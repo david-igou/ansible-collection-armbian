@@ -1,0 +1,24 @@
+---
+# Removes the PXE DHCP option set from a board's static lease.
+# Called by the reprovision script (via RouterOS REST API) after flashing,
+# or manually via the disable_netboot.yml playbook.
+#
+# Required variables: board_mac, board_model
+
+- name: Remove netboot DHCP option set for {{ board_mac }}
+  community.routeros.command:
+    commands:
+      - >
+        /ip dhcp-server lease
+        set [find mac-address="{{ board_mac }}"]
+        dhcp-option=""
+  tags: routeros, disable_netboot
+
+- name: Restore disk-first boot order (non-SPI boards, if board is accessible)
+  when: not (board_configs[board_model].has_spi | default(false))
+  delegate_to: "{{ inventory_hostname }}"
+  ansible.builtin.command:
+    cmd: "fw_setenv boot_targets '{{ uboot_boot_targets_normal }}'"
+  ignore_errors: true
+  changed_when: true
+  tags: routeros, disable_netboot

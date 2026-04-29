@@ -1,0 +1,17 @@
+---
+# Force a specific flash target regardless of SPI detection.
+# Options: auto (detect SPI, fall back to eMMC), spi, emmc
+bootloader_target: auto
+
+# Where Armbian installs the u-boot package images
+uboot_package_lib_dir: "/usr/lib"
+
+# SPI MTD device to write to
+spi_mtd_device: "/dev/mtd0"
+
+# eMMC boot partition (RK3588 bootloader lives here at offset 0)
+emmc_boot_partition: "/dev/mmcblk0boot0"
+
+# Set true to skip flashing if the device reports an existing valid bootloader.
+# Set false to always reflash (safer for reprovisioning).
+bootloader_skip_if_present: false

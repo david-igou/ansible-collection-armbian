@@ -1,0 +1,48 @@
+---
+# Full reprovision workflow:
+#   1. Stages the Armbian image on the image server
+#   2. Installs the reprovision script + systemd unit into the NFS reprovision rootfs
+#   3. Enables PXE boot via RouterOS DHCP
+#   4. Reboots the board — it PXE boots, runs reprovision.sh, calls RouterOS to
+#      disable PXE, then reboots again from the freshly flashed disk
+#
+# Usage:
+#   ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
+#
+# To reprovision multiple boards sequentially:
+#   ansible-playbook playbooks/reprovision.yml --limit "rock-5b-01,orange-pi-5-01"
+#
+# The playbook does NOT wait for reprovision to finish — the board handles that
+# autonomously. Monitor via the board's serial console or check disk boot afterward.
+
+- name: Stage reprovision assets on server
+  hosts: netboot_server
+  gather_facts: true
+  tasks:
+    - name: Run reprovision role for each target board
+      ansible.builtin.include_role:
+        name: reprovision
+      vars:
+        board_model: "{{ hostvars[item]['board_model'] }}"
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }}"
+
+- name: Enable PXE reprovision boot on RouterOS
+  hosts: routeros
+  gather_facts: false
+  vars:
+    netboot_mode: reprovision
+  tasks:
+    - name: Enable reprovision netboot for each target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: enable_netboot.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        board_model: "{{ hostvars[item]['board_model'] }}"
+        netboot_mode: reprovision
+        netboot_reboot: true
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"

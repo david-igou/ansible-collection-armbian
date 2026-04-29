@@ -1,0 +1,27 @@
+---
+# Flashes PXE-capable U-Boot to SPI or eMMC on target boards.
+# Boards must already be running an Armbian OS and reachable via SSH.
+#
+# Usage (all boards):
+#   ansible-playbook playbooks/flash_bootloader.yml
+#
+# Usage (specific board):
+#   ansible-playbook playbooks/flash_bootloader.yml --limit orange-pi-5-01
+#
+# Options:
+#   -e bootloader_target=spi    force SPI flash
+#   -e bootloader_target=emmc   force eMMC flash
+#   -e bootloader_target=auto   detect (default)
+
+- name: Flash U-Boot bootloader
+  hosts: boards
+  gather_facts: true
+  serial: 1
+  roles:
+    - role: bootloader
+  post_tasks:
+    - name: Reboot board after flashing
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        post_reboot_delay: 30
+      when: bootloader_reboot | default(true) | bool

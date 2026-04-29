@@ -1,0 +1,19 @@
+---
+netbootxyz_install_dir: "/opt/netbootxyz"
+netbootxyz_config_dir: "{{ netbootxyz_install_dir }}/config"
+netbootxyz_assets_dir: "{{ netbootxyz_install_dir }}/assets"
+
+# Ports exposed on the host
+netbootxyz_tftp_port: 69
+netbootxyz_http_port: 8080
+netbootxyz_webui_port: 3000
+
+# PUID/PGID for the container process
+netbootxyz_uid: 1000
+netbootxyz_gid: 1000
+
+# Docker image tag
+netbootxyz_image: "ghcr.io/netbootxyz/netbootxyz:latest"
+
+# tftp_base must match netbootxyz_config_dir so other roles write to the right place
+tftp_base: "{{ netbootxyz_config_dir }}"

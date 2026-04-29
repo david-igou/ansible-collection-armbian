@@ -1,0 +1,8 @@
+---
+# community.routeros.api connection parameters
+ansible_connection: "ansible.netcommon.httpapi"
+ansible_network_os: "community.routeros.api"
+ansible_httpapi_use_ssl: true
+ansible_httpapi_validate_certs: false
+ansible_user: "{{ routeros_api_user }}"
+ansible_password: "{{ routeros_api_password }}"

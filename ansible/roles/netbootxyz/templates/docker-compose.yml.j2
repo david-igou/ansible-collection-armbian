@@ -1,0 +1,18 @@
+---
+services:
+  netbootxyz:
+    image: {{ netbootxyz_image }}
+    container_name: netbootxyz
+    environment:
+      - PUID={{ netbootxyz_uid }}
+      - PGID={{ netbootxyz_gid }}
+    volumes:
+      - {{ netbootxyz_config_dir }}:/config
+      - {{ netbootxyz_assets_dir }}:/assets
+    ports:
+      - "{{ netbootxyz_tftp_port }}:69/udp"
+      - "{{ netbootxyz_http_port }}:80"
+      - "{{ netbootxyz_webui_port }}:3000"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN

@@ -1,0 +1,34 @@
+---
+# Downloads an Armbian image, extracts the rootfs to the NFS export directory,
+# and copies the kernel/initrd/DTB to the TFTP tree.
+#
+# This task runs per board_model listed in hostvars. It is idempotent —
+# if a rootfs directory already contains /bin/bash, the extraction is skipped.
+
+- name: Gather unique board models from inventory
+  ansible.builtin.set_fact:
+    _board_models: >-
+      {{
+        groups['boards']
+        | map('extract', hostvars, 'board_model')
+        | list
+        | unique
+      }}
+
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../roles/bootloader/vars/boards.yml"
+  ignore_errors: true
+
+- name: Ensure TFTP armbian directory exists
+  ansible.builtin.file:
+    path: "{{ tftp_base }}/armbian/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ _board_models }}"
+
+- name: Process rootfs for each board model
+  ansible.builtin.include_tasks: rootfs_per_board.yml
+  loop: "{{ _board_models }}"
+  loop_control:
+    loop_var: _model

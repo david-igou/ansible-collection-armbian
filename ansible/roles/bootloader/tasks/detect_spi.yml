@@ -1,0 +1,16 @@
+---
+- name: Check for SPI MTD device
+  ansible.builtin.stat:
+    path: "{{ spi_mtd_device }}"
+  register: _spi_dev_stat
+
+- name: Set SPI availability fact
+  ansible.builtin.set_fact:
+    _spi_available: "{{ _spi_dev_stat.stat.exists }}"
+
+- name: Report SPI status
+  ansible.builtin.debug:
+    msg: >
+      SPI flash {{ 'found' if _spi_available else 'not found' }} on
+      {{ inventory_hostname }} ({{ board_model }}).
+      Target: {{ 'SPI' if _spi_available else 'eMMC boot partition' }}.

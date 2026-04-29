@@ -1,0 +1,22 @@
+---
+# Provisions the netboot server: Docker, netboot.xyz, NFS, and nginx image server.
+# Run once (or re-run to update) against the netboot_server group.
+#
+# Usage:
+#   ansible-playbook playbooks/setup_server.yml
+
+- name: Setup netboot infrastructure server
+  hosts: netboot_server
+  gather_facts: true
+  roles:
+    - role: netbootxyz
+    - role: nfs_server
+    - role: reprovision
+
+- name: Configure RouterOS DHCP option objects
+  hosts: routeros
+  gather_facts: false
+  vars:
+    routeros_setup_options: true
+  roles:
+    - role: routeros_dhcp

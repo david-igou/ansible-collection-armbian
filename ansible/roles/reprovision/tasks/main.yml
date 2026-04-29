@@ -1,0 +1,115 @@
+---
+# Orchestrates the full reprovision workflow for a board.
+# This role runs against the netboot_server to stage the image,
+# and the routeros host to flip DHCP. The actual flashing happens
+# inside reprovision.sh running on the board via NFS root.
+
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../roles/bootloader/vars/boards.yml"
+  tags: reprovision
+
+- name: Ensure image server directories exist
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.file:
+    path: "{{ image_server_root }}"
+    state: directory
+    mode: "0755"
+  tags: reprovision
+
+- name: Install nginx for image serving (if not present)
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+  tags: reprovision
+
+- name: Configure nginx image server vhost
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.copy:
+    dest: /etc/nginx/sites-enabled/netboot-images
+    content: |
+      server {
+          listen 80;
+          server_name _;
+          root {{ image_server_root }};
+          autoindex on;
+          location /images/ {
+              alias {{ image_server_root }}/;
+          }
+      }
+    mode: "0644"
+  notify: Reload nginx
+  tags: reprovision
+
+- name: Fetch Armbian image to image server for {{ board_model }}
+  when: reprovision_prefetch_image | bool
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.get_url:
+    url: >-
+      {{ armbian_image_base_url }}/{{ board_configs[board_model].armbian_board_name }}/archive/
+      Armbian_{{ armbian_release }}_{{ board_configs[board_model].armbian_board_name }}_{{ armbian_branch }}.img.xz
+    dest: "{{ image_server_root }}/{{ board_model }}.img.xz"
+    mode: "0644"
+    timeout: 600
+  tags: reprovision
+
+- name: Write RouterOS API credentials to reprovision rootfs
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.copy:
+    dest: "{{ nfs_reprovision_path }}/{{ board_model }}/etc/reprovision.conf"
+    content: |
+      ROUTEROS_HOST={{ routeros_host }}
+      ROUTEROS_USER={{ routeros_api_user }}
+      ROUTEROS_PASS={{ routeros_api_password }}
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  tags: reprovision
+
+- name: Install reprovision script into reprovision rootfs
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.copy:
+    src: reprovision.sh
+    dest: "{{ nfs_reprovision_path }}/{{ board_model }}/usr/local/sbin/reprovision.sh"
+    mode: "0755"
+  tags: reprovision
+
+- name: Install reprovision systemd unit into reprovision rootfs
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.copy:
+    dest: >-
+      {{ nfs_reprovision_path }}/{{ board_model }}/etc/systemd/system/reprovision.service
+    content: |
+      [Unit]
+      Description=Armbian Disk Reprovision
+      After=network-online.target
+      Wants=network-online.target
+      ConditionKernelCommandLine=reprovision=1
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/reprovision.sh
+      StandardOutput=journal+console
+      StandardError=journal+console
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  tags: reprovision
+
+- name: Enable reprovision service in rootfs
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.shell: |
+    ROOTFS="{{ nfs_reprovision_path }}/{{ board_model }}"
+    WANTS="${ROOTFS}/etc/systemd/system/multi-user.target.wants"
+    mkdir -p "${WANTS}"
+    ln -sf /etc/systemd/system/reprovision.service \
+      "${WANTS}/reprovision.service"
+  args:
+    creates: >-
+      {{ nfs_reprovision_path }}/{{ board_model
+        }}/etc/systemd/system/multi-user.target.wants/reprovision.service
+  tags: reprovision

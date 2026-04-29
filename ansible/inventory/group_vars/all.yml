@@ -1,0 +1,33 @@
+---
+# Network
+netboot_server_ip: "192.168.1.10"
+routeros_host: "192.168.1.1"
+routeros_api_user: "ansible"
+routeros_dhcp_server_name: "dhcp1"
+
+# NFS paths on the server
+nfs_export_base: "/exports"
+nfs_rootfs_path: "/exports/rootfs"
+nfs_reprovision_path: "/exports/reprovision"
+
+# TFTP paths within the netboot.xyz config volume
+tftp_base: "/opt/netbootxyz/config"
+tftp_armbian_dir: "armbian"
+tftp_pxelinux_cfg_dir: "pxelinux.cfg"
+
+# Armbian image source — swap in a local mirror or custom URL later
+armbian_image_base_url: "https://dl.armbian.com"
+armbian_release: "bookworm"
+armbian_branch: "current"
+
+# Image server (nginx on the netboot server) for reprovision downloads
+image_server_url: "http://{{ netboot_server_ip }}/images"
+image_server_root: "/var/www/netboot/images"
+
+# RouterOS credentials (override with ansible-vault)
+routeros_api_password: "changeme"
+
+# Board SSH defaults
+ansible_user: "armbian"
+ansible_become: true
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"

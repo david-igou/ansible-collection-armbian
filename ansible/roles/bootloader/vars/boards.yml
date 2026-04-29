@@ -1,0 +1,61 @@
+---
+# Per-board hardware and U-Boot configuration.
+# Keyed by board_model (matches inventory host_vars and pxelinux paths).
+
+board_configs:
+  orange-pi-5:
+    soc: rk3588s
+    armbian_board_name: orangepi5
+    uboot_package: linux-u-boot-current-orangepi5
+    uboot_spi_image: u-boot-rockchip-spi.bin
+    uboot_emmc_image: u-boot-rockchip.bin
+    dtb: rockchip/rk3588s-orangepi-5.dtb
+    console: ttyS2,1500000n8
+    has_spi: true
+    primary_storage: nvme
+
+  orange-pi-5-pro:
+    soc: rk3588s
+    armbian_board_name: orangepi5pro
+    uboot_package: linux-u-boot-current-orangepi5-pro
+    uboot_spi_image: u-boot-rockchip-spi.bin
+    uboot_emmc_image: u-boot-rockchip.bin
+    dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+    console: ttyS2,1500000n8
+    has_spi: true
+    primary_storage: nvme
+
+  orange-pi-5-max:
+    soc: rk3588
+    armbian_board_name: orangepi5max
+    uboot_package: linux-u-boot-current-orangepi5-max
+    uboot_spi_image: u-boot-rockchip-spi.bin
+    uboot_emmc_image: u-boot-rockchip.bin
+    dtb: rockchip/rk3588-orangepi-5-max.dtb
+    console: ttyS2,1500000n8
+    has_spi: true
+    primary_storage: nvme
+
+  rock-5b:
+    soc: rk3588
+    armbian_board_name: rock-5b
+    uboot_package: linux-u-boot-current-rock-5b
+    uboot_spi_image: u-boot-rockchip-spi.bin
+    uboot_emmc_image: u-boot-rockchip.bin
+    dtb: rockchip/rk3588-rock-5b.dtb
+    console: ttyS2,1500000n8
+    # Rock 5B has an SPI socket but it may not be populated
+    has_spi: true
+    primary_storage: nvme
+
+  rock-5a:
+    soc: rk3588s
+    armbian_board_name: rock-5a
+    uboot_package: linux-u-boot-current-rock-5a
+    uboot_spi_image: u-boot-rockchip-spi.bin
+    uboot_emmc_image: u-boot-rockchip.bin
+    dtb: rockchip/rk3588s-rock-5a.dtb
+    console: ttyS2,1500000n8
+    # Rock 5A SPI is not always populated
+    has_spi: false
+    primary_storage: nvme

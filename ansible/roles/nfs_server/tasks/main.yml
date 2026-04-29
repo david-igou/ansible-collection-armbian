@@ -1,0 +1,49 @@
+---
+- name: Install NFS server packages
+  ansible.builtin.apt:
+    name:
+      - nfs-kernel-server
+      - nfs-common
+      - xz-utils
+      - wget
+      - python3
+      - kpartx
+    state: present
+    update_cache: true
+  tags: nfs
+
+- name: Create NFS export directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  loop:
+    - "{{ nfs_export_base }}"
+    - "{{ nfs_rootfs_path }}"
+    - "{{ nfs_reprovision_path }}"
+    - "{{ armbian_image_cache }}"
+    - "{{ armbian_image_mount }}"
+  tags: nfs
+
+- name: Configure NFS exports
+  ansible.builtin.template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NFS exports
+  tags: nfs
+
+- name: Enable and start NFS server
+  ansible.builtin.systemd:
+    name: nfs-kernel-server
+    enabled: true
+    state: started
+  tags: nfs
+
+- name: Populate rootfs from Armbian image
+  ansible.builtin.include_tasks: rootfs.yml
+  tags: nfs, rootfs

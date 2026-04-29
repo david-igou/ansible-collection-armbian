@@ -1,0 +1,41 @@
+---
+- name: Load board configuration
+  ansible.builtin.include_vars:
+    file: boards.yml
+  tags: bootloader
+
+- name: Resolve board config for {{ board_model }}
+  ansible.builtin.set_fact:
+    _board: "{{ board_configs[board_model] }}"
+  tags: bootloader
+
+- name: Fail if board_model is not recognised
+  ansible.builtin.fail:
+    msg: "board_model '{{ board_model }}' not found in roles/bootloader/vars/boards.yml"
+  when: _board is not defined
+  tags: bootloader
+
+- name: Install Armbian U-Boot package
+  ansible.builtin.apt:
+    name: "{{ _board.uboot_package }}"
+    state: present
+    update_cache: true
+  tags: bootloader
+
+- name: Detect SPI flash availability
+  ansible.builtin.include_tasks: detect_spi.yml
+  tags: bootloader
+
+- name: Flash bootloader to SPI
+  ansible.builtin.include_tasks: flash_spi.yml
+  when: >
+    (bootloader_target == 'auto' and _spi_available) or
+    bootloader_target == 'spi'
+  tags: bootloader
+
+- name: Flash bootloader to eMMC boot partition
+  ansible.builtin.include_tasks: flash_emmc.yml
+  when: >
+    (bootloader_target == 'auto' and not _spi_available) or
+    bootloader_target == 'emmc'
+  tags: bootloader

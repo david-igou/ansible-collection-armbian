@@ -1,0 +1,56 @@
+#!ipxe
+# Armbian RK3588 netboot menu — loaded by netboot.xyz custom menu hook.
+# Board-specific kernel/DTB paths are under tftp://${next-server}/armbian/${board_model}/
+
+# These variables must be set before branching to :nfsroot or :reprovision.
+# They are populated from DHCP / iPXE env or can be overridden here.
+isset ${board_model}    || set board_model     unknown
+isset ${board_dtb}      || set board_dtb       board.dtb
+isset ${board_console}  || set board_console   ttyS2,1500000n8
+isset ${nfs_server}     || set nfs_server      ${next-server}
+isset ${nfs_rootfs}     || set nfs_rootfs      /exports/rootfs/${board_model}
+isset ${nfs_reprovision}|| set nfs_reprovision /exports/reprovision/${board_model}
+isset ${image_server}   || set image_server    http://${next-server}/images
+
+:armbian_menu
+menu Armbian Netboot — ${board_model}
+item --gap          Board: ${board_model}
+item nfsroot        Boot NFS root (diskless)
+item reprovision    Reprovision local disk
+item --gap
+item local          Boot from local disk
+choose --default local --timeout 10000 target && goto ${target}
+
+:nfsroot
+kernel tftp://${next-server}/armbian/${board_model}/vmlinuz \
+    root=/dev/nfs \
+    nfsroot=${nfs_server}:${nfs_rootfs},vers=4,ro \
+    ip=dhcp \
+    console=${board_console} \
+    rootwait \
+    rw
+initrd tftp://${next-server}/armbian/${board_model}/initrd.img
+devicetree tftp://${next-server}/armbian/${board_model}/${board_dtb}
+boot || goto armbian_menu
+
+:reprovision
+kernel tftp://${next-server}/armbian/${board_model}/vmlinuz \
+    root=/dev/nfs \
+    nfsroot=${nfs_server}:${nfs_reprovision},vers=4,rw \
+    ip=dhcp \
+    console=${board_console} \
+    rootwait \
+    rw \
+    reprovision=1 \
+    board_model=${board_model} \
+    board_mac=${net0/mac} \
+    board_storage=nvme \
+    ros_host=${ros_host} \
+    ros_user=${ros_user} \
+    image_server=${image_server}
+initrd tftp://${next-server}/armbian/${board_model}/initrd.img
+devicetree tftp://${next-server}/armbian/${board_model}/${board_dtb}
+boot || goto armbian_menu
+
+:local
+exit 1

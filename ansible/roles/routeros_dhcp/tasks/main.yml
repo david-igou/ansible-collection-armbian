@@ -1,0 +1,9 @@
+---
+# Default entry point — included by other tasks files as needed.
+# Run setup_options.yml once to create the shared DHCP option objects.
+# Use enable_netboot.yml / disable_netboot.yml per board.
+
+- name: Include setup_options tasks
+  ansible.builtin.include_tasks: setup_options.yml
+  when: routeros_setup_options | default(false) | bool
+  tags: routeros

@@ -1,0 +1,37 @@
+---
+# Enables network boot for one or more boards.
+# Updates the pxelinux.cfg on the TFTP server, assigns the PXE DHCP option
+# set on RouterOS, adjusts U-Boot boot order (non-SPI boards), and reboots.
+#
+# Usage:
+#   # Reprovision a specific board
+#   ansible-playbook playbooks/enable_netboot.yml \
+#     --limit rock-5b-01 \
+#     -e netboot_mode=reprovision
+#
+#   # Boot all boards to NFS root (diskless mode)
+#   ansible-playbook playbooks/enable_netboot.yml \
+#     -e netboot_mode=nfsroot
+#
+#   # Enable without rebooting (e.g. board is off)
+#   ansible-playbook playbooks/enable_netboot.yml \
+#     --limit orange-pi-5-01 \
+#     -e netboot_mode=reprovision \
+#     -e netboot_reboot=false
+
+- name: Enable netboot for boards
+  hosts: routeros
+  gather_facts: false
+  vars:
+    # Override per-board by looping over boards group
+  tasks:
+    - name: Enable netboot on RouterOS for each target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: enable_netboot.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        board_model: "{{ hostvars[item]['board_model'] }}"
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"

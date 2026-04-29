@@ -1,0 +1,28 @@
+---
+# Defaults for all RK3588/RK3588S boards.
+# Override these in host_vars for boards that differ.
+
+# Armbian U-Boot package name suffix — set per board_model in vars/boards.yml
+# but these defaults apply if not found there
+uboot_spi_image: "u-boot-rockchip-spi.bin"
+uboot_emmc_image: "u-boot-rockchip.bin"
+
+# The eMMC device that holds the U-Boot boot partition (mmcblk0boot0)
+emmc_device: "/dev/mmcblk0"
+
+# NVMe device — present on boards with an M.2 slot
+nvme_device: "/dev/nvme0n1"
+
+# Serial console for kernel cmdline; all current RK3588 boards use ttyS2
+board_console: "ttyS2,1500000n8"
+
+# Armbian repo suite used when installing the u-boot package on the board
+armbian_apt_suite: "bookworm"
+
+# U-Boot environment tool (present on all Armbian RK3588 installs)
+fw_env_config: "/etc/fw_env.config"
+
+# Default boot order: disk first, PXE fallback
+uboot_boot_targets_normal: "mmc0 nvme0 mmc1 pxe dhcp"
+# Boot order when PXE boot is requested (non-SPI/non-UEFI boards only)
+uboot_boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"

@@ -1,0 +1,13 @@
+---
+# Where to look for Armbian images on the image server
+image_server_url: "http://{{ netboot_server_ip }}/images"
+
+# Directory on the netboot server where images are staged for download
+image_server_root: "/var/www/netboot/images"
+
+# If true, download fresh images from armbian.com to the image server
+# before enabling reprovision. Set false if images are pre-staged.
+reprovision_prefetch_image: true
+
+# How long to wait for reprovision to complete (seconds)
+reprovision_timeout: 1800
