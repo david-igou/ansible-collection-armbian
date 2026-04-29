@@ -23,6 +23,15 @@ armbian_apt_suite: "bookworm"
 fw_env_config: "/etc/fw_env.config"
 
 # Default boot order: disk first, PXE fallback
-uboot_boot_targets_normal: "mmc0 nvme0 mmc1 pxe dhcp"
-# Boot order when PXE boot is requested (non-SPI/non-UEFI boards only)
+# Boot order written to the SD card U-Boot env for non-SPI boards.
+# PXE is first so DHCP options alone control whether the board netboots.
+# When DHCP provides no next-server, PXE fails gracefully and U-Boot
+# falls through to mmc0/nvme0.
 uboot_boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
+
+# U-Boot environment location on disk — used by fw_setenv when writing
+# the PXE-first environment to an SD card.
+# Verify against /etc/fw_env.config on a running Armbian RK3588 board
+# if the default does not match your hardware.
+uboot_sd_env_offset: "0x3f8000"
+uboot_sd_env_size: "0x8000"

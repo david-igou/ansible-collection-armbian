@@ -15,20 +15,18 @@ tftp_base: "/opt/netbootxyz/config"
 tftp_armbian_dir: "armbian"
 tftp_pxelinux_cfg_dir: "pxelinux.cfg"
 
-# Armbian image source
-armbian_image_base_url: "https://dl.armbian.com"
-# Distro release to select when discovering images (bookworm or noble)
-armbian_release: "bookworm"
-armbian_branch: "current"
-# Image variant to prefer: "server" (headless) or "minimal"
-armbian_image_variant: "server"
+# Armbian image URLs — must be set explicitly per board model.
+# Browse https://dl.armbian.com/<board>/ to find the current .img.xz URL.
+# Board subdirectory names: orangepi5, orangepi5-pro, orangepi5-max, rock-5b, rock-5a
+armbian_image_urls:
+  orange-pi-5: ""
+  orange-pi-5-pro: ""
+  orange-pi-5-max: ""
+  rock-5b: ""
+  rock-5a: ""
 
-# Per-board image URL overrides — set these to skip auto-discovery and pin
-# to a specific image.  Leave empty ({}) to always discover the latest.
-# Example:
-#   armbian_image_overrides:
-#     rock-5b: "https://dl.armbian.com/rock-5b/Armbian_25.02_rock-5b_bookworm_6.1.75_server.img.xz"
-armbian_image_overrides: {}
+# U-Boot branch — determines which linux-u-boot-<branch>-<board> package is used
+armbian_branch: "current"
 
 # Image server (nginx on the netboot server) for reprovision downloads
 image_server_url: "http://{{ netboot_server_ip }}/images"

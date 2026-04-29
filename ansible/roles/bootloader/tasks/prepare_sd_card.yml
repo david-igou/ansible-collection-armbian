@@ -1,0 +1,91 @@
+---
+# Prepares a bootable SD card containing PXE-first U-Boot for a non-SPI board.
+# Run via the prepare_sd_card.yml playbook on the netboot server (which has
+# the U-Boot binaries cached from the Armbian image extraction).
+#
+# Required variables:
+#   sd_card_device   — block device of the SD card (e.g. /dev/sdb)
+#   board_model      — board model key from boards.yml
+
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: boards.yml
+
+- name: Set board facts
+  ansible.builtin.set_fact:
+    _board: "{{ board_configs[board_model] }}"
+    _uboot_cache: "{{ armbian_image_cache }}/uboot-{{ board_model }}"
+
+- name: Fail if board has SPI (SD card not needed)
+  ansible.builtin.fail:
+    msg: >-
+      {{ board_model }} has SPI flash — use flash_bootloader.yml instead.
+      SD card preparation is only needed for non-SPI boards.
+  when: _board.has_spi | default(false)
+
+- name: Verify U-Boot binary is cached
+  ansible.builtin.stat:
+    path: "{{ _uboot_cache }}/{{ _board.uboot_emmc_image }}"
+  register: _uboot_bin_stat
+
+- name: Fail if U-Boot binary not found in cache
+  ansible.builtin.fail:
+    msg: >-
+      U-Boot binary not found at {{ _uboot_cache }}/{{ _board.uboot_emmc_image }}.
+      Run setup_server.yml first to extract binaries from the Armbian image.
+  when: not _uboot_bin_stat.stat.exists
+
+- name: Read U-Boot env offset from extracted rootfs
+  ansible.builtin.shell: |
+    grep -v '^#\|^$' \
+      "{{ nfs_rootfs_path }}/{{ board_model }}/etc/fw_env.config" \
+      | awk '{print $2}' | head -1
+  register: _env_offset_raw
+  changed_when: false
+  failed_when: _env_offset_raw.stdout == ''
+
+- name: Read U-Boot env size from extracted rootfs
+  ansible.builtin.shell: |
+    grep -v '^#\|^$' \
+      "{{ nfs_rootfs_path }}/{{ board_model }}/etc/fw_env.config" \
+      | awk '{print $3}' | head -1
+  register: _env_size_raw
+  changed_when: false
+  failed_when: _env_size_raw.stdout == ''
+
+- name: Confirm SD card write
+  ansible.builtin.pause:
+    prompt: |
+      About to write U-Boot for {{ board_model }} to {{ sd_card_device }}.
+      ALL EXISTING DATA ON THE CARD WILL BE OVERWRITTEN.
+      Ctrl+C now to abort, or press Enter to continue.
+
+- name: Write U-Boot to SD card
+  ansible.builtin.shell: |
+    dd if="{{ _uboot_cache }}/{{ _board.uboot_emmc_image }}" \
+       of="{{ sd_card_device }}" bs=512 seek=64 conv=notrunc
+    sync
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Write PXE-first boot_targets to SD card U-Boot environment
+  ansible.builtin.shell: |
+    printf "%s\t%s\t%s\n" \
+      "{{ sd_card_device }}" \
+      "{{ _env_offset_raw.stdout | trim }}" \
+      "{{ _env_size_raw.stdout | trim }}" \
+      > /tmp/fw_env_sdcard.conf
+    fw_setenv -c /tmp/fw_env_sdcard.conf \
+      boot_targets "{{ uboot_boot_targets_pxe }}"
+    rm -f /tmp/fw_env_sdcard.conf
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: SD card ready
+  ansible.builtin.debug:
+    msg: >-
+      SD card for {{ board_model }} written to {{ sd_card_device }}.
+      U-Boot will try PXE first; disk boot is the fallback when DHCP
+      provides no next-server. Insert the card and it acts like SPI flash.

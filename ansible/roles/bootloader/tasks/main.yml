@@ -15,27 +15,40 @@
   when: _board is not defined
   tags: bootloader
 
-- name: Install Armbian U-Boot package
+# ── SPI path ────────────────────────────────────────────────────────────────
+# Runs on the board itself. Board must be running Armbian so the u-boot
+# package can be installed from the Armbian apt repository.
+
+- name: Install Armbian U-Boot package (SPI boards)
   ansible.builtin.apt:
     name: "{{ _board.uboot_package }}"
     state: present
     update_cache: true
+  when: _board.has_spi | default(false)
   tags: bootloader
 
 - name: Detect SPI flash availability
   ansible.builtin.include_tasks: detect_spi.yml
+  when: _board.has_spi | default(false)
   tags: bootloader
 
 - name: Flash bootloader to SPI
   ansible.builtin.include_tasks: flash_spi.yml
-  when: >
-    (bootloader_target == 'auto' and _spi_available) or
-    bootloader_target == 'spi'
+  when:
+    - _board.has_spi | default(false)
+    - (bootloader_target == 'auto' and _spi_available | default(false)) or bootloader_target == 'spi'
   tags: bootloader
 
-- name: Flash bootloader to eMMC boot partition
-  ansible.builtin.include_tasks: flash_emmc.yml
-  when: >
-    (bootloader_target == 'auto' and not _spi_available) or
-    bootloader_target == 'emmc'
+# ── SD card path ────────────────────────────────────────────────────────────
+# Non-SPI boards use a prepared SD card as the persistent bootloader source.
+# The SD card is prepared separately via prepare_sd_card.yml and physically
+# inserted into the board — this role does not touch it.
+
+- name: Non-SPI board notice
+  ansible.builtin.debug:
+    msg: >-
+      {{ board_model }} has no SPI flash. Bootloader is sourced from an SD card.
+      Run prepare_sd_card.yml once per board to prepare the card, then insert it.
+      This playbook has nothing to flash on the board itself.
+  when: not (_board.has_spi | default(false))
   tags: bootloader
