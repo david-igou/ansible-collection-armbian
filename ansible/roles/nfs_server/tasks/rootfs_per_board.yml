@@ -23,11 +23,49 @@
     path: "{{ _rootfs_dir }}/bin/bash"
   register: _rootfs_populated
 
+- name: Discover latest Armbian image URL for {{ _model }}
+  ansible.builtin.shell: |
+    set -euo pipefail
+    BASE="{{ armbian_image_base_url }}/{{ _bc.armbian_dl_dir }}/"
+    LISTING=$(curl -sf "${BASE}")
+    # Try preferred variant + release first, then release only
+    for FILTER in "{{ armbian_image_variant }}" ""; do
+      MATCH=$(echo "${LISTING}" \
+        | grep -oP 'Armbian[^"]+\.img\.xz' \
+        | grep -i '{{ armbian_release }}' \
+        | { [ -n "${FILTER}" ] && grep -i "${FILTER}" || cat; } \
+        | sort -r \
+        | head -1)
+      [ -n "${MATCH}" ] && break
+    done
+    if [ -z "${MATCH}" ]; then
+      echo "ERROR: No image found at ${BASE} matching release={{ armbian_release }}" >&2
+      echo "Available files:" >&2
+      echo "${LISTING}" | grep -oP 'Armbian[^"]+\.img\.xz' >&2 || true
+      exit 1
+    fi
+    echo "${BASE}${MATCH}"
+  args:
+    executable: /bin/bash
+  register: _discovered_image_url
+  changed_when: false
+  when:
+    - not _rootfs_populated.stat.exists
+    - (armbian_image_overrides | default({}))[_model] is not defined
+
+- name: Set image URL for {{ _model }}
+  ansible.builtin.set_fact:
+    _image_url: >-
+      {{
+        (armbian_image_overrides | default({}))[_model]
+        if (armbian_image_overrides | default({}))[_model] is defined
+        else _discovered_image_url.stdout | default('') | trim
+      }}
+  when: not _rootfs_populated.stat.exists
+
 - name: Download Armbian image for {{ _model }}
   ansible.builtin.get_url:
-    url: >-
-      {{ armbian_image_base_url }}/{{ _bc.armbian_board_name }}/archive/
-      Armbian_{{ armbian_release }}_{{ _bc.armbian_board_name }}_{{ armbian_branch }}.img.xz
+    url: "{{ _image_url }}"
     dest: "{{ _image_cache }}"
     mode: "0644"
     timeout: 600

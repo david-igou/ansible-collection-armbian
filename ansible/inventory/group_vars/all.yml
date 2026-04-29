@@ -15,10 +15,20 @@ tftp_base: "/opt/netbootxyz/config"
 tftp_armbian_dir: "armbian"
 tftp_pxelinux_cfg_dir: "pxelinux.cfg"
 
-# Armbian image source — swap in a local mirror or custom URL later
+# Armbian image source
 armbian_image_base_url: "https://dl.armbian.com"
+# Distro release to select when discovering images (bookworm or noble)
 armbian_release: "bookworm"
 armbian_branch: "current"
+# Image variant to prefer: "server" (headless) or "minimal"
+armbian_image_variant: "server"
+
+# Per-board image URL overrides — set these to skip auto-discovery and pin
+# to a specific image.  Leave empty ({}) to always discover the latest.
+# Example:
+#   armbian_image_overrides:
+#     rock-5b: "https://dl.armbian.com/rock-5b/Armbian_25.02_rock-5b_bookworm_6.1.75_server.img.xz"
+armbian_image_overrides: {}
 
 # Image server (nginx on the netboot server) for reprovision downloads
 image_server_url: "http://{{ netboot_server_ip }}/images"

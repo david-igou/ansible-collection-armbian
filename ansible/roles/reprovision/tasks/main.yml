@@ -42,13 +42,45 @@
   notify: Reload nginx
   tags: reprovision
 
+- name: Discover latest Armbian image URL for {{ board_model }}
+  when:
+    - reprovision_prefetch_image | bool
+    - (armbian_image_overrides | default({}))[board_model] is not defined
+  delegate_to: "{{ groups['netboot_server'][0] }}"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    BASE="{{ armbian_image_base_url }}/{{ board_configs[board_model].armbian_dl_dir }}/"
+    LISTING=$(curl -sf "${BASE}")
+    for FILTER in "{{ armbian_image_variant }}" ""; do
+      MATCH=$(echo "${LISTING}" \
+        | grep -oP 'Armbian[^"]+\.img\.xz' \
+        | grep -i '{{ armbian_release }}' \
+        | { [ -n "${FILTER}" ] && grep -i "${FILTER}" || cat; } \
+        | sort -r \
+        | head -1)
+      [ -n "${MATCH}" ] && break
+    done
+    if [ -z "${MATCH}" ]; then
+      echo "ERROR: No image found at ${BASE} for release={{ armbian_release }}" >&2
+      exit 1
+    fi
+    echo "${BASE}${MATCH}"
+  args:
+    executable: /bin/bash
+  register: _reprovision_discovered_url
+  changed_when: false
+  tags: reprovision
+
 - name: Fetch Armbian image to image server for {{ board_model }}
   when: reprovision_prefetch_image | bool
   delegate_to: "{{ groups['netboot_server'][0] }}"
   ansible.builtin.get_url:
     url: >-
-      {{ armbian_image_base_url }}/{{ board_configs[board_model].armbian_board_name }}/archive/
-      Armbian_{{ armbian_release }}_{{ board_configs[board_model].armbian_board_name }}_{{ armbian_branch }}.img.xz
+      {{
+        (armbian_image_overrides | default({}))[board_model]
+        if (armbian_image_overrides | default({}))[board_model] is defined
+        else _reprovision_discovered_url.stdout | default('') | trim
+      }}
     dest: "{{ image_server_root }}/{{ board_model }}.img.xz"
     mode: "0644"
     timeout: 600
