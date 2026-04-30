@@ -86,12 +86,3 @@
       is inserted into the board before it reboots. See prepare_sd_card.yml.
   when: not (board_configs[board_model].has_spi | default(false))
   tags: routeros, enable_netboot
-
-- name: Reboot board to trigger PXE
-  when: netboot_reboot | default(true) | bool
-  delegate_to: "{{ inventory_hostname }}"
-  ansible.builtin.reboot:
-    reboot_timeout: 60
-    connect_timeout: 10
-    post_reboot_delay: 0
-  tags: routeros, enable_netboot

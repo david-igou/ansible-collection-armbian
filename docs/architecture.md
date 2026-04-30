@@ -21,18 +21,18 @@
     │  │ (Docker)      │◄─┼────┤  2. If next-server set:  │
     │  │               │  │    │     TFTP pxelinux.cfg   │
     │  │ TFTP :69      │  │    │     TFTP kernel/initrd/ │
-    │  │ HTTP :8080    │  │    │     DTB → boot          │
+    │  │ HTTP :8080    │  │    │     DTB → boot NFS root │
     │  └───────────────┘  │    │  3. If no next-server:   │
     │                     │    │     boot local disk     │
     │  ┌───────────────┐  │    └──────────────────────────┘
     │  │ NFS Server    │  │
     │  │ /exports/     │  │    ┌──────────────────────────┐
-    │  │  rootfs/      │  │    │  Ansible Control Node    │
-    │  │  reprovision/ │◄─┼────┤                          │
-    │  └───────────────┘  │    │  Mounts NFS exports,     │
-    │                     │    │  writes content through  │
-    └─────────────────────┘    │  mounts (no SSH needed   │
-                               │  to netboot server)      │
+    │  │  rootfs/      │◄─┼────┤  Ansible Control Node    │
+    │  └───────────────┘  │    │                          │
+    └─────────────────────┘    │  Mounts NFS exports,     │
+                               │  writes content; SSHes   │
+                               │  into NFS-booted boards  │
+                               │  to drive reprovision    │
                                └──────────────────────────┘
 ```
 
@@ -48,26 +48,31 @@ attempt fails, and U-Boot falls through to NVMe or eMMC.
 
 ### NFS Root (diskless)
 
-The board boots a full Armbian rootfs served over NFS. Useful for testing,
-maintenance, or running the board completely off-network storage.
+The board boots a full Armbian rootfs served over NFS (read-only mount).
+Useful for testing, maintenance, or running the board completely off-network
+storage.
 
-1. Ansible `enable_netboot.yml -e netboot_mode=nfsroot` runs
+1. `enable_netboot.yml -e netboot_mode=nfsroot` runs
 2. RouterOS lease gets `dhcp-option=armbian-nfsroot`
 3. Board reboots → U-Boot DHCP → gets next-server + boot file path
 4. U-Boot fetches `pxelinux.cfg/01-<mac>` → downloads kernel, initrd, DTB
-5. Board boots into Armbian on NFS at `/exports/rootfs/<model>` (read-only)
+5. Board boots into Armbian on NFS at `/exports/rootfs/<model>` (ro)
 
 ### Reprovision
 
-Same PXE flow as NFS root, but the kernel cmdline includes `reprovision=1`
-and the root is the read-write reprovision export. On boot, systemd starts
-`reprovision.service`, which:
+Same PXE flow as NFS root, but the rootfs is mounted read-write to give
+systemd full write access. Ansible SSHes into the board after it comes up
+and drives the flash directly — no scripts are staged on the board.
 
-1. Reads `/etc/reprovision.conf` (credentials on NFS server, not board disk)
-2. Downloads `<model>.img.xz` from the netboot.xyz HTTP server (port 8080)
-3. Flashes it to NVMe (`/dev/nvme0n1`) or eMMC (`/dev/mmcblk0`)
-4. Calls the RouterOS REST API to clear `dhcp-option` from the board's lease
-5. Reboots — board comes up from the freshly flashed disk
+1. `reprovision.yml` runs
+2. RouterOS lease gets `dhcp-option=armbian-reprovision`
+3. Board reboots → PXE boots into NFS rootfs (rw mount)
+4. Ansible waits for SSH (`root` / `armbian_default_password`)
+5. Ansible downloads `.img.xz` from netboot.xyz HTTP server to `/tmp`
+6. Ansible flashes the image to NVMe/eMMC with `xz | dd`
+7. Ansible clears `dhcp-option` on RouterOS from the control node
+8. Ansible reboots the board → comes up from freshly flashed disk
+9. Ansible asserts root filesystem is no longer NFS
 
 ---
 
@@ -103,8 +108,7 @@ SD card (permanent, inserted into board)
 - The SD card contains **only U-Boot** — no OS, no partitions
 - U-Boot's environment on the card sets `boot_targets` to try PXE first
 - When DHCP provides no next-server, PXE fails and the board boots from disk
-- The card can remain inserted permanently; removing it makes the board
-  fall back to eMMC U-Boot (if present) which defaults to disk-first
+- The card can remain inserted permanently
 
 **Preparing the SD card** (run once per card, on the Ansible control node):
 
@@ -133,15 +137,17 @@ Control node (ansible-playbook runs here)
   │
   ├── mounts {{ netboot_server_ip }}:{{ nfs_rootfs_path }}/<model>  → /mnt/netboot/rootfs/<model>/
   │     Writes: full Armbian rootfs (rsync from extracted image)
-  │
-  ├── mounts {{ netboot_server_ip }}:{{ nfs_reprovision_path }}/<model>  → /mnt/netboot/reprovision/<model>/
-  │     Writes: reprovision.sh, reprovision.service, /etc/reprovision.conf
+  │     Shared by both nfsroot (ro) and reprovision (rw) boot modes
   │
   └── mounts {{ netboot_server_ip }}:{{ nfs_assets_export }}  → /mnt/netboot/assets/
         Writes: images/<model>.img.xz  (served via netboot.xyz HTTP :8080)
 ```
 
 No SSH access to the netboot server is required for any content operation.
+
+A single NFS rootfs export serves both boot modes. The nfsroot pxelinux label
+mounts it `ro`; the reprovision label mounts it `rw`. The NFS server export
+itself must be configured with `rw,no_root_squash`.
 
 ---
 
@@ -150,10 +156,10 @@ No SSH access to the netboot server is required for any content operation.
 | Goal | Command |
 |---|---|
 | Populate NFS and set up RouterOS DHCP objects | `ansible-playbook setup_netboot.yml` |
-| Enable reprovision for one board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
-| Enable NFS root for all boards | `ansible-playbook enable_netboot.yml -e netboot_mode=nfsroot` |
+| Enable NFS root for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=nfsroot` |
+| Enable reprovision for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
+| Full reprovision (Ansible-driven flash) | `ansible-playbook reprovision.yml --limit rock-5b-01` |
 | Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
-| Full reprovision workflow | `ansible-playbook reprovision.yml --limit rock-5b-01` |
 | Prepare SD card (non-SPI board) | `ansible-playbook prepare_sd_card.yml -e board_model=rock-5a -e sd_card_device=/dev/sdb` |
 
 ---
@@ -164,7 +170,7 @@ Served from `{{ tftp_nfs_export }}` on the netboot server (default `/opt/netboot
 
 ```
 pxelinux.cfg/
-  01-aa-bb-cc-dd-ee-ff    # per-board config, generated by enable_netboot
+  01-aa-bb-cc-dd-ee-ff    # per-board config, written by enable_netboot
 
 armbian/
   orange-pi-5/
@@ -182,14 +188,12 @@ armbian/
 
 ## NFS Export Layout
 
+A single rootfs export per board model serves both nfsroot and reprovision modes:
+
 ```
 /exports/
   rootfs/
-    orange-pi-5/          # read-only Armbian rootfs
-    rock-5b/
-    ...
-  reprovision/
-    orange-pi-5/          # read-write; holds reprovision.sh + systemd unit
+    orange-pi-5/          # Armbian rootfs; mounted ro for nfsroot, rw for reprovision
     rock-5b/
     ...
 ```
@@ -214,6 +218,9 @@ Per board, only the static lease's `dhcp-option` field changes:
 Netboot:  dhcp-option=armbian-nfsroot  OR  dhcp-option=armbian-reprovision
 Normal:   dhcp-option=""
 ```
+
+Both option sets point to the same NFS rootfs; the distinction is that
+`armbian-reprovision` selects the pxelinux label that mounts the rootfs `rw`.
 
 ---
 

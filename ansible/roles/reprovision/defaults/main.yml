@@ -1,9 +1,13 @@
 ---
-# HTTP URL from which reprovision.sh (running on the board) downloads the
-# Armbian image. The image is placed in the netboot.xyz assets directory by
-# the nfs_content role and served from netboot's built-in HTTP server.
-# Adjust the port if your netboot.xyz instance uses a different HTTP port.
+# HTTP URL from which the board (booted into NFS root) downloads the Armbian
+# image. Served by netboot.xyz's built-in HTTP server; the image is placed
+# there by setup_netboot.yml via the nfs_content role.
 image_server_url: "http://{{ netboot_server_ip }}:8080/assets/images"
 
-# How long to wait for reprovision to complete (seconds)
-reprovision_timeout: 1800
+# Maximum time in seconds to wait for the image download to complete.
+# A 1 GB compressed image at 100 Mbps takes ~80 s; 300 s is a safe margin.
+flash_download_timeout: 300
+
+# Maximum time in seconds to wait for the xz | dd flash to complete.
+# A 16 GB NVMe at ~200 MB/s takes ~80 s decompressed; 900 s covers slow media.
+flash_timeout: 900

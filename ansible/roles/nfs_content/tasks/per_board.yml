@@ -8,7 +8,6 @@
   ansible.builtin.set_fact:
     _bc: "{{ board_configs[_model] }}"
     _rootfs_mount: "{{ nfs_local_mount }}/rootfs/{{ _model }}"
-    _reprovision_mount: "{{ nfs_local_mount }}/reprovision/{{ _model }}"
     _tftp_board_dir: "{{ nfs_local_mount }}/tftp/armbian/{{ _model }}"
     _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
     _uboot_cache: "{{ armbian_image_cache }}/uboot-{{ _model }}"
@@ -20,21 +19,12 @@
     mode: "0755"
   loop:
     - "{{ _rootfs_mount }}"
-    - "{{ _reprovision_mount }}"
     - "{{ _tftp_board_dir }}"
 
 - name: Mount NFS rootfs export for {{ _model }}
   ansible.posix.mount:
     src: "{{ netboot_server_ip }}:{{ nfs_rootfs_path }}/{{ _model }}"
     path: "{{ _rootfs_mount }}"
-    fstype: nfs
-    opts: "vers=4,rw"
-    state: mounted
-
-- name: Mount NFS reprovision export for {{ _model }}
-  ansible.posix.mount:
-    src: "{{ netboot_server_ip }}:{{ nfs_reprovision_path }}/{{ _model }}"
-    path: "{{ _reprovision_mount }}"
     fstype: nfs
     opts: "vers=4,rw"
     state: mounted
@@ -126,26 +116,12 @@
         regexp: "^/dev/"
         state: absent
 
-    - name: Rsync rootfs into reprovision NFS mount
-      ansible.builtin.shell: |
-        rsync -aHAX --exclude '/proc/*' --exclude '/sys/*' \
-          --exclude '/dev/*' --exclude '/run/*' \
-          "{{ _rootfs_mount }}/" "{{ _reprovision_mount }}/"
-      args:
-        executable: /bin/bash
-      changed_when: true
-
 - name: Copy Armbian image to assets for reprovision HTTP download
   ansible.builtin.copy:
     src: "{{ _image_cache }}"
     dest: "{{ nfs_local_mount }}/assets/images/{{ _model }}.img.xz"
     mode: "0644"
     remote_src: true
-
-- name: Unmount NFS reprovision export for {{ _model }}
-  ansible.posix.mount:
-    path: "{{ _reprovision_mount }}"
-    state: unmounted
 
 - name: Unmount NFS rootfs export for {{ _model }}
   ansible.posix.mount:

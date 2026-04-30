@@ -1,10 +1,11 @@
 ---
-# Populates NFS rootfs/reprovision exports and TFTP assets on an already-running
-# netboot server. Also creates the shared RouterOS DHCP option objects used by
+# Populates the NFS rootfs export and TFTP assets on an already-running
+# netboot server, and creates the shared RouterOS DHCP option objects used by
 # enable/disable_netboot.
 #
 # Prerequisites:
-#   - NFS server running, exports exist and are accessible from this host
+#   - NFS server running; nfs_rootfs_path/<model> exports exist and are
+#     accessible (rw) from this host for each board model in inventory
 #   - netboot.xyz running (TFTP config and assets directories NFS-exported)
 #   - armbian_image_urls set in group_vars/all.yml for each board model
 #

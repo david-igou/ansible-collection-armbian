@@ -26,11 +26,11 @@ ansible-playbook playbooks/flash_bootloader.yml --limit rock-5b-01
 ansible-playbook playbooks/prepare_sd_card.yml \
   -e board_model=rock-5a -e sd_card_device=/dev/sdb
 
-# Enable netboot (reprovision or nfsroot mode)
+# Enable netboot (nfsroot or reprovision mode) — boards reboot immediately
 ansible-playbook playbooks/enable_netboot.yml \
-  --limit rock-5b-01 -e netboot_mode=reprovision
+  --limit rock-5b-01 -e netboot_mode=nfsroot
 
-# Full reprovision workflow (stages image, enables PXE, reboots board)
+# Full reprovision workflow (enables PXE, reboots, flashes disk, reboots to disk)
 ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
 
 # Manually revert a board to disk boot
@@ -44,9 +44,10 @@ Set all values in `ansible/inventory/group_vars/all.yml`:
 - `netboot_server_ip` — IP of the host running netboot.xyz + NFS
 - `routeros_host` — RouterOS device IP
 - `routeros_api_password` — use ansible-vault to encrypt this
+- `armbian_default_password` — Armbian NFS root SSH password (default `1234`); encrypt with vault
 - `armbian_image_urls` — full `.img.xz` URL per board model, found at `https://dl.armbian.com/<armbian_dl_dir>/`
 
-The NFS exports and paths (`nfs_rootfs_path`, `nfs_reprovision_path`, `tftp_nfs_export`, `nfs_assets_export`) must already exist and be accessible from the Ansible control node before running `setup_netboot.yml`.
+The NFS rootfs export paths (`nfs_rootfs_path/<model>`) must already exist and be accessible (rw) from the Ansible control node before running `setup_netboot.yml`. The separate reprovision export is no longer needed.
 
 Each board in `ansible/inventory/hosts.yml` needs `board_mac` and `board_model` set. The `board_model` value must exactly match a key in `ansible/roles/bootloader/vars/boards.yml`.
 
@@ -69,11 +70,26 @@ Each board in `ansible/inventory/hosts.yml` needs `board_mac` and `board_model` 
 
 All file operations on the netboot server go through NFS mounts on the Ansible control node — there is no SSH access to the netboot server required.
 
-- `setup_netboot.yml` mounts the TFTP config export (`tftp_nfs_export`), NFS rootfs export (`nfs_rootfs_path`), NFS reprovision export (`nfs_reprovision_path`), and assets export (`nfs_assets_export`) via `ansible.posix.mount`, writes content through those mounts, then unmounts.
+- `setup_netboot.yml` mounts the TFTP config export (`tftp_nfs_export`), NFS rootfs export (`nfs_rootfs_path`), and assets export (`nfs_assets_export`) via `ansible.posix.mount`, writes content through those mounts, then unmounts.
 - `enable_netboot.yml` mounts the TFTP config export, writes the per-board `pxelinux.cfg`, then unmounts.
-- The `reprovision` role mounts the NFS reprovision export, writes `reprovision.sh` and credentials, then unmounts.
 
-Mount base on the control node: `nfs_local_mount` (default `/mnt/netboot`), with subdirs `tftp/`, `assets/`, `rootfs/`, `reprovision/`.
+Mount base on the control node: `nfs_local_mount` (default `/mnt/netboot`), with subdirs `tftp/`, `assets/`, `rootfs/`.
+
+## Reprovision workflow
+
+`reprovision.yml` is fully Ansible-driven — no scripts are staged on the board:
+
+1. Writes pxelinux.cfg and sets RouterOS DHCP option (`armbian-reprovision`) — board boots the NFS rootfs with `rw` mount
+2. Reboots the board via SSH
+3. Waits for SSH on the NFS-booted board (connects as `root` using `armbian_default_password`)
+4. Asserts the board is booted from NFS, then runs `reprovision` role tasks:
+   - Downloads `.img.xz` from netboot.xyz HTTP server to `/tmp`
+   - Flashes to NVMe/eMMC with `xz | dd`
+5. Clears RouterOS DHCP option from the control node
+6. Reboots the board and waits for it to come up from the freshly flashed disk
+7. Asserts root filesystem is no longer NFS
+
+**Note:** boards of the same model share the NFS rootfs export. Reprovision one model at a time to avoid log/state contention in the shared NFS root.
 
 ## Where things run
 
@@ -83,9 +99,7 @@ Mount base on the control node: `nfs_local_mount` (default `/mnt/netboot`), with
 | `flash_bootloader.yml` | **boards** (requires Armbian running + internet for apt) |
 | `prepare_sd_card.yml` | Ansible control node (SD card attached via USB reader) |
 | `enable/disable_netboot.yml` | Ansible control node (pxelinux.cfg via NFS) + RouterOS (DHCP) |
-| `reprovision.yml` | Ansible control node (image staging via NFS) + RouterOS (DHCP trigger) |
-
-`reprovision.sh` runs **on the board itself** after it PXE-boots into the NFS reprovision root. It flashes the disk, then calls the RouterOS REST API to clear `dhcp-option` on the board's lease before rebooting.
+| `reprovision.yml` | RouterOS (DHCP) + **boards** (flash via SSH into NFS root) |
 
 ## Adding a new board
 
@@ -104,10 +118,12 @@ Three object types are created once by `setup_netboot.yml` and reused for all bo
 
 Per-board `enable_netboot` sets `dhcp-option=armbian-nfsroot|armbian-reprovision` on the static lease; `disable_netboot` clears it to `""`. This is the only per-board RouterOS state.
 
+The `armbian-reprovision` DHCP option set boots the board into the same NFS rootfs as `armbian-nfsroot` but with a `rw` NFS mount, giving systemd write access to the root during the Ansible-driven flash.
+
 ## Key files
 
 - `ansible/roles/bootloader/vars/boards.yml` — authoritative hardware config for all board models
 - `ansible/inventory/group_vars/all.yml` — IPs, credentials, image URLs (edit before first run)
 - `ansible/inventory/group_vars/rk3588.yml` — RK3588 U-Boot env offset defaults (verify against hardware)
-- `ansible/roles/reprovision/files/reprovision.sh` — bash script that runs on the board during reprovision; reads kernel cmdline params and `/etc/reprovision.conf` from the NFS export
+- `ansible/roles/reprovision/tasks/main.yml` — flash tasks that run on the board via SSH during reprovision
 - `ansible/roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-board TFTP boot config template; generated by `enable_netboot`

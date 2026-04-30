@@ -1,29 +1,27 @@
 ---
 # Enables network boot for one or more boards.
-# Updates the pxelinux.cfg on the TFTP server, assigns the PXE DHCP option
-# set on RouterOS, adjusts U-Boot boot order (non-SPI boards), and reboots.
+# Writes pxelinux.cfg to the TFTP NFS mount, assigns the PXE DHCP option
+# set on RouterOS, and optionally reboots boards to apply the change.
 #
 # Usage:
-#   # Reprovision a specific board
+#   # Enable NFS root (diskless mode) for a specific board
 #   ansible-playbook playbooks/enable_netboot.yml \
 #     --limit rock-5b-01 \
-#     -e netboot_mode=reprovision
-#
-#   # Boot all boards to NFS root (diskless mode)
-#   ansible-playbook playbooks/enable_netboot.yml \
 #     -e netboot_mode=nfsroot
 #
-#   # Enable without rebooting (e.g. board is off)
+#   # Enable reprovision mode for all boards
+#   ansible-playbook playbooks/enable_netboot.yml \
+#     -e netboot_mode=reprovision
+#
+#   # Enable without rebooting (e.g. board is currently off)
 #   ansible-playbook playbooks/enable_netboot.yml \
 #     --limit orange-pi-5-01 \
-#     -e netboot_mode=reprovision \
+#     -e netboot_mode=nfsroot \
 #     -e netboot_reboot=false
 
-- name: Enable netboot for boards
+- name: Configure PXE boot on RouterOS
   hosts: routeros
   gather_facts: false
-  vars:
-    # Override per-board by looping over boards group
   tasks:
     - name: Enable netboot on RouterOS for each target board
       ansible.builtin.include_role:
@@ -32,6 +30,19 @@
       vars:
         board_mac: "{{ hostvars[item]['board_mac'] }}"
         board_model: "{{ hostvars[item]['board_model'] }}"
+        netboot_reboot: false
       loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
+
+- name: Reboot boards to apply PXE boot
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: Reboot to trigger PXE
+      ansible.builtin.command: reboot
+      async: 1
+      poll: 0
+      ignore_errors: true
+      changed_when: true
+      when: netboot_reboot | default(true) | bool

@@ -1,6 +1,6 @@
 ---
 # Mounts NFS exports from the already-running netboot server and populates
-# them with Armbian rootfs, kernel/DTB/initrd for TFTP, and reprovision assets.
+# them with Armbian rootfs, kernel/DTB/initrd for TFTP, and image assets.
 # Runs on the Ansible control node (localhost).
 
 - name: Load board configs
@@ -23,7 +23,6 @@
     - tftp
     - assets
     - rootfs
-    - reprovision
 
 - name: Create local Armbian image cache and mount directories
   ansible.builtin.file:
