@@ -43,6 +43,6 @@
       ansible.builtin.command: reboot
       async: 1
       poll: 0
-      ignore_errors: true
+      ignore_errors: true # noqa: ignore-errors
       changed_when: true
       when: netboot_reboot | default(true) | bool

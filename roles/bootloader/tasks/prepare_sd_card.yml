@@ -37,18 +37,24 @@
 
 - name: Read U-Boot env offset from extracted rootfs
   ansible.builtin.shell: |
+    set -o pipefail
     grep -v '^#\|^$' \
       "{{ nfs_rootfs_path }}/{{ board_model }}/etc/fw_env.config" \
       | awk '{print $2}' | head -1
+  args:
+    executable: /bin/bash
   register: _env_offset_raw
   changed_when: false
   failed_when: _env_offset_raw.stdout == ''
 
 - name: Read U-Boot env size from extracted rootfs
   ansible.builtin.shell: |
+    set -o pipefail
     grep -v '^#\|^$' \
       "{{ nfs_rootfs_path }}/{{ board_model }}/etc/fw_env.config" \
       | awk '{print $3}' | head -1
+  args:
+    executable: /bin/bash
   register: _env_size_raw
   changed_when: false
   failed_when: _env_size_raw.stdout == ''

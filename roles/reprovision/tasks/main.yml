@@ -45,15 +45,22 @@
 
 - name: Unmount any mounted partitions on {{ _flash_target }}
   ansible.builtin.shell: |
+    set -o pipefail
     lsblk -ln -o NAME {{ _flash_target }} | tail -n +2 \
       | xargs -I{} sh -c 'umount /dev/{} 2>/dev/null; true'
+  args:
+    executable: /bin/bash
   changed_when: false
   tags: reprovision
 
 - name: Flash image to {{ _flash_target }}
   ansible.builtin.shell: |
+    set -o pipefail
     xz --decompress --stdout /tmp/armbian.img.xz \
       | dd of={{ _flash_target }} bs=4M conv=fsync status=progress
+  args:
+    executable: /bin/bash
+  changed_when: true
   async: "{{ flash_timeout }}"
   poll: 15
   tags: reprovision
