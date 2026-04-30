@@ -241,11 +241,13 @@ armbian_image_urls:
 Browse `https://dl.armbian.com/<board>/` to find the current URL. Prefer
 the `server` or `minimal` variant (`bookworm` recommended for stability).
 
+Set them in `inventory/group_vars/all.yml`.
+
 ---
 
 ## Ansible Collections Required
 
-Install with `ansible-galaxy collection install -r ansible/requirements.yml`:
+Install with `ansible-galaxy collection install -r requirements.yml`:
 
 - `community.routeros` ≥ 2.0 — RouterOS API/command modules
 - `ansible.posix` ≥ 1.5 — mount module for NFS content management

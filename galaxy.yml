@@ -1,0 +1,55 @@
+---
+# Initialized by https://github.com/ansible/ansible-creator 26.4.3
+# See https://docs.ansible.com/ansible/latest/dev_guide/collections_galaxy_meta.html
+
+namespace: "david_igou"
+name: "armbian_netboot"
+version: 1.0.0
+readme: README.md
+authors:
+  - david-igou
+
+description: >-
+  Ansible collection for PXE-netbooting and reprovisioning Armbian-based
+  RK3588/RK3588S SBCs (Orange Pi 5/Pro/Max, Rock 5B, Rock 5A) via RouterOS
+  DHCP option management and NFS-based root filesystems.
+
+license_file: LICENSE
+
+tags:
+  - linux
+  - networking
+  - infrastructure
+  - armbian
+  - pxe
+  - netboot
+  - rockchip
+
+dependencies:
+  "community.routeros": ">=2.0.0"
+  "ansible.posix": ">=1.5.0"
+  "ansible.netcommon": ">=5.0.0"
+
+repository: https://github.com/david-igou/armbian-netboot-reprovision
+documentation: https://github.com/david-igou/armbian-netboot-reprovision/tree/main/docs
+homepage: https://github.com/david-igou/armbian-netboot-reprovision
+issues: https://github.com/david-igou/armbian-netboot-reprovision/issues
+
+build_ignore:
+  - .gitignore
+  - .devcontainer/
+  - .github/
+  - .vscode/
+  - .pre-commit-config.yaml
+  - .isort.cfg
+  - .prettierignore
+  - changelogs/.plugin-cache.yaml
+  - tox-ansible.ini
+  - pyproject.toml
+  - requirements.txt
+  - test-requirements.txt
+  - devfile.yaml
+  - AGENTS.md
+  - CONTRIBUTING
+  - MAINTAINERS
+  - ansible-creator.log
