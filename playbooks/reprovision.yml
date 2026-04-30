@@ -1,0 +1,122 @@
+---
+# Ansible-driven reprovision workflow:
+#   1. Writes per-board pxelinux.cfg (reprovision mode) and assigns the PXE
+#      DHCP option set on RouterOS
+#   2. Reboots boards via SSH — they PXE boot into the NFS root environment
+#   3. Waits for SSH to come up on each board, then downloads and flashes the
+#      Armbian image directly via Ansible tasks (no scripts staged on the board)
+#   4. Clears the PXE DHCP option on RouterOS from the control node
+#   5. Reboots boards to the freshly flashed disk and verifies disk boot
+#
+# Usage:
+#   ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
+#
+# Multiple boards (processed in parallel up to ansible forks):
+#   ansible-playbook playbooks/reprovision.yml --limit "rock-5b-01,orange-pi-5-01"
+#
+# Note: boards of the same model share the NFS rootfs export. Reprovision one
+# model at a time to avoid log/state contention in the shared NFS root.
+
+- name: Configure PXE reprovision boot on RouterOS
+  hosts: routeros
+  gather_facts: false
+  tasks:
+    - name: Enable reprovision netboot for each target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: enable_netboot.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        board_model: "{{ hostvars[item]['board_model'] }}"
+        netboot_mode: reprovision
+        netboot_reboot: false
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
+
+- name: Reboot boards into NFS root
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: Reboot to trigger PXE boot
+      ansible.builtin.command: reboot
+      async: 1
+      poll: 0
+      ignore_errors: true # noqa: ignore-errors
+      changed_when: true
+
+- name: Flash Armbian image to disk
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    ansible_user: root
+    ansible_password: "{{ armbian_default_password }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_become: false
+  tasks:
+    - name: Wait for board to come up on NFS root
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: 180
+
+    - name: Gather facts for boot verification
+      ansible.builtin.setup:
+
+    - name: Verify board is booted from NFS
+      ansible.builtin.assert:
+        that:
+          - ansible_mounts
+            | selectattr('mount', 'equalto', '/')
+            | map(attribute='fstype')
+            | first in ['nfs', 'nfs4']
+        fail_msg: >-
+          Root filesystem on {{ inventory_hostname }} is not NFS — board did not
+          PXE boot correctly. Check RouterOS DHCP options and TFTP connectivity.
+
+    - name: Flash Armbian image
+      ansible.builtin.include_role:
+        name: reprovision
+
+- name: Disable PXE boot on RouterOS
+  hosts: routeros
+  gather_facts: false
+  tasks:
+    - name: Clear PXE DHCP option for each target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: disable_netboot.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }}"
+
+- name: Reboot boards to freshly flashed disk
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    ansible_user: root
+    ansible_password: "{{ armbian_default_password }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_become: false
+  tasks:
+    - name: Reboot to flashed disk
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        connect_timeout: 10
+        post_reboot_delay: 15
+        msg: "Reprovision complete — booting from freshly flashed disk"
+
+    - name: Gather facts after disk boot
+      ansible.builtin.setup:
+
+    - name: Verify board booted from local disk
+      ansible.builtin.assert:
+        that:
+          - ansible_mounts
+            | selectattr('mount', 'equalto', '/')
+            | map(attribute='fstype')
+            | first not in ['nfs', 'nfs4']
+        fail_msg: >-
+          Root filesystem on {{ inventory_hostname }} is still NFS after reboot —
+          board did not boot from disk. Check that RouterOS DHCP option was cleared.

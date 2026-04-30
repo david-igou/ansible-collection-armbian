@@ -57,9 +57,9 @@ version should be updated or rebuilt with `CONFIG_CMD_PXE=y`.
 
 ## Adding a New Board
 
-1. Add a new entry to `ansible/roles/bootloader/vars/boards.yml` with the
+1. Add a new entry to `roles/bootloader/vars/boards.yml` with the
    correct SoC, DTB path, console, SPI availability, and Armbian package name.
-2. Add host entries to `ansible/inventory/hosts.yml` with `board_model` set
+2. Add host entries to `inventory/hosts.yml` with `board_model` set
    to the new key.
 3. Verify the DTB path against the actual Armbian image for that board — DTB
    paths are under `/boot/dtb/rockchip/` on most Armbian builds.

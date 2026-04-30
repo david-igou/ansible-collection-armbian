@@ -1,0 +1,27 @@
+---
+profile: min
+
+exclude_paths:
+  - extensions/
+  - tests/
+  - changelogs/
+
+warn_list:
+  - command-instead-of-module
+
+skip_list:
+  # Cross-role interface variables (board_mac, board_model, etc.) are
+  # deliberately shared across roles and don't use per-role prefixes.
+  - var-naming[no-role-prefix]
+
+# Declare external collection modules so syntax-check passes without
+# requiring the collections to be installed locally.
+mock_modules:
+  - ansible.posix.mount
+  - community.routeros.command
+  - community.routeros.api
+
+use_default_rules: true
+# mock_modules covers external collection deps, so offline mode works
+# without running `make install` first.
+offline: true

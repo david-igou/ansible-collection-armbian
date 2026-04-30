@@ -1,0 +1,132 @@
+---
+# Runs once per board model (_model variable set by include loop in main.yml).
+# Mounts the NFS rootfs and reprovision exports for this model, populates
+# them from the Armbian image, writes kernel/DTB/initrd to the TFTP mount,
+# then unmounts. All operations run on the Ansible control node.
+
+- name: Set board facts for {{ _model }}
+  ansible.builtin.set_fact:
+    _bc: "{{ board_configs[_model] }}"
+    _rootfs_mount: "{{ nfs_local_mount }}/rootfs/{{ _model }}"
+    _tftp_board_dir: "{{ nfs_local_mount }}/tftp/armbian/{{ _model }}"
+    _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
+    _uboot_cache: "{{ armbian_image_cache }}/uboot-{{ _model }}"
+
+- name: Create local mount directories for {{ _model }}
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ _rootfs_mount }}"
+    - "{{ _tftp_board_dir }}"
+
+- name: Mount NFS rootfs export for {{ _model }}
+  ansible.posix.mount:
+    src: "{{ netboot_server_ip }}:{{ nfs_rootfs_path }}/{{ _model }}"
+    path: "{{ _rootfs_mount }}"
+    fstype: nfs
+    opts: "vers=4,rw"
+    state: mounted
+
+- name: Check if rootfs is already populated for {{ _model }}
+  ansible.builtin.stat:
+    path: "{{ _rootfs_mount }}/bin/bash"
+  register: _rootfs_populated
+
+- name: Populate rootfs from Armbian image
+  when: not _rootfs_populated.stat.exists
+  block:
+    - name: Fail if no image URL configured for {{ _model }}
+      ansible.builtin.fail:
+        msg: >-
+          armbian_image_urls['{{ _model }}'] is not set.
+          Set it in ansible/inventory/group_vars/all.yml to the full .img.xz
+          URL from https://dl.armbian.com/{{ _bc.armbian_dl_dir }}/
+      when: not armbian_image_urls[_model] | default('')
+
+    - name: Download Armbian image for {{ _model }}
+      ansible.builtin.get_url:
+        url: "{{ armbian_image_urls[_model] }}"
+        dest: "{{ _image_cache }}"
+        mode: "0644"
+        timeout: 600
+
+    - name: Decompress image
+      ansible.builtin.shell: |
+        xz -dk "{{ _image_cache }}"
+      args:
+        creates: "{{ armbian_image_cache }}/{{ _model }}.img"
+
+    - name: Set up loop device
+      ansible.builtin.shell: |
+        losetup --find --show --partscan \
+          "{{ armbian_image_cache }}/{{ _model }}.img"
+      register: _loop_dev
+      changed_when: true
+
+    - name: Mount Armbian image rootfs partition
+      ansible.builtin.shell: |
+        set -o pipefail
+        PART=$(lsblk -ln -o NAME {{ _loop_dev.stdout }} | tail -1)
+        mount /dev/${PART} "{{ armbian_image_mount }}"
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Rsync rootfs to NFS rootfs mount
+      ansible.builtin.shell: |
+        rsync -aHAX --exclude '/proc/*' --exclude '/sys/*' \
+          --exclude '/dev/*' --exclude '/run/*' \
+          "{{ armbian_image_mount }}/" "{{ _rootfs_mount }}/"
+      changed_when: true
+
+    - name: Copy kernel and initrd to TFTP tree
+      ansible.builtin.shell: |
+        cp "{{ armbian_image_mount }}"/boot/vmlinuz-* "{{ _tftp_board_dir }}/vmlinuz"
+        cp "{{ armbian_image_mount }}"/boot/initrd.img-* "{{ _tftp_board_dir }}/initrd.img"
+      changed_when: true
+
+    - name: Copy board DTB to TFTP tree
+      ansible.builtin.shell: |
+        DTB_SRC="{{ armbian_image_mount }}/boot/dtb/{{ _bc.dtb }}"
+        [ -f "${DTB_SRC}" ] && cp "${DTB_SRC}" "{{ _tftp_board_dir }}/board.dtb" \
+          || echo "WARNING: DTB not found at ${DTB_SRC}" >&2
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Cache U-Boot binaries for SD card preparation
+      ansible.builtin.shell: |
+        UBOOT_DIR="{{ armbian_image_mount }}/usr/lib/{{ _bc.uboot_package }}"
+        mkdir -p "{{ _uboot_cache }}"
+        for BIN in "{{ _bc.uboot_emmc_image }}" "{{ _bc.uboot_spi_image }}"; do
+          [ -f "${UBOOT_DIR}/${BIN}" ] && cp "${UBOOT_DIR}/${BIN}" "{{ _uboot_cache }}/" || true
+        done
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Unmount Armbian image and detach loop device
+      ansible.builtin.shell: |
+        umount "{{ armbian_image_mount }}" || true
+        losetup -d "{{ _loop_dev.stdout }}" || true
+      changed_when: true
+
+    - name: Remove local disk entries from NFS rootfs fstab
+      ansible.builtin.lineinfile:
+        path: "{{ _rootfs_mount }}/etc/fstab"
+        regexp: "^/dev/"
+        state: absent
+
+- name: Copy Armbian image to assets for reprovision HTTP download
+  ansible.builtin.copy:
+    src: "{{ _image_cache }}"
+    dest: "{{ nfs_local_mount }}/assets/images/{{ _model }}.img.xz"
+    mode: "0644"
+    remote_src: true
+
+- name: Unmount NFS rootfs export for {{ _model }}
+  ansible.posix.mount:
+    path: "{{ _rootfs_mount }}"
+    state: unmounted
