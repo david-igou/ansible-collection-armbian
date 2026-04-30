@@ -14,28 +14,26 @@
                │                          │
     ┌──────────▼──────────┐    ┌──────────▼──────────────┐
     │   Netboot Server    │    │       Board (RK3588)     │
-    │                     │    │                          │
-    │  ┌───────────────┐  │    │  U-Boot (SPI or SD card) │
-    │  │ netboot.xyz   │  │    │                          │
-    │  │ (Docker)      │◄─┼────┤  1. DHCP request        │
-    │  │               │  │    │  2. If next-server set:  │
-    │  │ TFTP :69      │  │    │     TFTP pxelinux.cfg   │
-    │  │ HTTP :8080    │  │    │     TFTP kernel/initrd/ │
-    │  └───────────────┘  │    │     DTB → boot          │
-    │                     │    │  3. If no next-server:   │
-    │  ┌───────────────┐  │    │     boot local disk     │
-    │  │ NFS Server    │  │    └──────────────────────────┘
-    │  │ /exports/     │  │
-    │  │  rootfs/      │  │
-    │  │  reprovision/ │  │
-    │  └───────────────┘  │
-    │                     │
-    │  ┌───────────────┐  │
-    │  │ nginx :80     │  │
-    │  │ /images/      │  │
-    │  │ (Armbian img) │  │
-    │  └───────────────┘  │
-    └─────────────────────┘
+    │  (already running)  │    │                          │
+    │                     │    │  U-Boot (SPI or SD card) │
+    │  ┌───────────────┐  │    │                          │
+    │  │ netboot.xyz   │  │    │  1. DHCP request        │
+    │  │ (Docker)      │◄─┼────┤  2. If next-server set:  │
+    │  │               │  │    │     TFTP pxelinux.cfg   │
+    │  │ TFTP :69      │  │    │     TFTP kernel/initrd/ │
+    │  │ HTTP :8080    │  │    │     DTB → boot          │
+    │  └───────────────┘  │    │  3. If no next-server:   │
+    │                     │    │     boot local disk     │
+    │  ┌───────────────┐  │    └──────────────────────────┘
+    │  │ NFS Server    │  │
+    │  │ /exports/     │  │    ┌──────────────────────────┐
+    │  │  rootfs/      │  │    │  Ansible Control Node    │
+    │  │  reprovision/ │◄─┼────┤                          │
+    │  └───────────────┘  │    │  Mounts NFS exports,     │
+    │                     │    │  writes content through  │
+    └─────────────────────┘    │  mounts (no SSH needed   │
+                               │  to netboot server)      │
+                               └──────────────────────────┘
 ```
 
 ---
@@ -66,7 +64,7 @@ and the root is the read-write reprovision export. On boot, systemd starts
 `reprovision.service`, which:
 
 1. Reads `/etc/reprovision.conf` (credentials on NFS server, not board disk)
-2. Downloads `<model>.img.xz` from the nginx image server on the netboot host
+2. Downloads `<model>.img.xz` from the netboot.xyz HTTP server (port 8080)
 3. Flashes it to NVMe (`/dev/nvme0n1`) or eMMC (`/dev/mmcblk0`)
 4. Calls the RouterOS REST API to clear `dhcp-option` from the board's lease
 5. Reboots — board comes up from the freshly flashed disk
@@ -108,7 +106,7 @@ SD card (permanent, inserted into board)
 - The card can remain inserted permanently; removing it makes the board
   fall back to eMMC U-Boot (if present) which defaults to disk-first
 
-**Preparing the SD card** (run once per card, on the netboot server):
+**Preparing the SD card** (run once per card, on the Ansible control node):
 
 ```bash
 ansible-playbook playbooks/prepare_sd_card.yml \
@@ -117,7 +115,33 @@ ansible-playbook playbooks/prepare_sd_card.yml \
 ```
 
 The playbook reads the U-Boot binary and env offset from the Armbian rootfs
-already extracted by `setup_server.yml`, so no additional downloads are needed.
+already extracted by `setup_netboot.yml`, so no additional downloads are needed.
+
+---
+
+## How NFS Content is Managed
+
+This repo does not configure the netboot server — it only populates the NFS
+exports that netboot.xyz and the boards consume. All writes happen through
+NFS mounts on the Ansible control node:
+
+```
+Control node (ansible-playbook runs here)
+  │
+  ├── mounts {{ netboot_server_ip }}:{{ tftp_nfs_export }}  → /mnt/netboot/tftp/
+  │     Writes: pxelinux.cfg/01-<mac>, armbian/<model>/{vmlinuz,initrd,dtb}
+  │
+  ├── mounts {{ netboot_server_ip }}:{{ nfs_rootfs_path }}/<model>  → /mnt/netboot/rootfs/<model>/
+  │     Writes: full Armbian rootfs (rsync from extracted image)
+  │
+  ├── mounts {{ netboot_server_ip }}:{{ nfs_reprovision_path }}/<model>  → /mnt/netboot/reprovision/<model>/
+  │     Writes: reprovision.sh, reprovision.service, /etc/reprovision.conf
+  │
+  └── mounts {{ netboot_server_ip }}:{{ nfs_assets_export }}  → /mnt/netboot/assets/
+        Writes: images/<model>.img.xz  (served via netboot.xyz HTTP :8080)
+```
+
+No SSH access to the netboot server is required for any content operation.
 
 ---
 
@@ -125,6 +149,7 @@ already extracted by `setup_server.yml`, so no additional downloads are needed.
 
 | Goal | Command |
 |---|---|
+| Populate NFS and set up RouterOS DHCP objects | `ansible-playbook setup_netboot.yml` |
 | Enable reprovision for one board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
 | Enable NFS root for all boards | `ansible-playbook enable_netboot.yml -e netboot_mode=nfsroot` |
 | Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
@@ -135,17 +160,15 @@ already extracted by `setup_server.yml`, so no additional downloads are needed.
 
 ## TFTP File Layout
 
-Served from `/opt/netbootxyz/config/` on the netboot server:
+Served from `{{ tftp_nfs_export }}` on the netboot server (default `/opt/netbootxyz/config`):
 
 ```
 pxelinux.cfg/
   01-aa-bb-cc-dd-ee-ff    # per-board config, generated by enable_netboot
-  nfsroot-default         # shared fallback — NFS root mode
-  reprovision-default     # shared fallback — reprovision mode
 
 armbian/
   orange-pi-5/
-    vmlinuz               # extracted from Armbian image by setup_server
+    vmlinuz               # extracted from Armbian image by setup_netboot
     initrd.img
     board.dtb
   rock-5b/
@@ -175,7 +198,7 @@ armbian/
 
 ## RouterOS DHCP Objects
 
-Created once by `setup_server.yml` → `routeros_dhcp/setup_options.yml`:
+Created once by `setup_netboot.yml` → `routeros_dhcp/setup_options.yml`:
 
 | Object | Name | Purpose |
 |---|---|---|
@@ -218,5 +241,5 @@ the `server` or `minimal` variant (`bookworm` recommended for stability).
 Install with `ansible-galaxy collection install -r ansible/requirements.yml`:
 
 - `community.routeros` ≥ 2.0 — RouterOS API/command modules
-- `community.docker` ≥ 3.0 — docker_compose_v2 module
+- `ansible.posix` ≥ 1.5 — mount module for NFS content management
 - `ansible.netcommon` ≥ 5.0 — network_cli connection plugin

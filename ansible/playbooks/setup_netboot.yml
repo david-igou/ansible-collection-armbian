@@ -1,0 +1,33 @@
+---
+# Populates NFS rootfs/reprovision exports and TFTP assets on an already-running
+# netboot server. Also creates the shared RouterOS DHCP option objects used by
+# enable/disable_netboot.
+#
+# Prerequisites:
+#   - NFS server running, exports exist and are accessible from this host
+#   - netboot.xyz running (TFTP config and assets directories NFS-exported)
+#   - armbian_image_urls set in group_vars/all.yml for each board model
+#
+# Usage:
+#   ansible-playbook playbooks/setup_netboot.yml
+#
+# To re-run only the NFS content population (e.g. after updating image URLs):
+#   ansible-playbook playbooks/setup_netboot.yml --tags nfs_content
+
+- name: Populate NFS and TFTP content
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  roles:
+    - role: nfs_content
+      tags: nfs_content
+
+- name: Configure RouterOS DHCP option objects
+  hosts: routeros
+  gather_facts: false
+  vars:
+    routeros_setup_options: true
+  roles:
+    - role: routeros_dhcp
+      tags: routeros

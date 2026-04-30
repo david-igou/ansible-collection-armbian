@@ -1,23 +1,26 @@
 ---
-# Network
+# ── Addresses ────────────────────────────────────────────────────────────────
 netboot_server_ip: "192.168.1.10"
 routeros_host: "192.168.1.1"
 routeros_api_user: "ansible"
 routeros_dhcp_server_name: "dhcp1"
 
-# NFS paths on the server
-nfs_export_base: "/exports"
-nfs_rootfs_path: "/exports/rootfs"
-nfs_reprovision_path: "/exports/reprovision"
+# ── NFS export paths on the netboot server ───────────────────────────────────
+# These must already exist and be exported before running setup_netboot.yml.
+nfs_rootfs_path: /exports/rootfs
+nfs_reprovision_path: /exports/reprovision
+tftp_nfs_export: /opt/netbootxyz/config
+nfs_assets_export: /opt/netbootxyz/assets
 
-# TFTP paths within the netboot.xyz config volume
-tftp_base: "/opt/netbootxyz/config"
-tftp_armbian_dir: "armbian"
-tftp_pxelinux_cfg_dir: "pxelinux.cfg"
+# ── Local mount base on the Ansible control node ─────────────────────────────
+nfs_local_mount: /mnt/netboot
 
-# Armbian image URLs — must be set explicitly per board model.
-# Browse https://dl.armbian.com/<board>/ to find the current .img.xz URL.
-# Board subdirectory names: orangepi5, orangepi5-pro, orangepi5-max, rock-5b, rock-5a
+# tftp_base resolves through the NFS mount; used when writing pxelinux.cfg
+tftp_base: "{{ nfs_local_mount }}/tftp"
+
+# ── Armbian image URLs ────────────────────────────────────────────────────────
+# Set to the full .img.xz URL for each board model.
+# Browse https://dl.armbian.com/<armbian_dl_dir>/ to find the current URL.
 armbian_image_urls:
   orange-pi-5: ""
   orange-pi-5-pro: ""
@@ -28,14 +31,11 @@ armbian_image_urls:
 # U-Boot branch — determines which linux-u-boot-<branch>-<board> package is used
 armbian_branch: "current"
 
-# Image server (nginx on the netboot server) for reprovision downloads
-image_server_url: "http://{{ netboot_server_ip }}/images"
-image_server_root: "/var/www/netboot/images"
-
-# RouterOS credentials (override with ansible-vault)
+# ── RouterOS credentials ──────────────────────────────────────────────────────
+# Encrypt routeros_api_password with ansible-vault
 routeros_api_password: "changeme"
 
-# Board SSH defaults
+# ── Board SSH defaults ────────────────────────────────────────────────────────
 ansible_user: "armbian"
 ansible_become: true
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"

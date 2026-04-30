@@ -1,7 +1,0 @@
-# /etc/exports — managed by Ansible, do not edit manually
-
-# NFS root exports — one per board model, served read-only to boards
-{% for model in groups['boards'] | map('extract', hostvars, 'board_model') | list | unique %}
-{{ nfs_rootfs_path }}/{{ model }}   {{ nfs_allowed_clients }}(ro,no_subtree_check,no_root_squash)
-{{ nfs_reprovision_path }}/{{ model }} {{ nfs_allowed_clients }}(rw,no_subtree_check,no_root_squash)
-{% endfor %}

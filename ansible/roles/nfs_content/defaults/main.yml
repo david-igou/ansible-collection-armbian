@@ -1,0 +1,19 @@
+---
+# Where to mount NFS exports on the Ansible control node
+nfs_local_mount: /mnt/netboot
+
+# Temporary mount point used when loop-mounting an Armbian image for extraction
+armbian_image_mount: /mnt/armbian-image
+
+# Local directory for cached Armbian .img.xz downloads
+armbian_image_cache: /var/cache/armbian-images
+
+# NFS export paths on the netboot server (must already exist and be exported)
+nfs_rootfs_path: /exports/rootfs
+nfs_reprovision_path: /exports/reprovision
+tftp_nfs_export: /opt/netbootxyz/config
+nfs_assets_export: /opt/netbootxyz/assets
+
+# tftp_base resolves to the NFS-mounted TFTP config directory;
+# used by routeros_dhcp/enable_netboot when writing pxelinux.cfg files
+tftp_base: "{{ nfs_local_mount }}/tftp"

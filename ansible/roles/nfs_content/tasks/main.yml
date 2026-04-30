@@ -1,0 +1,82 @@
+---
+# Mounts NFS exports from the already-running netboot server and populates
+# them with Armbian rootfs, kernel/DTB/initrd for TFTP, and reprovision assets.
+# Runs on the Ansible control node (localhost).
+
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../bootloader/vars/boards.yml"
+
+- name: Gather unique board models from inventory
+  ansible.builtin.set_fact:
+    _board_models: >-
+      {{ groups['boards']
+         | map('extract', hostvars, 'board_model')
+         | list | unique }}
+
+- name: Create local NFS mount base directories
+  ansible.builtin.file:
+    path: "{{ nfs_local_mount }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - tftp
+    - assets
+    - rootfs
+    - reprovision
+
+- name: Create local Armbian image cache and mount directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ armbian_image_cache }}"
+    - "{{ armbian_image_mount }}"
+
+- name: Mount TFTP config directory from NFS
+  ansible.posix.mount:
+    src: "{{ netboot_server_ip }}:{{ tftp_nfs_export }}"
+    path: "{{ nfs_local_mount }}/tftp"
+    fstype: nfs
+    opts: "vers=4,rw"
+    state: mounted
+
+- name: Mount netboot assets directory from NFS
+  ansible.posix.mount:
+    src: "{{ netboot_server_ip }}:{{ nfs_assets_export }}"
+    path: "{{ nfs_local_mount }}/assets"
+    fstype: nfs
+    opts: "vers=4,rw"
+    state: mounted
+
+- name: Ensure TFTP armbian and pxelinux.cfg directories exist
+  ansible.builtin.file:
+    path: "{{ nfs_local_mount }}/tftp/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - armbian
+    - pxelinux.cfg
+
+- name: Ensure assets images directory exists
+  ansible.builtin.file:
+    path: "{{ nfs_local_mount }}/assets/images"
+    state: directory
+    mode: "0755"
+
+- name: Populate NFS content for each board model
+  ansible.builtin.include_tasks: per_board.yml
+  loop: "{{ _board_models }}"
+  loop_control:
+    loop_var: _model
+
+- name: Unmount TFTP config directory
+  ansible.posix.mount:
+    path: "{{ nfs_local_mount }}/tftp"
+    state: unmounted
+
+- name: Unmount netboot assets directory
+  ansible.posix.mount:
+    path: "{{ nfs_local_mount }}/assets"
+    state: unmounted

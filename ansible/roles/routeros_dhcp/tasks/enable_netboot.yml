@@ -1,6 +1,6 @@
 ---
-# Writes the per-board pxelinux.cfg, assigns the PXE DHCP option set on
-# RouterOS, and reboots the board.
+# Writes the per-board pxelinux.cfg via the NFS-mounted TFTP config directory,
+# assigns the PXE DHCP option set on RouterOS, and reboots the board.
 #
 # For SPI boards: U-Boot in SPI handles PXE automatically once DHCP options
 # are set — no board-side configuration change is needed.
@@ -19,8 +19,38 @@
     fail_msg: "netboot_mode must be 'nfsroot' or 'reprovision'"
   tags: routeros, enable_netboot
 
+- name: Ensure TFTP NFS mount directory exists
+  delegate_to: localhost
+  become: true
+  ansible.builtin.file:
+    path: "{{ tftp_base }}"
+    state: directory
+    mode: "0755"
+  tags: routeros, enable_netboot
+
+- name: Mount TFTP config directory from NFS
+  delegate_to: localhost
+  become: true
+  ansible.posix.mount:
+    src: "{{ netboot_server_ip }}:{{ tftp_nfs_export }}"
+    path: "{{ tftp_base }}"
+    fstype: nfs
+    opts: "vers=4,rw"
+    state: mounted
+  tags: routeros, enable_netboot
+
+- name: Ensure pxelinux.cfg directory exists on TFTP mount
+  delegate_to: localhost
+  become: true
+  ansible.builtin.file:
+    path: "{{ tftp_base }}/pxelinux.cfg"
+    state: directory
+    mode: "0755"
+  tags: routeros, enable_netboot
+
 - name: Generate pxelinux.cfg for {{ inventory_hostname }}
-  delegate_to: "{{ groups['netboot_server'][0] }}"
+  delegate_to: localhost
+  become: true
   ansible.builtin.template:
     src: "{{ role_path }}/templates/pxelinux_cfg.j2"
     dest: >-
@@ -28,6 +58,14 @@
         board_mac | lower | replace(':', '-')
       }}
     mode: "0644"
+  tags: routeros, enable_netboot
+
+- name: Unmount TFTP config directory
+  delegate_to: localhost
+  become: true
+  ansible.posix.mount:
+    path: "{{ tftp_base }}"
+    state: unmounted
   tags: routeros, enable_netboot
 
 - name: Assign netboot DHCP option set for {{ board_mac }}
