@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  role_name: nfs_content
+  author: David Igou
+  description: Populate netboot.xyz NFS exports with Armbian rootfs, kernel, DTB, and image assets via NFS mounts on the control node
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+  galaxy_tags:
+    - linux
+    - networking
+    - infrastructure
+    - armbian
+    - nfs
+    - netboot
+
+dependencies: []

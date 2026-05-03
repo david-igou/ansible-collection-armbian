@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  role_name: routeros_dhcp
+  author: David Igou
+  description: Manage MikroTik RouterOS DHCP option objects to switch boards between disk boot and PXE netboot
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+  galaxy_tags:
+    - linux
+    - networking
+    - infrastructure
+    - dhcp
+    - routeros
+    - mikrotik
+
+dependencies: []

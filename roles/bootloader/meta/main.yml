@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  role_name: bootloader
+  author: David Igou
+  description: Flash PXE-capable U-Boot to SPI/eMMC, or prepare an SD card bootloader, for RK3588/RK3588S Armbian boards
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+  galaxy_tags:
+    - linux
+    - networking
+    - infrastructure
+    - armbian
+    - bootloader
+    - rockchip
+
+dependencies: []

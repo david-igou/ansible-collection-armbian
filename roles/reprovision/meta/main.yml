@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: reprovision
+  author: David Igou
+  description: Download an Armbian image from the netboot HTTP server and flash it to the board's NVMe or eMMC while booted from NFS root
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+  galaxy_tags:
+    - linux
+    - infrastructure
+    - armbian
+    - reprovision
+    - rockchip
+
+dependencies: []
