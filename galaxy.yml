@@ -30,20 +30,22 @@ dependencies:
   "ansible.posix": ">=1.5.0"
   "ansible.netcommon": ">=5.0.0"
 
-repository: https://github.com/david-igou/armbian-netboot-reprovision
-documentation: https://github.com/david-igou/armbian-netboot-reprovision/tree/main/docs
-homepage: https://github.com/david-igou/armbian-netboot-reprovision
-issues: https://github.com/david-igou/armbian-netboot-reprovision/issues
+repository: https://github.com/david-igou/ansible-collection-armbian_netboot
+documentation: https://github.com/david-igou/ansible-collection-armbian_netboot/tree/main/docs
+homepage: https://github.com/david-igou/ansible-collection-armbian_netboot
+issues: https://github.com/david-igou/ansible-collection-armbian_netboot/issues
 
 build_ignore:
+  - .ansible
   - .gitignore
-  - .devcontainer/
-  - .github/
-  - .vscode/
+  - .devcontainer
+  - .github
+  - .vscode
   - .pre-commit-config.yaml
   - .isort.cfg
   - .prettierignore
   - changelogs/.plugin-cache.yaml
+  - extensions
   - tox-ansible.ini
   - pyproject.toml
   - requirements.txt
@@ -52,4 +54,5 @@ build_ignore:
   - AGENTS.md
   - CONTRIBUTING
   - MAINTAINERS
+  - Makefile
   - ansible-creator.log

@@ -2,7 +2,7 @@
 profile: min
 
 exclude_paths:
-  - extensions/
+  - extensions/molecule/provisioners/
   - tests/
   - changelogs/
 

@@ -1,5 +1,11 @@
 # david_igou.armbian_netboot
 
+![Galaxy Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgalaxy.ansible.com%2Fapi%2Fv3%2Fplugin%2Fansible%2Fcontent%2Fpublished%2Fcollections%2Findex%2Fdavid_igou%2Farmbian_netboot%2F&query=%24.highest_version.version&label=galaxy)
+![Ansible](https://img.shields.io/badge/ansible-%3E%3D2.15-blue?logo=ansible)
+![CI](https://img.shields.io/github/actions/workflow/status/david-igou/ansible-collection-armbian_netboot/tests.yml?branch=main&label=CI)
+![License](https://img.shields.io/github/license/david-igou/ansible-collection-armbian_netboot)
+![Last Commit](https://img.shields.io/github/last-commit/david-igou/ansible-collection-armbian_netboot)
+
 Ansible collection for PXE-netbooting and reprovisioning Armbian-based RK3588/RK3588S
 single-board computers. A RouterOS DHCP change is the sole trigger for switching a board
 between disk boot and netboot. The netboot server (netboot.xyz + NFS) is assumed to already
@@ -9,35 +15,28 @@ be running; this collection manages its NFS export contents and RouterOS DHCP co
 
 ## Requirements
 
-- Ansible ≥ 2.15
+- Ansible >= 2.15
 - A running netboot.xyz instance with NFS exports accessible from the Ansible control node
 - A MikroTik RouterOS device with the REST API and DHCP server configured
-- `ansible.posix`, `community.routeros`, and `ansible.netcommon` collections (see below)
 
-## Installation
+### Collection dependencies
 
-```bash
-ansible-galaxy collection install david_igou.armbian_netboot
-```
+| Collection | Version |
+|---|---|
+| `community.routeros` | >= 2.0.0 |
+| `ansible.posix` | >= 1.5.0 |
+| `ansible.netcommon` | >= 5.0.0 |
 
-Or clone this repository and install dependencies directly:
-
-```bash
-git clone https://github.com/david-igou/armbian-netboot-reprovision
-cd armbian-netboot-reprovision
-ansible-galaxy collection install -r requirements.yml
-```
-
-## Included Content
+## Included content
 
 ### Roles
 
 | Role | Description |
 |---|---|
-| `bootloader` | Flashes PXE-capable U-Boot to SPI or eMMC on boards running Armbian |
-| `nfs_content` | Populates NFS exports with Armbian rootfs, kernel, DTB, and image assets |
-| `reprovision` | Downloads and flashes an Armbian image to disk from within an NFS root environment |
-| `routeros_dhcp` | Creates and manages RouterOS DHCP option objects for PXE boot control |
+| [`bootloader`](roles/bootloader/) | Flashes PXE-capable U-Boot to SPI or eMMC on boards running Armbian |
+| [`nfs_content`](roles/nfs_content/) | Populates NFS exports with Armbian rootfs, kernel, DTB, and image assets |
+| [`reprovision`](roles/reprovision/) | Downloads and flashes an Armbian image to disk from within an NFS root environment |
+| [`routeros_dhcp`](roles/routeros_dhcp/) | Creates and manages RouterOS DHCP option objects for PXE boot control |
 
 ### Playbooks
 
@@ -50,7 +49,21 @@ ansible-galaxy collection install -r requirements.yml
 | `disable_netboot.yml` | Revert boards to local disk boot |
 | `reprovision.yml` | Full Ansible-driven flash workflow: PXE boot → flash → disk boot |
 
-## Quick Start
+## Installation
+
+```bash
+ansible-galaxy collection install david_igou.armbian_netboot
+```
+
+Or in a `requirements.yml`:
+
+```yaml
+---
+collections:
+  - name: david_igou.armbian_netboot
+```
+
+## Quick start
 
 ### 1. Configure inventory
 
@@ -70,13 +83,11 @@ armbian_default_password: "1234"      # encrypt with ansible-vault
 armbian_image_urls:
   orange-pi-5: "https://dl.armbian.com/orangepi5/Armbian_25.x_..."
   rock-5b:     "https://dl.armbian.com/rock-5b/Armbian_25.x_..."
-  # ... one URL per board model in inventory
 ```
 
 ### 3. Initial setup
 
 ```bash
-# Populate NFS exports and create RouterOS DHCP objects
 ansible-playbook playbooks/setup_netboot.yml
 ```
 
@@ -97,7 +108,7 @@ ansible-playbook playbooks/prepare_sd_card.yml \
 ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
 ```
 
-## Usage Examples
+## Usage examples
 
 ```bash
 # Enable NFS root (diskless mode) for testing
@@ -112,58 +123,51 @@ ansible-playbook playbooks/enable_netboot.yml \
 ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
 
 # Reprovision multiple boards of the same model in parallel
-ansible-playbook playbooks/reprovision.yml \
-  --limit "rock-5b-01,rock-5b-02"
+ansible-playbook playbooks/reprovision.yml --limit "rock-5b-01,rock-5b-02"
 ```
 
-## Collection Structure
+## Testing
 
+[Molecule](https://ansible.readthedocs.io/projects/molecule/) scenarios live in
+`extensions/molecule/`. Scenarios use a pluggable provisioner pattern so the same converge
+and verify plays can run against either local containers or real VMs. Set the `PROVISIONER`
+environment variable to switch (default: `podman`).
+
+```bash
+# Run the default scenario with podman
+molecule test -s default
+
+# Converge only (skip destroy)
+molecule converge -s default
+
+# Re-run verify against an already-converged instance
+molecule verify -s default
 ```
-david_igou/armbian_netboot/
-├── galaxy.yml                        # Collection metadata
-├── ansible.cfg                       # Ansible config for direct use
-├── requirements.yml                  # External collection dependencies
-├── meta/
-│   └── runtime.yml                   # Minimum Ansible version
-├── roles/
-│   ├── bootloader/                   # U-Boot flashing (SPI/eMMC) + SD card prep
-│   ├── nfs_content/                  # Populate NFS exports from Armbian images
-│   ├── reprovision/                  # Flash Armbian image to disk
-│   └── routeros_dhcp/                # RouterOS DHCP option management
-├── playbooks/
-│   ├── setup_netboot.yml
-│   ├── flash_bootloader.yml
-│   ├── prepare_sd_card.yml
-│   ├── enable_netboot.yml
-│   ├── disable_netboot.yml
-│   └── reprovision.yml
-├── inventory/                        # Example inventory (customise for your lab)
-│   ├── hosts.yml
-│   └── group_vars/
-│       ├── all.yml
-│       ├── rk3588.yml
-│       └── routeros.yml
-└── docs/
-    ├── architecture.md
-    ├── board-bootloader.md
-    └── routeros-setup.md
-```
+
+The `default` scenario is currently a hello-world placeholder. Per-role scenarios will be
+added as the collection matures; the boards and RouterOS device this collection targets
+cannot be fully emulated, so most scenarios will be limited to syntax and check-mode runs.
+
+## Makefile targets
+
+| Target | Description |
+|---|---|
+| `make install` | Install external collection dependencies from `requirements.yml` |
+| `make lint` | Run yamllint and ansible-lint |
+| `make yamllint` | Run yamllint on `roles/`, `playbooks/`, `inventory/` |
+| `make ansible-lint` | Run ansible-lint on `roles/` and `playbooks/` |
+| `make molecule` | Run `molecule test` (override with `SCENARIO=<name>` and/or `PROVISIONER=<name>`) |
+| `make test` | Run lint then molecule |
+| `make collection-build` | Build the collection tarball |
+| `make collection-install` | Build and install the collection locally |
+| `make galaxy-import` | Run `galaxy-importer` locally (requires `pip install galaxy-importer`) |
+| `make clean` | Remove build artefacts |
 
 ## Documentation
 
 - [Architecture and boot flow](docs/architecture.md)
 - [Board bootloader reference](docs/board-bootloader.md)
 - [RouterOS setup guide](docs/routeros-setup.md)
-
-## Dependencies
-
-Install with `ansible-galaxy collection install -r requirements.yml`:
-
-| Collection | Version | Purpose |
-|---|---|---|
-| `community.routeros` | ≥ 2.0.0 | RouterOS API/command modules |
-| `ansible.posix` | ≥ 1.5.0 | NFS mount module |
-| `ansible.netcommon` | ≥ 5.0.0 | `httpapi` connection plugin for RouterOS |
 
 ## License
 

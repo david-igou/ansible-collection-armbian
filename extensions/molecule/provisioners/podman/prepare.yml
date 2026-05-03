@@ -1,0 +1,10 @@
+---
+- name: Prepare podman instances
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Ensure sudo is installed
+      ansible.builtin.package:
+        name: sudo
+        state: present

@@ -1,0 +1,60 @@
+---
+- name: Create
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Initialize podman network list
+      ansible.builtin.set_fact:
+        __podman_networks: []
+
+    - name: Collect networks from platforms[].podman.podman_network
+      ansible.builtin.set_fact:
+        __podman_networks: >-
+          {{ __podman_networks +
+             (item['podman']['podman_network']
+              if (item['podman']['podman_network'] is sequence and item['podman']['podman_network'] is not string)
+              else [item['podman']['podman_network']]) }}
+      with_items: "{{ molecule_yml['platforms'] }}"
+      when:
+        - item['podman']['podman_network'] is defined
+
+    - name: Create podman network(s)
+      containers.podman.podman_network:
+        name: "{{ item }}"
+        state: present
+      with_items: "{{ __podman_networks | default([]) | unique }}"
+      when:
+        - __podman_networks | default([]) | length > 0
+        - item not in ['bridge', 'none', 'host', 'slirp4netns']
+        - item is not match('^ns:')
+        - item is not match('^container:')
+
+    - name: Create molecule instance(s)
+      containers.podman.podman_container:
+        name: "{{ item['name'] }}"
+        image: "{{ item['podman']['image'] }}"
+        state: started
+        recreate: false
+        command: "{{ item['podman']['command'] | default(omit) }}"
+        privileged: "{{ item['podman']['privileged'] | default(false) }}"
+        volume: "{{ item['podman']['volumes'] | default(omit) }}"
+        cap_add: "{{ item['podman']['capabilities'] | default(omit) }}"
+        expose: "{{ item['podman']['exposed_ports'] | default(omit) }}"
+        publish: "{{ item['podman']['published_ports'] | default(omit) }}"
+        network: "{{ item['podman']['podman_network'] | default(omit) }}"
+        env: "{{ item['podman']['env'] | default({}) }}"
+        tmpfs: "{{ item['podman']['tmpfs'] | default(omit) }}"
+      register: server
+      with_items: "{{ molecule_yml['platforms'] }}"
+      async: 7200
+      poll: 0
+
+    - name: Wait for instance(s) creation to complete
+      ansible.builtin.async_status:
+        jid: "{{ item['ansible_job_id'] }}"
+      register: podman_jobs
+      until: podman_jobs.finished
+      retries: 300
+      with_items: "{{ server['results'] }}"

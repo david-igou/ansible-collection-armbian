@@ -1,0 +1,10 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  become: false
+
+  tasks:
+    - name: Hello world
+      ansible.builtin.debug:
+        msg: "david_igou.armbian_netboot molecule scaffold OK on {{ inventory_hostname }}"
