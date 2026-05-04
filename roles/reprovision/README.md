@@ -15,7 +15,7 @@ environment (set up by the `nfs_content` role and triggered by the
 
 | Variable | Default | Description |
 |---|---|---|
-| `image_server_url` | `http://{{ netboot_server_ip }}:8080/assets/images` | HTTP base URL for `<board_model>.img.xz`. |
+| `image_server_url` | `http://{{ tftp_server_ip \| default(netboot_server_ip) }}/images` | HTTP base URL for `<board_model>.img.xz`. The default matches netboot.xyz's container layout (nginx port 80, doc root `/assets/`). Override if you serve images from a different host, port, or URL prefix. |
 | `flash_download_timeout` | `300` | Seconds to wait for the image download to finish. |
 | `flash_timeout` | `900` | Seconds to wait for the `xz \| dd` flash to finish. |
 

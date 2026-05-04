@@ -37,12 +37,12 @@ netboot server (`become: true`).
 
 | Variable | Default | Description |
 |---|---|---|
-| `nfs_rootfs_path` | `/exports/rootfs` | NFS export root for per-board rootfs trees on the netboot server. |
+| `nfs_rootfs_path` | `/mnt/ssd/netboot/rootfs` | NFS export root for per-board rootfs trees on the netboot server. |
 | `nfs_reprovision_path` | `/exports/reprovision` | NFS export path used by the reprovision flow. |
-| `tftp_nfs_export` | `/opt/netbootxyz/config` | TFTP config root on the netboot server (where pxelinux.cfg + per-board kernel/DTB/initrd live). |
-| `nfs_assets_export` | `/opt/netbootxyz/assets` | netboot.xyz HTTP assets root on the netboot server. |
-| `armbian_image_cache` | `/var/cache/armbian-images` | Local cache for downloaded `.img.xz` files on the netboot server. On TrueNAS, override to a path on a data pool — the boot pool is small. |
-| `armbian_image_mount` | `/mnt/armbian-image` | Temporary loop-mount point on the netboot server while extracting an image. |
+| `tftp_nfs_export` | `/mnt/ssd/containers/netbootxyz/config/menus` | TFTP server's document root. The default matches the netboot.xyz container's `dnsmasq --tftp-root=/config/menus`. Override if you serve TFTP from a different root. |
+| `nfs_assets_export` | `/mnt/ssd/containers/netbootxyz/assets` | HTTP server's document root. The default matches the netboot.xyz container's nginx (`root /assets;`). |
+| `armbian_image_cache` | `/mnt/ssd/netboot/cache` | Local cache for downloaded `.img.xz` files on the netboot server. |
+| `armbian_image_mount` | `/mnt/ssd/netboot/.loop-mount` | Temporary loop-mount point on the netboot server while extracting an image. |
 
 `netboot_server_ip` and the per-model entries in `armbian_image_urls` must
 be set in inventory (typically `inventory/group_vars/all.yml`).
