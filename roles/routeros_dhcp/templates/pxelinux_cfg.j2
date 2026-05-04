@@ -11,7 +11,7 @@ LABEL nfsroot
   INITRD armbian/{{ board_model }}/initrd.img
   FDT    armbian/{{ board_model }}/board.dtb
   APPEND root=/dev/nfs \
-    nfsroot={{ netboot_server_ip }}:{{ nfs_rootfs_path }}/{{ target_board_host }},vers=4,ro \
+    nfsroot={{ nfs_server_ip | default(netboot_server_ip) }}:{{ nfs_rootfs_path }}/{{ target_board_host }},vers=4,ro \
     ip=dhcp \
     console={{ board_configs[board_model].console }} \
     rootwait \
@@ -23,7 +23,7 @@ LABEL reprovision
   INITRD armbian/{{ board_model }}/initrd.img
   FDT    armbian/{{ board_model }}/board.dtb
   APPEND root=/dev/nfs \
-    nfsroot={{ netboot_server_ip }}:{{ nfs_rootfs_path }}/{{ target_board_host }},vers=4,rw \
+    nfsroot={{ nfs_server_ip | default(netboot_server_ip) }}:{{ nfs_rootfs_path }}/{{ target_board_host }},vers=4,rw \
     ip=dhcp \
     console={{ board_configs[board_model].console }} \
     rootwait \

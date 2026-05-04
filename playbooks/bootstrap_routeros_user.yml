@@ -40,7 +40,7 @@
 #     -e ansible_port=3480
 
 - name: Bootstrap RouterOS user with key-based SSH access
-  hosts: routeros_devices
+  hosts: routeros_netboot
   gather_facts: false
   connection: ansible.netcommon.network_cli
 

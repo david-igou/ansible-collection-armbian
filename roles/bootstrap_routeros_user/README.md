@@ -30,7 +30,7 @@ admin account, since the user being provisioned doesn't exist yet.
 
 ```yaml
 - name: Bootstrap RouterOS user with key-based SSH access
-  hosts: routeros_devices
+  hosts: routeros_netboot
   gather_facts: false
   connection: ansible.netcommon.network_cli
   vars:

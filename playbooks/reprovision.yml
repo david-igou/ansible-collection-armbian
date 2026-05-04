@@ -18,7 +18,7 @@
 # model at a time to avoid log/state contention in the shared NFS root.
 
 - name: Configure PXE reprovision boot on RouterOS
-  hosts: routeros
+  hosts: routeros_routers
   gather_facts: false
   tasks:
     - name: Enable reprovision netboot for each target board
@@ -78,7 +78,7 @@
         name: reprovision
 
 - name: Disable PXE boot on RouterOS
-  hosts: routeros
+  hosts: routeros_routers
   gather_facts: false
   tasks:
     - name: Clear PXE DHCP option for each target board

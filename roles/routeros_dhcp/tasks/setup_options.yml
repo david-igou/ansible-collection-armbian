@@ -14,7 +14,7 @@
         /ip dhcp-server option
         add name="{{ routeros_opt_tftp_name }}"
         code=66
-        value="'{{ netboot_server_ip }}'"
+        value="'{{ tftp_server_ip | default(netboot_server_ip) }}'"
   register: _opt_tftp
   changed_when: "'already have' not in (_opt_tftp.stdout | default(''))"
   failed_when: >

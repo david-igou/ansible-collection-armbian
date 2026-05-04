@@ -22,7 +22,11 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 ## Requirements
 
 - Ansible >= 2.15
-- A running netboot.xyz instance with NFS exports accessible from the Ansible control node
+- A running netboot.xyz instance with NFS exports accessible from the Ansible control
+  node. Path defaults match the [netboot.xyz container](https://github.com/netbootxyz/docker-netbootxyz):
+  TFTP root `/config/menus/` and HTTP root `/assets/` on port 80. Override
+  `tftp_nfs_export` / `nfs_assets_export` / `image_server_url` in
+  `group_vars/all.yml` if you serve TFTP/HTTP differently.
 - A MikroTik RouterOS device with SSH access and a DHCP server configured
 
 ### Collection dependencies
@@ -90,8 +94,9 @@ The collection has two layers of configuration:
 
 **`inventory/hosts.yml`** — host identity, including SSH connection details
 (`ansible_host`, `ansible_user`, `ansible_port`) for the netboot server and RouterOS
-device. SSH connection settings live on the host entry, not in collection-level variables;
-this is plain Ansible inventory.
+devices. SSH connection settings live on the host entry, not in collection-level
+variables; this is plain Ansible inventory. Three RouterOS-related groups partition
+device roles:
 
 ```yaml
 all:
@@ -104,22 +109,49 @@ all:
           ansible_become: true
 
     routeros:
+      children:
+        routeros_routers:    # devices that run a DHCP server
+        routeros_switches:   # devices that don't, but should still get the SSH user
+
+    routeros_routers:
       hosts:
         router:
           ansible_host: 192.168.1.1
           ansible_user: ansible-netboot   # provisioned in step 1 below
           ansible_port: 22
+
+    routeros_netboot:        # subset to provision the SSH user on
+      children:
+        routeros_routers:
+        routeros_switches:
 ```
+
+The split matters because per-board playbooks (`enable_netboot.yml`,
+`disable_netboot.yml`, `reprovision.yml`) and `setup_routeros_dhcp.yml` all target
+`routeros_routers` — running DHCP-mutating commands against switches would fail.
+`bootstrap_routeros_user.yml` targets `routeros_netboot` (typically the same set as
+`routeros`).
 
 **`inventory/group_vars/all.yml`** — collection-level variables that are not SSH
 connection details:
 
 ```yaml
-netboot_server_ip: "192.168.1.10"     # written into RouterOS DHCP option 66 + pxelinux.cfg
+netboot_server_ip: "192.168.1.10"     # default for both TFTP and NFS server IPs
 routeros_dhcp_server_name: "dhcp1"    # /ip dhcp-server name on RouterOS
 armbian_apt_suite: "bookworm"         # Armbian apt suite for preflight package validation
 armbian_default_password: "1234"      # encrypt with ansible-vault before committing
 ```
+
+**Split-host topology**: when TFTP/HTTP and NFS run on different IPs (e.g.
+netboot.xyz container on a macvlan network at one address, NFS exported from the host
+at another), override the two roles independently:
+
+```yaml
+tftp_server_ip: "10.10.45.242"   # netbootxyz container — DHCP option 66 + image_server_url
+nfs_server_ip:  "10.10.9.213"    # NFS server — written into pxelinux.cfg's nfsroot=
+```
+
+When both roles share an address, leave both unset and just set `netboot_server_ip`.
 
 The netboot server is **assumed to already be running** (netboot.xyz container + NFS
 exports). The collection populates content into the existing exports — it does not stand
@@ -129,7 +161,7 @@ up the server itself. The export root paths (`nfs_rootfs_path`, `tftp_nfs_export
 #### 0.2 Provision the RouterOS user (Playbook 1)
 
 Run once against your RouterOS device(s) using an existing admin account. Targets the
-`routeros_devices` parent group, which covers both the router and any switches you want
+`routeros_netboot` parent group, which covers both the router and any switches you want
 provisioned with the same SSH-only admin user:
 
 ```bash

@@ -1,0 +1,57 @@
+---
+breaking_changes:
+  - >-
+    The default for ``tftp_nfs_export`` has changed from
+    ``/mnt/ssd/containers/netbootxyz/config`` to
+    ``/mnt/ssd/containers/netbootxyz/config/menus`` to match the
+    netboot.xyz container's dnsmasq TFTP root
+    (``--tftp-root=/config/menus``). Boards on the previous default
+    would TFTP-404 on every kernel/initrd/DTB fetch. If you serve TFTP
+    differently (dnsmasq directly on the host, custom container image,
+    etc.) override ``tftp_nfs_export`` in your inventory to your TFTP
+    server's actual document root.
+  - >-
+    ``image_server_url`` default has changed from
+    ``http://{{ netboot_server_ip }}:8080/assets/images`` to
+    ``http://{{ tftp_server_ip | default(netboot_server_ip) }}/images``.
+    The netboot.xyz container's nginx listens on port 80 with its
+    document root already set to ``/assets/`` — the previous default's
+    port and ``/assets/`` URL prefix did not match. Override
+    ``image_server_url`` if your HTTP server has a different port or
+    URL layout.
+  - >-
+    ``setup_routeros_dhcp.yml``, ``enable_netboot.yml``,
+    ``disable_netboot.yml``, and ``reprovision.yml`` now target
+    ``routeros_routers`` instead of the broader ``routeros`` parent
+    group. Switches do not run a DHCP server; the role's
+    ``/ip dhcp-server`` commands would fail noisily on them. Update
+    your inventory to expose a ``routeros_routers`` group covering the
+    devices that own the DHCP server this collection mutates.
+  - >-
+    ``bootstrap_routeros_user.yml`` now targets ``routeros_netboot``
+    (matching the parent-group convention used in real deployments).
+    The previous value ``routeros_devices`` is no longer the sample
+    inventory's parent group.
+
+minor_changes:
+  - >-
+    Added ``tftp_server_ip`` and ``nfs_server_ip`` overrides for
+    split-host topologies. Both fall back to ``netboot_server_ip`` when
+    unset, so single-host setups need no change. ``tftp_server_ip`` is
+    used for RouterOS DHCP option 66 and for ``image_server_url``;
+    ``nfs_server_ip`` is used for the ``nfsroot=<ip>:<path>`` value
+    written into per-host pxelinux.cfg files. Set them when (for
+    example) the netboot.xyz container lives on a macvlan network at
+    one IP and NFS is exported from the host at a different IP.
+  - >-
+    The sample ``inventory/hosts.yml`` now includes a ``routeros_routers``
+    group (DHCP-server-bearing devices) alongside ``routeros_switches``
+    and a ``routeros_netboot`` parent group used only by
+    ``bootstrap_routeros_user.yml``. The ``routeros`` group becomes the
+    union parent and is no longer directly targeted by any playbook.
+  - >-
+    ``roles/routeros_dhcp/tasks/enable_netboot.yml`` now uses
+    ``nfs_server_ip`` (with fallback to ``netboot_server_ip``) when the
+    control node mounts the TFTP export over NFS to write per-host
+    pxelinux.cfg files. The TFTP path must be NFS-exported alongside
+    ``nfs_rootfs_path`` for this step to succeed.

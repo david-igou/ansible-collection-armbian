@@ -20,8 +20,11 @@
 # Usage:
 #   ansible-playbook playbooks/setup_routeros_dhcp.yml
 
+# Targets `routeros_routers` rather than the broader `routeros` parent
+# group: only routers run a DHCP server. The role's commands
+# (`/ip dhcp-server option add ...`) would fail noisily on switches.
 - name: Configure RouterOS DHCP option objects
-  hosts: routeros
+  hosts: routeros_routers
   gather_facts: false
   vars:
     routeros_setup_options: true

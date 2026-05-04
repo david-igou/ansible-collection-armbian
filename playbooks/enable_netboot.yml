@@ -20,7 +20,7 @@
 #     -e netboot_reboot=false
 
 - name: Configure PXE boot on RouterOS
-  hosts: routeros
+  hosts: routeros_routers
   gather_facts: false
   tasks:
     - name: Enable netboot on RouterOS for each target board

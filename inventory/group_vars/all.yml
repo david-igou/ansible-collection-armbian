@@ -1,11 +1,22 @@
 ---
 # ── Addresses ────────────────────────────────────────────────────────────────
-# IP of the netboot server; consumed by RouterOS DHCP option 66 (TFTP) and
-# by the reprovision role when fetching the .img.xz over HTTP. This IS a
-# collection-level variable (it ends up inside RouterOS DHCP options and
-# pxelinux.cfg, not as an SSH target), so it is not a duplicate of the
-# `ansible_host` value on the netboot_server inventory entry.
+# IP of the netboot server, used as the default for both TFTP and NFS roles
+# when they share an address. These are collection-level variables (they end
+# up inside RouterOS DHCP options, pxelinux.cfg, and reprovision HTTP URLs —
+# not as SSH targets), so they are not duplicates of `ansible_host`.
+#
+# When TFTP/HTTP and NFS run on different hosts (e.g. netboot.xyz container
+# on a macvlan network at one IP, NFS exported from the host at another),
+# override `tftp_server_ip` and `nfs_server_ip` independently:
+#
+#   tftp_server_ip: "10.10.45.242"   # netbootxyz container — DHCP option 66 + image_server_url
+#   nfs_server_ip:  "10.10.9.213"    # NFS server (nfsroot=<ip>:<path> in pxelinux.cfg)
+#
+# In a simple single-host setup (TFTP+HTTP+NFS all on the same machine),
+# leave both unset and just set netboot_server_ip.
 netboot_server_ip: "192.168.1.10"
+# tftp_server_ip: "{{ netboot_server_ip }}"
+# nfs_server_ip:  "{{ netboot_server_ip }}"
 
 # Name of the RouterOS DHCP server that owns the static leases this
 # collection mutates. Visible on RouterOS as `/ip dhcp-server print`.

@@ -78,7 +78,7 @@ as an existing admin user (default: `igou`) over SSH key auth, so it sidesteps
 the chicken/egg of needing `ansible-netboot` before `ansible-netboot` exists.
 
 Router and switch both want SSH-only key auth with the same policy, so a
-single invocation against the `routeros_devices` parent group (the playbook's
+single invocation against the `routeros_netboot` parent group (the playbook's
 default `hosts:` target) covers both:
 
 ```bash

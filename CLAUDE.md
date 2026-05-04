@@ -103,17 +103,37 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 
 `inventory/group_vars/all.yml` — collection-level variables:
 
-- `netboot_server_ip` — IP written into RouterOS DHCP option 66 + pxelinux.cfg (this is
-  the on-the-wire address boards see, not an SSH target — it's separate from the
-  `ansible_host` value on the `netboot_server` inventory entry on purpose).
+- `netboot_server_ip` — IP used as the default for both TFTP/HTTP (DHCP option 66 +
+  `image_server_url`) and NFS (`nfsroot=<ip>:<path>` in pxelinux.cfg).
+- `tftp_server_ip` (optional) — overrides `netboot_server_ip` for the TFTP/HTTP role.
+  Set in split-host topologies (e.g. netboot.xyz container on a macvlan network at one
+  IP, NFS exported from the host at another).
+- `nfs_server_ip` (optional) — overrides `netboot_server_ip` for the NFS role.
 - `routeros_dhcp_server_name` — `/ip dhcp-server` name on RouterOS (default `dhcp1`).
 - `armbian_apt_suite` — Armbian apt suite (default `bookworm`); used by preflight to fetch the package index
 - `armbian_default_password` — Armbian NFS root SSH password (default `1234`); encrypt with vault
 - `armbian_image_urls` — full `.img.xz` URL per board model, found at `https://dl.armbian.com/<armbian_dl_dir>/`
+- `tftp_nfs_export` (overridable) — TFTP server's document root. Default
+  `/mnt/ssd/containers/netbootxyz/config/menus` matches netboot.xyz container's
+  dnsmasq `--tftp-root`. Override if you run TFTP differently.
+- `nfs_assets_export` (overridable) — HTTP server's document root. Default
+  `/mnt/ssd/containers/netbootxyz/assets` matches netboot.xyz container's nginx root.
 
 `inventory/group_vars/routeros.yml` only pins the network_cli connection plumbing
 (`ansible_connection`, `ansible_network_os`); it intentionally does **not** set
 `ansible_user` / `ansible_port` — those are per-host values in `hosts.yml`.
+
+**Three RouterOS groups in `inventory/hosts.yml`**:
+
+- `routeros_routers` — devices that run a DHCP server. All per-board plays
+  (`enable_netboot.yml`, `disable_netboot.yml`, `reprovision.yml`) and
+  `setup_routeros_dhcp.yml` target this group; the DHCP-mutating commands would fail
+  on switches.
+- `routeros_switches` — devices that don't run DHCP but should still get the SSH user.
+- `routeros_netboot` — subset that `bootstrap_routeros_user.yml` provisions the
+  `ansible-netboot` user on (typically the same as `routeros_routers + routeros_switches`).
+- `routeros` (optional parent) — convenience group that includes both router and
+  switches; not directly targeted by any playbook.
 
 The NFS rootfs export root (`nfs_rootfs_path`) must already exist on the netboot server
 and be exported. Within it, the role creates `_templates/<model>/` (per-model rootfs
@@ -214,7 +234,7 @@ treatment to be fully rootless-EE-friendly.
 
 | Playbook | Runs on |
 |---|---|
-| `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_devices`) |
+| `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
 | `populate_nfs_content.yml` | **netboot server** (image extraction, NFS/TFTP content) |
 | `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |
 | `flash_bootloader.yml` | **boards** (requires Armbian running + internet for apt; for the SD path, board must be booted from the SD card it should flash) |

@@ -292,6 +292,22 @@ is which pxelinux LABEL the file selects (the rootfs ro/rw mode).
 
 ---
 
+## Server IPs (single-host vs split-host)
+
+Three on-the-wire services are involved:
+
+1. **TFTP** (DHCP option 66) — boards fetch pxelinux.cfg / kernel / initrd / DTB from
+   here. Lives at the dnsmasq IP.
+2. **HTTP** (reprovision image fetch) — boards download `<model>.img.xz` from here at
+   `image_server_url`. Lives at the netboot HTTP server IP.
+3. **NFS** (rootfs) — boards mount `nfsroot=<ip>:<path>` baked into pxelinux.cfg.
+   Lives at the NFS server IP.
+
+In a single-host setup all three share `netboot_server_ip`. In a split-host setup
+(e.g. netboot.xyz container on a macvlan network at a separate IP from the host's NFS
+server), set `tftp_server_ip` (used for both TFTP and HTTP) and `nfs_server_ip`
+independently. Both fall back to `netboot_server_ip` if unset.
+
 ## Image URLs
 
 Armbian image filenames include version, kernel, and date components that

@@ -16,7 +16,17 @@
 # cost stays at one rootfs per model regardless of host count.
 nfs_rootfs_path: /mnt/ssd/netboot/rootfs
 nfs_reprovision_path: /exports/reprovision
-tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config
+# `tftp_nfs_export` must point at the TFTP server's actual document root.
+# The default matches the netboot.xyz container, whose dnsmasq is launched
+# with `--tftp-root=/config/menus`. If you serve TFTP from elsewhere
+# (e.g. dnsmasq directly on the host with a different root), override
+# this — the role writes `armbian/<model>/{vmlinuz,initrd.img,board.dtb}`
+# and `pxelinux.cfg/01-<mac>` relative to this path.
+tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config/menus
+# `nfs_assets_export` must point at the HTTP server's document root. The
+# default matches the netboot.xyz container, whose nginx serves `/` from
+# `/assets/`. The role writes `images/<model>.img.xz` here; the
+# reprovision role downloads from `<image_server_url>/<model>.img.xz`.
 nfs_assets_export: /mnt/ssd/containers/netbootxyz/assets
 
 # Working paths on the netboot server used while extracting an Armbian

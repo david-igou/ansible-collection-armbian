@@ -7,7 +7,7 @@
 #   ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
 
 - name: Disable netboot for boards
-  hosts: routeros
+  hosts: routeros_routers
   gather_facts: false
   tasks:
     - name: Disable netboot on RouterOS for each target board

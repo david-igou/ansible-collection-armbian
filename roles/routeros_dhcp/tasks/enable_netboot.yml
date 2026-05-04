@@ -26,11 +26,22 @@
     mode: "0755"
   tags: routeros, enable_netboot
 
+# Mount the TFTP server's document root from the NFS server. This is the
+# host that owns the underlying filesystem (i.e. the netboot server, not
+# the netboot.xyz container's bind-mount target) — addressed by
+# `nfs_server_ip` so it stays correct in topologies where TFTP/HTTP run
+# on a separate macvlan IP from NFS.
+#
+# `tftp_nfs_export` must be exported over NFS to the control node's
+# subnet alongside `nfs_rootfs_path`. On TrueNAS, add a second
+# `arensb.truenas.sharing_nfs` entry covering the parent of
+# `tftp_nfs_export` (typically the netboot.xyz container's `/config`
+# dataset).
 - name: Mount TFTP config directory from NFS
   delegate_to: localhost
   become: true
   ansible.posix.mount:
-    src: "{{ netboot_server_ip }}:{{ tftp_nfs_export }}"
+    src: "{{ nfs_server_ip | default(netboot_server_ip) }}:{{ tftp_nfs_export }}"
     path: "{{ tftp_base }}"
     fstype: nfs
     opts: "vers=4,rw"
