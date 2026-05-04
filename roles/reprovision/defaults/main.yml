@@ -1,7 +1,7 @@
 ---
 # HTTP URL from which the board (booted into NFS root) downloads the Armbian
 # image. Served by netboot.xyz's built-in HTTP server; the image is placed
-# there by setup_netboot.yml via the nfs_content role.
+# there by populate_nfs_content.yml via the nfs_content role.
 image_server_url: "http://{{ netboot_server_ip }}:8080/assets/images"
 
 # Maximum time in seconds to wait for the image download to complete.

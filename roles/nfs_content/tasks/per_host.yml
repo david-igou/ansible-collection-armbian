@@ -51,7 +51,7 @@
       changed_when: true
 
 # Per-host identity customisation runs every time (idempotent), so an
-# operator can rerun setup_netboot.yml after renaming a host without
+# operator can rerun populate_nfs_content.yml after renaming a host without
 # needing to nuke the rootfs.
 - name: Set per-host /etc/hostname
   ansible.builtin.copy:

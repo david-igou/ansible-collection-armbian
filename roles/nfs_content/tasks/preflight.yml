@@ -1,5 +1,5 @@
 ---
-# Pre-flight validation for setup_netboot.yml.
+# Pre-flight validation for populate_nfs_content.yml.
 #
 # Catches two classes of misconfiguration that would otherwise surface
 # late and far from the cause:

@@ -1,0 +1,39 @@
+---
+# Populates the netboot server's NFS rootfs / TFTP exports for every board
+# in inventory. Runs against the netboot server itself over SSH; the
+# control node does not need an NFS client mount.
+#
+# Pre-flights every board's `uboot_apt_package` against the Armbian apt
+# repo and HEAD-checks every `armbian_image_urls` entry before any
+# destructive work; failures here surface at apt/URL config time, not
+# halfway through an extraction.
+#
+# For each unique board model in inventory:
+#   - Downloads the `.img.xz`, extracts the rootfs into
+#     `nfs_rootfs_path/_templates/<model>/`
+#   - Stages kernel / initrd / DTB into the TFTP tree
+#   - Publishes a copy of the `.img.xz` to the HTTP assets directory
+#     for the reprovision role to fetch
+#
+# For each inventory host:
+#   - Reflink-clones the model template into
+#     `nfs_rootfs_path/<inventory_hostname>/`
+#   - Resets hostname / machine-id / SSH host keys for unique on-the-wire
+#     identity
+#
+# Re-run this playbook whenever you add a board model, change an image
+# URL, or add a new host to inventory. It is idempotent.
+#
+# Usage:
+#   ansible-playbook playbooks/populate_nfs_content.yml
+#
+# To re-run only the per-host clone step (e.g. after adding a host):
+#   ansible-playbook playbooks/populate_nfs_content.yml --tags nfs_content
+
+- name: Populate NFS rootfs and TFTP content on the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  roles:
+    - role: nfs_content
+      tags: nfs_content

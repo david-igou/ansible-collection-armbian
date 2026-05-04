@@ -37,16 +37,19 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── reprovision/               # Flash Armbian image to disk from NFS root
 │   └── routeros_dhcp/             # RouterOS DHCP option management
 ├── playbooks/
-│   ├── setup_netboot.yml         # Populate NFS exports + create RouterOS DHCP objects
-│   ├── flash_bootloader.yml      # Flash U-Boot to SPI / eMMC / SD on the board
-│   ├── enable_netboot.yml        # Enable PXE boot (nfsroot or reprovision mode)
-│   ├── disable_netboot.yml       # Revert boards to disk boot
-│   └── reprovision.yml           # Full Ansible-driven reprovision workflow
+│   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
+│   ├── populate_nfs_content.yml     # (2) Populate NFS rootfs + TFTP content
+│   ├── setup_routeros_dhcp.yml      # (3) Create RouterOS DHCP option objects
+│   ├── flash_bootloader.yml         # (4) Flash U-Boot to SPI / eMMC / SD on the board
+│   ├── reprovision.yml              # (5) Full Ansible-driven reprovision workflow
+│   ├── enable_netboot.yml           # Ad-hoc: enable PXE (nfsroot or reprovision)
+│   └── disable_netboot.yml          # Ad-hoc: revert to disk boot
 ├── inventory/
-│   ├── hosts.yml             # Sample inventory (multiple hosts per model + Allwinner)
+│   ├── hosts.yml             # Sample inventory: ansible_host/user/port go on host entries
 │   └── group_vars/
-│       ├── all.yml           # Global vars: IPs, credentials, image URLs, apt suite
-│       └── routeros.yml      # RouterOS network_cli (SSH) connection vars
+│       ├── all.yml           # Global vars: netboot_server_ip, image URLs, apt suite
+│       └── routeros.yml      # RouterOS network_cli connection plumbing only
+│                             # (no per-host identity — that lives in hosts.yml)
 └── docs/
     ├── architecture.md
     ├── board-bootloader.md
@@ -61,38 +64,56 @@ Run playbooks from the collection root (where `ansible.cfg` is):
 # Install required external collections first
 ansible-galaxy collection install -r requirements.yml
 
-# Populate NFS exports with rootfs/kernel/DTB and configure RouterOS DHCP objects.
-# Runs preflight (validates U-Boot apt packages and image URLs are reachable for
-# every board model in inventory) before any destructive operation.
-ansible-playbook playbooks/setup_netboot.yml
+# (1) Bootstrap the RouterOS SSH user (one-time, against an existing admin user).
+ansible-playbook playbooks/bootstrap_routeros_user.yml \
+  -e ansible_user=<existing-admin>
 
-# Flash U-Boot on a specific board (board must already run Armbian, including
+# (2) Populate NFS exports with rootfs/kernel/DTB. Runs preflight (validates
+# U-Boot apt packages and image URLs are reachable for every board model
+# in inventory) before any destructive operation.
+ansible-playbook playbooks/populate_nfs_content.yml
+
+# (3) Create the shared RouterOS DHCP option objects (one-time per RouterOS
+# device). Re-run after firmware upgrades that may have wiped option state.
+ansible-playbook playbooks/setup_routeros_dhcp.yml
+
+# (4) Flash U-Boot on a specific board (board must already run Armbian, including
 # boards with no SPI/eMMC: the role flashes the SD card the board is booted
 # from, in place). Auto-resolves SPI > eMMC > SD; force with -e bootloader_target=sd.
 ansible-playbook playbooks/flash_bootloader.yml --limit rock-5b-01
 
-# Enable netboot (nfsroot or reprovision mode) — boards reboot immediately
+# (5) Full reprovision workflow (enables PXE, reboots, flashes disk, reboots to disk)
+ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
+
+# Ad-hoc: enable netboot (nfsroot or reprovision mode) — boards reboot immediately
 ansible-playbook playbooks/enable_netboot.yml \
   --limit rock-5b-01 -e netboot_mode=nfsroot
 
-# Full reprovision workflow (enables PXE, reboots, flashes disk, reboots to disk)
-ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
-
-# Manually revert a board to disk boot
+# Ad-hoc: manually revert a board to disk boot
 ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
 ```
 
 ## Required configuration before first run
 
-Set all values in `inventory/group_vars/all.yml`:
+Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 
-- `netboot_server_ip` — IP of the host running netboot.xyz + NFS
-- `routeros_host` — RouterOS device IP
-- `routeros_ssh_user` — username provisioned by `bootstrap_routeros_user.yml` (default `ansible-netboot`)
-- `routeros_ssh_port` — SSH port on the RouterOS device (default 22)
+- `netboot_server` host: `ansible_host`, `ansible_user`, `ansible_become: true`
+- `routeros` host: `ansible_host`, `ansible_user` (`ansible-netboot` after bootstrap),
+  `ansible_port` (often non-default if you've moved RouterOS SSH off 22)
+
+`inventory/group_vars/all.yml` — collection-level variables:
+
+- `netboot_server_ip` — IP written into RouterOS DHCP option 66 + pxelinux.cfg (this is
+  the on-the-wire address boards see, not an SSH target — it's separate from the
+  `ansible_host` value on the `netboot_server` inventory entry on purpose).
+- `routeros_dhcp_server_name` — `/ip dhcp-server` name on RouterOS (default `dhcp1`).
 - `armbian_apt_suite` — Armbian apt suite (default `bookworm`); used by preflight to fetch the package index
 - `armbian_default_password` — Armbian NFS root SSH password (default `1234`); encrypt with vault
 - `armbian_image_urls` — full `.img.xz` URL per board model, found at `https://dl.armbian.com/<armbian_dl_dir>/`
+
+`inventory/group_vars/routeros.yml` only pins the network_cli connection plumbing
+(`ansible_connection`, `ansible_network_os`); it intentionally does **not** set
+`ansible_user` / `ansible_port` — those are per-host values in `hosts.yml`.
 
 The NFS rootfs export root (`nfs_rootfs_path`) must already exist on the netboot server
 and be exported. Within it, the role creates `_templates/<model>/` (per-model rootfs
@@ -134,7 +155,7 @@ populated, else SD. Boards with no on-board bootloader storage fall through to S
 automatically — no fail-fast.
 
 ### Pre-flight validation
-`setup_netboot.yml` runs `roles/nfs_content/tasks/preflight.yml` first, which:
+`populate_nfs_content.yml` runs `roles/nfs_content/tasks/preflight.yml` first, which:
 1. Fetches Armbian's apt `Packages.gz` once and asserts every board's `uboot_apt_package`
    exists (failing with the available branches if not).
 2. HEAD-checks every board's `armbian_image_urls` entry (failing on 4xx/dead mirror).
@@ -143,10 +164,10 @@ Both checks run before any image download or NFS write.
 
 ## How NFS content is managed
 
-`setup_netboot.yml` connects to the netboot server over SSH (`hosts: netboot_server`,
-`become: true`) and operates on the export paths (`nfs_rootfs_path`, `tftp_nfs_export`,
-`nfs_assets_export`) directly as filesystem paths — no NFS client mount on the control node
-is required. This makes the role compatible with rootless execution environments
+`populate_nfs_content.yml` connects to the netboot server over SSH
+(`hosts: netboot_server`, `become: true`) and operates on the export paths
+(`nfs_rootfs_path`, `tftp_nfs_export`, `nfs_assets_export`) directly as filesystem paths
+— no NFS client mount on the control node is required. This makes the role compatible with rootless execution environments
 (`ansible-navigator` + rootless podman).
 
 Inside `nfs_rootfs_path` two layouts coexist:
@@ -193,7 +214,9 @@ treatment to be fully rootless-EE-friendly.
 
 | Playbook | Runs on |
 |---|---|
-| `setup_netboot.yml` | **netboot server** (image extraction, NFS/TFTP content) + RouterOS (DHCP objects) |
+| `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_devices`) |
+| `populate_nfs_content.yml` | **netboot server** (image extraction, NFS/TFTP content) |
+| `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |
 | `flash_bootloader.yml` | **boards** (requires Armbian running + internet for apt; for the SD path, board must be booted from the SD card it should flash) |
 | `enable/disable_netboot.yml` | Ansible control node (pxelinux.cfg via NFS mount) + RouterOS (DHCP) |
 | `reprovision.yml` | RouterOS (DHCP) + **boards** (flash via SSH into NFS root) |
@@ -292,8 +315,8 @@ Do not add per-board state to `group_vars/`.
 3. Add hosts to `inventory/hosts.yml` under a per-model subgroup of `boards`,
    each with `board_mac` and `board_model`.
 4. Add a URL to `armbian_image_urls` in `inventory/group_vars/all.yml`.
-5. Re-run `setup_netboot.yml` — preflight will tell you immediately if any
-   value is wrong.
+5. Re-run `populate_nfs_content.yml` — preflight will tell you immediately
+   if any value is wrong.
 
 Notes on Armbian naming inconsistency:
 
@@ -311,7 +334,7 @@ Notes on Armbian naming inconsistency:
 
 ## RouterOS DHCP objects
 
-Three object types are created once by `setup_netboot.yml` and reused for all boards:
+Three object types are created once by `setup_routeros_dhcp.yml` and reused for all boards:
 - Two `dhcp-option` entries for option 66 (TFTP server) and option 67 (boot file) per mode
 - Two `dhcp-option` sets (`armbian-nfsroot`, `armbian-reprovision`) that bundle them
 

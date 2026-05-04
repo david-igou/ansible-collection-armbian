@@ -2,12 +2,10 @@
 # Writes the per-board pxelinux.cfg via the NFS-mounted TFTP config directory,
 # assigns the PXE DHCP option set on RouterOS, and reboots the board.
 #
-# For SPI boards: U-Boot in SPI handles PXE automatically once DHCP options
-# are set — no board-side configuration change is needed.
-#
-# For non-SPI boards: a prepared SD card (see prepare_sd_card.yml) must be
-# physically inserted before the board is rebooted. The SD card U-Boot has
-# PXE as its first boot target so DHCP controls the mode identically to SPI.
+# Once `flash_bootloader.yml` has installed PXE-first U-Boot to the
+# board's persistent storage (SPI / eMMC / SD), the DHCP option flip
+# handled here is the only thing needed to switch the board into PXE
+# mode — no board-side configuration change is required at this point.
 #
 # Required variables: board_mac, board_model, netboot_mode
 
@@ -77,21 +75,4 @@
         dhcp-option="{{ routeros_opt_set_nfsroot_prefix
           if netboot_mode == 'nfsroot'
           else routeros_opt_set_reprovision_prefix }}"
-  tags: routeros, enable_netboot
-
-- name: Resolve has_spi (respecting per-host overrides) for reminder check
-  ansible.builtin.set_fact:
-    _board_has_spi: >-
-      {{ (board_configs[board_model] | default({})
-          | combine(hostvars[target_board_host].host_board_overrides | default({})))
-         .has_spi | default(false) }}
-  tags: routeros, enable_netboot
-
-- name: Remind operator to insert SD card (non-SPI board)
-  ansible.builtin.debug:
-    msg: >-
-      {{ target_board_host }} ({{ board_model }}) has no SPI flash.
-      Ensure the PXE boot SD card is inserted into the board before it
-      reboots. See prepare_sd_card.yml.
-  when: not _board_has_spi
   tags: routeros, enable_netboot

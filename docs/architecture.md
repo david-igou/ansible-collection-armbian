@@ -188,8 +188,8 @@ on hostname, machine-id, SSH host keys, or systemd state.
 
 ## Pre-flight
 
-`setup_netboot.yml` runs `roles/nfs_content/tasks/preflight.yml` first, before
-any image is downloaded or any rootfs is touched. It validates:
+`populate_nfs_content.yml` runs `roles/nfs_content/tasks/preflight.yml` first,
+before any image is downloaded or any rootfs is touched. It validates:
 
 - Each board's `uboot_apt_package` exists in the Armbian apt repo (fetches
   `Packages.gz` once and asserts presence; failure lists the available
@@ -229,15 +229,17 @@ be fully rootless-EE-friendly.
 
 ## Trigger Reference
 
-| Goal | Command |
-|---|---|
-| Populate NFS and set up RouterOS DHCP objects | `ansible-playbook setup_netboot.yml` |
-| Enable NFS root for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=nfsroot` |
-| Enable reprovision for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
-| Full reprovision (Ansible-driven flash) | `ansible-playbook reprovision.yml --limit rock-5b-01` |
-| Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
-| Flash bootloader (any target, auto-resolved) | `ansible-playbook flash_bootloader.yml --limit rock-5b-01` |
-| Force SD card target | `ansible-playbook flash_bootloader.yml --limit opi-zero3-01 -e bootloader_target=sd` |
+| # | Goal | Command |
+|---|---|---|
+| 1 | Provision the RouterOS SSH user | `ansible-playbook bootstrap_routeros_user.yml -e ansible_user=<existing-admin>` |
+| 2 | Populate the NFS rootfs / TFTP exports | `ansible-playbook populate_nfs_content.yml` |
+| 3 | Create RouterOS DHCP option objects | `ansible-playbook setup_routeros_dhcp.yml` |
+| 4 | Flash bootloader (auto-resolves SPI > eMMC > SD) | `ansible-playbook flash_bootloader.yml --limit rock-5b-01` |
+| 4 | Force SD card target | `ansible-playbook flash_bootloader.yml --limit opi-zero3-01 -e bootloader_target=sd` |
+| 5 | Full reprovision (Ansible-driven flash) | `ansible-playbook reprovision.yml --limit rock-5b-01` |
+| — | Enable NFS root for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=nfsroot` |
+| — | Enable reprovision for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
+| — | Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
 
 ---
 
@@ -251,7 +253,7 @@ pxelinux.cfg/
 
 armbian/
   orange-pi-5/
-    vmlinuz               # extracted from Armbian image by setup_netboot
+    vmlinuz               # extracted from Armbian image by populate_nfs_content
     initrd.img
     board.dtb
   orange-pi-zero-3/
@@ -268,7 +270,7 @@ the rootfs is per-host.
 
 ## RouterOS DHCP Objects
 
-Created once by `setup_netboot.yml` → `routeros_dhcp/setup_options.yml`:
+Created once by `setup_routeros_dhcp.yml` → `routeros_dhcp/setup_options.yml`:
 
 | Object | Name | Purpose |
 |---|---|---|

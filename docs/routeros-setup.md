@@ -17,8 +17,8 @@ snippets below cover only what this collection needs on top of that baseline.
 - `/ip service` `ssh` enabled and reachable from the Ansible control node on
   `10.10.0.0/16`
 - A dedicated `ansible-netboot` user with key-based SSH access (created below)
-- SSH listens on **port 3480**, not 22 — set `routeros_ssh_port: 3480` in
-  `inventory/group_vars/all.yml`
+- SSH listens on **port 3480**, not 22 — set `ansible_port: 3480` on the
+  RouterOS host entry in `inventory/hosts.yml`
 
 The collection connects via `ansible.netcommon.network_cli` using
 `community.routeros.routeros` as the cliconf. No REST/HTTP API or TLS
@@ -52,12 +52,21 @@ Notes:
 - The `address=10.10.0.0/16` constraint pins the user to the management
   subnet — adjust if your control node lives elsewhere.
 
-Set the matching values in `inventory/group_vars/all.yml`:
+Set the matching values in your inventory. SSH connection details on the
+RouterOS host entry in `inventory/hosts.yml`:
 
 ```yaml
-routeros_ssh_user: "ansible-netboot"
-routeros_ssh_port: 3480
-routeros_host: "10.10.99.1"    # rb5009.igou.systems
+routeros:
+  hosts:
+    rb5009:
+      ansible_host: 10.10.99.1
+      ansible_user: ansible-netboot
+      ansible_port: 3480
+```
+
+Collection-level settings in `inventory/group_vars/all.yml`:
+
+```yaml
 routeros_dhcp_server_name: "dhcp_vlan70"
 ```
 
@@ -69,14 +78,20 @@ as an existing admin user (default: `igou`) over SSH key auth, so it sidesteps
 the chicken/egg of needing `ansible-netboot` before `ansible-netboot` exists.
 
 Router and switch both want SSH-only key auth with the same policy, so a
-single invocation against the `routeros_devices` parent group covers both:
+single invocation against the `routeros_devices` parent group (the playbook's
+default `hosts:` target) covers both:
 
 ```bash
 ansible-playbook playbooks/bootstrap_routeros_user.yml \
-  --limit routeros_devices \
-  -e routeros_bootstrap_ssh_port=3480 \
+  -e ansible_user=igou+cet1024w \
+  -e ansible_port=3480 \
   -e routeros_user_ssh_keys='["ssh-ed25519 AAAA... ansible-netboot@control"]'
 ```
+
+`-e ansible_user=...` overrides the inventory-pinned `ansible-netboot` for
+this bootstrap run; that user does not yet exist on the RouterOS device.
+After bootstrap, every other playbook authenticates as the inventory-set
+`ansible-netboot` automatically.
 
 Add `-e routeros_disable_password_ssh=true` once you've verified key auth
 works for every user that needs SSH (including `igou`) — it sets
@@ -121,7 +136,7 @@ stay or be removed; they don't conflict with the role's own object names
 
 ## DHCP Server PXE Objects
 
-`playbooks/setup_netboot.yml` creates these on the rb5009 automatically. For
+`playbooks/setup_routeros_dhcp.yml` creates these on the rb5009 automatically. For
 reference / manual recovery:
 
 ```routeros
@@ -207,8 +222,8 @@ Reprovision-environment → RouterOS SSH (control node → rb5009):
 
 The control node lives on `10.10.0.0/16` and the rb5009 already accepts
 management traffic on its mgmt VLAN — no extra rule needed if your control node
-is on vlan99 / vlan10 / vlan9. Adjust the port to match
-`routeros_ssh_port` if you've changed it from the default.
+is on vlan99 / vlan10 / vlan9. Adjust the port to match the `ansible_port` set
+on the RouterOS host entry if you've changed it from the default.
 
 ## Verifying DHCP PXE Options
 

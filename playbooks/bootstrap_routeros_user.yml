@@ -9,18 +9,19 @@
 # network_cli connection and supplies the SSH keys to register.
 #
 # Connection identity:
-#   - `ansible_user` and `ansible_port` come from inventory (typically
-#     `inventory/group_vars/routeros.yml` plus `routeros_ssh_user` /
-#     `routeros_ssh_port` in `group_vars/all.yml`). Override on the command
-#     line for the bootstrap, e.g.:
+#   `ansible_user`, `ansible_host`, and `ansible_port` come from inventory
+#   (`inventory/hosts.yml` host entries; group_vars/routeros.yml only pins
+#   the network_cli connection plumbing). Override on the command line for
+#   the bootstrap run if you must connect as an existing admin user with
+#   different credentials, e.g.:
 #       -e ansible_user=igou+cet1024w -e ansible_port=3480
 #
-#     The `+cet1024w` suffix on the username tells RouterOS to skip
-#     terminal auto-detection and use a 1024-column dumb terminal, which
-#     prevents network_cli command-timeout errors on long lines (RouterOS
-#     otherwise wraps and redraws each line many times, exceeding the
-#     prompt-match timeout). See
-#     https://docs.ansible.com/projects/ansible/latest/network/user_guide/platform_routeros.html
+#   The `+cet1024w` suffix on the username tells RouterOS to skip
+#   terminal auto-detection and use a 1024-column dumb terminal, which
+#   prevents network_cli command-timeout errors on long lines (RouterOS
+#   otherwise wraps and redraws each line many times, exceeding the
+#   prompt-match timeout). See
+#   https://docs.ansible.com/projects/ansible/latest/network/user_guide/platform_routeros.html
 #
 # Role variables (override with -e or in inventory). See
 # `roles/bootstrap_routeros_user/README.md` for the full list:
@@ -35,12 +36,11 @@
 # Example invocation (router and switch in one run — both want SSH-only key auth):
 #
 #   ansible-playbook playbooks/bootstrap_routeros_user.yml \
-#     --limit routeros_netboot \
 #     -e ansible_user=igou+cet1024w \
 #     -e ansible_port=3480
 
 - name: Bootstrap RouterOS user with key-based SSH access
-  hosts: routeros_netboot
+  hosts: routeros_devices
   gather_facts: false
   connection: ansible.netcommon.network_cli
 

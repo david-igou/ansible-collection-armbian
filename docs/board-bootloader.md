@@ -121,5 +121,5 @@ package version should be updated or rebuilt with `CONFIG_CMD_PXE=y`.
    apt package names, capability flags, console, DTB, and target device.
 3. Add host entries to `inventory/hosts.yml`.
 4. Add the image URL to `armbian_image_urls` in `group_vars/all.yml`.
-5. Run `setup_netboot.yml` — preflight will catch a wrong package name
-   or a dead URL immediately.
+5. Run `populate_nfs_content.yml` — preflight will catch a wrong package
+   name or a dead URL immediately.

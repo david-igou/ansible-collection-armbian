@@ -1,0 +1,30 @@
+---
+# Creates the shared RouterOS DHCP option objects that per-board
+# enable_netboot / disable_netboot runs reuse:
+#
+#   - dhcp-option `armbian-tftp-server`           (option 66)
+#   - dhcp-option `armbian-nfsroot-bootfile`      (option 67, nfsroot)
+#   - dhcp-option `armbian-reprovision-bootfile`  (option 67, reprovision)
+#   - option set  `armbian-nfsroot`               (bundles 66 + nfsroot 67)
+#   - option set  `armbian-reprovision`           (bundles 66 + reprovision 67)
+#
+# Per-board state is exclusively the `dhcp-option` field on each static
+# lease — set by enable_netboot.yml / cleared by disable_netboot.yml.
+# This playbook only manages the shared object set; it is idempotent and
+# typically only needs to run once per RouterOS device.
+#
+# Re-run after RouterOS firmware upgrades that may have reset
+# `/ip dhcp-server option` state, or any time you change
+# `routeros_dhcp_*` variable defaults.
+#
+# Usage:
+#   ansible-playbook playbooks/setup_routeros_dhcp.yml
+
+- name: Configure RouterOS DHCP option objects
+  hosts: routeros
+  gather_facts: false
+  vars:
+    routeros_setup_options: true
+  roles:
+    - role: routeros_dhcp
+      tags: routeros
