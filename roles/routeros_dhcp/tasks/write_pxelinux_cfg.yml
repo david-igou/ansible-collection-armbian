@@ -1,0 +1,45 @@
+---
+# Writes the per-board pxelinux.cfg file directly on the netboot server's
+# filesystem. Designed to be run from a play with `hosts: netboot_server`,
+# `become: true` — it operates on `tftp_nfs_export` as a local path, the
+# same way nfs_content does. No NFS mount on the control node.
+#
+# Required variables:
+#   board_mac          MAC address of the board (drives 01-<mac> filename)
+#   board_model        board model key (drives kernel/initrd/DTB paths)
+#   target_board_host  inventory hostname (drives nfsroot path + label)
+#   netboot_mode       'nfsroot' or 'reprovision' (drives DEFAULT label)
+
+- name: Validate netboot_mode
+  ansible.builtin.assert:
+    that:
+      - netboot_mode is defined
+      - netboot_mode in ['nfsroot', 'reprovision']
+    fail_msg: "netboot_mode must be 'nfsroot' or 'reprovision'"
+  tags: pxelinux
+
+# Load the per-board configs the pxelinux template needs (board console,
+# DTB filename). These live in the bootloader role's vars/ tree; we
+# include them here rather than depending on the bootloader role being
+# referenced from this play.
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../bootloader/vars/boards.yml"
+  tags: pxelinux
+
+- name: Ensure pxelinux.cfg directory exists on netboot server
+  ansible.builtin.file:
+    path: "{{ tftp_nfs_export }}/pxelinux.cfg"
+    state: directory
+    mode: "0755"
+  tags: pxelinux
+
+- name: Generate pxelinux.cfg for {{ target_board_host }}
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/pxelinux_cfg.j2"
+    dest: >-
+      {{ tftp_nfs_export }}/pxelinux.cfg/01-{{
+        board_mac | lower | replace(':', '-')
+      }}
+    mode: "0644"
+  tags: pxelinux

@@ -1,0 +1,30 @@
+---
+breaking_changes:
+  - >-
+    ``roles/routeros_dhcp/tasks/enable_netboot.yml`` no longer
+    NFS-mounts ``tftp_nfs_export`` on the control node to write
+    per-board ``pxelinux.cfg/01-<mac>`` files. The pxelinux.cfg
+    generation has moved to a new task file
+    ``roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml`` that runs
+    against ``hosts: netboot_server`` (``become: true``) and writes
+    files directly on the server's filesystem over SSH — the same
+    pattern ``nfs_content`` already uses. The control node no longer
+    needs an NFS client.
+  - >-
+    ``playbooks/enable_netboot.yml`` and ``playbooks/reprovision.yml``
+    each gain a new initial play targeting ``netboot_server`` to
+    invoke ``write_pxelinux_cfg.yml`` before the routeros-side DHCP
+    option flip. Existing ``--limit`` selectors and per-board variable
+    handling are unchanged.
+  - >-
+    The ``nfs_local_mount`` and ``tftp_base`` variables have been
+    removed from ``inventory/group_vars/all.yml``. They are no longer
+    referenced by any task. Remove any overrides in your own inventory.
+  - >-
+    The required-variables list for the role's ``enable_netboot.yml``
+    has shrunk to ``board_mac`` and ``netboot_mode`` only.
+    ``board_model`` and ``target_board_host`` move to
+    ``write_pxelinux_cfg.yml``'s required vars instead. Direct
+    consumers of the role should split their ``include_role`` calls
+    across the two task files (or use ``playbooks/enable_netboot.yml``
+    as a reference).

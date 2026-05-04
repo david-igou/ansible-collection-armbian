@@ -5,15 +5,22 @@ be controlled entirely from the router. This is the only control surface
 needed to switch boards between disk boot and netboot — U-Boot always tries
 PXE first and falls through to disk when DHCP provides no `next-server`.
 
-The role has three task entry-points:
+The role has four task entry-points, each designed to be included from a
+play with the right `hosts:` target:
 
-- `setup_options.yml` — runs once. Creates per-mode DHCP option objects
-  (option 66 / 67) and the `armbian-nfsroot` and `armbian-reprovision`
-  option sets that bundle them.
-- `enable_netboot.yml` — sets `dhcp-option=armbian-nfsroot` or
-  `armbian-reprovision` on a board's static lease, optionally rebooting it.
-- `disable_netboot.yml` — clears the lease's `dhcp-option` so the board
-  boots from disk on next DHCP renewal.
+- `setup_options.yml` — `hosts: routeros_routers`. Runs once. Creates
+  per-mode DHCP option objects (option 66 / 67) and the `armbian-nfsroot`
+  / `armbian-reprovision` option sets that bundle them.
+- `write_pxelinux_cfg.yml` — `hosts: netboot_server` (`become: true`).
+  Writes `pxelinux.cfg/01-<mac>` on the netboot server's TFTP root over
+  SSH. No NFS mount on the control node. Required vars: `board_mac`,
+  `board_model`, `target_board_host`, `netboot_mode`.
+- `enable_netboot.yml` — `hosts: routeros_routers`. Sets
+  `dhcp-option=armbian-nfsroot` or `armbian-reprovision` on a board's
+  static lease. Run after `write_pxelinux_cfg.yml` (the file must exist
+  before the board renews DHCP).
+- `disable_netboot.yml` — `hosts: routeros_routers`. Clears the lease's
+  `dhcp-option` so the board boots from disk on next DHCP renewal.
 
 ## Role variables
 

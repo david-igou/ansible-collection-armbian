@@ -219,11 +219,11 @@ Control node ──SSH──> Netboot server (runs all extract/copy/clone work)
 
 The control node needs no NFS client mount, no root, and works under a
 rootless execution environment (ansible-navigator + rootless podman).
-
-`enable_netboot.yml` is the remaining exception: it still NFS-mounts
-`tftp_nfs_export` on the control node to write per-host `pxelinux.cfg`
-files. That step will need the same SSH-and-operate-locally treatment to
-be fully rootless-EE-friendly.
+`enable_netboot.yml` and `reprovision.yml` follow the same pattern:
+per-board `pxelinux.cfg/01-<mac>` files are written on the netboot
+server over SSH (via the `routeros_dhcp` role's
+`write_pxelinux_cfg.yml` task file) before the RouterOS DHCP option
+flip — no NFS mount on the control node.
 
 ---
 

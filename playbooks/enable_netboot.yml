@@ -1,7 +1,8 @@
 ---
 # Enables network boot for one or more boards.
-# Writes pxelinux.cfg to the TFTP NFS mount, assigns the PXE DHCP option
-# set on RouterOS, and optionally reboots boards to apply the change.
+# Writes per-host pxelinux.cfg directly on the netboot server over SSH,
+# assigns the PXE DHCP option set on RouterOS, and optionally reboots
+# boards to apply the change.
 #
 # Usage:
 #   # Enable NFS root (diskless mode) for a specific board
@@ -19,6 +20,25 @@
 #     -e netboot_mode=nfsroot \
 #     -e netboot_reboot=false
 
+# Per-board pxelinux.cfg files are written directly on the netboot
+# server over SSH — no NFS mount on the control node.
+- name: Write per-board pxelinux.cfg on the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Generate pxelinux.cfg per target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: write_pxelinux_cfg.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        board_model: "{{ hostvars[item]['board_model'] }}"
+        target_board_host: "{{ item }}"
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
+
 - name: Configure PXE boot on RouterOS
   hosts: routeros_routers
   gather_facts: false
@@ -29,11 +49,6 @@
         tasks_from: enable_netboot.yml
       vars:
         board_mac: "{{ hostvars[item]['board_mac'] }}"
-        board_model: "{{ hostvars[item]['board_model'] }}"
-        # Pass the board's inventory hostname through so the per-host
-        # rootfs path can be embedded in pxelinux.cfg.
-        target_board_host: "{{ item }}"
-        netboot_reboot: false
       loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"

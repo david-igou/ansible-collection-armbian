@@ -208,10 +208,12 @@ on ext4. Hostname, machine-id, and SSH host keys are reset per-host so two same-
 boards have independent identity on the wire — see `roles/nfs_content/tasks/per_host.yml`.
 The `pxelinux.cfg/01-<mac>` files point each board at its own per-host export.
 
-`enable_netboot.yml` is the remaining exception to the SSH-and-operate-locally rule: it
-still NFS-mounts `tftp_nfs_export` on the control node (`nfs_local_mount` / `tftp_base`) to
-write per-board `pxelinux.cfg`. That path will need the same SSH-and-operate-locally
-treatment to be fully rootless-EE-friendly.
+`enable_netboot.yml` and `reprovision.yml` write per-board `pxelinux.cfg/01-<mac>`
+files directly on the netboot server over SSH, via the `routeros_dhcp` role's
+`write_pxelinux_cfg.yml` task file (run from a `hosts: netboot_server`,
+`become: true` play). The control node never NFS-mounts the export. Combined with
+`nfs_content`'s same model, every write to the netboot server happens over SSH —
+no NFS client on the control node, rootless-EE-friendly.
 
 ## Reprovision workflow
 

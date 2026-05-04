@@ -32,13 +32,6 @@ nfs_rootfs_path: /exports/rootfs
 tftp_nfs_export: /opt/netbootxyz/config
 nfs_assets_export: /opt/netbootxyz/assets
 
-# ── Control-node NFS mount paths ─────────────────────────────────────────────
-# Used only by routeros_dhcp/enable_netboot, which still NFS-mounts the TFTP
-# config export on the control node to write per-board pxelinux.cfg files.
-# nfs_content no longer needs these (it runs on the netboot server itself).
-nfs_local_mount: /mnt/netboot
-tftp_base: "{{ nfs_local_mount }}/tftp"
-
 # ── Armbian image URLs ────────────────────────────────────────────────────────
 # Set to the full .img.xz URL for each board model. Pinning a versioned URL
 # is more reproducible; pinning the alias (e.g.

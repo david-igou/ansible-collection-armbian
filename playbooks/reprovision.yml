@@ -1,12 +1,12 @@
 ---
 # Ansible-driven reprovision workflow:
-#   1. Writes per-board pxelinux.cfg (reprovision mode) and assigns the PXE
-#      DHCP option set on RouterOS
-#   2. Reboots boards via SSH — they PXE boot into the NFS root environment
-#   3. Waits for SSH to come up on each board, then downloads and flashes the
+#   1. Writes per-board pxelinux.cfg directly on the netboot server over SSH
+#   2. Assigns the reprovision PXE DHCP option set on RouterOS
+#   3. Reboots boards via SSH — they PXE boot into the NFS root environment
+#   4. Waits for SSH to come up on each board, then downloads and flashes the
 #      Armbian image directly via Ansible tasks (no scripts staged on the board)
-#   4. Clears the PXE DHCP option on RouterOS from the control node
-#   5. Reboots boards to the freshly flashed disk and verifies disk boot
+#   5. Clears the PXE DHCP option on RouterOS
+#   6. Reboots boards to the freshly flashed disk and verifies disk boot
 #
 # Usage:
 #   ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
@@ -16,6 +16,26 @@
 #
 # Note: boards of the same model share the NFS rootfs export. Reprovision one
 # model at a time to avoid log/state contention in the shared NFS root.
+
+# Per-board pxelinux.cfg files are written directly on the netboot
+# server over SSH — no NFS mount on the control node.
+- name: Write reprovision pxelinux.cfg on the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Generate pxelinux.cfg per target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: write_pxelinux_cfg.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        board_model: "{{ hostvars[item]['board_model'] }}"
+        target_board_host: "{{ item }}"
+        netboot_mode: reprovision
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
 
 - name: Configure PXE reprovision boot on RouterOS
   hosts: routeros_routers
@@ -27,9 +47,7 @@
         tasks_from: enable_netboot.yml
       vars:
         board_mac: "{{ hostvars[item]['board_mac'] }}"
-        board_model: "{{ hostvars[item]['board_model'] }}"
         netboot_mode: reprovision
-        netboot_reboot: false
       loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
