@@ -1,0 +1,6 @@
+---
+# Action to perform: on, off, or cycle (off → pause → on)
+poe_action: "on"
+
+# Seconds to wait between off and on during a power cycle
+poe_cycle_delay: 5

@@ -35,7 +35,8 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
 │   ├── nfs_content/               # Populate NFS exports (preflight + per-model + per-host)
 │   ├── reprovision/               # Flash Armbian image to disk from NFS root
-│   └── routeros_dhcp/             # RouterOS DHCP option management
+│   ├── routeros_dhcp/             # RouterOS DHCP option management
+│   └── routeros_poe/              # PoE power control via RouterOS switch
 ├── playbooks/
 │   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
 │   ├── populate_nfs_content.yml     # (2) Populate NFS rootfs + TFTP content
@@ -43,9 +44,11 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── flash_bootloader.yml         # (4) Flash U-Boot to SPI / eMMC / SD on the board
 │   ├── reprovision.yml              # (5) Full Ansible-driven reprovision workflow
 │   ├── enable_netboot.yml           # Ad-hoc: enable PXE (nfsroot or reprovision)
-│   └── disable_netboot.yml          # Ad-hoc: revert to disk boot
-├── inventory/
-│   ├── hosts.yml             # Sample inventory: ansible_host/user/port go on host entries
+│   ├── disable_netboot.yml          # Ad-hoc: revert to disk boot
+│   └── poe_control.yml              # Ad-hoc: PoE power on/off/cycle via switch
+├── .inventory/               # Real inventory (gitignored), used at runtime
+├── inventory/                # Documentation-only sample inventory (not used at runtime)
+│   ├── hosts.yml             # Example groups, host variables, and naming conventions
 │   └── group_vars/
 │       ├── all.yml           # Global vars: netboot_server_ip, image URLs, apt suite
 │       └── routeros.yml      # RouterOS network_cli connection plumbing only
@@ -57,6 +60,10 @@ david_igou/armbian_netboot/   (this repo root)
 ```
 
 ## Running playbooks
+
+The `ANSIBLE_INVENTORY` environment variable points to the real inventory directory
+(`.inventory/`, gitignored). Always verify this env var is set before running playbooks.
+Do not pass `-i` explicitly unless the user overrides this convention.
 
 Run playbooks from the collection root (where `ansible.cfg` is):
 
@@ -91,7 +98,23 @@ ansible-playbook playbooks/enable_netboot.yml \
 
 # Ad-hoc: manually revert a board to disk boot
 ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
+
+# Ad-hoc: PoE power cycle a board via its upstream RouterOS switch
+ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e poe_action=cycle
+
+# Ad-hoc: power off all boards
+ansible-playbook playbooks/poe_control.yml --limit boards -e poe_action=off
 ```
+
+## Inventory: documentation vs. real
+
+The `inventory/` directory in this repo is **documentation-only** — it illustrates
+the expected group structure, host variables, and naming conventions but is never
+used at runtime. The real (gitignored) inventory lives in `.inventory/` and is
+picked up by Ansible's default inventory search path. When validating changes
+against real hosts, use the `.inventory/` content (e.g. `ansible -m ping boards`
+resolves from there). Do not modify `.inventory/` for documentation purposes;
+update `inventory/hosts.yml` instead to keep the example accurate.
 
 ## Required configuration before first run
 
@@ -142,6 +165,10 @@ node needs SSH (with `become: true`) to the netboot server, but does not need an
 
 Each board in `inventory/hosts.yml` needs `board_mac` and `board_model` set. The `board_model`
 value must exactly match a key in `roles/bootloader/vars/boards.yml`.
+
+For PoE-powered boards, also set `poe_switch` (inventory hostname of the RouterOS switch
+providing power) and `poe_port` (interface name on that switch, e.g. `ether3`). These are
+required by `playbooks/poe_control.yml`.
 
 ## Architecture
 
@@ -242,6 +269,7 @@ no NFS client on the control node, rootless-EE-friendly.
 | `flash_bootloader.yml` | **boards** (requires Armbian running + internet for apt; for the SD path, board must be booted from the SD card it should flash) |
 | `enable/disable_netboot.yml` | Ansible control node (pxelinux.cfg via NFS mount) + RouterOS (DHCP) |
 | `reprovision.yml` | RouterOS (DHCP) + **boards** (flash via SSH into NFS root) |
+| `poe_control.yml` | **boards** (delegated to `routeros_switches` via `poe_switch` hostvar) |
 
 ## SBC ecosystem reality: variation is the rule
 
@@ -363,6 +391,23 @@ Three object types are created once by `setup_routeros_dhcp.yml` and reused for 
 Per-board `enable_netboot` sets `dhcp-option=armbian-nfsroot|armbian-reprovision` on the static
 lease; `disable_netboot` clears it to `""`. This is the only per-board RouterOS state.
 
+## PoE power control
+
+`poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
+and delegates the RouterOS command to the switch identified by each board's `poe_switch`
+host variable. The `delegate_to` pattern works because `group_vars/routeros.yml` sets
+`ansible_connection: ansible.netcommon.network_cli` on all RouterOS hosts, so the
+delegated task uses the switch's connection settings automatically.
+
+The role supports three actions via `-e poe_action=`:
+- `on` — sets `poe-out=auto` (default)
+- `off` — sets `poe-out=off`
+- `cycle` — off, pause (`poe_cycle_delay` seconds, default 5), then on
+
+Unlike the DHCP role (which loops over boards from a `hosts: routeros_routers` play),
+PoE uses delegation because boards may be connected to different switches. Each board
+knows its own switch and port, so delegation routes the command correctly without filtering.
+
 ## Key files
 
 - `roles/bootloader/vars/socs/*.yml` — SoC family defaults (binary names, eMMC strategy, SD seek)
@@ -372,4 +417,5 @@ lease; `disable_netboot` clears it to `""`. This is the only per-board RouterOS 
 - `inventory/group_vars/all.yml` — IPs, credentials, image URLs, apt suite (edit before first run)
 - `roles/reprovision/tasks/main.yml` — flash tasks that run on the board during reprovision
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host TFTP boot config template
+- `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
 - `galaxy.yml` — collection namespace, version, and external collection dependencies

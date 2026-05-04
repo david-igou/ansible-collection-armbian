@@ -48,6 +48,7 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 | [`nfs_content`](roles/nfs_content/) | Populates NFS exports with Armbian rootfs, kernel, DTB, and image assets |
 | [`reprovision`](roles/reprovision/) | Downloads and flashes an Armbian image to disk from within an NFS root environment |
 | [`routeros_dhcp`](roles/routeros_dhcp/) | Creates and manages RouterOS DHCP option objects for PXE boot control |
+| [`routeros_poe`](roles/routeros_poe/) | Controls PoE power state on RouterOS switch ports feeding the boards (on/off/cycle) |
 
 ### Playbooks (in lifecycle order)
 
@@ -60,6 +61,7 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 | 5 | `reprovision.yml` | Repeated per refresh | Full PXE → flash → disk boot cycle: enables PXE, reboots, flashes the disk, re-disables PXE, verifies disk boot. |
 | — | `enable_netboot.yml` | Ad-hoc | Boots a board into NFS root (read-only) for diagnostics or maintenance. |
 | — | `disable_netboot.yml` | Ad-hoc | Reverts a board to local disk boot. |
+| — | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream RouterOS PoE switch port. |
 
 ## Installation
 
@@ -372,6 +374,32 @@ ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
 
 Clears the RouterOS DHCP option for that board. The next reboot lands on disk.
 
+#### 2.4 Power-cycle a board via PoE
+
+When a board is wedged or unreachable over SSH, cycle its upstream RouterOS PoE
+switch port instead of pulling cables:
+
+```bash
+# Hard power-cycle (off → wait poe_cycle_delay seconds → on)
+ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e poe_action=cycle
+
+# Power off / on individually
+ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e poe_action=off
+ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e poe_action=on
+
+# Bulk: power off the whole lab
+ansible-playbook playbooks/poe_control.yml --limit boards -e poe_action=off
+```
+
+Each PoE-powered board needs `poe_switch` (inventory hostname of the RouterOS
+switch supplying power) and `poe_port` (interface name on that switch, e.g.
+`ether3`) set in inventory. The play targets `boards` with `gather_facts: false`
+(boards may be powered off) and delegates the `/interface ethernet poe set`
+command to each board's switch via `delegate_to: "{{ poe_switch }}"`. Boards on
+different switches in the same run are routed correctly without filtering.
+
+Use `-e poe_cycle_delay=<seconds>` to override the off→on dwell (default 5s).
+
 ---
 
 ## Quick reference
@@ -385,6 +413,7 @@ Clears the RouterOS DHCP option for that board. The next reboot lands on disk.
 | 5 | `reprovision.yml --limit <host>` | Repeated per refresh |
 | — | `enable_netboot.yml --limit <host> -e netboot_mode=nfsroot` | Ad-hoc diskless boot |
 | — | `disable_netboot.yml --limit <host>` | Ad-hoc revert to disk |
+| — | `poe_control.yml --limit <host> -e poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
 
 ## Testing
 

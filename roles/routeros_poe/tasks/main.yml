@@ -1,0 +1,63 @@
+---
+# Controls PoE power state on a RouterOS switch port connected to an
+# Armbian board. Delegates to the switch identified by poe_switch.
+#
+# Required host variables: poe_switch, poe_port
+# Role variable: poe_action (on|off|cycle)
+
+- name: Validate required PoE host variables
+  ansible.builtin.assert:
+    that:
+      - poe_switch is defined
+      - poe_switch | length > 0
+      - poe_port is defined
+      - poe_port | length > 0
+    fail_msg: >-
+      poe_switch and poe_port must be defined as host variables.
+      Set them in inventory for {{ inventory_hostname }}.
+  tags: poe
+
+- name: Validate poe_action
+  ansible.builtin.assert:
+    that:
+      - poe_action in ['on', 'off', 'cycle']
+    fail_msg: "poe_action must be 'on', 'off', or 'cycle'. Got: '{{ poe_action }}'"
+  tags: poe
+
+- name: Power on PoE port {{ poe_port }} on {{ poe_switch }}
+  community.routeros.command:
+    commands:
+      - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=auto'
+  delegate_to: "{{ poe_switch }}"
+  when: poe_action == 'on'
+  tags: poe
+
+- name: Power off PoE port {{ poe_port }} on {{ poe_switch }}
+  community.routeros.command:
+    commands:
+      - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=off'
+  delegate_to: "{{ poe_switch }}"
+  when: poe_action == 'off'
+  tags: poe
+
+- name: Power cycle — disable PoE on {{ poe_port }}
+  community.routeros.command:
+    commands:
+      - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=off'
+  delegate_to: "{{ poe_switch }}"
+  when: poe_action == 'cycle'
+  tags: poe
+
+- name: Power cycle — wait {{ poe_cycle_delay }}s for capacitors to drain
+  ansible.builtin.pause:
+    seconds: "{{ poe_cycle_delay }}"
+  when: poe_action == 'cycle'
+  tags: poe
+
+- name: Power cycle — re-enable PoE on {{ poe_port }}
+  community.routeros.command:
+    commands:
+      - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=auto'
+  delegate_to: "{{ poe_switch }}"
+  when: poe_action == 'cycle'
+  tags: poe

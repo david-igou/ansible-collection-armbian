@@ -240,6 +240,8 @@ flip — no NFS mount on the control node.
 | — | Enable NFS root for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=nfsroot` |
 | — | Enable reprovision for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
 | — | Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
+| — | PoE power-cycle a board | `ansible-playbook poe_control.yml --limit rock-5b-01 -e poe_action=cycle` |
+| — | Power off the whole lab | `ansible-playbook poe_control.yml --limit boards -e poe_action=off` |
 
 ---
 
@@ -289,6 +291,56 @@ Normal:   dhcp-option=""
 
 Both option sets resolve to per-host pxelinux.cfg files; the distinction
 is which pxelinux LABEL the file selects (the rootfs ro/rw mode).
+
+---
+
+## PoE power control
+
+Out-of-band power control is a separate, optional path that does not touch
+DHCP options or the netboot server. It exists to recover wedged boards and
+to bulk-power the lab on or off.
+
+```
+Ansible control node ──network_cli/SSH──> RouterOS switch
+                                             │
+                                             └── /interface ethernet poe set
+                                                 [find name="<poe_port>"] poe-out=auto|off
+                                                                                 │
+                                                                                 ▼
+                                                                        Board (powered/depowered)
+```
+
+Each PoE-powered board carries two host variables in inventory:
+
+- `poe_switch` — inventory hostname of the RouterOS switch supplying power
+  (must be a member of `routeros_switches` with `network_cli` configured).
+- `poe_port` — interface name on that switch, e.g. `ether3`.
+
+`playbooks/poe_control.yml` targets `boards` with `gather_facts: false` (the
+board may be powered off and unreachable) and runs the `routeros_poe` role
+for each host. The role delegates the RouterOS command to the board's switch:
+
+```yaml
+delegate_to: "{{ poe_switch }}"
+```
+
+`group_vars/routeros.yml` sets `ansible_connection: ansible.netcommon.network_cli`
+on every RouterOS device, so the delegated task uses the switch's connection
+settings without further configuration. The same run can span boards on
+different switches — each task is routed to its own switch by `delegate_to`.
+
+Three actions are supported via `-e poe_action=`:
+
+| Action | RouterOS effect |
+|---|---|
+| `on` (default) | `poe-out=auto` |
+| `off` | `poe-out=off` |
+| `cycle` | `poe-out=off` → pause `poe_cycle_delay` seconds (default 5) → `poe-out=auto` |
+
+PoE control is intentionally orthogonal to the PXE / disk boot mode. A board's
+DHCP option state survives a PoE cycle, so the next boot follows whatever
+`enable_netboot` / `disable_netboot` last set. Use it freely in combination
+with the reprovision flow when a board is hung mid-PXE or won't accept SSH.
 
 ---
 
