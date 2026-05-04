@@ -1,0 +1,117 @@
+---
+# SD card bootloader install: write the disk U-Boot binary into the SD
+# card the board is currently booted from, at the SoC family's
+# sd_uboot_seek_sectors offset, then set PXE-first boot_targets via
+# fw_setenv on the board's own /etc/fw_env.config.
+#
+# Premise: the user manually wrote an Armbian image to the SD card
+# (etcher / dd / Armbian's build output). The board boots from that
+# card. This task converts that same card's U-Boot into a PXE-first
+# one, in place. The first Armbian partition starts well past the
+# seek offset (sector 8192 on stock images), so writing while the
+# rootfs is mounted does not touch the filesystem.
+#
+# Hard-fails if the rootfs is not on a removable SD card — refuses to
+# overwrite eMMC or NVMe under this code path.
+
+- name: Find the block device backing the rootfs
+  ansible.builtin.shell: |
+    set -o pipefail
+    src=$(findmnt -n -o SOURCE /)
+    pk=$(lsblk -no PKNAME "$src")
+    # findmnt returns the partition (e.g. /dev/mmcblk0p1); PKNAME gives
+    # the parent disk (mmcblk0). If the rootfs is on a whole-disk device
+    # PKNAME is empty — fall back to the source itself.
+    if [ -z "$pk" ]; then
+      basename "$src"
+    else
+      echo "$pk"
+    fi
+  args:
+    executable: /bin/bash
+  register: _sd_root_disk
+  changed_when: false
+
+- name: Read /sys block device type for {{ _sd_root_disk.stdout }}
+  ansible.builtin.slurp:
+    src: "/sys/block/{{ _sd_root_disk.stdout }}/device/type"
+  register: _sd_block_type
+  failed_when: false
+
+- name: Read /sys removable flag for {{ _sd_root_disk.stdout }}
+  ansible.builtin.slurp:
+    src: "/sys/block/{{ _sd_root_disk.stdout }}/removable"
+  register: _sd_removable
+
+- name: Resolve SD device facts
+  ansible.builtin.set_fact:
+    _sd_target_device: "/dev/{{ _sd_root_disk.stdout }}"
+    _sd_block_type_str: >-
+      {{ (_sd_block_type.content | default('') | b64decode | trim)
+         if (_sd_block_type.content is defined) else '' }}
+    _sd_removable_flag: "{{ _sd_removable.content | b64decode | trim }}"
+
+# The combined check is conservative: removable=1 covers SD cards and
+# USB; device/type=SD covers the SD-vs-eMMC distinction on mmcblk*
+# devices. Either signal alone is sometimes wrong (eMMC reports
+# removable=0 type=MMC; some carriers expose SD as removable=0).
+- name: Fail if rootfs is not on a removable SD card
+  ansible.builtin.fail:
+    msg: >-
+      {{ _sd_target_device }} (rootfs disk on {{ inventory_hostname }})
+      is not a removable SD card (removable={{ _sd_removable_flag }},
+      type='{{ _sd_block_type_str }}'). The SD bootloader path refuses
+      to overwrite eMMC or NVMe. Boot the board from the SD card you
+      want to flash, or set bootloader_target=spi/emmc if appropriate.
+  when:
+    - _sd_removable_flag != '1'
+    - _sd_block_type_str != 'SD'
+
+- name: Locate disk U-Boot image from installed package
+  ansible.builtin.find:
+    paths: "{{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}"
+    patterns: "{{ _board.uboot_disk_image }}"
+    recurse: true
+  register: _uboot_disk_image_find
+
+- name: Fail if SD-card U-Boot image not found
+  ansible.builtin.fail:
+    msg: >-
+      Could not find {{ _board.uboot_disk_image }} under
+      {{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}.
+      Is {{ _board.uboot_apt_package }} installed?
+  when: _uboot_disk_image_find.files | length == 0
+
+- name: Set SD U-Boot image source path
+  ansible.builtin.set_fact:
+    _uboot_disk_image_path: "{{ _uboot_disk_image_find.files[0].path }}"
+
+- name: Ensure u-boot-tools is installed (provides fw_setenv)
+  ansible.builtin.apt:
+    name: u-boot-tools
+    state: present
+
+- name: Flash U-Boot to SD card at sector {{ _board.sd_uboot_seek_sectors }}
+  ansible.builtin.shell: |
+    dd if="{{ _uboot_disk_image_path }}" of="{{ _sd_target_device }}" \
+       bs=512 seek={{ _board.sd_uboot_seek_sectors }} conv=notrunc
+    sync
+  args:
+    executable: /bin/bash
+  register: _sd_flash_result
+  changed_when: _sd_flash_result.rc == 0
+
+# fw_setenv reads /etc/fw_env.config (already shipped by the Armbian
+# image on the rootfs). No -c override needed — U-Boot env lives on
+# the same disk we just wrote, which is what fw_env.config points at.
+- name: Set PXE-first boot_targets in U-Boot environment
+  ansible.builtin.command:
+    cmd: "fw_setenv boot_targets {{ _board.boot_targets_pxe }}"
+  changed_when: true
+
+- name: Report SD flash complete
+  ansible.builtin.debug:
+    msg: >-
+      SD flash complete: {{ _uboot_disk_image_path }} →
+      {{ _sd_target_device }} (seek={{ _board.sd_uboot_seek_sectors }}),
+      boot_targets='{{ _board.boot_targets_pxe }}'.

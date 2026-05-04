@@ -1,19 +1,33 @@
 ---
-# Where to mount NFS exports on the Ansible control node
-nfs_local_mount: /mnt/netboot
-
-# Temporary mount point used when loop-mounting an Armbian image for extraction
-armbian_image_mount: /mnt/armbian-image
-
-# Local directory for cached Armbian .img.xz downloads
-armbian_image_cache: /var/cache/armbian-images
-
-# NFS export paths on the netboot server (must already exist and be exported)
-nfs_rootfs_path: /exports/rootfs
+# Paths on the netboot server. The role runs ON the netboot server (e.g.
+# a TrueNAS host) and operates on these export paths directly — no NFS
+# client mount on the Ansible control node is involved.
+#
+# These paths must already exist on the netboot server and be exported
+# read/write to the boards that will boot from them; the role only writes
+# content into them.
+#
+# Inside nfs_rootfs_path the role creates two kinds of subdirectories:
+#   _templates/<board_model>/   per-model rootfs (extracted Armbian image)
+#   <inventory_hostname>/       per-host rootfs (cp --reflink from template,
+#                               with hostname/machine-id/SSH keys customised)
+# Boards mount their per-host directory as nfsroot. Per-host clones use
+# reflinks where the filesystem supports them (XFS, btrfs, ZFS), so disk
+# cost stays at one rootfs per model regardless of host count.
+nfs_rootfs_path: /mnt/ssd/netboot/rootfs
 nfs_reprovision_path: /exports/reprovision
-tftp_nfs_export: /opt/netbootxyz/config
-nfs_assets_export: /opt/netbootxyz/assets
+tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config
+nfs_assets_export: /mnt/ssd/containers/netbootxyz/assets
 
-# tftp_base resolves to the NFS-mounted TFTP config directory;
-# used by routeros_dhcp/enable_netboot when writing pxelinux.cfg files
-tftp_base: "{{ nfs_local_mount }}/tftp"
+# Working paths on the netboot server used while extracting an Armbian
+# image. armbian_image_cache also persists between runs so re-runs can
+# skip the download. On TrueNAS, override both to a path on a data pool —
+# the boot pool is small and not appropriate for caching multi-GB images.
+armbian_image_cache: /mnt/ssd/netboot/cache
+armbian_image_mount: /mnt/ssd/netboot/.loop-mount
+
+# URL of the Armbian apt mirror's Packages.gz, used by preflight.yml to
+# validate that each board's uboot_apt_package actually exists. Override
+# if you mirror Armbian internally.
+armbian_apt_packages_url: >-
+  https://apt.armbian.com/dists/{{ armbian_apt_suite | default('bookworm') }}/main/binary-arm64/Packages.gz

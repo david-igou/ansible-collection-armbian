@@ -1,15 +1,23 @@
 ---
 # Force a specific flash target regardless of SPI detection.
-# Options: auto (detect SPI, fall back to eMMC), spi, emmc
+# Options:
+#   auto — prefer SPI when populated and detected, then eMMC, then SD
+#          (the SD card the board is currently booted from).
+#   spi  — force SPI flash (fails if not populated/detected).
+#   emmc — force eMMC flash (fails if not populated).
+#   sd   — force SD flash; writes U-Boot in place to the SD card the
+#          board is currently running from. Requires the rootfs to be
+#          on a removable SD card.
 bootloader_target: auto
 
 # Where Armbian installs the u-boot package images
 uboot_package_lib_dir: "/usr/lib"
 
-# SPI MTD device to write to
+# Fallback device paths used only when the per-board entry in boards.yml
+# does not provide its own and detection (for SPI, by MTD label) finds
+# nothing. Override per-board via board_configs.<model>.spi_mtd_device /
+# .emmc_boot_partition, or per-host via host_board_overrides.
 spi_mtd_device: "/dev/mtd0"
-
-# eMMC boot partition (RK3588 bootloader lives here at offset 0)
 emmc_boot_partition: "/dev/mmcblk0boot0"
 
 # Set true to skip flashing if the device reports an existing valid bootloader.

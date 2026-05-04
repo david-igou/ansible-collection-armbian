@@ -11,12 +11,34 @@
     file: "{{ role_path }}/../bootloader/vars/boards.yml"
   tags: reprovision
 
+- name: Look up board entry for {{ board_model }}
+  ansible.builtin.set_fact:
+    _board_entry: "{{ board_configs[board_model] | default({}) }}"
+  tags: reprovision
+
+- name: Fail if board_model is not recognised
+  ansible.builtin.fail:
+    msg: "board_model '{{ board_model }}' not found in boards.yml"
+  when: _board_entry == {}
+  tags: reprovision
+
+- name: Load SoC family defaults for {{ _board_entry.soc_family }}
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../bootloader/vars/socs/{{ _board_entry.soc_family }}.yml"
+    name: _soc_defaults
+  tags: reprovision
+
+- name: Resolve effective board config
+  ansible.builtin.set_fact:
+    _board: >-
+      {{ _soc_defaults
+         | combine(_board_entry)
+         | combine(host_board_overrides | default({})) }}
+  tags: reprovision
+
 - name: Determine target block device
   ansible.builtin.set_fact:
-    _flash_target: >-
-      {{ '/dev/nvme0n1'
-         if board_configs[board_model].primary_storage == 'nvme'
-         else '/dev/mmcblk0' }}
+    _flash_target: "{{ _board.flash_target_device }}"
   tags: reprovision
 
 - name: Verify target block device exists
@@ -25,13 +47,42 @@
   register: _target_stat
   tags: reprovision
 
-- name: Fail if target device not found
+- name: Fail if target device not found or not a block device
   ansible.builtin.fail:
     msg: >-
-      Target device {{ _flash_target }} not found on {{ inventory_hostname }}.
-      Check that the NVMe/eMMC is seated and recognised by the kernel
-      (lsblk should list it).
-  when: not _target_stat.stat.exists
+      Target device {{ _flash_target }} not found (or not a block device) on
+      {{ inventory_hostname }}. Confirm the NVMe/eMMC is seated and recognised
+      by the kernel (lsblk should list it). If your board uses a different
+      device path, override flash_target_device via host_board_overrides.
+  when: not _target_stat.stat.exists or not _target_stat.stat.isblk
+  tags: reprovision
+
+# Removable-flag check guards against accidentally flashing the SD card
+# being used as the PXE bootloader source. /sys/block/<dev>/removable
+# returns "1" for SD/USB and "0" for eMMC/NVMe. SD-only boards (where
+# primary_storage == 'sd') opt out of this guard, since their flash
+# target is legitimately the SD card itself.
+- name: Read target device removable flag
+  ansible.builtin.slurp:
+    src: "/sys/block/{{ _flash_target | basename }}/removable"
+  register: _flash_target_removable
+  failed_when: false
+  when: _board.primary_storage != 'sd'
+  tags: reprovision
+
+- name: Refuse to flash a removable device
+  ansible.builtin.fail:
+    msg: >-
+      Refusing to flash {{ _flash_target }} because it is marked removable
+      ({{ '/sys/block/' + (_flash_target | basename) + '/removable=1' }}).
+      This is almost certainly the PXE SD card. Adjust flash_target_device
+      via host_board_overrides if your real eMMC/NVMe path is different,
+      or set primary_storage=sd if this board legitimately reprovisions
+      to SD.
+  when:
+    - _board.primary_storage != 'sd'
+    - _flash_target_removable.content is defined
+    - (_flash_target_removable.content | b64decode | trim) == '1'
   tags: reprovision
 
 - name: Download Armbian image to /tmp

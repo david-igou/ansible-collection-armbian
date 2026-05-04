@@ -1,0 +1,16 @@
+---
+breaking_changes:
+  - >-
+    RouterOS connectivity now uses ``ansible.netcommon.network_cli`` over SSH
+    exclusively. The ``httpapi`` / REST API path has been removed. Inventory
+    variables ``routeros_api_user`` and ``routeros_api_password`` are gone;
+    use ``routeros_ssh_user`` and ``routeros_ssh_port`` (key-based auth) in
+    ``inventory/group_vars/all.yml`` instead. Re-run
+    ``playbooks/bootstrap_routeros_user.yml`` to provision the SSH-only user
+    policy (``read,write,ssh,...,!rest-api,!api``).
+minor_changes:
+  - >-
+    ``playbooks/bootstrap_routeros_user.yml`` now uses a single SSH-only
+    policy by default. The router and switch can be provisioned together
+    against the ``routeros_devices`` parent group; the
+    ``routeros_user_password`` parameter has been removed.

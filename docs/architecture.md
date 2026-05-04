@@ -13,9 +13,9 @@
 └──────────────┬──────────────────────────┬───────────────┘
                │                          │
     ┌──────────▼──────────┐    ┌──────────▼──────────────┐
-    │   Netboot Server    │    │       Board (RK3588)     │
+    │   Netboot Server    │    │       ARM SBC           │
     │  (already running)  │    │                          │
-    │                     │    │  U-Boot (SPI or SD card) │
+    │                     │    │  U-Boot (SPI/eMMC/SD)   │
     │  ┌───────────────┐  │    │                          │
     │  │ netboot.xyz   │  │    │  1. DHCP request        │
     │  │ (Docker)      │◄─┼────┤  2. If next-server set:  │
@@ -28,11 +28,11 @@
     │  │ NFS Server    │  │
     │  │ /exports/     │  │    ┌──────────────────────────┐
     │  │  rootfs/      │◄─┼────┤  Ansible Control Node    │
-    │  └───────────────┘  │    │                          │
-    └─────────────────────┘    │  Mounts NFS exports,     │
-                               │  writes content; SSHes   │
-                               │  into NFS-booted boards  │
-                               │  to drive reprovision    │
+    │  │   _templates/ │  │    │                          │
+    │  │   <hostname>/ │  │    │  SSHes to netboot server │
+    │  └───────────────┘  │    │  to populate exports;    │
+    └─────────────────────┘    │  SSHes into NFS-booted   │
+                               │  boards to drive flash   │
                                └──────────────────────────┘
 ```
 
@@ -43,20 +43,23 @@
 ### Normal (disk boot)
 
 RouterOS has no PXE DHCP options assigned to the board's static lease.
-U-Boot starts from SPI (or SD card), DHCP returns no next-server, PXE
-attempt fails, and U-Boot falls through to NVMe or eMMC.
+U-Boot starts from SPI / eMMC / SD card, DHCP returns no next-server, PXE
+attempt fails, and U-Boot falls through to NVMe / eMMC / SD as configured
+by `boot_targets_pxe` for that board.
 
 ### NFS Root (diskless)
 
 The board boots a full Armbian rootfs served over NFS (read-only mount).
-Useful for testing, maintenance, or running the board completely off-network
-storage.
+Useful for testing, maintenance, or running the board completely off
+network storage.
 
 1. `enable_netboot.yml -e netboot_mode=nfsroot` runs
 2. RouterOS lease gets `dhcp-option=armbian-nfsroot`
 3. Board reboots → U-Boot DHCP → gets next-server + boot file path
 4. U-Boot fetches `pxelinux.cfg/01-<mac>` → downloads kernel, initrd, DTB
-5. Board boots into Armbian on NFS at `/exports/rootfs/<model>` (ro)
+5. Board boots into Armbian on NFS at
+   `nfs_rootfs_path/<inventory_hostname>` (ro). Each host has its own
+   per-host rootfs export — see "Per-host rootfs" below.
 
 ### Reprovision
 
@@ -69,85 +72,158 @@ and drives the flash directly — no scripts are staged on the board.
 3. Board reboots → PXE boots into NFS rootfs (rw mount)
 4. Ansible waits for SSH (`root` / `armbian_default_password`)
 5. Ansible downloads `.img.xz` from netboot.xyz HTTP server to `/tmp`
-6. Ansible flashes the image to NVMe/eMMC with `xz | dd`
+6. Ansible flashes the image to `flash_target_device` (NVMe/eMMC/SD)
+   with `xz | dd`. The reprovision role refuses to flash a removable
+   device (unless `primary_storage=sd`) so the PXE SD card cannot be
+   accidentally clobbered.
 7. Ansible clears `dhcp-option` on RouterOS from the control node
 8. Ansible reboots the board → comes up from freshly flashed disk
 9. Ansible asserts root filesystem is no longer NFS
 
 ---
 
-## Bootloader: Two Paths
+## Bootloader: Three Paths
 
-The board's boot behaviour (disk vs PXE) is controlled entirely by RouterOS
-DHCP options regardless of which bootloader path is used. The only difference
-is where U-Boot lives.
+The board's boot behaviour (disk vs. PXE) is controlled entirely by RouterOS
+DHCP options regardless of which bootloader path is used. The role picks one
+based on each board's `has_spi`/`has_emmc` capability flags and the
+`bootloader_target` setting (default `auto`).
 
-### Path 1 — SPI flash (Orange Pi 5, Orange Pi 5 Pro, Orange Pi 5 Max, Rock 5B)
+### Path 1 — SPI flash
 
 ```
 SPI flash
-└── U-Boot (Armbian linux-u-boot-current-<board>)
+└── U-Boot (Armbian linux-u-boot-<board>-<branch>)
       ├── DHCP → next-server set   → PXE boot (nfsroot or reprovision)
-      └── DHCP → no next-server    → local disk (NVMe / eMMC)
+      └── DHCP → no next-server    → local disk (NVMe / eMMC / SD)
 ```
 
-- U-Boot is flashed to SPI once via `flash_bootloader.yml`
-- No physical intervention ever needed to switch boot mode
-- RouterOS DHCP change is the sole trigger
+`flash_bootloader.yml` SSHes into the board, `apt install`s the U-Boot
+deb, detects the SPI MTD partition by name (`/sys/class/mtd/mtd*/name`),
+and `dd`s the SPI binary to it. No physical intervention is needed
+afterwards — DHCP is the sole control surface.
 
-### Path 2 — SD card (Rock 5A, and Rock 5B if SPI socket is unpopulated)
+### Path 2 — eMMC
+
+The strategy varies by SoC family (`vars/socs/<family>.yml`):
+
+- **Rockchip** (`emmc_strategy: boot_partition`) — write the U-Boot binary
+  to `/dev/mmcblkNboot0` at offset 0, toggling `force_ro` around the dd.
+- **Allwinner** (`emmc_strategy: user_area_seek`) — write to the eMMC user
+  data area at sector 16 (no boot partition involved).
 
 ```
-SD card (permanent, inserted into board)
-└── U-Boot  (boot_targets = pxe dhcp mmc0 nvme0 mmc1)
+eMMC
+├── boot0 partition (Rockchip)            or  ├── user area sector 16 (Allwinner)
+│   └── U-Boot binary                          │   └── U-Boot binary
+└── user partition: rootfs / disk image        └── user partition: rootfs / disk image
+```
+
+### Path 3 — SD card (boards without SPI or eMMC populated)
+
+```
+SD card (the one the board is currently booted from)
+└── U-Boot
+      ├── boot_targets = pxe-first (per-board boot_targets_pxe)
       ├── DHCP → next-server set   → PXE boot (nfsroot or reprovision)
-      └── DHCP → no next-server    → local disk (NVMe / eMMC)
+      └── DHCP → no next-server    → local disk
 ```
 
-- SD card is prepared once via `prepare_sd_card.yml` and physically inserted
-- The SD card contains **only U-Boot** — no OS, no partitions
-- U-Boot's environment on the card sets `boot_targets` to try PXE first
-- When DHCP provides no next-server, PXE fails and the board boots from disk
-- The card can remain inserted permanently
+The starting point is an SD card the operator has manually flashed with
+the Armbian image (etcher / `dd` / Armbian installer). The board boots
+from it. `flash_bootloader.yml` then SSHes into the board and:
 
-**Preparing the SD card** (run once per card, on the Ansible control node):
+- `apt install`s the Armbian U-Boot deb (provides `u-boot-rockchip.bin`
+  / `u-boot-sunxi-with-spl.bin` under `/usr/lib/<install_dir>/`).
+- Resolves the rootfs disk via `findmnt -n -o SOURCE / | lsblk -no PKNAME`
+  and asserts it's a removable SD card (`/sys/block/<dev>/removable=1`
+  or `device/type=SD`). Refuses to write to eMMC or NVMe under this code
+  path.
+- `dd`s the U-Boot binary to that disk at the SoC family's
+  `sd_uboot_seek_sectors` (Rockchip=64, Allwinner=16) with `conv=notrunc`.
+  These offsets sit before the first Armbian partition (~sector 8192),
+  so the rootfs partition is untouched.
+- Calls `fw_setenv boot_targets "<boot_targets_pxe>"` against the board's
+  own `/etc/fw_env.config` to put PXE first.
 
-```bash
-ansible-playbook playbooks/prepare_sd_card.yml \
-  -e board_model=rock-5a \
-  -e sd_card_device=/dev/sdb
+The card stays inserted permanently; it acts identically to SPI flash
+from a DHCP perspective.
+
+For boards with `has_spi: false` and `has_emmc: false`, `bootloader_target=auto`
+falls through to the SD path automatically. To force it on a board that
+has SPI/eMMC populated but should still flash SD, pass
+`-e bootloader_target=sd`.
+
+---
+
+## Per-host rootfs
+
+Multiple boards of the same model are supported. The `nfs_content` role
+runs in two passes:
+
+1. **Per board model** — extract one Armbian image into a template
+   directory `nfs_rootfs_path/_templates/<board_model>/`.
+2. **Per inventory host** — `cp --reflink=auto` the template into
+   `nfs_rootfs_path/<inventory_hostname>/`, then reset hostname,
+   machine-id, and SSH host keys so the host has independent identity
+   on the wire when it boots.
+
+```
+nfs_rootfs_path/
+├── _templates/
+│   ├── orange-pi-5/        (extracted from .img.xz; read-only after setup)
+│   └── orange-pi-zero-3/
+├── orange-pi-5-01/         (reflink clone of _templates/orange-pi-5)
+├── orange-pi-5-02/         (reflink clone)
+└── orange-pi-zero-3-01/
 ```
 
-The playbook reads the U-Boot binary and env offset from the Armbian rootfs
-already extracted by `setup_netboot.yml`, so no additional downloads are needed.
+`cp --reflink=auto` is a zero-cost CoW snapshot on XFS, btrfs, and ZFS
+(one rootfs's worth of bytes regardless of host count) and a full copy
+on ext4. Each board's `pxelinux.cfg/01-<mac>` points at its own
+`<inventory_hostname>` export, so two same-model boards never collide
+on hostname, machine-id, SSH host keys, or systemd state.
+
+---
+
+## Pre-flight
+
+`setup_netboot.yml` runs `roles/nfs_content/tasks/preflight.yml` first, before
+any image is downloaded or any rootfs is touched. It validates:
+
+- Each board's `uboot_apt_package` exists in the Armbian apt repo (fetches
+  `Packages.gz` once and asserts presence; failure lists the available
+  branches for that board family).
+- Each board's `armbian_image_urls` entry returns 200/302 to a HEAD
+  request (catches dead mirrors and typos).
+
+Failures are cheap to fix; the same misconfiguration caught at flash time
+on a real board is much more painful.
 
 ---
 
 ## How NFS Content is Managed
 
-This repo does not configure the netboot server — it only populates the NFS
-exports that netboot.xyz and the boards consume. All writes happen through
-NFS mounts on the Ansible control node:
+This collection does not configure the netboot server — it only populates
+the NFS exports that netboot.xyz and the boards consume. All writes happen
+from the netboot server itself, which the control node reaches over SSH:
 
 ```
-Control node (ansible-playbook runs here)
-  │
-  ├── mounts {{ netboot_server_ip }}:{{ tftp_nfs_export }}  → /mnt/netboot/tftp/
-  │     Writes: pxelinux.cfg/01-<mac>, armbian/<model>/{vmlinuz,initrd,dtb}
-  │
-  ├── mounts {{ netboot_server_ip }}:{{ nfs_rootfs_path }}/<model>  → /mnt/netboot/rootfs/<model>/
-  │     Writes: full Armbian rootfs (rsync from extracted image)
-  │     Shared by both nfsroot (ro) and reprovision (rw) boot modes
-  │
-  └── mounts {{ netboot_server_ip }}:{{ nfs_assets_export }}  → /mnt/netboot/assets/
-        Writes: images/<model>.img.xz  (served via netboot.xyz HTTP :8080)
+Control node ──SSH──> Netboot server (runs all extract/copy/clone work)
+                          │
+                          ├── writes nfs_rootfs_path/_templates/<model>/
+                          ├── writes nfs_rootfs_path/<inventory_hostname>/
+                          ├── writes tftp_nfs_export/armbian/<model>/{vmlinuz,initrd,dtb}
+                          └── writes nfs_assets_export/images/<model>.img.xz
 ```
 
-No SSH access to the netboot server is required for any content operation.
+The control node needs no NFS client mount, no root, and works under a
+rootless execution environment (ansible-navigator + rootless podman).
 
-A single NFS rootfs export serves both boot modes. The nfsroot pxelinux label
-mounts it `ro`; the reprovision label mounts it `rw`. The NFS server export
-itself must be configured with `rw,no_root_squash`.
+`enable_netboot.yml` is the remaining exception: it still NFS-mounts
+`tftp_nfs_export` on the control node to write per-host `pxelinux.cfg`
+files. That step will need the same SSH-and-operate-locally treatment to
+be fully rootless-EE-friendly.
 
 ---
 
@@ -160,7 +236,8 @@ itself must be configured with `rw,no_root_squash`.
 | Enable reprovision for a board | `ansible-playbook enable_netboot.yml --limit rock-5b-01 -e netboot_mode=reprovision` |
 | Full reprovision (Ansible-driven flash) | `ansible-playbook reprovision.yml --limit rock-5b-01` |
 | Manually revert a board to disk | `ansible-playbook disable_netboot.yml --limit rock-5b-01` |
-| Prepare SD card (non-SPI board) | `ansible-playbook prepare_sd_card.yml -e board_model=rock-5a -e sd_card_device=/dev/sdb` |
+| Flash bootloader (any target, auto-resolved) | `ansible-playbook flash_bootloader.yml --limit rock-5b-01` |
+| Force SD card target | `ansible-playbook flash_bootloader.yml --limit opi-zero3-01 -e bootloader_target=sd` |
 
 ---
 
@@ -170,33 +247,22 @@ Served from `{{ tftp_nfs_export }}` on the netboot server (default `/opt/netboot
 
 ```
 pxelinux.cfg/
-  01-aa-bb-cc-dd-ee-ff    # per-board config, written by enable_netboot
+  01-aa-bb-cc-dd-ee-ff    # per-host config, written by enable_netboot
 
 armbian/
   orange-pi-5/
     vmlinuz               # extracted from Armbian image by setup_netboot
     initrd.img
     board.dtb
-  rock-5b/
+  orange-pi-zero-3/
     vmlinuz
     initrd.img
     board.dtb
   ...
 ```
 
----
-
-## NFS Export Layout
-
-A single rootfs export per board model serves both nfsroot and reprovision modes:
-
-```
-/exports/
-  rootfs/
-    orange-pi-5/          # Armbian rootfs; mounted ro for nfsroot, rw for reprovision
-    rock-5b/
-    ...
-```
+Kernel/initrd/DTB are per-model (shared by all hosts of that model). Only
+the rootfs is per-host.
 
 ---
 
@@ -219,8 +285,8 @@ Netboot:  dhcp-option=armbian-nfsroot  OR  dhcp-option=armbian-reprovision
 Normal:   dhcp-option=""
 ```
 
-Both option sets point to the same NFS rootfs; the distinction is that
-`armbian-reprovision` selects the pxelinux label that mounts the rootfs `rw`.
+Both option sets resolve to per-host pxelinux.cfg files; the distinction
+is which pxelinux LABEL the file selects (the rootfs ro/rw mode).
 
 ---
 
@@ -231,17 +297,15 @@ change with each release. Set them explicitly in `group_vars/all.yml`:
 
 ```yaml
 armbian_image_urls:
-  orange-pi-5:     "https://dl.armbian.com/orangepi5/Armbian_25.x_..."
-  orange-pi-5-pro: "https://dl.armbian.com/orangepi5-pro/Armbian_25.x_..."
-  orange-pi-5-max: "https://dl.armbian.com/orangepi5-max/Armbian_25.x_..."
-  rock-5b:         "https://dl.armbian.com/rock-5b/Armbian_25.x_..."
-  rock-5a:         "https://dl.armbian.com/rock-5a/Armbian_25.x_..."
+  orange-pi-5:        "https://dl.armbian.com/orangepi5/Armbian_..."
+  orange-pi-5-pro:    "https://dl.armbian.com/orangepi5pro/Armbian_..."
+  orange-pi-zero-3:   "https://dl.armbian.com/orangepizero3/Armbian_..."
+  ...
 ```
 
-Browse `https://dl.armbian.com/<board>/` to find the current URL. Prefer
-the `server` or `minimal` variant (`bookworm` recommended for stability).
-
-Set them in `inventory/group_vars/all.yml`.
+Browse `https://dl.armbian.com/<armbian_dl_dir>/` (or the `community`
+GitHub releases for community-tier boards) to find the current URL.
+Preflight HEAD-checks every URL; broken pins fail loudly before any work.
 
 ---
 
@@ -249,6 +313,6 @@ Set them in `inventory/group_vars/all.yml`.
 
 Install with `ansible-galaxy collection install -r requirements.yml`:
 
-- `community.routeros` ≥ 2.0 — RouterOS API/command modules
+- `community.routeros` ≥ 2.0 — RouterOS command module + network_cli cliconf (SSH)
 - `ansible.posix` ≥ 1.5 — mount module for NFS content management
 - `ansible.netcommon` ≥ 5.0 — network_cli connection plugin

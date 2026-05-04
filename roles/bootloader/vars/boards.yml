@@ -1,73 +1,131 @@
 ---
 # Per-board hardware and U-Boot configuration.
 # Keyed by board_model (matches inventory host_vars and pxelinux paths).
+#
+# Field resolution precedence (later overrides earlier):
+#   1. roles/bootloader/vars/socs/<soc_family>.yml  (SoC family defaults)
+#   2. board_configs.<model>.<field>                (this file)
+#   3. host_board_overrides.<field>                 (per-host inventory)
+#
+# Common fields (uboot_spi_image, uboot_disk_image, sd_uboot_seek_sectors,
+# emmc_strategy) are usually inherited from the SoC vars file; only
+# repeat them here when a specific board diverges from the family default.
+#
+# About the two U-Boot name fields:
+#   - uboot_apt_package — exact apt package name on apt.armbian.com.
+#     Format: linux-u-boot-<board>-<branch>
+#   - uboot_install_dir — directory the deb installs under /usr/lib/.
+#     Format: linux-u-boot-<branch>-<board>  (segments swapped)
+#   Verify both by extracting the deb (`dpkg-deb -c`) when adding a new
+#   board — segment dashing is inconsistent across boards.
+#
+# About per-board feature flags:
+#   - has_spi / has_emmc — declares whether the optional storage chip is
+#     populated. Both are SKU-level (the same model can ship with or
+#     without). Defaults here reflect typical retail; override per-host
+#     via host_board_overrides for non-typical units.
 
 board_configs:
+  # ── Rockchip RK3588/RK3588S boards ───────────────────────────────────
   orange-pi-5:
-    soc: rk3588s
-    # armbian_dl_dir: subdirectory name at dl.armbian.com
+    soc_family: rockchip
     armbian_dl_dir: orangepi5
-    # armbian_board_name: used in apt package names (no dashes)
     armbian_board_name: orangepi5
-    uboot_package: linux-u-boot-current-orangepi5
-    uboot_spi_image: u-boot-rockchip-spi.bin
-    uboot_emmc_image: u-boot-rockchip.bin
+    armbian_support: standard
+    uboot_apt_package: linux-u-boot-orangepi5-current
+    uboot_install_dir: linux-u-boot-current-orangepi5
     dtb: rockchip/rk3588s-orangepi-5.dtb
     console: ttyS2,1500000n8
     has_spi: true
+    has_emmc: false
     primary_storage: nvme
-    armbian_support: standard
+    flash_target_device: /dev/nvme0n1
+    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   orange-pi-5-pro:
-    soc: rk3588s
-    armbian_dl_dir: orangepi5-pro
+    soc_family: rockchip
+    armbian_dl_dir: orangepi5pro
     armbian_board_name: orangepi5pro
-    uboot_package: linux-u-boot-current-orangepi5-pro
-    uboot_spi_image: u-boot-rockchip-spi.bin
-    uboot_emmc_image: u-boot-rockchip.bin
+    armbian_support: community
+    # No `current` deb is published for orangepi5pro; the `current`-branch
+    # image and the `edge` deb both ship mainline U-Boot v2025.10.
+    uboot_apt_package: linux-u-boot-orangepi5pro-edge
+    uboot_install_dir: linux-u-boot-edge-orangepi5pro
     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
     console: ttyS2,1500000n8
-    has_spi: true
+    # Orange Pi 5 Pro spec lists "SPI NOR Flash footprint" — most retail
+    # units ship without the chip populated. Override to true via
+    # host_board_overrides if your specific board has SPI populated.
+    has_spi: false
+    has_emmc: false
     primary_storage: nvme
-    armbian_support: community
+    flash_target_device: /dev/nvme0n1
+    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   orange-pi-5-max:
-    soc: rk3588
+    soc_family: rockchip
     armbian_dl_dir: orangepi5-max
     armbian_board_name: orangepi5max
-    uboot_package: linux-u-boot-current-orangepi5-max
-    uboot_spi_image: u-boot-rockchip-spi.bin
-    uboot_emmc_image: u-boot-rockchip.bin
+    armbian_support: community
+    # Armbian publishes only edge/vendor for this board — no current branch.
+    uboot_apt_package: linux-u-boot-orangepi5-max-edge
+    uboot_install_dir: linux-u-boot-edge-orangepi5-max
     dtb: rockchip/rk3588-orangepi-5-max.dtb
     console: ttyS2,1500000n8
     has_spi: true
+    has_emmc: false
     primary_storage: nvme
-    armbian_support: community
+    flash_target_device: /dev/nvme0n1
+    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   rock-5b:
-    soc: rk3588
+    soc_family: rockchip
     armbian_dl_dir: rock-5b
     armbian_board_name: rock-5b
-    uboot_package: linux-u-boot-current-rock-5b
-    uboot_spi_image: u-boot-rockchip-spi.bin
-    uboot_emmc_image: u-boot-rockchip.bin
+    armbian_support: standard
+    uboot_apt_package: linux-u-boot-rock-5b-current
+    uboot_install_dir: linux-u-boot-current-rock-5b
     dtb: rockchip/rk3588-rock-5b.dtb
     console: ttyS2,1500000n8
-    # Rock 5B has an SPI socket but it may not be populated
+    # Rock 5B has an SPI socket; commonly populated, but verify per unit.
     has_spi: true
+    has_emmc: false
     primary_storage: nvme
-    armbian_support: standard
+    flash_target_device: /dev/nvme0n1
+    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   rock-5a:
-    soc: rk3588s
+    soc_family: rockchip
     armbian_dl_dir: rock-5a
     armbian_board_name: rock-5a
-    uboot_package: linux-u-boot-current-rock-5a
-    uboot_spi_image: u-boot-rockchip-spi.bin
-    uboot_emmc_image: u-boot-rockchip.bin
+    armbian_support: standard
+    uboot_apt_package: linux-u-boot-rock-5a-current
+    uboot_install_dir: linux-u-boot-current-rock-5a
     dtb: rockchip/rk3588s-rock-5a.dtb
     console: ttyS2,1500000n8
-    # Rock 5A SPI is not always populated
+    # Rock 5A SPI is not always populated.
     has_spi: false
+    has_emmc: false
     primary_storage: nvme
-    armbian_support: standard
+    flash_target_device: /dev/nvme0n1
+    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
+
+  # ── Allwinner H618 boards ────────────────────────────────────────────
+  orange-pi-zero-3:
+    soc_family: allwinner
+    armbian_dl_dir: orangepizero3
+    armbian_board_name: orangepizero3
+    armbian_support: community
+    uboot_apt_package: linux-u-boot-orangepizero3-current
+    uboot_install_dir: linux-u-boot-current-orangepizero3
+    dtb: allwinner/sun50i-h616-orangepi-zero3.dtb
+    console: ttyS0,115200n8
+    # OPi Zero 3 has neither SPI flash nor an eMMC socket — boots only
+    # from microSD. The bootloader role's auto resolution falls through
+    # to the `sd` target: it flashes PXE-first U-Boot to the SD card
+    # the board is already booted from, in place.
+    has_spi: false
+    has_emmc: false
+    primary_storage: sd
+    flash_target_device: /dev/mmcblk0
+    boot_targets_pxe: "pxe dhcp mmc0"

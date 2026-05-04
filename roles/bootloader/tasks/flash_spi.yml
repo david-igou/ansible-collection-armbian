@@ -1,7 +1,7 @@
 ---
 - name: Locate SPI U-Boot image from installed package
   ansible.builtin.find:
-    paths: "{{ uboot_package_lib_dir }}/{{ _board.uboot_package }}"
+    paths: "{{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}"
     patterns: "{{ _board.uboot_spi_image }}"
     recurse: true
   register: _uboot_spi_image_find
@@ -10,7 +10,7 @@
   ansible.builtin.fail:
     msg: >
       Could not find {{ _board.uboot_spi_image }} under
-      {{ uboot_package_lib_dir }}/{{ _board.uboot_package }}.
+      {{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}.
       Is the package installed?
   when: _uboot_spi_image_find.files | length == 0
 
@@ -18,9 +18,9 @@
   ansible.builtin.set_fact:
     _uboot_spi_image_path: "{{ _uboot_spi_image_find.files[0].path }}"
 
-- name: Flash U-Boot to SPI ({{ spi_mtd_device }})
+- name: Flash U-Boot to SPI ({{ _spi_mtd_device }})
   ansible.builtin.shell: |
-    dd if="{{ _uboot_spi_image_path }}" of="{{ spi_mtd_device }}" bs=4096 conv=notrunc
+    dd if="{{ _uboot_spi_image_path }}" of="{{ _spi_mtd_device }}" bs=4096 conv=notrunc
     sync
   args:
     executable: /bin/bash
@@ -29,4 +29,4 @@
 
 - name: Verify SPI flash completed
   ansible.builtin.debug:
-    msg: "SPI flash complete: {{ _uboot_spi_image_path }} → {{ spi_mtd_device }}"
+    msg: "SPI flash complete: {{ _uboot_spi_image_path }} → {{ _spi_mtd_device }}"

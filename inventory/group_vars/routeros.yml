@@ -1,8 +1,8 @@
 ---
-# community.routeros.api connection parameters
-ansible_connection: "ansible.netcommon.httpapi"
-ansible_network_os: "community.routeros.api"
-ansible_httpapi_use_ssl: true
-ansible_httpapi_validate_certs: false
-ansible_user: "{{ routeros_api_user }}"
-ansible_password: "{{ routeros_api_password }}"
+# community.routeros connection parameters — SSH / network_cli
+ansible_connection: "ansible.netcommon.network_cli"
+ansible_network_os: "community.routeros.routeros"
+ansible_user: "{{ routeros_ssh_user }}"
+ansible_port: "{{ routeros_ssh_port | default(22) }}"
+# Authentication is SSH key based — no password is set here. Provision keys
+# with playbooks/bootstrap_routeros_user.yml before running other playbooks.

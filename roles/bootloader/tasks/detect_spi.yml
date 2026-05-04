@@ -1,16 +1,57 @@
 ---
-- name: Check for SPI MTD device
-  ansible.builtin.stat:
-    path: "{{ spi_mtd_device }}"
-  register: _spi_dev_stat
+# Determine which /dev/mtdN node corresponds to the SPI NOR flash. Probe
+# order is not stable across kernels/boards, so prefer detection by name
+# (the MTD subsystem exposes /sys/class/mtd/mtdN/name set by the partition
+# label or the SPI NOR driver). Fall back to stat'ing the configured
+# spi_mtd_device only if name-based detection turns up nothing.
 
-- name: Set SPI availability fact
+- name: Detect SPI MTD device by name
+  ansible.builtin.shell: |
+    set -o pipefail
+    for n in /sys/class/mtd/mtd*/name; do
+      [ -e "$n" ] || continue
+      base=$(basename "$(dirname "$n")")
+      # ignore mtdblockN — we want the raw mtd char device
+      case "$base" in
+        mtd[0-9]|mtd[0-9][0-9]) ;;
+        *) continue ;;
+      esac
+      label=$(cat "$n" 2>/dev/null || true)
+      case "$label" in
+        *spi*|*SPI*|*nor*|*NOR*|*flash*|*Flash*|*loader*|*boot*)
+          echo "/dev/$base"
+          exit 0
+          ;;
+      esac
+    done
+    exit 1
+  args:
+    executable: /bin/bash
+  register: _spi_detect_by_name
+  failed_when: false
+  changed_when: false
+
+- name: Stat configured SPI MTD device (fallback when name detection fails)
+  ansible.builtin.stat:
+    path: "{{ _board.spi_mtd_device | default(spi_mtd_device) }}"
+  register: _spi_dev_stat
+  when: _spi_detect_by_name.rc != 0
+
+- name: Set SPI availability and device facts
   ansible.builtin.set_fact:
-    _spi_available: "{{ _spi_dev_stat.stat.exists }}"
+    _spi_available: >-
+      {{ _spi_detect_by_name.rc == 0
+         or (_spi_dev_stat.stat.exists | default(false)) }}
+    _spi_mtd_device: >-
+      {{ _spi_detect_by_name.stdout
+         if _spi_detect_by_name.rc == 0
+         else (_board.spi_mtd_device | default(spi_mtd_device)) }}
 
 - name: Report SPI status
   ansible.builtin.debug:
-    msg: >
-      SPI flash {{ 'found' if _spi_available else 'not found' }} on
-      {{ inventory_hostname }} ({{ board_model }}).
-      Target: {{ 'SPI' if _spi_available else 'eMMC boot partition' }}.
+    msg: >-
+      SPI flash {{ 'found at ' + _spi_mtd_device if _spi_available else 'not found' }}
+      on {{ inventory_hostname }} ({{ board_model }}).
+      {{ '(detected by MTD label)'
+         if _spi_detect_by_name.rc == 0
+         else '(configured device path)' }}

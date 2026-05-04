@@ -1,43 +1,30 @@
 ---
+# Dispatch to the per-SoC-family eMMC write strategy.
+# Strategies live in flash_emmc_<strategy>.yml; the strategy name comes
+# from _board.emmc_strategy (resolved from socs/<family>.yml unless the
+# board overrides it).
+#
+# Currently implemented:
+#   boot_partition  — Rockchip RK3588/3399/356x: dd to /dev/mmcblkNboot0
+#   user_area_seek  — Allwinner sunxi: dd to /dev/mmcblkN with seek=N
+
 - name: Locate eMMC U-Boot image from installed package
   ansible.builtin.find:
-    paths: "{{ uboot_package_lib_dir }}/{{ _board.uboot_package }}"
-    patterns: "{{ _board.uboot_emmc_image }}"
+    paths: "{{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}"
+    patterns: "{{ _board.uboot_disk_image }}"
     recurse: true
-  register: _uboot_emmc_image_find
+  register: _uboot_disk_image_find
 
 - name: Fail if eMMC image not found
   ansible.builtin.fail:
-    msg: >
-      Could not find {{ _board.uboot_emmc_image }} under
-      {{ uboot_package_lib_dir }}/{{ _board.uboot_package }}.
-  when: _uboot_emmc_image_find.files | length == 0
+    msg: >-
+      Could not find {{ _board.uboot_disk_image }} under
+      {{ uboot_package_lib_dir }}/{{ _board.uboot_install_dir }}.
+  when: _uboot_disk_image_find.files | length == 0
 
-- name: Set eMMC image path
+- name: Set eMMC image source path
   ansible.builtin.set_fact:
-    _uboot_emmc_image_path: "{{ _uboot_emmc_image_find.files[0].path }}"
+    _uboot_disk_image_path: "{{ _uboot_disk_image_find.files[0].path }}"
 
-- name: Disable eMMC boot0 write protection
-  ansible.builtin.shell: "echo 0 > /sys/block/mmcblk0boot0/force_ro"
-  args:
-    executable: /bin/bash
-  changed_when: true
-
-- name: Flash U-Boot to eMMC boot partition
-  ansible.builtin.shell: |
-    dd if="{{ _uboot_emmc_image_path }}" of="{{ emmc_boot_partition }}" bs=512
-    sync
-  args:
-    executable: /bin/bash
-  register: _emmc_flash_result
-  changed_when: _emmc_flash_result.rc == 0
-
-- name: Re-enable eMMC boot0 write protection
-  ansible.builtin.shell: "echo 1 > /sys/block/mmcblk0boot0/force_ro"
-  args:
-    executable: /bin/bash
-  changed_when: true
-
-- name: Report eMMC flash complete
-  ansible.builtin.debug:
-    msg: "eMMC flash complete: {{ _uboot_emmc_image_path }} → {{ emmc_boot_partition }}"
+- name: Dispatch to eMMC flash strategy
+  ansible.builtin.include_tasks: "flash_emmc_{{ _board.emmc_strategy }}.yml"

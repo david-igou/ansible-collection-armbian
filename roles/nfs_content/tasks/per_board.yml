@@ -1,50 +1,33 @@
 ---
 # Runs once per board model (_model variable set by include loop in main.yml).
-# Mounts the NFS rootfs and reprovision exports for this model, populates
-# them from the Armbian image, writes kernel/DTB/initrd to the TFTP mount,
-# then unmounts. All operations run on the Ansible control node.
+# Populates the per-model rootfs template and the TFTP tree for this model
+# from an Armbian image. The per-host rootfs clones are created in a later
+# pass by per_host.yml. All operations run locally on the netboot server.
 
-- name: Set board facts for {{ _model }}
+- name: Set per-model facts for {{ _model }}
   ansible.builtin.set_fact:
     _bc: "{{ board_configs[_model] }}"
-    _rootfs_mount: "{{ nfs_local_mount }}/rootfs/{{ _model }}"
-    _tftp_board_dir: "{{ nfs_local_mount }}/tftp/armbian/{{ _model }}"
+    _template_dir: "{{ nfs_rootfs_path }}/_templates/{{ _model }}"
+    _tftp_board_dir: "{{ tftp_nfs_export }}/armbian/{{ _model }}"
     _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
-    _uboot_cache: "{{ armbian_image_cache }}/uboot-{{ _model }}"
 
-- name: Create local mount directories for {{ _model }}
+- name: Ensure per-model template and TFTP directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: "0755"
   loop:
-    - "{{ _rootfs_mount }}"
+    - "{{ _template_dir }}"
     - "{{ _tftp_board_dir }}"
 
-- name: Mount NFS rootfs export for {{ _model }}
-  ansible.posix.mount:
-    src: "{{ netboot_server_ip }}:{{ nfs_rootfs_path }}/{{ _model }}"
-    path: "{{ _rootfs_mount }}"
-    fstype: nfs
-    opts: "vers=4,rw"
-    state: mounted
-
-- name: Check if rootfs is already populated for {{ _model }}
+- name: Check if rootfs template is already populated for {{ _model }}
   ansible.builtin.stat:
-    path: "{{ _rootfs_mount }}/bin/bash"
-  register: _rootfs_populated
+    path: "{{ _template_dir }}/bin/bash"
+  register: _template_populated
 
-- name: Populate rootfs from Armbian image
-  when: not _rootfs_populated.stat.exists
+- name: Populate rootfs template from Armbian image
+  when: not _template_populated.stat.exists
   block:
-    - name: Fail if no image URL configured for {{ _model }}
-      ansible.builtin.fail:
-        msg: >-
-          armbian_image_urls['{{ _model }}'] is not set.
-          Set it in ansible/inventory/group_vars/all.yml to the full .img.xz
-          URL from https://dl.armbian.com/{{ _bc.armbian_dl_dir }}/
-      when: not armbian_image_urls[_model] | default('')
-
     - name: Download Armbian image for {{ _model }}
       ansible.builtin.get_url:
         url: "{{ armbian_image_urls[_model] }}"
@@ -74,11 +57,11 @@
         executable: /bin/bash
       changed_when: true
 
-    - name: Rsync rootfs to NFS rootfs mount
+    - name: Rsync rootfs into per-model template
       ansible.builtin.shell: |
         rsync -aHAX --exclude '/proc/*' --exclude '/sys/*' \
           --exclude '/dev/*' --exclude '/run/*' \
-          "{{ armbian_image_mount }}/" "{{ _rootfs_mount }}/"
+          "{{ armbian_image_mount }}/" "{{ _template_dir }}/"
       changed_when: true
 
     - name: Copy kernel and initrd to TFTP tree
@@ -87,22 +70,29 @@
         cp "{{ armbian_image_mount }}"/boot/initrd.img-* "{{ _tftp_board_dir }}/initrd.img"
       changed_when: true
 
+    # Armbian images can place DTBs at several locations depending on the
+    # kernel package: /boot/dtb/<dtb>, /boot/dtb-<version>/<dtb>, or
+    # /boot/dtbs/<version>/<dtb>. Try each and fail loudly if none match —
+    # silently shipping a missing DTB causes a kernel panic at PXE boot
+    # time, which is much harder to diagnose than an Ansible failure here.
     - name: Copy board DTB to TFTP tree
       ansible.builtin.shell: |
-        DTB_SRC="{{ armbian_image_mount }}/boot/dtb/{{ _bc.dtb }}"
-        [ -f "${DTB_SRC}" ] && cp "${DTB_SRC}" "{{ _tftp_board_dir }}/board.dtb" \
-          || echo "WARNING: DTB not found at ${DTB_SRC}" >&2
-      args:
-        executable: /bin/bash
-      changed_when: true
-
-    - name: Cache U-Boot binaries for SD card preparation
-      ansible.builtin.shell: |
-        UBOOT_DIR="{{ armbian_image_mount }}/usr/lib/{{ _bc.uboot_package }}"
-        mkdir -p "{{ _uboot_cache }}"
-        for BIN in "{{ _bc.uboot_emmc_image }}" "{{ _bc.uboot_spi_image }}"; do
-          [ -f "${UBOOT_DIR}/${BIN}" ] && cp "${UBOOT_DIR}/${BIN}" "{{ _uboot_cache }}/" || true
+        set -e
+        ROOT="{{ armbian_image_mount }}"
+        DTB="{{ _bc.dtb }}"
+        for CANDIDATE in \
+            "${ROOT}/boot/dtb/${DTB}" \
+            "${ROOT}/boot/dtbs/${DTB}" \
+            $(ls "${ROOT}"/boot/dtb-*/"${DTB}" 2>/dev/null) \
+            $(ls "${ROOT}"/boot/dtbs/*/"${DTB}" 2>/dev/null); do
+          if [ -f "${CANDIDATE}" ]; then
+            cp "${CANDIDATE}" "{{ _tftp_board_dir }}/board.dtb"
+            echo "DTB copied from ${CANDIDATE}"
+            exit 0
+          fi
         done
+        echo "ERROR: DTB ${DTB} not found under ${ROOT}/boot/{dtb,dtbs,dtb-*}" >&2
+        exit 1
       args:
         executable: /bin/bash
       changed_when: true
@@ -113,20 +103,15 @@
         losetup -d "{{ _loop_dev.stdout }}" || true
       changed_when: true
 
-    - name: Remove local disk entries from NFS rootfs fstab
+    - name: Remove local disk entries from rootfs template fstab
       ansible.builtin.lineinfile:
-        path: "{{ _rootfs_mount }}/etc/fstab"
+        path: "{{ _template_dir }}/etc/fstab"
         regexp: "^/dev/"
         state: absent
 
 - name: Copy Armbian image to assets for reprovision HTTP download
   ansible.builtin.copy:
     src: "{{ _image_cache }}"
-    dest: "{{ nfs_local_mount }}/assets/images/{{ _model }}.img.xz"
+    dest: "{{ nfs_assets_export }}/images/{{ _model }}.img.xz"
     mode: "0644"
     remote_src: true
-
-- name: Unmount NFS rootfs export for {{ _model }}
-  ansible.posix.mount:
-    path: "{{ _rootfs_mount }}"
-    state: unmounted

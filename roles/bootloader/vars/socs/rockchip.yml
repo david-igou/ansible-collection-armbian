@@ -1,0 +1,19 @@
+---
+# SoC family defaults for Rockchip boards using Armbian's modern unified
+# U-Boot format (RK3588/RK3588S/RK3399/RK356x current+edge branches).
+# Each board entry in boards.yml may override any of these fields.
+
+# Sector offset for U-Boot binary on SD/eMMC user area (when SoC strategy
+# uses user-area-seek; not used by Rockchip's boot_partition strategy
+# but kept for symmetry with other SoC families).
+sd_uboot_seek_sectors: 64
+
+# How flash_emmc.yml writes the bootloader to eMMC. One of:
+#   boot_partition  — toggle force_ro on /dev/mmcblkNboot0 and dd at offset 0
+#   user_area_seek  — dd to /dev/mmcblkN with seek=sd_uboot_seek_sectors
+emmc_strategy: boot_partition
+
+# Default U-Boot binary names inside the apt deb. Boards with a vendor
+# fork that ships different filenames override these in boards.yml.
+uboot_spi_image: u-boot-rockchip-spi.bin
+uboot_disk_image: u-boot-rockchip.bin

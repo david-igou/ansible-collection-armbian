@@ -1,7 +1,14 @@
 ---
-# Mounts NFS exports from the already-running netboot server and populates
-# them with Armbian rootfs, kernel/DTB/initrd for TFTP, and image assets.
-# Runs on the Ansible control node (localhost).
+# Populates the netboot server's NFS exports with Armbian rootfs and the
+# TFTP kernel/DTB/initrd assets. Runs ON the netboot server (no NFS client
+# mount on the control node) and operates on the export paths directly.
+#
+# Two-pass structure:
+#   1. Per board model: extract the Armbian image once into a template
+#      directory (_templates/<model>) and copy kernel/initrd/DTB to TFTP.
+#   2. Per inventory host: cp --reflink the model template into a per-host
+#      rootfs directory, then customise hostname/machine-id/SSH keys so
+#      multiple same-model boards have independent identities on the wire.
 
 - name: Load board configs
   ansible.builtin.include_vars:
@@ -14,17 +21,14 @@
          | map('extract', hostvars, 'board_model')
          | list | unique }}
 
-- name: Create local NFS mount base directories
-  ansible.builtin.file:
-    path: "{{ nfs_local_mount }}/{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - tftp
-    - assets
-    - rootfs
+# ── Preflight ─────────────────────────────────────────────────────────
+# Validate apt package and image URL for every board model before any
+# destructive work. Failures here are cheap to fix; failures at flash
+# time on a board half-way through the workflow are not.
+- name: Preflight — validate U-Boot packages and image URLs
+  ansible.builtin.include_tasks: preflight.yml
 
-- name: Create local Armbian image cache and mount directories
+- name: Ensure local working directories exist on the netboot server
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -32,26 +36,11 @@
   loop:
     - "{{ armbian_image_cache }}"
     - "{{ armbian_image_mount }}"
+    - "{{ nfs_rootfs_path }}/_templates"
 
-- name: Mount TFTP config directory from NFS
-  ansible.posix.mount:
-    src: "{{ netboot_server_ip }}:{{ tftp_nfs_export }}"
-    path: "{{ nfs_local_mount }}/tftp"
-    fstype: nfs
-    opts: "vers=4,rw"
-    state: mounted
-
-- name: Mount netboot assets directory from NFS
-  ansible.posix.mount:
-    src: "{{ netboot_server_ip }}:{{ nfs_assets_export }}"
-    path: "{{ nfs_local_mount }}/assets"
-    fstype: nfs
-    opts: "vers=4,rw"
-    state: mounted
-
-- name: Ensure TFTP armbian and pxelinux.cfg directories exist
+- name: Ensure TFTP armbian and pxelinux.cfg subdirectories exist
   ansible.builtin.file:
-    path: "{{ nfs_local_mount }}/tftp/{{ item }}"
+    path: "{{ tftp_nfs_export }}/{{ item }}"
     state: directory
     mode: "0755"
   loop:
@@ -60,22 +49,26 @@
 
 - name: Ensure assets images directory exists
   ansible.builtin.file:
-    path: "{{ nfs_local_mount }}/assets/images"
+    path: "{{ nfs_assets_export }}/images"
     state: directory
     mode: "0755"
 
-- name: Populate NFS content for each board model
+# ── Pass 1: per-model template extraction ─────────────────────────────
+- name: Extract per-model rootfs templates
   ansible.builtin.include_tasks: per_board.yml
   loop: "{{ _board_models }}"
   loop_control:
     loop_var: _model
 
-- name: Unmount TFTP config directory
-  ansible.posix.mount:
-    path: "{{ nfs_local_mount }}/tftp"
-    state: unmounted
-
-- name: Unmount netboot assets directory
-  ansible.posix.mount:
-    path: "{{ nfs_local_mount }}/assets"
-    state: unmounted
+# ── Pass 2: per-host rootfs clones ────────────────────────────────────
+# Each host of every model gets its own NFS export under
+# nfs_rootfs_path/<hostname>, reflink-copied from the model template
+# and customised so identities (hostname, machine-id, SSH host keys)
+# are unique on the wire. Hosts of the same model share storage on
+# reflink-capable filesystems.
+- name: Build per-host rootfs clones
+  ansible.builtin.include_tasks: per_host.yml
+  loop: "{{ groups['boards'] }}"
+  loop_control:
+    loop_var: _host
+    label: "{{ _host }} ({{ hostvars[_host]['board_model'] }})"

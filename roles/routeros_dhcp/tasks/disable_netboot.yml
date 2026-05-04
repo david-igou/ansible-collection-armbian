@@ -2,7 +2,7 @@
 # Removes the PXE DHCP option set from a board's static lease, reverting it
 # to normal disk boot.
 #
-# Called automatically by reprovision.sh after flashing (via RouterOS REST API).
+# Called automatically by reprovision.yml after flashing (via SSH to RouterOS).
 # Can also be run manually via the disable_netboot.yml playbook to cancel a
 # queued netboot.
 #

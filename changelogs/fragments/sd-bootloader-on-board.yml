@@ -1,0 +1,38 @@
+---
+breaking_changes:
+  - >-
+    The ``prepare_sd_card.yml`` playbook and the
+    ``roles/bootloader/tasks/prepare_sd_card.yml`` task file have been
+    removed. SD card bootloader installation now runs **on the board
+    over SSH** as part of the ``bootloader`` role, not on the netboot
+    server with the SD card attached via USB reader. The new starting
+    point is: the operator manually flashes Armbian to the SD card
+    (etcher / ``dd`` / Armbian installer), boots the board from it, and
+    then runs ``flash_bootloader.yml --limit <host>`` — the role
+    auto-resolves to the SD card the board is currently booted from
+    when no SPI/eMMC is available.
+
+minor_changes:
+  - >-
+    Added ``sd`` as a valid value for ``bootloader_target`` (alongside
+    ``auto``, ``spi``, ``emmc``). The ``auto`` resolution order is now
+    SPI → eMMC → SD; boards with no on-board persistent bootloader
+    storage no longer hard-fail and instead fall through to flashing
+    the SD card the board is currently booted from.
+  - >-
+    New task file ``roles/bootloader/tasks/flash_sd.yml`` writes U-Boot
+    in place to the rootfs disk after asserting it is a removable SD
+    card (via ``/sys/block/<dev>/removable`` and ``device/type``).
+    Hard-fails if the rootfs is on eMMC or NVMe, preventing accidental
+    overwrite under the SD code path.
+  - >-
+    ``flash_sd.yml`` sets PXE-first ``boot_targets`` via ``fw_setenv``
+    against the board's own ``/etc/fw_env.config``. No env offset/size
+    pre-reading from the netboot server's rootfs template is required
+    anymore.
+  - >-
+    ``nfs_content`` no longer caches U-Boot binaries from each Armbian
+    image (the ``armbian_image_cache/uboot-<model>/`` directory is no
+    longer populated). The bootloader role pulls U-Boot exclusively
+    from the apt-installed deb on the board itself, regardless of which
+    flash target it ends up using.

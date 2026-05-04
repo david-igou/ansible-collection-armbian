@@ -1,0 +1,12 @@
+---
+# SoC family defaults for Allwinner boards (sunxi).
+# Each board entry in boards.yml may override any of these fields.
+
+# Allwinner U-Boot lives at sector 16 (8 KiB) on SD and eMMC, not in an
+# eMMC boot partition. The same binary is used for SPI, eMMC, and SD —
+# Allwinner does not split SPI vs. on-disk variants the way Rockchip does.
+sd_uboot_seek_sectors: 16
+emmc_strategy: user_area_seek
+
+uboot_spi_image: u-boot-sunxi-with-spl.bin
+uboot_disk_image: u-boot-sunxi-with-spl.bin

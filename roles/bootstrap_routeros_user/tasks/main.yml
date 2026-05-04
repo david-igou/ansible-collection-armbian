@@ -1,0 +1,111 @@
+---
+# Idempotently create / update a RouterOS user, its group, and its SSH keys.
+# Expects the play to use ansible.netcommon.network_cli with
+# community.routeros.routeros as the cliconf, and to be connected as an
+# existing admin user (since this role provisions the one used by the rest
+# of the collection).
+
+- name: Validate that at least one SSH key was provided
+  ansible.builtin.assert:
+    that: routeros_user_ssh_keys | length > 0
+    fail_msg: >-
+      routeros_user_ssh_keys is empty. Pass at least one public key, e.g.
+      -e routeros_user_ssh_keys='["ssh-ed25519 AAAA... user@host"]'
+
+- name: Validate that the policy string contains no whitespace
+  ansible.builtin.assert:
+    that: routeros_user_policy is not search('\s')
+    fail_msg: >-
+      routeros_user_policy must be a comma-separated string with no
+      whitespace. Got: {{ routeros_user_policy }}
+
+# Compound :if/do/else one-liners get long enough that the RouterOS CLI
+# wraps them across many redraws, and network_cli's prompt match never
+# resolves before the command timeout. Split into a short presence check
+# plus separate add / set tasks gated on the result. See
+# https://github.com/ansible-collections/community.routeros/issues/229.
+
+- name: Check whether the user group already exists
+  community.routeros.command:
+    commands:
+      - ':put [:len [/user group find name="{{ routeros_user_group_name }}"]]'
+  register: _routeros_group_check
+  changed_when: false
+
+- name: Create the user group with the requested policy
+  community.routeros.command:
+    commands:
+      - '/user group add name="{{ routeros_user_group_name }}" policy="{{ routeros_user_policy }}"'
+  when: _routeros_group_check.stdout[0] | int == 0
+
+- name: Update the user group policy
+  community.routeros.command:
+    commands:
+      - '/user group set [find name="{{ routeros_user_group_name }}"] policy="{{ routeros_user_policy }}"'
+  when: _routeros_group_check.stdout[0] | int > 0
+
+- name: Check whether the user already exists
+  community.routeros.command:
+    commands:
+      - ':put [:len [/user find name="{{ routeros_user_name }}"]]'
+  register: _routeros_user_check
+  changed_when: false
+
+- name: Create the user with the requested group / scope / comment
+  community.routeros.command:
+    commands:
+      # password=... is required: some RouterOS builds prompt interactively
+      # when omitted, hanging network_cli. See defaults/main.yml.
+      - >-
+        /user add name="{{ routeros_user_name }}"
+        group="{{ routeros_user_group_name }}"
+        address="{{ routeros_user_address_scope }}"
+        comment="{{ routeros_user_comment }}"
+        password="{{ routeros_user_initial_password }}"
+  when: _routeros_user_check.stdout[0] | int == 0
+  no_log: true
+
+- name: Update the user's group / scope / comment
+  community.routeros.command:
+    commands:
+      - >-
+        /user set [find name="{{ routeros_user_name }}"]
+        group="{{ routeros_user_group_name }}"
+        address="{{ routeros_user_address_scope }}"
+        comment="{{ routeros_user_comment }}"
+  when: _routeros_user_check.stdout[0] | int > 0
+
+# RouterOS marks users created without a password as EXPIRED (`E` flag in
+# /user print). Key-auth then succeeds the SSH handshake but hangs at an
+# unsolicited password-change prompt, breaking network_cli. Re-asserting
+# the password every run clears the E flag for users that were created
+# by a previous version of this role (or by hand) and keeps the user
+# usable. The password is unreachable: SSH keys are added below and
+# `routeros_user_policy` denies the `password` privilege.
+- name: Refresh the user's password to clear any EXPIRED state
+  community.routeros.command:
+    commands:
+      - >-
+        /user set [find name="{{ routeros_user_name }}"]
+        password="{{ routeros_user_initial_password }}"
+  changed_when: false
+  no_log: true
+
+- name: Reset existing SSH keys for the user (full re-sync from inventory)
+  community.routeros.command:
+    commands:
+      - '/user ssh-keys remove [find user="{{ routeros_user_name }}"]'
+
+- name: Register each SSH public key for the user
+  community.routeros.command:
+    commands:
+      - '/user ssh-keys add user="{{ routeros_user_name }}" key="{{ item }}"'
+  loop: "{{ routeros_user_ssh_keys }}"
+  loop_control:
+    label: "{{ item.split() | last | default('(no comment)') }}"
+
+- name: Disable password-based SSH globally (opt-in)
+  community.routeros.command:
+    commands:
+      - "/ip ssh set always-allow-password-login=no"
+  when: routeros_disable_password_ssh | bool

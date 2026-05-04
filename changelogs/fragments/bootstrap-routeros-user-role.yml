@@ -1,0 +1,36 @@
+---
+minor_changes:
+  - >-
+    Extracted the RouterOS user / group / SSH-key bootstrap logic out of
+    ``playbooks/bootstrap_routeros_user.yml`` into a new
+    ``bootstrap_routeros_user`` role. The playbook is now a thin wrapper
+    that selects the connection user / port (typically the existing admin
+    account) and supplies ``routeros_user_ssh_keys`` to the role.
+
+bugfixes:
+  - >-
+    ``bootstrap_routeros_user`` — replace the compound
+    ``:if ... do={...} else={...}`` user / group provisioning commands
+    with a short presence check plus separate add / set tasks. The
+    one-liner was long enough that RouterOS' CLI wrapped and redrew it
+    many times, and ``community.routeros``' ``network_cli`` prompt match
+    could not resolve before the command timeout on some routers (e.g.
+    RB5009). The example invocation in the playbook header now also
+    documents the ``+cet1024w`` username suffix that RouterOS uses to
+    disable terminal auto-detection on the bootstrap connection.
+  - >-
+    ``bootstrap_routeros_user`` — pass an explicit ``password=...`` on
+    ``/user add``. Some RouterOS builds (notably factory-software
+    7.4.x+, e.g. RB5009UG+S+) prompt interactively for a password when
+    one is omitted, and that prompt hangs ``network_cli``. A new
+    ``routeros_user_initial_password`` variable defaults to a random
+    32-char throwaway; it is unreachable for login because the default
+    ``routeros_user_policy`` denies the ``password`` privilege.
+  - >-
+    ``bootstrap_routeros_user`` — re-assert the user's password on
+    every run. RouterOS flags users that were ever created without a
+    password as ``EXPIRED`` (``E`` in ``/user print``); key auth then
+    succeeds the SSH handshake but hangs at an unsolicited
+    password-change prompt, which manifested as connection timeouts
+    against switches whose ``ansible-netboot`` user was created by an
+    earlier (no-password) version of this role.

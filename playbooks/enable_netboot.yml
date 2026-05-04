@@ -30,6 +30,9 @@
       vars:
         board_mac: "{{ hostvars[item]['board_mac'] }}"
         board_model: "{{ hostvars[item]['board_model'] }}"
+        # Pass the board's inventory hostname through so the per-host
+        # rootfs path can be embedded in pxelinux.cfg.
+        target_board_host: "{{ item }}"
         netboot_reboot: false
       loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
       loop_control:

@@ -1,0 +1,25 @@
+---
+breaking_changes:
+  - >-
+    ``nfs_content`` role and ``playbooks/setup_netboot.yml`` now run
+    against the ``netboot_server`` host (over SSH) instead of the
+    Ansible control node. The role no longer mounts NFS exports
+    locally; it operates on ``nfs_rootfs_path``, ``tftp_nfs_export``,
+    and ``nfs_assets_export`` directly as filesystem paths on the
+    netboot server. ``nfs_local_mount`` and ``tftp_base`` are no
+    longer consumed by this role (they are still used by
+    ``routeros_dhcp/enable_netboot``). Inventories must include a
+    ``netboot_server`` host that the control node can reach over SSH
+    with ``become: true``; required tools on that host are
+    ``losetup``, ``mount``, ``xz``, ``rsync``, and ``lsblk`` (all
+    present on TrueNAS SCALE / Debian-based systems by default).
+
+minor_changes:
+  - >-
+    ``nfs_content`` is now compatible with rootless execution
+    environments (``ansible-navigator`` + rootless podman). The
+    previous design relied on ``ansible.posix.mount`` of
+    ``fstype: nfs`` and ``losetup`` on the control node, both of
+    which the kernel rejects from a user namespace. The new flow
+    pushes those operations onto the netboot server itself, where
+    root is available natively.

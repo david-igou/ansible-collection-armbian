@@ -25,9 +25,10 @@ The role has three task entry-points:
 | `routeros_opt_set_reprovision_prefix` | `armbian-reprovision` | Option-set name for reprovision mode. |
 | `netboot_modes` | *(see defaults)* | Map of mode name to TFTP `pxelinux.cfg` filename. |
 
-`routeros_host`, `routeros_api_user`, and `routeros_api_password` must be set
-elsewhere (typically in `inventory/group_vars/routeros.yml` and encrypted
-with ansible-vault).
+`routeros_host` and `routeros_ssh_user` must be set elsewhere (typically in
+`inventory/group_vars/all.yml`). Authentication is SSH-key based — provision
+the user and key with `playbooks/bootstrap_routeros_user.yml` before running
+this role.
 
 ## Example
 

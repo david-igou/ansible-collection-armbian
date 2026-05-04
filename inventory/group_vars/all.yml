@@ -2,37 +2,56 @@
 # ── Addresses ────────────────────────────────────────────────────────────────
 netboot_server_ip: "192.168.1.10"
 routeros_host: "192.168.1.1"
-routeros_api_user: "ansible"
+routeros_ssh_user: "ansible-netboot"
+routeros_ssh_port: 22
 routeros_dhcp_server_name: "dhcp1"
 
 # ── NFS export paths on the netboot server ───────────────────────────────────
 # These must already exist and be exported before running setup_netboot.yml.
+# nfs_rootfs_path is the parent export. Inside it:
+#   _templates/<board_model>/   per-model rootfs templates (extracted images)
+#   <inventory_hostname>/       per-host rootfs (cp --reflink from template)
 nfs_rootfs_path: /exports/rootfs
 tftp_nfs_export: /opt/netbootxyz/config
 nfs_assets_export: /opt/netbootxyz/assets
 
-# ── Local mount base on the Ansible control node ─────────────────────────────
+# ── Control-node NFS mount paths ─────────────────────────────────────────────
+# Used only by routeros_dhcp/enable_netboot, which still NFS-mounts the TFTP
+# config export on the control node to write per-board pxelinux.cfg files.
+# nfs_content no longer needs these (it runs on the netboot server itself).
 nfs_local_mount: /mnt/netboot
-
-# tftp_base resolves through the NFS mount; used when writing pxelinux.cfg
 tftp_base: "{{ nfs_local_mount }}/tftp"
 
 # ── Armbian image URLs ────────────────────────────────────────────────────────
-# Set to the full .img.xz URL for each board model.
+# Set to the full .img.xz URL for each board model. Pinning a versioned URL
+# is more reproducible; pinning the alias (e.g.
+# https://dl.armbian.com/rock-5b/Noble_current_minimal) follows whatever
+# Armbian currently calls "stable" for that channel.
 # Browse https://dl.armbian.com/<armbian_dl_dir>/ to find the current URL.
+#
+# Branch availability is per-board (see board_configs.<model>.uboot_apt_package
+# in roles/bootloader/vars/boards.yml). Some community boards (orange-pi-5-pro,
+# orange-pi-5-max) have no `current` deb published — only `edge`/`vendor` — so
+# their U-Boot packages use the edge stream even when the rootfs image is
+# current-branch (the binaries are typically identical for those boards).
 armbian_image_urls:
-  orange-pi-5: ""
-  orange-pi-5-pro: ""
-  orange-pi-5-max: ""
-  rock-5b: ""
-  rock-5a: ""
+  orange-pi-5: "https://armbian.chi.auroradev.org/dl/orangepi5/archive/Armbian_26.2.1_Orangepi5_noble_current_6.18.8_minimal.img.xz"
+  orange-pi-5-pro: "https://github.com/armbian/community/releases/download/26.2.0-trunk.821/Armbian_community_26.2.0-trunk.821_Orangepi5pro_trixie_current_6.18.26_minimal.img.xz"
+  orange-pi-5-max: "https://github.com/armbian/community/releases/download/26.2.0-trunk.821/Armbian_community_26.2.0-trunk.821_Orangepi5-max_trixie_edge_7.0.3_minimal.img.xz"
+  rock-5b: "https://armbian.chi.auroradev.org/dl/rock-5b/archive/Armbian_26.2.1_Rock-5b_noble_current_6.18.8_minimal.img.xz"
+  rock-5a: "https://armbian.chi.auroradev.org/dl/rock-5a/archive/Armbian_26.2.1_Rock-5a_noble_current_6.18.15_minimal.img.xz"
+  orange-pi-zero-3: "https://armbian.chi.auroradev.org/dl/orangepizero3/archive/Armbian_26.2.1_Orangepizero3_noble_current_6.18.8_minimal.img.xz"
 
-# U-Boot branch — determines which linux-u-boot-<branch>-<board> package is used
+# Apt suite used to validate U-Boot package availability in
+# nfs_content/preflight.yml. Armbian's apt repo organises packages under
+# Debian suite directories; package contents are independent of OS suite
+# for hardware-side debs.
+armbian_apt_suite: "bookworm"
+
+# Default U-Boot branch advisory — informational only; the canonical
+# branch source is each board_configs.<model>.uboot_apt_package field.
+# This value is not currently consumed by any task.
 armbian_branch: "current"
-
-# ── RouterOS credentials ──────────────────────────────────────────────────────
-# Encrypt routeros_api_password with ansible-vault
-routeros_api_password: "changeme"
 
 # ── Board SSH defaults ────────────────────────────────────────────────────────
 ansible_user: "armbian"

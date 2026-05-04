@@ -4,8 +4,9 @@
 # enable/disable_netboot.
 #
 # Prerequisites:
-#   - NFS server running; nfs_rootfs_path/<model> exports exist and are
-#     accessible (rw) from this host for each board model in inventory
+#   - NFS server running; nfs_rootfs_path is exported (rw) and accessible.
+#     The role creates _templates/<model>/ and per-host <hostname>/
+#     subdirectories inside it; no per-model NFS export setup is needed.
 #   - netboot.xyz running (TFTP config and assets directories NFS-exported)
 #   - armbian_image_urls set in group_vars/all.yml for each board model
 #
@@ -16,8 +17,7 @@
 #   ansible-playbook playbooks/setup_netboot.yml --tags nfs_content
 
 - name: Populate NFS and TFTP content
-  hosts: localhost
-  connection: local
+  hosts: netboot_server
   become: true
   gather_facts: false
   roles:

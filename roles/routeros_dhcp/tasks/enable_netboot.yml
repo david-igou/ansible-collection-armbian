@@ -48,7 +48,7 @@
     mode: "0755"
   tags: routeros, enable_netboot
 
-- name: Generate pxelinux.cfg for {{ inventory_hostname }}
+- name: Generate pxelinux.cfg for {{ target_board_host }}
   delegate_to: localhost
   become: true
   ansible.builtin.template:
@@ -79,10 +79,19 @@
           else routeros_opt_set_reprovision_prefix }}"
   tags: routeros, enable_netboot
 
+- name: Resolve has_spi (respecting per-host overrides) for reminder check
+  ansible.builtin.set_fact:
+    _board_has_spi: >-
+      {{ (board_configs[board_model] | default({})
+          | combine(hostvars[target_board_host].host_board_overrides | default({})))
+         .has_spi | default(false) }}
+  tags: routeros, enable_netboot
+
 - name: Remind operator to insert SD card (non-SPI board)
   ansible.builtin.debug:
     msg: >-
-      {{ board_model }} has no SPI flash. Ensure the PXE boot SD card
-      is inserted into the board before it reboots. See prepare_sd_card.yml.
-  when: not (board_configs[board_model].has_spi | default(false))
+      {{ target_board_host }} ({{ board_model }}) has no SPI flash.
+      Ensure the PXE boot SD card is inserted into the board before it
+      reboots. See prepare_sd_card.yml.
+  when: not _board_has_spi
   tags: routeros, enable_netboot
