@@ -1,0 +1,33 @@
+---
+# Drop each { dest, content } entry into <armbian_build_cache_dir>/userpatches/<dest>.
+# Asserts that no `dest` contains `..` or starts with `/` to prevent path
+# escape (we do not want a hostile or buggy caller to write outside the
+# userpatches tree).
+
+- name: Assert userpatches dest paths are safe
+  ansible.builtin.assert:
+    that:
+      - "'..' not in item.dest"
+      - not item.dest.startswith('/')
+    fail_msg: "Unsafe userpatches dest (must be relative and not contain '..'): {{ item.dest }}"
+  loop: "{{ armbian_build_userpatches }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Ensure parent directories for userpatches files exist
+  ansible.builtin.file:
+    path: "{{ (armbian_build_cache_dir + '/userpatches/' + item.dest) | dirname }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ armbian_build_userpatches }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Write userpatches files
+  ansible.builtin.copy:
+    dest: "{{ armbian_build_cache_dir }}/userpatches/{{ item.dest }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+  loop: "{{ armbian_build_userpatches }}"
+  loop_control:
+    label: "{{ item.dest }}"
