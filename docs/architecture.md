@@ -2,12 +2,24 @@
 
 > **⚠️ WIP pending the `armbian_build` role
 > ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).**
-> The "RouterOS DHCP options are the only control surface" invariant requires a custom
-> Armbian U-Boot build — stock Rockchip `current` debs put PXE at position 6 in
-> `BOOT_TARGETS` and `bootflow scan` lands on the SD card's `boot.scr` first. The
-> flashing roles (`bootloader`, `nfs_content`, `routeros_dhcp`) are correct in
-> isolation. Empirical evidence:
+> The "RouterOS DHCP options are the only control surface" invariant requires custom
+> Armbian images with PXE-first `BOOT_TARGETS` baked into U-Boot at compile time —
+> stock Rockchip `current` puts PXE at position 6 and `bootflow scan` lands on the
+> SD card's `boot.scr` first. The other roles (`bootloader`, `nfs_content`,
+> `routeros_dhcp`) are correct in isolation. v1 of `armbian_build` produces full
+> `.img.xz` images for one board (`orangepi5pro`); see the directional spec at
+> [`docs/superpowers/specs/2026-05-05-collection-direction-design.md`](superpowers/specs/2026-05-05-collection-direction-design.md).
+> Empirical evidence:
 > [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
+
+## Mental model
+
+The collection is organised as **single-purpose, parameter-driven roles** plus
+**workflow playbooks** that compose them. A role enforces one external system's
+state given parameters; a playbook decides which roles to invoke, against which
+inventory, with which parameters, in what order. Netboot, reprovision, and PoE
+power-cycle are workflows on top of the same primitives — not separate
+subsystems.
 
 ## Overview
 
@@ -57,7 +69,7 @@ dhcp spi` on upstream Rockchip with no Armbian override) and the first
 device with a valid bootflow wins. On a stock Armbian SD-card setup
 that's mmc1's `/boot/boot.scr`. PXE/DHCP at positions 6/7 are unreached.
 
-### NFS Root (diskless) — *requires custom U-Boot, see WIP banner*
+### NFS Root (diskless) — *requires the custom Armbian image, see WIP banner*
 
 The board boots a full Armbian rootfs served over NFS (read-only mount).
 Useful for testing, maintenance, or running the board completely off
@@ -71,12 +83,12 @@ network storage.
    `nfs_rootfs_path/<inventory_hostname>` (ro). Each host has its own
    per-host rootfs export — see "Per-host rootfs" below.
 
-> Step 3 requires the custom Armbian U-Boot built by the `armbian_build` role
+> Step 3 requires the custom Armbian image built by the `armbian_build` role
 > ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).
 > On stock Armbian Rockchip `current`, `bootflow scan -lb` finds mmc1's `boot.scr`
 > before reaching PXE and the board boots from SD regardless of the DHCP option.
 
-### Reprovision — *requires custom U-Boot, see WIP banner*
+### Reprovision — *requires the custom Armbian image, see WIP banner*
 
 Same PXE flow as NFS root, but the rootfs is mounted read-write to give
 systemd full write access. Ansible SSHes into the board after it comes up
@@ -103,6 +115,13 @@ The board's boot behaviour (disk vs. PXE) is controlled entirely by RouterOS
 DHCP options regardless of which bootloader path is used. The role picks one
 based on each board's `has_spi`/`has_emmc` capability flags and the
 `bootloader_target` setting (default `auto`).
+
+> The `bootloader` role is the **transition path** for boards still running
+> stock Armbian images. Once a board is onboarded to `armbian_build` (#16), the
+> custom image carries PXE-first U-Boot baked in, and `reprovision.yml` lays
+> the whole thing down in one step — `flash_bootloader.yml` is no longer needed
+> on that board for fresh provisions. A future deb-only path will plug a custom
+> U-Boot deb into this same role via an `uboot_apt_source: local` switch.
 
 ### Path 1 — SPI flash
 
@@ -165,9 +184,11 @@ boot depends on the compile-time `BOOT_TARGETS` ordering. Stock Armbian
 Rockchip `current` puts PXE at position 6, so the practical ordering
 needs a custom build — see
 [#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)
-for the `armbian_build` role that produces PXE-first debs. The role
-cannot influence the env at runtime (`CONFIG_ENV_IS_NOWHERE=y`); see
-`docs/board-bootloader.md` for the per-board probe.
+for the `armbian_build` role. v1 produces PXE-first full images; the
+deb-only path through this role's `uboot_apt_source: local` switch is
+deferred to a follow-up issue. The role cannot influence the env at
+runtime (`CONFIG_ENV_IS_NOWHERE=y`); see `docs/board-bootloader.md` for
+the per-board probe.
 
 The card stays inserted permanently; for the purposes of where the
 U-Boot binary lives, it acts identically to SPI flash.
@@ -222,6 +243,42 @@ before any image is downloaded or any rootfs is touched. It validates:
 
 Failures are cheap to fix; the same misconfiguration caught at flash time
 on a real board is much more painful.
+
+---
+
+## Build pipeline (WIP, [#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16))
+
+The `armbian_build` role is the third primitive — alongside `routeros_dhcp` and
+`routeros_poe` — that owns one external system. Here, the system is
+[`armbian/build`](https://github.com/armbian/build) running in Docker mode on
+a build host. The role's job: produce one `.img.xz` per `(board, branch,
+release)` tuple with PXE-first `BOOT_TARGETS` patched in, and publish it to
+the netboot server's HTTP root.
+
+```
+Ansible control node ──SSH──> armbian_builders host
+                                   │
+                                   ├── git clone armbian/build at pinned ref
+                                   ├── drop userpatches/extensions/igou-pxe-first.sh
+                                   ├── ./compile.sh docker BOARD=... BRANCH=... RELEASE=...
+                                   │      (applies pre_config_uboot_target__<board>_pxe_first
+                                   │       hook → sed include/configs/rockchip-common.h)
+                                   └── scp resulting .img.xz + manifest.json
+                                        ──> netboot server: nfs_assets_export/images/<board>/
+
+Inventory side: armbian_image_urls[<board_model>] override points at the
+locally-built image. populate_nfs_content.yml and reprovision.yml consume
+the custom image through the existing path with no role changes.
+```
+
+**Idempotency** is via the manifest sidecar: a re-run with the same patch
+table and the same pinned `armbian/build` ref is a no-op.
+
+**Onboarding a board** to the build pipeline is a per-board hook entry in
+`roles/armbian_build/vars/pxe_first_boards.yml` plus
+`host_board_overrides.armbian_build_enabled: true` on each host of that
+model. v1 ships with one entry (`orangepi5pro`); see issue #16 acceptance
+criteria.
 
 ---
 
