@@ -1,0 +1,64 @@
+---
+# Run armbian/build's compile.sh in Docker mode, locate the produced
+# .img.xz (kernel version is unknown ahead of time, so glob+age-filter),
+# and move both the image and its .sha sidecar into the per-board output
+# directory. Async/poll keeps long builds from tying up the SSH session.
+
+- name: Build Armbian image with userpatches applied
+  ansible.builtin.command:
+    cmd: >-
+      ./compile.sh docker
+      BOARD={{ armbian_build_board }}
+      BRANCH={{ armbian_build_branch }}
+      RELEASE={{ armbian_build_release }}
+      USERPATCHES_DIR={{ armbian_build_cache_dir }}/userpatches
+      {% for k, v in armbian_build_compile_args.items() %}{{ k }}={{ v }} {% endfor %}
+    chdir: "{{ armbian_build_cache_dir }}/build"
+  async: "{{ armbian_build_timeout }}"
+  poll: 30
+  changed_when: true
+
+- name: Locate the produced .img.xz from this run
+  ansible.builtin.find:
+    paths: "{{ armbian_build_cache_dir }}/build/output/images"
+    patterns: "Armbian_*_{{ armbian_build_board }}_{{ armbian_build_release }}_{{ armbian_build_branch }}_*.img.xz"
+    age: -10m
+  register: _produced_images
+
+- name: Assert exactly one image was produced
+  ansible.builtin.assert:
+    that: _produced_images.files | length == 1
+    fail_msg: >-
+      Expected exactly one .img.xz produced for
+      {{ armbian_build_board }}/{{ armbian_build_release }}/{{ armbian_build_branch }},
+      found {{ _produced_images.files | length }}
+
+- name: Set produced image filename
+  ansible.builtin.set_fact:
+    _image_filename: "{{ _produced_images.files[0].path | basename }}"
+
+- name: Ensure per-board output directory exists
+  ansible.builtin.file:
+    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}"
+    state: directory
+    mode: "0755"
+
+- name: Move produced image into the per-board output directory
+  ansible.builtin.command:
+    cmd: >-
+      mv {{ _produced_images.files[0].path }}
+         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}
+  changed_when: true
+
+- name: Stat the .sha sidecar (may not exist depending on COMPRESS_OUTPUTIMAGE)
+  ansible.builtin.stat:
+    path: "{{ _produced_images.files[0].path }}.sha"
+  register: _sha_stat
+
+- name: Move the .sha sidecar if present
+  ansible.builtin.command:
+    cmd: >-
+      mv {{ _produced_images.files[0].path }}.sha
+         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
+  changed_when: true
+  when: _sha_stat.stat.exists
