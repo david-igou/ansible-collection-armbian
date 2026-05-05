@@ -4,6 +4,21 @@
 # and move both the image and its .sha sidecar into the per-board output
 # directory. Async/poll keeps long builds from tying up the SSH session.
 
+- name: Assert armbian_build_compile_args values are shell-token-safe
+  ansible.builtin.assert:
+    that:
+      - "' ' not in (item.value | string)"
+      - "'\"' not in (item.value | string)"
+      - "\"'\" not in (item.value | string)"
+    fail_msg: >-
+      armbian_build_compile_args[{{ item.key }}]={{ item.value }} contains
+      whitespace or quotes; values must be single shell tokens since they
+      are passed via command (not shell). Re-encode without spaces or
+      quote characters.
+  loop: "{{ armbian_build_compile_args | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
 - name: Build Armbian image with userpatches applied
   ansible.builtin.command:
     cmd: >-
