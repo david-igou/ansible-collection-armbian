@@ -19,7 +19,7 @@ the patch list and consume the resulting `.img.xz` + `manifest.json` from
 | `armbian_build_cache_dir` | `/var/lib/armbian_build` | Checkout + cache + userpatches root |
 | `armbian_build_output_dir` | `/var/lib/armbian_build/output` | Where `<board>/<file>.img.xz` + `manifest.json` land |
 | `armbian_build_min_free_gb` | `50` | Preflight threshold |
-| `armbian_build_required_egress_hosts` | github.com, apt.armbian.com, ghcr.io | Preflight HEAD-checks |
+| `armbian_build_required_egress_hosts` | github.com, apt.armbian.com, ghcr.io, registry-1.docker.io | Preflight HEAD-checks |
 | `armbian_build_compile_args` | _see defaults_ | Per-run knobs forwarded to `compile.sh` |
 | `armbian_build_timeout` | `7200` | Build timeout in seconds |
 | `armbian_build_force` | `false` | Force rebuild even if manifest matches |
