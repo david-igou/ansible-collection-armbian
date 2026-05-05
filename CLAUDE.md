@@ -261,8 +261,10 @@ ordering must be addressed upstream (`config/boards/<board>.conf` in `armbian/bu
 it cannot be done from this collection.
 
 `bootloader_target=auto` (default) resolves: SPI if populated/detected, else eMMC if
-populated, else SD. Boards with no on-board bootloader storage fall through to SD
-automatically — no fail-fast.
+populated *and detected*, else SD. Boards with no on-board bootloader storage fall
+through to SD automatically — no fail-fast. Detection (`tasks/detect_spi.yml`,
+`tasks/detect_emmc.yml`) handles SKU-level variation where `has_spi`/`has_emmc` is
+declared in `vars/boards.yml` but the chip isn't populated on a given unit.
 
 ### Idempotent flashing and integrity verification
 Every flash path runs `tasks/verify_flash.yml` after `dd` completes — reads back the

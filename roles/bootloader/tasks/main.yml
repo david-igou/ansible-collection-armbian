@@ -58,6 +58,11 @@
   when: _board.has_spi | default(false)
   tags: bootloader
 
+- name: Detect eMMC device
+  ansible.builtin.include_tasks: detect_emmc.yml
+  when: _board.has_emmc | default(false)
+  tags: bootloader
+
 # Resolve which storage to flash. Honour explicit user choice; otherwise
 # prefer the most permanent on-board storage available, then fall back
 # to writing the SD card the board is currently booted from. The SD
@@ -71,7 +76,8 @@
       {%- elif bootloader_target == 'sd' -%}sd
       {%- elif _board.has_spi | default(false)
               and _spi_available | default(false) -%}spi
-      {%- elif _board.has_emmc | default(false) -%}emmc
+      {%- elif _board.has_emmc | default(false)
+              and _emmc_available | default(false) -%}emmc
       {%- else -%}sd
       {%- endif -%}
   tags: bootloader
@@ -82,12 +88,14 @@
       Cannot flash {{ board_model }}: bootloader_target='{{ bootloader_target }}'
       resolved to '{{ _effective_target }}', but the board's capability flags
       (has_spi={{ _board.has_spi | default(false) }},
-      has_emmc={{ _board.has_emmc | default(false) }})
+      spi_detected={{ _spi_available | default(false) }},
+      has_emmc={{ _board.has_emmc | default(false) }},
+      emmc_detected={{ _emmc_available | default(false) }})
       do not allow it. Adjust bootloader_target, host_board_overrides, or
-      check that SPI is detected (run with -vv to see detect_spi output).
+      check that the device is detected (run with -vv to see detection output).
   when: >-
     (_effective_target == 'spi' and not (_spi_available | default(false))) or
-    (_effective_target == 'emmc' and not (_board.has_emmc | default(false)))
+    (_effective_target == 'emmc' and not (_emmc_available | default(false)))
   tags: bootloader
 
 - name: Flash bootloader to SPI
