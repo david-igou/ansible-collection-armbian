@@ -1,5 +1,7 @@
 ---
-- name: Reboot board
+- name: Reboot board after bootloader flash
   ansible.builtin.reboot:
     reboot_timeout: 300
     post_reboot_delay: 30
+  when: bootloader_reboot | bool
+  listen: bootloader changed

@@ -20,6 +20,13 @@ uboot_package_lib_dir: "/usr/lib"
 spi_mtd_device: "/dev/mtd0"
 emmc_boot_partition: "/dev/mmcblk0boot0"
 
-# Set true to skip flashing if the device reports an existing valid bootloader.
-# Set false to always reflash (safer for reprovisioning).
+# Skip flashing when the on-device bootloader already matches the source
+# binary (checksum comparison). Set true for idempotent re-runs; set false
+# (default) to always reflash — safer for reprovisioning or after U-Boot
+# package upgrades where the version hasn't changed but build flags differ.
 bootloader_skip_if_present: false
+
+# Reboot the board after a successful flash. The playbook's post_tasks
+# previously owned this; having it as a role default makes the role
+# self-contained and reusable from other playbooks.
+bootloader_reboot: true

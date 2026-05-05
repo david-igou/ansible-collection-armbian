@@ -6,7 +6,9 @@
 - name: Resolve eMMC boot partition path
   ansible.builtin.set_fact:
     _emmc_boot_partition: >-
-      {{ _board.emmc_boot_partition | default(emmc_boot_partition) }}
+      {{ _emmc_boot_part
+         if (_emmc_boot_part is defined and _emmc_boot_part | length > 0)
+         else (_board.emmc_boot_partition | default(emmc_boot_partition)) }}
 
 # Hard guard: eMMC may be advertised in boards.yml but not actually
 # populated on this specific unit. Confirm both the boot partition and
@@ -42,12 +44,22 @@
       partition without disabling its read-only guard. Aborting.
   when: not _emmc_force_ro_stat.stat.exists
 
+- name: Check existing eMMC boot partition bootloader
+  ansible.builtin.include_tasks: check_existing_bootloader.yml
+  vars:
+    _check_device: "{{ _emmc_boot_partition }}"
+    _check_offset: 0
+    _check_source: "{{ _uboot_disk_image_path }}"
+    _check_bs: 512
+  when: bootloader_skip_if_present | bool
+
 - name: Disable eMMC boot0 write protection
   ansible.builtin.copy:
     dest: "{{ _emmc_force_ro }}"
     content: "0"
     mode: "0644"
   changed_when: true
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
 
 - name: Flash U-Boot to eMMC boot partition
   ansible.builtin.shell: |
@@ -57,6 +69,16 @@
     executable: /bin/bash
   register: _emmc_flash_result
   changed_when: _emmc_flash_result.rc == 0
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
+
+- name: Verify eMMC boot partition flash integrity
+  ansible.builtin.include_tasks: verify_flash.yml
+  vars:
+    _verify_device: "{{ _emmc_boot_partition }}"
+    _verify_offset: 0
+    _verify_source: "{{ _uboot_disk_image_path }}"
+    _verify_bs: 512
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
 
 - name: Re-enable eMMC boot0 write protection
   ansible.builtin.copy:
@@ -64,7 +86,9 @@
     content: "1"
     mode: "0644"
   changed_when: true
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
 
 - name: Report eMMC flash complete
   ansible.builtin.debug:
-    msg: "eMMC flash complete: {{ _uboot_disk_image_path }} → {{ _emmc_boot_partition }}"
+    msg: "eMMC flash verified: {{ _uboot_disk_image_path }} → {{ _emmc_boot_partition }}"
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)

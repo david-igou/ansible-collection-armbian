@@ -40,7 +40,6 @@ board_configs:
     has_emmc: false
     primary_storage: nvme
     flash_target_device: /dev/nvme0n1
-    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   orange-pi-5-pro:
     soc_family: rockchip
@@ -58,7 +57,6 @@ board_configs:
     has_emmc: false
     primary_storage: nvme
     flash_target_device: /dev/nvme0n1
-    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   orange-pi-5-max:
     soc_family: rockchip
@@ -74,7 +72,6 @@ board_configs:
     has_emmc: false
     primary_storage: nvme
     flash_target_device: /dev/nvme0n1
-    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   rock-5b:
     soc_family: rockchip
@@ -90,7 +87,6 @@ board_configs:
     has_emmc: false
     primary_storage: nvme
     flash_target_device: /dev/nvme0n1
-    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   rock-5a:
     soc_family: rockchip
@@ -106,7 +102,6 @@ board_configs:
     has_emmc: false
     primary_storage: nvme
     flash_target_device: /dev/nvme0n1
-    boot_targets_pxe: "pxe dhcp mmc0 nvme0 mmc1"
 
   # ── Allwinner H618 boards ────────────────────────────────────────────
   orange-pi-zero-3:
@@ -126,4 +121,3 @@ board_configs:
     has_emmc: false
     primary_storage: sd
     flash_target_device: /dev/mmcblk0
-    boot_targets_pxe: "pxe dhcp mmc0"

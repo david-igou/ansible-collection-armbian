@@ -86,7 +86,7 @@
       do not allow it. Adjust bootloader_target, host_board_overrides, or
       check that SPI is detected (run with -vv to see detect_spi output).
   when: >-
-    (_effective_target == 'spi' and not (_board.has_spi | default(false))) or
+    (_effective_target == 'spi' and not (_spi_available | default(false))) or
     (_effective_target == 'emmc' and not (_board.has_emmc | default(false)))
   tags: bootloader
 
@@ -109,4 +109,18 @@
 - name: Flash bootloader to SD card
   ansible.builtin.include_tasks: flash_sd.yml
   when: _effective_target == 'sd'
+  tags: bootloader
+
+# Trigger the reboot handler if any flash was performed. The handler
+# checks bootloader_reboot to decide whether to actually reboot.
+# include_tasks cannot directly notify handlers, so this sentinel task
+# evaluates the registered results from the flash paths.
+- name: Signal bootloader change for reboot handler
+  ansible.builtin.debug:
+    msg: "Bootloader flash completed on {{ inventory_hostname }} (target={{ _effective_target }})"
+  changed_when: >-
+    (_spi_flash_result is defined and _spi_flash_result is changed) or
+    (_sd_flash_result is defined and _sd_flash_result is changed) or
+    (_emmc_flash_result is defined and _emmc_flash_result is changed)
+  notify: bootloader changed
   tags: bootloader

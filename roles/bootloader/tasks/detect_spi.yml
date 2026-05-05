@@ -30,6 +30,7 @@
   register: _spi_detect_by_name
   failed_when: false
   changed_when: false
+  check_mode: false
 
 - name: Stat configured SPI MTD device (fallback when name detection fails)
   ansible.builtin.stat:

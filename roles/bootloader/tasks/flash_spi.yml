@@ -18,6 +18,15 @@
   ansible.builtin.set_fact:
     _uboot_spi_image_path: "{{ _uboot_spi_image_find.files[0].path }}"
 
+- name: Check existing SPI bootloader
+  ansible.builtin.include_tasks: check_existing_bootloader.yml
+  vars:
+    _check_device: "{{ _spi_mtd_device }}"
+    _check_offset: 0
+    _check_source: "{{ _uboot_spi_image_path }}"
+    _check_bs: 4096
+  when: bootloader_skip_if_present | bool
+
 - name: Flash U-Boot to SPI ({{ _spi_mtd_device }})
   ansible.builtin.shell: |
     dd if="{{ _uboot_spi_image_path }}" of="{{ _spi_mtd_device }}" bs=4096 conv=notrunc
@@ -26,7 +35,18 @@
     executable: /bin/bash
   register: _spi_flash_result
   changed_when: _spi_flash_result.rc == 0
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
 
-- name: Verify SPI flash completed
+- name: Verify SPI flash integrity
+  ansible.builtin.include_tasks: verify_flash.yml
+  vars:
+    _verify_device: "{{ _spi_mtd_device }}"
+    _verify_offset: 0
+    _verify_source: "{{ _uboot_spi_image_path }}"
+    _verify_bs: 4096
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)
+
+- name: Report SPI flash complete
   ansible.builtin.debug:
-    msg: "SPI flash complete: {{ _uboot_spi_image_path }} → {{ _spi_mtd_device }}"
+    msg: "SPI flash verified: {{ _uboot_spi_image_path }} → {{ _spi_mtd_device }}"
+  when: not (bootloader_skip_if_present | bool and _bootloader_matches | default(false) | bool)

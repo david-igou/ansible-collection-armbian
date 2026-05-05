@@ -16,12 +16,7 @@
 - name: Flash U-Boot bootloader
   hosts: boards
   gather_facts: true
+  become: true
   serial: 1
   roles:
     - role: bootloader
-  post_tasks:
-    - name: Reboot board after flashing
-      ansible.builtin.reboot:
-        reboot_timeout: 300
-        post_reboot_delay: 30
-      when: bootloader_reboot | default(true) | bool

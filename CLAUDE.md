@@ -264,6 +264,21 @@ it cannot be done from this collection.
 populated, else SD. Boards with no on-board bootloader storage fall through to SD
 automatically — no fail-fast.
 
+### Idempotent flashing and integrity verification
+Every flash path runs `tasks/verify_flash.yml` after `dd` completes — reads back the
+written region, md5-compares it against the source binary, fails the play with both
+checksums shown if they don't match. Catches silent write failures (worn SD card, bad
+flash chip, I/O error) instead of leaving a half-written bootloader and reporting
+success. With `bootloader_skip_if_present=true`, the same comparison runs *before*
+writing via `tasks/check_existing_bootloader.yml`; matching device → flash short-circuits
+(no writes, no force_ro toggles, no reboot). Default is `false` to keep reprovisioning
+runs unconditionally re-flashing, which is the safer behaviour after U-Boot package
+upgrades where the version string hasn't changed but build flags have.
+
+The role owns its post-flash reboot via a `bootloader changed` listener handler. Caller
+playbooks set `bootloader_reboot: false` if they want to batch reboots externally
+(rarely needed; mostly useful for development loops).
+
 ### Pre-flight validation
 `populate_nfs_content.yml` runs `roles/nfs_content/tasks/preflight.yml` first, which:
 1. Fetches Armbian's apt `Packages.gz` once and asserts every board's `uboot_apt_package`

@@ -1,0 +1,31 @@
+---
+breaking_changes:
+  - >-
+    ``board_configs.<model>.boot_targets_pxe`` (in
+    ``roles/bootloader/vars/boards.yml``) has been removed. The field was
+    only consumed by the ``fw_setenv boot_targets …`` task in
+    ``roles/bootloader/tasks/flash_sd.yml``, which has also been removed
+    (along with the ``u-boot-tools`` install) — modern Armbian Rockchip
+    ``current`` debs build U-Boot with ``CONFIG_ENV_IS_NOWHERE=y``, so
+    ``fw_setenv`` had nowhere to persist anyway. PXE-first boot order is
+    delivered by the U-Boot binary's compile-time ``BOOTSTD_DEFAULTS=y``
+    + ``bootflow scan -lb``; switching a board between PXE and disk boot
+    is purely a RouterOS DHCP-side toggle, not on-board state. Custom
+    ``boards.yml`` entries that still set ``boot_targets_pxe`` will keep
+    loading without error (Ansible ignores unknown fields), but the
+    field has no effect. Boards that genuinely need a non-default
+    ``BOOT_TARGETS`` ordering must patch
+    ``include/configs/<soc>-common.h`` in ``armbian/build`` upstream;
+    that is out of scope for this collection.
+
+bugfixes:
+  - >-
+    ``flash_bootloader.yml`` no longer hard-fails on the SD-card path
+    with ``Cannot parse config file '/etc/fw_env.config': No such file
+    or directory``. Stock Armbian doesn't ship a ``/etc/fw_env.config``,
+    and the modern Rockchip ``current`` U-Boot has no on-disk env area
+    even if one were templated, so the previous ``fw_setenv
+    boot_targets`` step always failed on the boards this role flashes.
+    The task has been removed; PXE-first behaviour is unchanged because
+    it was already delivered by the U-Boot binary's ``bootflow scan -lb``
+    default.

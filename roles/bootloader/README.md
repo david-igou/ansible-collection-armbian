@@ -30,6 +30,13 @@ For `bootloader_target=auto` (default) the role picks the most permanent
 storage available: SPI if populated and detected, else eMMC if
 populated, else the SD card the board is booted from.
 
+Every flash path md5-verifies the written region against the source
+binary after `dd` completes; a silent write failure (worn SD card, bad
+flash chip, I/O error) fails the play with both checksums shown. With
+`bootloader_skip_if_present=true` the same comparison runs *before*
+writing and short-circuits the flash when the on-device bootloader
+already matches.
+
 > **WIP — netboot trigger.** Flashing this role's binaries does **not** by
 > itself deliver "RouterOS DHCP option flip → board PXE-boots." Modern
 > Armbian Rockchip `current` debs build with `BOOT_TARGETS "mmc1 mmc0 nvme
@@ -49,7 +56,8 @@ populated, else the SD card the board is booted from.
 | `uboot_package_lib_dir` | `/usr/lib` | Directory where the Armbian U-Boot package installs binaries. |
 | `spi_mtd_device` | `/dev/mtd0` | Fallback SPI MTD device when label-based detection finds nothing. |
 | `emmc_boot_partition` | `/dev/mmcblk0boot0` | Fallback eMMC boot partition. |
-| `bootloader_skip_if_present` | `false` | Skip flashing if a valid bootloader is already present. |
+| `bootloader_skip_if_present` | `false` | Skip flashing when the on-device bootloader region's md5 already matches the source binary. Set `true` for idempotent re-runs; leave `false` (default) to always reflash — safer when the U-Boot package version hasn't changed but build flags have. |
+| `bootloader_reboot` | `true` | Reboot the board after a successful flash via the role's own handler. Set `false` if the caller wants to batch reboots externally. |
 
 `board_model` is a required host variable — it must match a key in
 `vars/boards.yml`.
