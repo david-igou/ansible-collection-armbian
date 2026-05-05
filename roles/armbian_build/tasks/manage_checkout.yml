@@ -1,0 +1,24 @@
+---
+# Ensure the cache, userpatches, and output directories exist; clone or
+# update armbian/build to the pinned ref. The build cache (cache/,
+# output/ inside the checkout) survives across runs so kernel build
+# artifacts can be reused for incremental builds.
+
+- name: Ensure cache, userpatches, and output directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ armbian_build_cache_dir }}"
+    - "{{ armbian_build_cache_dir }}/userpatches"
+    - "{{ armbian_build_output_dir }}"
+
+- name: Clone or update armbian/build at the pinned ref
+  ansible.builtin.git:
+    repo: https://github.com/armbian/build.git
+    dest: "{{ armbian_build_cache_dir }}/build"
+    version: "{{ armbian_build_ref }}"
+    force: false                   # preserve untracked files (cache/, output/)
+    update: true
+    depth: 1                       # shallow; we only need the pinned ref's tree
