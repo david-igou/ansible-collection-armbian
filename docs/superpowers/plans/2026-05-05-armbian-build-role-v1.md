@@ -894,7 +894,7 @@ After the existing `armbian_image_urls:` block, append a comment + commented-out
 # version + kernel revision; copy it from the produced manifest.json.
 #
 #   armbian_image_urls:
-#     orange-pi-5-pro: "{{ image_server_url }}/images/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
+#     orange-pi-5-pro: "{{ image_server_url }}/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
 ```
 
 - [ ] **Step 4: Lint**
