@@ -9,6 +9,14 @@
 #   2. hosts: netboot_server — synchronize each <board>/ directory
 #      from the builder into nfs_assets_export/images/<board>/.
 #
+# Prerequisites for the publish play:
+#   - The builder's SSH user must have an SSH key authorised on the
+#     netboot_server as a user that exists there (typically ansible_user).
+#   - That user must have passwordless sudo on the netboot_server
+#     (the publish task uses rsync_path: 'sudo rsync' so the receive
+#     side writes as root, matching the directory created by the
+#     become: true file: task above it).
+#
 # The PXE-first userpatches table is playbook data, not role data —
 # the armbian_build role itself is intent-agnostic. Add a new board by
 # extending build_userpatches with another entry and setting
@@ -81,5 +89,6 @@
         dest: "{{ nfs_assets_export }}/images/{{ item }}/"
         mode: pull
         delete: false
+        rsync_path: "sudo rsync"
       delegate_to: "{{ _builder }}"
       loop: "{{ hostvars[_builder]._build_targets }}"

@@ -64,6 +64,20 @@ hard-fails if any prerequisite is missing.
 - Free space at `armbian_build_cache_dir` ≥ `armbian_build_min_free_gb` GB.
 - `armbian_build_required_egress_hosts` are HTTPS-reachable.
 
+## Publish prerequisites (when used with `playbooks/build_image.yml`)
+
+The role itself only writes to `armbian_build_output_dir` on the builder. The
+companion `playbooks/build_image.yml` publishes the artifacts builder→netboot
+server using `ansible.posix.synchronize` (mode pull, delegated to the builder).
+That publish step requires:
+
+- The builder's SSH user has an SSH key authorised on the `netboot_server` as
+  a user that exists there (typically the same `ansible_user`).
+- That user has passwordless sudo on the netboot server (the publish task uses
+  `rsync_path: 'sudo rsync'` so the receive side runs as root, matching the
+  directory created by `playbooks/build_image.yml`'s `become: true` `file:`
+  task).
+
 ## Example
 
 ```yaml
