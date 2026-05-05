@@ -1,17 +1,13 @@
 # Architecture
 
-> **⚠️ WIP — Rockchip `current` netboot trigger is broken upstream.** This document
-> describes the *intended* design. The flashing roles (`bootloader`, `nfs_content`,
-> `routeros_dhcp`) work as written. The cross-cutting "RouterOS DHCP options are the
-> only control surface" invariant does **not** hold today on Armbian Rockchip
-> `current` U-Boot debs (v2025.10 era), because their compile-time `BOOT_TARGETS` puts
-> local storage before `pxe`/`dhcp` and the SD card's `boot.scr` wins before bootflow
-> scan reaches the network bootmeths. Empirical analysis:
+> **⚠️ WIP pending the `armbian_build` role
+> ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).**
+> The "RouterOS DHCP options are the only control surface" invariant requires a custom
+> Armbian U-Boot build — stock Rockchip `current` debs put PXE at position 6 in
+> `BOOT_TARGETS` and `bootflow scan` lands on the SD card's `boot.scr` first. The
+> flashing roles (`bootloader`, `nfs_content`, `routeros_dhcp`) are correct in
+> isolation. Empirical evidence:
 > [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
-> Active fix discussion:
-> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
-> Read those before relying on `enable_netboot.yml` / `reprovision.yml` against
-> Rockchip `current` boards.
 
 ## Overview
 
@@ -61,7 +57,7 @@ dhcp spi` on upstream Rockchip with no Armbian override) and the first
 device with a valid bootflow wins. On a stock Armbian SD-card setup
 that's mmc1's `/boot/boot.scr`. PXE/DHCP at positions 6/7 are unreached.
 
-### NFS Root (diskless) — *blocked, see WIP banner*
+### NFS Root (diskless) — *requires custom U-Boot, see WIP banner*
 
 The board boots a full Armbian rootfs served over NFS (read-only mount).
 Useful for testing, maintenance, or running the board completely off
@@ -75,12 +71,12 @@ network storage.
    `nfs_rootfs_path/<inventory_hostname>` (ro). Each host has its own
    per-host rootfs export — see "Per-host rootfs" below.
 
-> Step 3 is where this fails today on Armbian Rockchip `current`: U-Boot's
-> `bootflow scan -lb` finds mmc1's `boot.scr` before reaching DHCP, so the
-> board boots from SD as if no option were set. See
-> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
+> Step 3 requires the custom Armbian U-Boot built by the `armbian_build` role
+> ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).
+> On stock Armbian Rockchip `current`, `bootflow scan -lb` finds mmc1's `boot.scr`
+> before reaching PXE and the board boots from SD regardless of the DHCP option.
 
-### Reprovision — *blocked, see WIP banner*
+### Reprovision — *requires custom U-Boot, see WIP banner*
 
 Same PXE flow as NFS root, but the rootfs is mounted read-write to give
 systemd full write access. Ansible SSHes into the board after it comes up
@@ -165,13 +161,13 @@ from it. `flash_bootloader.yml` then SSHes into the board and:
 The U-Boot binary the role installs is PXE-capable
 (`BOOTSTD_DEFAULTS=y`, `CONFIG_BOOTCOMMAND="bootflow scan -lb"`,
 `CONFIG_CMD_PXE=y`). Whether the board actually reaches PXE on each
-boot depends on the compile-time `BOOT_TARGETS` ordering set by
-Armbian. On Rockchip `current` the upstream default puts PXE at
-position 6 — this is the WIP issue tracked in
-[#3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
-The role cannot influence the env at runtime
-(`CONFIG_ENV_IS_NOWHERE=y`); see `docs/board-bootloader.md` for the
-per-board probe.
+boot depends on the compile-time `BOOT_TARGETS` ordering. Stock Armbian
+Rockchip `current` puts PXE at position 6, so the practical ordering
+needs a custom build — see
+[#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)
+for the `armbian_build` role that produces PXE-first debs. The role
+cannot influence the env at runtime (`CONFIG_ENV_IS_NOWHERE=y`); see
+`docs/board-bootloader.md` for the per-board probe.
 
 The card stays inserted permanently; for the purposes of where the
 U-Boot binary lives, it acts identically to SPI flash.

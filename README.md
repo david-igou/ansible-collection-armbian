@@ -11,17 +11,15 @@ computers. A RouterOS DHCP change is the sole trigger for switching a board betw
 boot and netboot. The netboot server (netboot.xyz + NFS) is assumed to already be running;
 this collection manages its NFS export contents and RouterOS DHCP configuration.
 
-> **⚠️ Status: netboot trigger is WIP on Armbian Rockchip `current`.** The bootloader,
-> NFS-content, and RouterOS DHCP roles all work as designed and have been validated on
-> live hardware. The downstream control surface ("flip RouterOS DHCP options → board
-> PXE-boots on next reboot") is **not** delivered out-of-the-box by Armbian's modern
-> Rockchip U-Boot debs: their compile-time `BOOT_TARGETS` puts local storage (mmc1, mmc0,
-> nvme, …) before `pxe`/`dhcp`, and the SD card's `boot.scr` wins before bootflow scan
-> reaches the network bootmeths. See
-> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
-> for the empirical analysis and
-> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
-> for the active design discussion on a portable fix.
+> **⚠️ Status: netboot trigger is WIP pending the `armbian_build` role.** PXE-first
+> requires a custom Armbian U-Boot build, not stock — Rockchip `current` debs ship
+> `BOOT_TARGETS` with PXE at position 6, and `bootflow scan` lands on the SD card's
+> `boot.scr` before reaching PXE. The flashing playbooks are correct in isolation but
+> the full netboot trigger ("flip RouterOS DHCP option → board PXE-boots") doesn't
+> deliver until the `armbian_build` role ships custom debs. Tracked in
+> [issue #16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16);
+> empirical evidence in
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
 
 The bootloader role is structured around per-SoC-family strategies; current implementations
 cover Rockchip (RK3588/RK3588S/RK3399/RK356x via Armbian's unified U-Boot format) and
@@ -338,11 +336,11 @@ The role auto-resolves the flash target from the board's capability flags:
 The U-Boot binary the role installs is *PXE-capable* (`BOOTSTD_DEFAULTS=y`,
 `CONFIG_BOOTCOMMAND="bootflow scan -lb"`, `CONFIG_CMD_PXE=y`). Whether the board
 *actually* tries PXE before disk on each boot depends on the binary's compile-time
-`BOOT_TARGETS` ordering, which Armbian sets per board in `armbian/build`. On Rockchip
-`current` the upstream default puts PXE at position 6 — this is the WIP issue tracked
-in [#3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
-The role does not (and on `CONFIG_ENV_IS_NOWHERE=y` builds cannot) tweak this from the
-board side.
+`BOOT_TARGETS` ordering. Stock Armbian Rockchip `current` debs put PXE at position 6,
+which means PXE is unreachable in practice — see
+[#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16) for
+the `armbian_build` role that ships custom debs with PXE-first ordering. The role
+cannot tweak this from the board side (`CONFIG_ENV_IS_NOWHERE=y`).
 
 To force a target, override:
 

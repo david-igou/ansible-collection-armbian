@@ -6,18 +6,16 @@ U-Boot tries PXE first and falls through to disk when DHCP provides no
 `next-server`, so flipping the lease's option set is enough to toggle a
 board's boot mode.
 
-> **WIP.** This invariant is not delivered by Armbian Rockchip `current`
-> U-Boot debs as of v2025.10 — their compile-time `BOOT_TARGETS` puts local
-> storage before PXE/DHCP, and the SD card's `boot.scr` wins before
-> bootflow scan reaches the network bootmeths. This role's tasks
-> (creating DHCP option sets, writing `pxelinux.cfg/01-<mac>`, flipping
-> the lease's option) are correct in isolation, but `enable_netboot` will
-> not actually cause the board to PXE-boot until that's resolved upstream
-> or worked around in the bootloader role. See
-> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
-> for analysis and
-> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
-> for the design discussion.
+> **WIP.** Stock Armbian Rockchip `current` debs don't deliver this invariant —
+> their compile-time `BOOT_TARGETS` puts PXE at position 6, behind mmc1 where the
+> SD card's `boot.scr` wins via `bootflow scan`. This role's tasks (creating DHCP
+> option sets, writing `pxelinux.cfg/01-<mac>`, flipping the lease's option) are
+> correct in isolation, but `enable_netboot` won't actually cause the board to
+> PXE-boot until the board has been flashed with a custom Armbian U-Boot deb
+> built by the `armbian_build` role
+> ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).
+> Empirical evidence:
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
 
 The role has four task entry-points, each designed to be included from a
 play with the right `hosts:` target:

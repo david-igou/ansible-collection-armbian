@@ -37,16 +37,16 @@ flash chip, I/O error) fails the play with both checksums shown. With
 writing and short-circuits the flash when the on-device bootloader
 already matches.
 
-> **WIP — netboot trigger.** Flashing this role's binaries does **not** by
-> itself deliver "RouterOS DHCP option flip → board PXE-boots." Modern
-> Armbian Rockchip `current` debs build with `BOOT_TARGETS "mmc1 mmc0 nvme
-> scsi usb pxe dhcp spi"` (PXE at position 6) and an SD-card-booted
-> Armbian install hits `bootmeth_script` on mmc1 before bootflow scan
-> reaches PXE. See
-> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
-> for the empirical analysis and
-> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
-> for the design discussion on a portable fix.
+> **WIP — netboot trigger.** Stock Armbian Rockchip `current` debs ship
+> `BOOT_TARGETS "mmc1 mmc0 nvme scsi usb pxe dhcp spi"` (PXE at position 6),
+> so flashing this role's binaries does **not** by itself deliver "RouterOS
+> DHCP option flip → board PXE-boots" — the SD card's `boot.scr` wins via
+> `bootflow scan` first. PXE-first requires the custom Armbian U-Boot built
+> by the `armbian_build` role
+> ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16));
+> once that lands, set `uboot_apt_source: local` to consume the custom deb
+> instead of the stock one. Empirical evidence:
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
 
 ## Role variables
 

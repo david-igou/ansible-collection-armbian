@@ -96,56 +96,51 @@ The operator is expected to have flashed Armbian to the SD card
 manually first (etcher / `dd` / Armbian installer); `flash_sd.yml`
 replaces that card's U-Boot in place.
 
-## How PXE-first *should* work — and why it doesn't yet on Rockchip `current`
+## How PXE-first works — custom Armbian builds via the `armbian_build` role
 
-> **Status: WIP.** The flashing role works. The rest of the collection assumes a
-> "PXE-first via DHCP option flip" control surface that is not delivered out of
-> the box on Armbian Rockchip `current` debs (verified on `linux-u-boot-orangepi5pro-current 26.2.0-trunk.821`,
-> U-Boot v2025.10). See [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
-> for the design discussion and [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
-> for the empirical analysis.
-
-The intended behaviour:
+> **Status: WIP pending [#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16).**
+> The flashing role works. PXE-first ordering is delivered by a custom Armbian U-Boot
+> build managed by the `armbian_build` role; until that role lands, stock Rockchip
+> `current` debs reach the SD card's `boot.scr` before PXE and the netboot trigger
+> doesn't fire. Empirical evidence:
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
+> (verified on `linux-u-boot-orangepi5pro-current 26.2.0-trunk.821`, U-Boot v2025.10).
 
 Modern Armbian Rockchip `current` debs build U-Boot with
 `BOOTSTD_DEFAULTS=y` and `CONFIG_BOOTCOMMAND="bootflow scan -lb"`.
 `bootflow scan` walks global bootmeths (only `efi_bootmgr` qualifies) and
 then per-device bootmeths in the order set by the `boot_targets` env var,
 which on first boot inherits the compile-time `BOOT_TARGETS` macro. With
-PXE/DHCP bootmeths enabled, **the intent** is:
+PXE-first ordering and PXE/DHCP bootmeths enabled:
 
 - DHCP returns `next-server` ⇒ pxe bootflow wins → board netboots.
 - DHCP returns no next-server ⇒ scan falls through to local disk.
 
-The actual behaviour on Orange Pi 5 Pro `current`:
+Stock Armbian doesn't ship PXE-first. `include/configs/rockchip-common.h`
+in upstream U-Boot v2025.10 defines `BOOT_TARGETS "mmc1 mmc0 nvme scsi
+usb pxe dhcp spi"` and Armbian's per-board configs (`orangepi5pro.csc`,
+`orangepi5.conf`, `rock-5a.csc`, `rock-5b.conf` on `current`, …) don't
+patch it. `bootflow scan -lb` walks mmc1 first; the SD card's
+`/boot/boot.scr` is found by `bootmeth_script` and `booti`s the kernel
+directly — PXE at positions 6/7 is unreachable.
 
-`include/configs/rockchip-common.h` in upstream U-Boot v2025.10 defines
-`BOOT_TARGETS "mmc1 mmc0 nvme scsi usb pxe dhcp spi"`. Armbian's
-`config/boards/orangepi5pro.csc` does **not** patch this. So
-`bootflow scan -lb` walks mmc1 first; an SD card with stock Armbian has
-`/boot/boot.scr`, which `bootmeth_script` finds and executes. The
-script does its own kernel/initrd/dtb load and `booti` — **control
-never returns to bootflow scan**, and PXE/DHCP at positions 6/7 are
-unreachable. Toggling RouterOS DHCP options for PXE has no effect.
-
-For comparison, Armbian's `BOOT_TARGETS` override pattern (a
+Armbian's `BOOT_TARGETS` override pattern (a
 `pre_config_uboot_target__*_patch_rockchip_common_boot_order` function in
 the board's `.conf`/`.csc`) is established for `rock-5b` (edge only),
 `nanopct6`, `cm3588-nas`, `mekotronics-r58s2`, `youyeetoo-r1-v3`,
-`mixtile-blade3`, and others — but **none of them** put PXE first either.
-The supported pattern is "local storage first, network last".
+`mixtile-blade3`, and others — but none of them put PXE first either.
+The `armbian_build` role applies the same hook pattern locally with
+`pxe dhcp` at the front.
 
 ### Why the role no longer touches U-Boot env
 
-The same Armbian debs build with `CONFIG_ENV_IS_NOWHERE=y` —
-U-Boot's env lives only in RAM and is reset to compiled-in defaults
-on every boot. `fw_setenv boot_targets …` has nowhere to persist, and
-no `/etc/fw_env.config` ships on a stock Armbian install. A handful of
-boards do opt into persistent env in the Armbian build tree (e.g.
-`rock-5b` on the `edge` branch, `rock-5b-plus`, `rock-5t`, `odroidm1`,
-`nanopct6`); none of those are currently in this collection's
-inventory. If you add one and want to override boot order from the
-role, treat it as a separate feature — probe per-board first.
+Armbian's debs build with `CONFIG_ENV_IS_NOWHERE=y` — U-Boot's env lives
+only in RAM and is reset to compiled-in defaults on every boot. `fw_setenv`
+is permanently a no-op on these debs, which is why the PXE-first ordering
+has to come from the U-Boot binary itself rather than from a runtime env
+override. A handful of upstream boards do opt into persistent env in the
+Armbian build tree (e.g. `rock-5b` on `edge`, `rock-5b-plus`, `rock-5t`,
+`odroidm1`, `nanopct6`); none are currently in this collection's inventory.
 
 Probe a board's env mode:
 
@@ -154,10 +149,10 @@ grep -E '^CONFIG_(ENV_IS_|BOOTSTD|BOOTCOMMAND)' \
   /usr/lib/<install_dir>/u-boot-config-target-1
 ```
 
-If `CONFIG_ENV_IS_NOWHERE=y` and you want a non-default boot order,
-the only fix is a build-time patch to `BOOT_TARGETS` in
-`include/configs/<soc>-common.h` (handled in
-[`armbian/build`](https://github.com/armbian/build)), not Ansible.
+If `CONFIG_ENV_IS_NOWHERE=y` and you want a non-default boot order, the
+fix is a compile-time patch to `BOOT_TARGETS` — which is what
+[#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)
+delivers via the `armbian_build` role.
 
 ### Verifying U-Boot PXE support
 
