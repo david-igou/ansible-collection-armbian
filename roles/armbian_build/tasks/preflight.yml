@@ -27,8 +27,8 @@
   ansible.builtin.set_fact:
     _cache_mount: >-
       {{ ansible_mounts
-         | selectattr('mount', 'match', '^' + (armbian_build_cache_dir | regex_escape) + '($|/)')
          | sort(attribute='mount', reverse=true)
+         | selectattr('mount', 'in', armbian_build_cache_dir + '/')
          | list | first }}
 
 - name: Assert sufficient free space at the cache dir

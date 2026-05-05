@@ -26,6 +26,7 @@ armbian_build_required_egress_hosts:
   - github.com
   - apt.armbian.com
   - ghcr.io
+  - registry-1.docker.io
 
 # compile.sh argument knobs. Overridable per-run, NOT folded into
 # patch_hash — manifest fields like `branch` and `release` cover the

@@ -31,6 +31,11 @@
                     include/configs/rockchip-common.h
             }
   pre_tasks:
+    - name: Load board configs for board name lookup
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/bootloader/vars/boards.yml"
+        name: _bootloader_vars
+
     - name: Resolve build targets from opted-in hosts
       ansible.builtin.set_fact:
         _build_targets: >-
@@ -38,8 +43,10 @@
              | map('extract', hostvars)
              | selectattr('host_board_overrides.armbian_build_enabled', 'defined')
              | selectattr('host_board_overrides.armbian_build_enabled')
-             | map(attribute='_board.armbian_board_name')
-             | unique | list }}
+             | map(attribute='board_model')
+             | unique
+             | map('extract', _bootloader_vars.board_configs, 'armbian_board_name')
+             | list }}
 
     - name: Report build targets
       ansible.builtin.debug:
