@@ -6,28 +6,44 @@
 ![License](https://img.shields.io/github/license/david-igou/ansible-collection-armbian_netboot)
 ![Last Commit](https://img.shields.io/github/last-commit/david-igou/ansible-collection-armbian_netboot)
 
-Ansible collection for PXE-netbooting and reprovisioning Armbian-based ARM single-board
-computers. A RouterOS DHCP change is the sole trigger for switching a board between disk
-boot and netboot. The netboot server (netboot.xyz + NFS) is assumed to already be running;
-this collection manages its NFS export contents and RouterOS DHCP configuration.
+Ansible collection for managing Armbian-based ARM single-board computers
+end-to-end. The collection is organised as a small set of single-purpose
+**roles** (primitives) and **workflow playbooks** that compose them. PXE-netboot
+and reprovisioning are workflows built on top, not the framing — see
+[Mental model](#mental-model) below.
 
 > **⚠️ Status: netboot trigger is WIP pending the `armbian_build` role.** PXE-first
-> requires a custom Armbian U-Boot build, not stock — Rockchip `current` debs ship
+> requires a custom Armbian image, not stock — Rockchip `current` U-Boot ships
 > `BOOT_TARGETS` with PXE at position 6, and `bootflow scan` lands on the SD card's
 > `boot.scr` before reaching PXE. The flashing playbooks are correct in isolation but
 > the full netboot trigger ("flip RouterOS DHCP option → board PXE-boots") doesn't
-> deliver until the `armbian_build` role ships custom debs. Tracked in
+> deliver until the `armbian_build` role ships custom images with PXE-first U-Boot
+> baked in at compile time. Tracked in
 > [issue #16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16);
 > empirical evidence in
 > [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
 
-The bootloader role is structured around per-SoC-family strategies; current implementations
-cover Rockchip (RK3588/RK3588S/RK3399/RK356x via Armbian's unified U-Boot format) and
-Allwinner (sunxi). Additional families add a SoC vars file under
-`roles/bootloader/vars/socs/` plus, if the eMMC layout differs, a per-strategy task file.
-
 **Sample inventory boards:** Orange Pi 5, Orange Pi 5 Pro, Orange Pi 5 Max, Rock 5B,
 Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
+
+## Mental model
+
+**Roles are single-purpose, parameter-driven state enforcers. Playbooks
+compose them into workflows.**
+
+A role asks: *given these inputs, is the world in the desired state, and if
+not, make it so.* It does not decide intent — callers do. A playbook decides
+which roles to invoke, against which inventory, with which parameters, in
+what order.
+
+Adding a new external system means adding a role. Adding a new operation
+that combines existing primitives means adding a playbook (no role changes).
+
+The `bootloader` role keeps its per-SoC-family strategy structure; current
+implementations cover Rockchip (RK3588/RK3588S/RK3399/RK356x via Armbian's
+unified U-Boot format) and Allwinner (sunxi). Additional families add a SoC
+vars file under `roles/bootloader/vars/socs/` plus, if the eMMC layout
+differs, a per-strategy task file.
 
 ## Requirements
 
@@ -51,15 +67,16 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 
 ### Roles
 
-| Role | Description |
-|---|---|
-| [`bootloader`](roles/bootloader/) | Flashes PXE-capable U-Boot to SPI / eMMC / SD on boards running Armbian |
-| [`bootstrap_armbian`](roles/bootstrap_armbian/) | Provisions a passwordless-sudo SSH-key-only user on a freshly flashed Armbian board |
-| [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | Idempotently provisions a RouterOS user, group, and SSH keys over network_cli |
-| [`nfs_content`](roles/nfs_content/) | Populates NFS exports with Armbian rootfs, kernel, DTB, and image assets |
-| [`reprovision`](roles/reprovision/) | Downloads and flashes an Armbian image to disk from within an NFS root environment |
-| [`routeros_dhcp`](roles/routeros_dhcp/) | Creates and manages RouterOS DHCP option objects for PXE boot control |
-| [`routeros_poe`](roles/routeros_poe/) | Controls PoE power state on RouterOS switch ports feeding the boards (on/off/cycle) |
+| Role | Enforces / produces | Inputs |
+|---|---|---|
+| [`armbian_build`](roles/armbian_build/) ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)) | `.img.xz` Armbian image with PXE-first U-Boot, published to netboot server | board, branch, release, patches, output path |
+| [`bootloader`](roles/bootloader/) | U-Boot flashed on a target device (SPI / eMMC / SD) | board metadata, target device, apt source |
+| [`bootstrap_armbian`](roles/bootstrap_armbian/) | SSH-key user with passwordless sudo on a freshly flashed Armbian board | user, key, sudoers policy |
+| [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | RouterOS user, group, SSH-key state over network_cli | user, group, key |
+| [`nfs_content`](roles/nfs_content/) | rootfs / TFTP / pxelinux content under server exports | image URL, model, host identity, export paths |
+| [`reprovision`](roles/reprovision/) | Armbian image flashed to a disk on the board | image URL, target device |
+| [`routeros_dhcp`](roles/routeros_dhcp/) | shared DHCP option-set objects + per-lease assignment on RouterOS | RouterOS host, lease MAC, option-set name |
+| [`routeros_poe`](roles/routeros_poe/) | PoE port state (on/off) on RouterOS switch ports | switch host, interface, action |
 
 ### Playbooks (in lifecycle order)
 
@@ -69,8 +86,9 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 | 1 | `bootstrap_routeros_user.yml` | Once per RouterOS device | Provisions the `ansible-netboot` SSH user, group, and keys on the router (and any switches) so subsequent playbooks can authenticate. |
 | 2 | `populate_nfs_content.yml` | Once per environment, then on every inventory change | Populates the netboot server's NFS rootfs templates, per-host clones, and TFTP kernel/initrd/DTB tree from each board's Armbian image. |
 | 3 | `setup_routeros_dhcp.yml` | Once per RouterOS device | Creates the shared `armbian-nfsroot` and `armbian-reprovision` DHCP option objects on RouterOS. |
-| 4 | `flash_bootloader.yml` | Once per physical board | Flashes PXE-first U-Boot to SPI / eMMC / SD — runs on the board itself over SSH. |
+| 4 | `flash_bootloader.yml` | Once per physical board (transition path for boards on stock images; superseded by `build_image.yml` once a board is onboarded to `armbian_build`) | Flashes PXE-first U-Boot to SPI / eMMC / SD — runs on the board itself over SSH. |
 | 5 | `reprovision.yml` | Repeated per refresh | Full PXE → flash → disk boot cycle: enables PXE, reboots, flashes the disk, re-disables PXE, verifies disk boot. |
+| — | `build_image.yml` ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)) | Per board model, on `armbian/build` ref change | Builds a custom Armbian `.img.xz` for opted-in boards (`armbian_build_enabled: true`) on the `armbian_builders` group and publishes it to the netboot server's HTTP root for `populate_nfs_content`/`reprovision` to consume. |
 | — | `enable_netboot.yml` | Ad-hoc | Boots a board into NFS root (read-only) for diagnostics or maintenance. |
 | — | `disable_netboot.yml` | Ad-hoc | Reverts a board to local disk boot. |
 | — | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream RouterOS PoE switch port. |
@@ -339,8 +357,11 @@ The U-Boot binary the role installs is *PXE-capable* (`BOOTSTD_DEFAULTS=y`,
 `BOOT_TARGETS` ordering. Stock Armbian Rockchip `current` debs put PXE at position 6,
 which means PXE is unreachable in practice — see
 [#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16) for
-the `armbian_build` role that ships custom debs with PXE-first ordering. The role
-cannot tweak this from the board side (`CONFIG_ENV_IS_NOWHERE=y`).
+the `armbian_build` role that produces custom **images** with PXE-first ordering
+baked into U-Boot at compile time. (`flash_bootloader.yml` remains useful as the
+transition path for boards still running stock images; once a board is onboarded
+to `armbian_build`, `build_image.yml` + `reprovision.yml` replaces it.) The
+bootloader role cannot tweak this from the board side (`CONFIG_ENV_IS_NOWHERE=y`).
 
 To force a target, override:
 
