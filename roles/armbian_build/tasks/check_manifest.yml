@@ -37,6 +37,12 @@
       ansible.builtin.set_fact:
         _existing_manifest: {}
 
+- name: Verify the image file referenced by the manifest still exists
+  ansible.builtin.stat:
+    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _existing_manifest.image_filename | default('') }}"
+  register: _existing_image_stat
+  when: _existing_manifest.image_filename is defined
+
 - name: Decide whether to skip the build
   ansible.builtin.set_fact:
     _skip_build: >-
@@ -45,7 +51,8 @@
          and (_existing_manifest.armbian_build_ref | default('') == _manifest_inputs.armbian_build_ref)
          and (_existing_manifest.board | default('') == _manifest_inputs.board)
          and (_existing_manifest.branch | default('') == _manifest_inputs.branch)
-         and (_existing_manifest.release | default('') == _manifest_inputs.release) }}
+         and (_existing_manifest.release | default('') == _manifest_inputs.release)
+         and (_existing_image_stat.stat.exists | default(false)) }}
 
 - name: Report skip-build decision
   ansible.builtin.debug:
