@@ -20,18 +20,26 @@ SSH — there is no separate netboot-server-side SD card prep step:
   populated, which prevents accidentally clobbering an SD card.
 - **SD card** — writes U-Boot to the SD card the board is currently
   booted from, in place, at the SoC family's `sd_uboot_seek_sectors`
-  offset (Rockchip 64, Allwinner 16). Sets PXE-first `boot_targets` via
-  `fw_setenv` on the board's own `/etc/fw_env.config`. Hard-fails if
-  the rootfs is not on a removable SD card — refuses to overwrite eMMC
-  or NVMe under this code path. Use this for boards with no SPI/eMMC
-  populated; the operator is expected to have flashed Armbian to the
-  SD card manually before this point.
+  offset (Rockchip 64, Allwinner 16). Hard-fails if the rootfs is not
+  on a removable SD card — refuses to overwrite eMMC or NVMe under
+  this code path. Use this for boards with no SPI/eMMC populated; the
+  operator is expected to have flashed Armbian to the SD card
+  manually before this point.
 
 For `bootloader_target=auto` (default) the role picks the most permanent
 storage available: SPI if populated and detected, else eMMC if
-populated, else the SD card the board is booted from. After flashing
-(any path), RouterOS DHCP options become the only mechanism needed to
-switch between disk boot and netboot.
+populated, else the SD card the board is booted from.
+
+> **WIP — netboot trigger.** Flashing this role's binaries does **not** by
+> itself deliver "RouterOS DHCP option flip → board PXE-boots." Modern
+> Armbian Rockchip `current` debs build with `BOOT_TARGETS "mmc1 mmc0 nvme
+> scsi usb pxe dhcp spi"` (PXE at position 6) and an SD-card-booted
+> Armbian install hits `bootmeth_script` on mmc1 before bootflow scan
+> reaches PXE. See
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
+> for the empirical analysis and
+> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
+> for the design discussion on a portable fix.
 
 ## Role variables
 

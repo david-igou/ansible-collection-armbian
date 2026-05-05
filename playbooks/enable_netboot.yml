@@ -4,6 +4,11 @@
 # assigns the PXE DHCP option set on RouterOS, and optionally reboots
 # boards to apply the change.
 #
+# WIP: on Armbian Rockchip `current` U-Boot debs (v2025.10 era), this
+# playbook will land in a no-op — `bootflow scan -lb` walks mmc1 first
+# and Armbian's /boot/boot.scr wins before PXE/DHCP are reached. See
+# https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3
+#
 # Usage:
 #   # Enable NFS root (diskless mode) for a specific board
 #   ansible-playbook playbooks/enable_netboot.yml \

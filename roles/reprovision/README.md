@@ -6,6 +6,15 @@ Runs **on the board itself** via SSH while it is booted into the NFS root
 environment (set up by the `nfs_content` role and triggered by the
 `routeros_dhcp` role's reprovision-mode DHCP options). The role:
 
+> **WIP.** This role is correct in isolation but its preconditions
+> (board-must-be-running-from-NFS) are not currently deliverable on
+> Armbian Rockchip `current` boards — their compile-time `BOOT_TARGETS`
+> puts local storage before PXE/DHCP. See
+> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3)
+> for the design discussion. Until that lands, the only way to land a
+> board in NFS root is manual (e.g. interrupt U-Boot via serial console
+> and `bootflow scan -lb pxe` by hand).
+
 1. Resolves the target block device from `board_model` (`/dev/nvme0n1` or
    `/dev/mmcblk0`).
 2. Downloads the per-board `.img.xz` from netboot.xyz's HTTP assets server.

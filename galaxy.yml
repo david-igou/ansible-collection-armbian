@@ -11,7 +11,7 @@ authors:
 
 description: >-
   Ansible collection for PXE-netbooting and reprovisioning Armbian-based
-  RK3588/RK3588S SBCs (Orange Pi 5/Pro/Max, Rock 5B, Rock 5A) via RouterOS
+  ARM SBCs (Rockchip RK3588/RK3588S, Allwinner H618/sunxi) via RouterOS
   DHCP option management and NFS-based root filesystems.
 
 license_file: LICENSE
@@ -24,6 +24,7 @@ tags:
   - pxe
   - netboot
   - rockchip
+  - allwinner
 
 dependencies:
   "community.routeros": ">=2.0.0"

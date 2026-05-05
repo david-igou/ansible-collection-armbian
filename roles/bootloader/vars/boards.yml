@@ -47,10 +47,8 @@ board_configs:
     armbian_dl_dir: orangepi5pro
     armbian_board_name: orangepi5pro
     armbian_support: community
-    # No `current` deb is published for orangepi5pro; the `current`-branch
-    # image and the `edge` deb both ship mainline U-Boot v2025.10.
-    uboot_apt_package: linux-u-boot-orangepi5pro-edge
-    uboot_install_dir: linux-u-boot-edge-orangepi5pro
+    uboot_apt_package: linux-u-boot-orangepi5pro-current
+    uboot_install_dir: linux-u-boot-current-orangepi5pro
     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
     console: ttyS2,1500000n8
     # Orange Pi 5 Pro spec lists "SPI NOR Flash footprint" — most retail

@@ -8,6 +8,11 @@
 #   5. Clears the PXE DHCP option on RouterOS
 #   6. Reboots boards to the freshly flashed disk and verifies disk boot
 #
+# WIP: step 3 currently fails on Armbian Rockchip `current` U-Boot debs —
+# bootflow scan walks mmc1 first and the SD card's boot.scr wins before
+# PXE/DHCP are reached. See
+# https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3
+#
 # Usage:
 #   ansible-playbook playbooks/reprovision.yml --limit rock-5b-01
 #

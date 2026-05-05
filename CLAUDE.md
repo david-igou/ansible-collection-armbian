@@ -15,6 +15,43 @@ A RouterOS DHCP change is the sole trigger for switching a board between disk bo
 netboot. The netboot server (running netboot.xyz + NFS) is assumed to already be running;
 this collection only manages its NFS export contents and RouterOS DHCP configuration.
 
+## ⚠️ Status: netboot trigger is WIP on Armbian Rockchip `current`
+
+**Read this before assuming any "PXE-first" claim in the rest of this document is correct.**
+The bootloader, NFS-content, and RouterOS DHCP roles all work as written and have been
+validated on hardware. The intended *downstream* behavior — flip a RouterOS DHCP option,
+reboot, board PXE-boots — is **not** delivered by Armbian's modern Rockchip `current`
+U-Boot debs out-of-the-box. Empirical evidence on `opi5pro-01`:
+
+- Upstream U-Boot v2025.10 `include/configs/rockchip-common.h` defines
+  `BOOT_TARGETS "mmc1 mmc0 nvme scsi usb pxe dhcp spi"`. PXE/DHCP are positions 6/7.
+- Armbian's `config/boards/orangepi5pro.csc` does **not** patch this (unlike rock-5b on
+  edge, nanopct6, cm3588-nas, mekotronics, mixtile-blade3, and others — none of which
+  put PXE first either).
+- `bootflow scan -lb` walks global bootmeths first (only `efi_bootmgr` qualifies in
+  v2025.10) then per-device bootmeths in `boot_targets` order. PXE is per-device, not
+  global. Source: `boot/bootflow.c:iter_incr` and `boot/bootmeth_pxe.c`.
+- mmc1 (the SD card) has Armbian's `/boot/boot.scr`. `bootmeth_script` finds it,
+  executes the `boot.cmd`-compiled script, which does its own kernel/initrd/dtb load
+  and `booti`. **Control never returns to bootflow scan.**
+- Therefore: setting `armbian-nfsroot` on a board's lease and rebooting will boot the
+  board from SD as normal. PXE is unreachable.
+
+`fw_setenv boot_targets …` was previously the role's attempted workaround — that path
+is removed (`CONFIG_ENV_IS_NOWHERE=y` makes env writes impossible on these debs anyway).
+Three candidate fixes are tracked in
+[issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3):
+upstream a `BOOT_TARGETS` patch to `armbian/build`, hijack `/boot/boot.scr`, or use a
+custom U-Boot in SPI on SKUs that have it populated. Until one of these lands, treat
+`enable_netboot.yml` / `reprovision.yml` as **WIP that does not deliver PXE on Rockchip
+`current` boards**. The flashing playbooks (`flash_bootloader.yml`,
+`populate_nfs_content.yml`, `setup_routeros_dhcp.yml`) are correct in isolation.
+
+When making changes, do not "fix" the architecture invariant by re-adding env-touching
+code — that path is permanently closed for these debs. Reference the empirical evidence
+in [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
+before proposing a different mechanism.
+
 ## Collection structure
 
 ```
@@ -111,10 +148,19 @@ ansible-playbook playbooks/poe_control.yml --limit boards -e poe_action=off
 The `inventory/` directory in this repo is **documentation-only** — it illustrates
 the expected group structure, host variables, and naming conventions but is never
 used at runtime. The real (gitignored) inventory lives in `.inventory/` and is
-picked up by Ansible's default inventory search path. When validating changes
+picked up via the `ANSIBLE_INVENTORY` environment variable. When validating changes
 against real hosts, use the `.inventory/` content (e.g. `ansible -m ping boards`
 resolves from there). Do not modify `.inventory/` for documentation purposes;
 update `inventory/hosts.yml` instead to keep the example accurate.
+
+**Agent requirement**: before running any `ansible-playbook`, `ansible`, or
+`ansible-lint` command, verify both conditions hold:
+1. `echo $ANSIBLE_INVENTORY` prints a path ending in `.inventory/` (or the
+   absolute path to this repo's `.inventory` directory).
+2. The `.inventory/` directory exists and contains at least a `hosts.yml`.
+
+If either check fails, stop and ask the user — do not fall back to
+`inventory/hosts.yml` (that file is sample data with placeholder IPs/MACs).
 
 ## Required configuration before first run
 
@@ -172,9 +218,17 @@ required by `playbooks/poe_control.yml`.
 
 ## Architecture
 
-**The key invariant**: RouterOS DHCP options are the *only* control surface for switching
-boot mode. U-Boot always tries PXE first and falls through to disk when DHCP provides no
-`next-server`.
+**The intended invariant**: RouterOS DHCP options are the *only* control surface for
+switching boot mode. U-Boot tries PXE first and falls through to disk when DHCP provides
+no `next-server`.
+
+**Reality check (see WIP banner near the top of this file):** this invariant is *not*
+delivered by Armbian Rockchip `current` U-Boot debs as of v2025.10. Their compile-time
+`BOOT_TARGETS` is `mmc1 mmc0 nvme scsi usb pxe dhcp spi`, and an SD-card-booted Armbian
+install hits `bootmeth_script` on mmc1 before bootflow scan ever reaches PXE. The
+roles below are still correct as flashing/configuration primitives; the invariant is
+the open question being tracked in
+[issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
 
 ### Three bootloader flash paths (all run on the board over SSH)
 The `bootloader` role picks one of three flash targets at runtime, based on each board's
@@ -189,13 +243,22 @@ netboot-server-side SD card prep step.
     toggling `force_ro` around the dd.
   - Allwinner (`emmc_strategy: user_area_seek`): write to the user-data area at sector 16.
 - **SD card** — `flash_sd.yml` writes U-Boot to the SD card the board is currently booted
-  from, in place, at the SoC-family-specific seek (Rockchip=64, Allwinner=16). Sets
-  PXE-first `boot_targets` via `fw_setenv` on the board's own `/etc/fw_env.config`.
-  Hard-fails if the rootfs is not on a removable SD card — refuses to overwrite eMMC or
-  NVMe. Operator is expected to have flashed the SD card with Armbian manually before
-  this point. Used for boards with no SPI/eMMC populated (e.g. Orange Pi Zero 3, Orange
-  Pi 5 Pro). The card stays inserted permanently; it acts identically to SPI flash from
-  a DHCP perspective.
+  from, in place, at the SoC-family-specific seek (Rockchip=64, Allwinner=16). Hard-fails
+  if the rootfs is not on a removable SD card — refuses to overwrite eMMC or NVMe.
+  Operator is expected to have flashed the SD card with Armbian manually before this
+  point. Used for boards with no SPI/eMMC populated (e.g. Orange Pi Zero 3, Orange Pi 5
+  Pro). The card stays inserted permanently; it acts identically to SPI flash from a
+  DHCP perspective.
+
+The role does not touch U-Boot env, does not template `/etc/fw_env.config`, and does
+not install `u-boot-tools`. Modern Armbian Rockchip `current` debs build with
+`CONFIG_ENV_IS_NOWHERE=y`, so `fw_setenv` would be a no-op even with a config file in
+place. The intended PXE-first ordering would have to come from the U-Boot binary's
+compile-time `BOOT_TARGETS`, which is set in `include/configs/<soc>-common.h` upstream.
+For Orange Pi 5 Pro on `current`, `BOOT_TARGETS` is `mmc1 mmc0 nvme scsi usb pxe dhcp
+spi` (PXE at position 6) — see WIP banner above. A board that needs a different
+ordering must be addressed upstream (`config/boards/<board>.conf` in `armbian/build`);
+it cannot be done from this collection.
 
 `bootloader_target=auto` (default) resolves: SPI if populated/detected, else eMMC if
 populated, else SD. Boards with no on-board bootloader storage fall through to SD
@@ -301,9 +364,13 @@ The dimensions that vary in practice:
   `mmcblk1`. NVMe is usually `/dev/nvme0n1` but can be `/dev/nvme1n1` on
   boards with multiple controllers. SPI MTD is *usually* `/dev/mtd0` but
   can shift if other MTD devices probe first.
-- **U-Boot environment offset/size**: per board, not per SoC. Always read
-  the board's own `/etc/fw_env.config` rather than using a hardcoded
-  constant.
+- **U-Boot environment storage**: per board *and* per branch. Most modern
+  Armbian Rockchip `current` debs build with `CONFIG_ENV_IS_NOWHERE=y`
+  (RAM-only env, no `/etc/fw_env.config`, `fw_setenv` is a no-op); a small
+  set of boards explicitly opts in to persistent env in `armbian/build`
+  (`rock-5b` on `edge`, `rock-5b-plus`, `rock-5t`, `odroidm1`, `nanopct6`).
+  Probe `grep CONFIG_ENV_IS_ /usr/lib/<install_dir>/u-boot-config-target-1`
+  before assuming `fw_setenv` will work.
 - **Console UART**: most current Rockchip boards use `ttyS2` at 1.5 Mbaud;
   Allwinner typically uses `ttyS0` at 115200; i.MX uses `ttymxc*`. Per-board.
 - **DTB layout in the rootfs**: `/boot/dtb/<dtb>` on most Armbian images,
@@ -359,9 +426,13 @@ Do not add per-board state to `group_vars/`.
 2. Add an entry to `roles/bootloader/vars/boards.yml`. Required fields:
    `soc_family`, `armbian_dl_dir`, `armbian_board_name`, `armbian_support`,
    `uboot_apt_package`, `uboot_install_dir`, `dtb`, `console`, `has_spi`,
-   `has_emmc`, `primary_storage`, `flash_target_device`, `boot_targets_pxe`.
-   Verify each value against the actual board and the Armbian deb
-   (`dpkg-deb -c`) — do not copy by analogy.
+   `has_emmc`, `primary_storage`, `flash_target_device`. Verify each value
+   against the actual board and the Armbian deb (`dpkg-deb -c`) — do not
+   copy by analogy. Boot-order is not a per-board field in this collection;
+   it is decided by the U-Boot binary's compile-time `BOOT_TARGETS`. Probe
+   the deb's `u-boot-config-target-1` for `CONFIG_ENV_IS_NOWHERE`,
+   `CONFIG_BOOTSTD_DEFAULTS`, and `CONFIG_BOOTCOMMAND` to confirm
+   bootflow-scan-based PXE-first will work as expected.
 3. Add hosts to `inventory/hosts.yml` under a per-model subgroup of `boards`,
    each with `board_mac` and `board_model`.
 4. Add a URL to `armbian_image_urls` in `inventory/group_vars/all.yml`.

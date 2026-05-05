@@ -1,5 +1,18 @@
 # Architecture
 
+> **⚠️ WIP — Rockchip `current` netboot trigger is broken upstream.** This document
+> describes the *intended* design. The flashing roles (`bootloader`, `nfs_content`,
+> `routeros_dhcp`) work as written. The cross-cutting "RouterOS DHCP options are the
+> only control surface" invariant does **not** hold today on Armbian Rockchip
+> `current` U-Boot debs (v2025.10 era), because their compile-time `BOOT_TARGETS` puts
+> local storage before `pxe`/`dhcp` and the SD card's `boot.scr` wins before bootflow
+> scan reaches the network bootmeths. Empirical analysis:
+> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
+> Active fix discussion:
+> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
+> Read those before relying on `enable_netboot.yml` / `reprovision.yml` against
+> Rockchip `current` boards.
+
 ## Overview
 
 ```
@@ -43,11 +56,12 @@
 ### Normal (disk boot)
 
 RouterOS has no PXE DHCP options assigned to the board's static lease.
-U-Boot starts from SPI / eMMC / SD card, DHCP returns no next-server, PXE
-attempt fails, and U-Boot falls through to NVMe / eMMC / SD as configured
-by `boot_targets_pxe` for that board.
+`bootflow scan -lb` walks `boot_targets` (`mmc1 mmc0 nvme scsi usb pxe
+dhcp spi` on upstream Rockchip with no Armbian override) and the first
+device with a valid bootflow wins. On a stock Armbian SD-card setup
+that's mmc1's `/boot/boot.scr`. PXE/DHCP at positions 6/7 are unreached.
 
-### NFS Root (diskless)
+### NFS Root (diskless) — *blocked, see WIP banner*
 
 The board boots a full Armbian rootfs served over NFS (read-only mount).
 Useful for testing, maintenance, or running the board completely off
@@ -61,7 +75,12 @@ network storage.
    `nfs_rootfs_path/<inventory_hostname>` (ro). Each host has its own
    per-host rootfs export — see "Per-host rootfs" below.
 
-### Reprovision
+> Step 3 is where this fails today on Armbian Rockchip `current`: U-Boot's
+> `bootflow scan -lb` finds mmc1's `boot.scr` before reaching DHCP, so the
+> board boots from SD as if no option were set. See
+> [issue #3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
+
+### Reprovision — *blocked, see WIP banner*
 
 Same PXE flow as NFS root, but the rootfs is mounted read-write to give
 systemd full write access. Ansible SSHes into the board after it comes up
@@ -123,8 +142,7 @@ eMMC
 
 ```
 SD card (the one the board is currently booted from)
-└── U-Boot
-      ├── boot_targets = pxe-first (per-board boot_targets_pxe)
+└── U-Boot (BOOTSTD_DEFAULTS=y; `bootflow scan -lb` walks pxe → dhcp → mmc/nvme)
       ├── DHCP → next-server set   → PXE boot (nfsroot or reprovision)
       └── DHCP → no next-server    → local disk
 ```
@@ -143,11 +161,20 @@ from it. `flash_bootloader.yml` then SSHes into the board and:
   `sd_uboot_seek_sectors` (Rockchip=64, Allwinner=16) with `conv=notrunc`.
   These offsets sit before the first Armbian partition (~sector 8192),
   so the rootfs partition is untouched.
-- Calls `fw_setenv boot_targets "<boot_targets_pxe>"` against the board's
-  own `/etc/fw_env.config` to put PXE first.
 
-The card stays inserted permanently; it acts identically to SPI flash
-from a DHCP perspective.
+The U-Boot binary the role installs is PXE-capable
+(`BOOTSTD_DEFAULTS=y`, `CONFIG_BOOTCOMMAND="bootflow scan -lb"`,
+`CONFIG_CMD_PXE=y`). Whether the board actually reaches PXE on each
+boot depends on the compile-time `BOOT_TARGETS` ordering set by
+Armbian. On Rockchip `current` the upstream default puts PXE at
+position 6 — this is the WIP issue tracked in
+[#3](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3).
+The role cannot influence the env at runtime
+(`CONFIG_ENV_IS_NOWHERE=y`); see `docs/board-bootloader.md` for the
+per-board probe.
+
+The card stays inserted permanently; for the purposes of where the
+U-Boot binary lives, it acts identically to SPI flash.
 
 For boards with `has_spi: false` and `has_emmc: false`, `bootloader_target=auto`
 falls through to the SD path automatically. To force it on a board that
