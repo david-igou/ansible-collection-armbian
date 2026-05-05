@@ -1,0 +1,54 @@
+---
+# Read any existing per-board manifest and decide whether a rebuild is
+# needed. _skip_build is true only when ALL five decision fields match.
+# Anything else (file missing, parse error, partial match,
+# armbian_build_force) → rebuild.
+
+- name: Compute per-board manifest path
+  ansible.builtin.set_fact:
+    _manifest_path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/manifest.json"
+
+- name: Stat existing manifest
+  ansible.builtin.stat:
+    path: "{{ _manifest_path }}"
+  register: _manifest_stat
+
+- name: Default to no existing manifest
+  ansible.builtin.set_fact:
+    _existing_manifest: {}
+
+- name: Read and parse existing manifest if present
+  block:
+    - name: Slurp existing manifest
+      ansible.builtin.slurp:
+        src: "{{ _manifest_path }}"
+      register: _manifest_raw
+      when: _manifest_stat.stat.exists
+
+    - name: Parse manifest JSON
+      ansible.builtin.set_fact:
+        _existing_manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
+      when: _manifest_stat.stat.exists
+  rescue:
+    - name: Note manifest unparseable — will rebuild
+      ansible.builtin.debug:
+        msg: "Existing manifest at {{ _manifest_path }} is unparseable; treating as missing"
+    - name: Reset to empty manifest
+      ansible.builtin.set_fact:
+        _existing_manifest: {}
+
+- name: Decide whether to skip the build
+  ansible.builtin.set_fact:
+    _skip_build: >-
+      {{ (not (armbian_build_force | bool))
+         and (_existing_manifest.patch_hash | default('') == _manifest_inputs.patch_hash)
+         and (_existing_manifest.armbian_build_ref | default('') == _manifest_inputs.armbian_build_ref)
+         and (_existing_manifest.board | default('') == _manifest_inputs.board)
+         and (_existing_manifest.branch | default('') == _manifest_inputs.branch)
+         and (_existing_manifest.release | default('') == _manifest_inputs.release) }}
+
+- name: Report skip-build decision
+  ansible.builtin.debug:
+    msg: >-
+      armbian_build for {{ armbian_build_board }}:
+      {{ 'skipping (manifest matches)' if _skip_build else 'will build (manifest mismatch or forced)' }}
