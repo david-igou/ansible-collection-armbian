@@ -18,6 +18,7 @@ skip_list:
 # requiring the collections to be installed locally.
 mock_modules:
   - ansible.posix.mount
+  - ansible.posix.synchronize
   - community.routeros.command
   - community.routeros.api
 
