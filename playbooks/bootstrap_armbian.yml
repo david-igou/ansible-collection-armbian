@@ -1,0 +1,35 @@
+---
+# Bootstrap a freshly flashed Armbian board with a passwordless-sudo,
+# SSH-key-only user. Connects as root using armbian_default_password
+# (group_vars/all.yml — typically "1234" on a fresh image) since this
+# is the only user that exists before bootstrap. After this playbook
+# succeeds, subsequent plays connect as the provisioned user
+# (ansible_user in inventory).
+#
+# Idempotent: re-running on a board that already has the user set up
+# is a no-op aside from authorized_keys reconciliation.
+#
+# Usage:
+#   ansible-playbook playbooks/bootstrap_armbian.yml --limit rock-5b-01
+#
+# Role variables (override with -e or in inventory). See
+# `roles/bootstrap_armbian/README.md`:
+#   bootstrap_armbian_user      — user to create (default: igou)
+#   bootstrap_armbian_ssh_keys  — list of public-key strings (required)
+
+- name: Bootstrap Armbian user with SSH key auth
+  hosts: boards
+  gather_facts: false
+
+  vars:
+    ansible_user: root
+    ansible_password: "{{ armbian_default_password }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_become: false
+
+    bootstrap_armbian_ssh_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWgNfV1zdod84sj28d+z7YBLkaD5ZImElWt8zHw+u7/"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINHO7UsiIgAepf5+s2z+1CbPQf2eqJo8aNK/vT9Oaf4B"
+
+  roles:
+    - role: bootstrap_armbian

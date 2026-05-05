@@ -56,6 +56,7 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 | Role | Description |
 |---|---|
 | [`bootloader`](roles/bootloader/) | Flashes PXE-capable U-Boot to SPI / eMMC / SD on boards running Armbian |
+| [`bootstrap_armbian`](roles/bootstrap_armbian/) | Provisions a passwordless-sudo SSH-key-only user on a freshly flashed Armbian board |
 | [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | Idempotently provisions a RouterOS user, group, and SSH keys over network_cli |
 | [`nfs_content`](roles/nfs_content/) | Populates NFS exports with Armbian rootfs, kernel, DTB, and image assets |
 | [`reprovision`](roles/reprovision/) | Downloads and flashes an Armbian image to disk from within an NFS root environment |
@@ -66,6 +67,7 @@ Rock 5A (Rockchip); Orange Pi Zero 3 (Allwinner).
 
 | # | Playbook | Frequency | What it does |
 |---|---|---|---|
+| 0 | `bootstrap_armbian.yml` | Once per board, right after flashing Armbian | Connects as root with `armbian_default_password`, creates the inventory's `ansible_user` with passwordless sudo + SSH key auth, drops Armbian's first-login TUI prompt, disables sshd password auth. |
 | 1 | `bootstrap_routeros_user.yml` | Once per RouterOS device | Provisions the `ansible-netboot` SSH user, group, and keys on the router (and any switches) so subsequent playbooks can authenticate. |
 | 2 | `populate_nfs_content.yml` | Once per environment, then on every inventory change | Populates the netboot server's NFS rootfs templates, per-host clones, and TFTP kernel/initrd/DTB tree from each board's Armbian image. |
 | 3 | `setup_routeros_dhcp.yml` | Once per RouterOS device | Creates the shared `armbian-nfsroot` and `armbian-reprovision` DHCP option objects on RouterOS. |
@@ -278,7 +280,22 @@ See the commented example in [`inventory/hosts.yml`](inventory/hosts.yml).
 If you're using a board model not yet in `boards.yml`, add an entry there first. See
 [docs/board-bootloader.md](docs/board-bootloader.md) for the field reference.
 
-#### 1.4 Add the image URL
+#### 1.4 Bootstrap the board's SSH user (Playbook 0)
+
+```bash
+ansible-playbook playbooks/bootstrap_armbian.yml --limit rock-5b-01
+```
+
+Connects as `root` with `armbian_default_password` (1234 on a stock image), creates the
+inventory's `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's
+first-login TUI prompt (`/root/.not_logged_in_yet` — would otherwise hang `apt install`
+in step 1.7), and disables sshd password auth. Idempotent — re-running on an
+already-bootstrapped board is a no-op aside from authorized_keys reconciliation.
+
+Edit the SSH key list in `playbooks/bootstrap_armbian.yml` (or override
+`bootstrap_armbian_ssh_keys` via `-e`) before first run.
+
+#### 1.5 Add the image URL
 
 Edit `inventory/group_vars/all.yml`:
 
@@ -290,7 +307,7 @@ armbian_image_urls:
 Pin the full versioned URL or an Armbian-published alias (e.g.
 `Noble_current_minimal`). Pre-flight in `populate_nfs_content.yml` HEAD-checks this URL.
 
-#### 1.5 Re-run populate_nfs_content.yml
+#### 1.6 Re-run populate_nfs_content.yml
 
 ```bash
 ansible-playbook playbooks/populate_nfs_content.yml
@@ -300,7 +317,7 @@ This builds the NFS rootfs and TFTP staging for the new board model (if new) and
 the per-host rootfs clone for this specific host. Existing boards are unaffected (the
 extraction step is skipped if the model template is already populated).
 
-#### 1.6 Flash PXE-first U-Boot to the board (Playbook 4)
+#### 1.7 Flash PXE-first U-Boot to the board (Playbook 4)
 
 This is the bootloader step. It runs on the board itself over SSH, regardless of which
 flash target the board ends up using:

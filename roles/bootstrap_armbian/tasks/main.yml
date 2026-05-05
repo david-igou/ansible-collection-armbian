@@ -1,0 +1,42 @@
+---
+- name: Validate that at least one SSH key was provided
+  ansible.builtin.assert:
+    that: bootstrap_armbian_ssh_keys | length > 0
+    fail_msg: >-
+      bootstrap_armbian_ssh_keys is empty. Pass at least one public key.
+
+- name: Create user {{ bootstrap_armbian_user }}
+  ansible.builtin.user:
+    name: "{{ bootstrap_armbian_user }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Grant passwordless sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ bootstrap_armbian_user }}"
+    content: "{{ bootstrap_armbian_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Set authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ bootstrap_armbian_user }}"
+    state: present
+    key: "{{ item }}"
+    exclusive: false
+  loop: "{{ bootstrap_armbian_ssh_keys }}"
+  loop_control:
+    label: "{{ item.split() | last | default('(no comment)') }}"
+
+- name: Remove Armbian first-login TUI prompt
+  ansible.builtin.file:
+    path: /root/.not_logged_in_yet
+    state: absent
+
+- name: Disable password authentication in sshd
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  notify: restart sshd

@@ -69,12 +69,14 @@ david_igou/armbian_netboot/   (this repo root)
 │   │   └── vars/
 │   │       ├── boards.yml         # Per-board configs
 │   │       └── socs/              # SoC family defaults (rockchip.yml, allwinner.yml, …)
+│   ├── bootstrap_armbian/         # Provision passwordless-sudo SSH-key user on a fresh board
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
 │   ├── nfs_content/               # Populate NFS exports (preflight + per-model + per-host)
 │   ├── reprovision/               # Flash Armbian image to disk from NFS root
 │   ├── routeros_dhcp/             # RouterOS DHCP option management
 │   └── routeros_poe/              # PoE power control via RouterOS switch
 ├── playbooks/
+│   ├── bootstrap_armbian.yml        # (0) Provision SSH-key user on freshly flashed boards
 │   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
 │   ├── populate_nfs_content.yml     # (2) Populate NFS rootfs + TFTP content
 │   ├── setup_routeros_dhcp.yml      # (3) Create RouterOS DHCP option objects
@@ -107,6 +109,12 @@ Run playbooks from the collection root (where `ansible.cfg` is):
 ```bash
 # Install required external collections first
 ansible-galaxy collection install -r requirements.yml
+
+# (0) Bootstrap a freshly flashed Armbian board: create the inventory's
+# `ansible_user` with passwordless sudo + SSH-key auth, drop the first-login
+# TUI prompt, and disable sshd password auth. Only needed once per board,
+# right after flashing Armbian. Connects as root with armbian_default_password.
+ansible-playbook playbooks/bootstrap_armbian.yml --limit rock-5b-01
 
 # (1) Bootstrap the RouterOS SSH user (one-time, against an existing admin user).
 ansible-playbook playbooks/bootstrap_routeros_user.yml \
@@ -343,6 +351,7 @@ no NFS client on the control node, rootless-EE-friendly.
 
 | Playbook | Runs on |
 |---|---|
+| `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
 | `populate_nfs_content.yml` | **netboot server** (image extraction, NFS/TFTP content) |
 | `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |

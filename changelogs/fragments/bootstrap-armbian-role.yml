@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    New ``bootstrap_armbian`` role and ``playbooks/bootstrap_armbian.yml``
+    that provision a passwordless-sudo, SSH-key-only user on a freshly
+    flashed Armbian board. Connects as ``root`` with
+    ``armbian_default_password`` (group_vars), creates the inventory's
+    ``ansible_user`` with the supplied SSH keys, drops Armbian's
+    first-login TUI prompt (``/root/.not_logged_in_yet`` — would
+    otherwise hang ``apt install`` in the bootloader role), and
+    disables sshd password auth. Idempotent.
+  - >-
+    README.md and CLAUDE.md document a new lifecycle step **(0)
+    bootstrap_armbian** — runs once per physical board, right after
+    flashing Armbian. Sits between the inventory-add step and the
+    image-URL/NFS-populate steps in the onboarding walkthrough.
