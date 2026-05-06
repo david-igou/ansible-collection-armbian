@@ -283,6 +283,13 @@ Add these tasks at the end of the existing `tasks:` list (immediately after the 
     - name: Phase 1 — gather facts
       ansible.builtin.setup:
 
+    - name: Phase 1 — capture root mount facts
+      ansible.builtin.set_fact:
+        _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                         | map(attribute='fstype') | first }}"
+        _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                         | map(attribute='device') | first }}"
+
     - name: Phase 1 — diagnostic bundle
       ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
       vars:
@@ -291,16 +298,11 @@ Add these tasks at the end of the existing `tasks:` list (immediately after the 
     - name: Phase 1 — assert rootfs is on a local block device
       ansible.builtin.assert:
         that:
-          - (ansible_mounts | selectattr('mount', 'equalto', '/')
-              | map(attribute='fstype') | first) not in ['nfs', 'nfs4']
-          - (ansible_mounts | selectattr('mount', 'equalto', '/')
-              | map(attribute='device') | first) is match('^/dev/')
+          - _root_fstype not in ['nfs', 'nfs4']
+          - _root_device is match('^/dev/')
         fail_msg: >-
           Phase 1: expected rootfs on /dev/<block>; got
-          {{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                            | map(attribute='device') | first }}
-          ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                             | map(attribute='fstype') | first }}).
+          {{ _root_device }} ({{ _root_fstype }}).
           Diagnostic bundle is in the prior debug task.
 ```
 
@@ -376,6 +378,13 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-1 asse
         - name: Phase 2 — gather facts
           ansible.builtin.setup:
 
+        - name: Phase 2 — capture root mount facts
+          ansible.builtin.set_fact:
+            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='fstype') | first }}"
+            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='device') | first }}"
+
         - name: Phase 2 — diagnostic bundle
           ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
           vars:
@@ -384,12 +393,10 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-1 asse
         - name: Phase 2 — assert rootfs is NFS
           ansible.builtin.assert:
             that:
-              - (ansible_mounts | selectattr('mount', 'equalto', '/')
-                  | map(attribute='fstype') | first) in ['nfs', 'nfs4']
+              - _root_fstype in ['nfs', 'nfs4']
             fail_msg: >-
               Phase 2: expected NFS-mounted rootfs; got fstype
-              {{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                                | map(attribute='fstype') | first }}.
+              {{ _root_fstype }}.
               Board did not PXE-boot into NFS root despite DHCP option
               armbian-nfsroot being set. Diagnostic bundle is in the
               prior debug task — check /proc/cmdline for nfsroot=, and
@@ -465,6 +472,12 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-2 bloc
       vars:
         poe_action: cycle
 
+    # Phase 3 intentionally has no block-scoped vars: the Phase 2
+    # verify-NFS block has exited so its NFS-root identity vars are
+    # already out of scope. reset_connection here flushes the cached
+    # SSH ControlMaster so wait_for_connection re-opens with the
+    # inventory ansible_user. Do NOT wrap Phase 3 in a vars block for
+    # symmetry with Phase 2 — that would re-introduce the override.
     - name: Phase 3 — reset connection so inventory identity takes effect
       ansible.builtin.meta: reset_connection
 
@@ -476,6 +489,13 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-2 bloc
     - name: Phase 3 — gather facts
       ansible.builtin.setup:
 
+    - name: Phase 3 — capture root mount facts
+      ansible.builtin.set_fact:
+        _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                         | map(attribute='fstype') | first }}"
+        _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                         | map(attribute='device') | first }}"
+
     - name: Phase 3 — diagnostic bundle
       ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
       vars:
@@ -484,20 +504,18 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-2 bloc
     - name: Phase 3 — assert rootfs returned to local block device
       ansible.builtin.assert:
         that:
-          - (ansible_mounts | selectattr('mount', 'equalto', '/')
-              | map(attribute='fstype') | first) not in ['nfs', 'nfs4']
-          - (ansible_mounts | selectattr('mount', 'equalto', '/')
-              | map(attribute='device') | first) is match('^/dev/')
+          - _root_fstype not in ['nfs', 'nfs4']
+          - _root_device is match('^/dev/')
         fail_msg: >-
           Phase 3: expected rootfs on /dev/<block> after clearing the
-          DHCP option; got
-          {{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                            | map(attribute='device') | first }}
-          ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                             | map(attribute='fstype') | first }}).
+          DHCP option; got {{ _root_device }} ({{ _root_fstype }}).
           Toggle is not bidirectional — DHCP option may not have been
           cleared on the lease, or the board is not honouring DHCP
-          renewal. Diagnostic bundle is in the prior debug task.
+          renewal. To distinguish: run
+          `/ip dhcp-server lease print where mac-address={{ board_mac }}`
+          on {{ _routeros_target }}; if dhcp-options is non-empty the
+          clear didn't take, if empty the board cached an old lease.
+          Diagnostic bundle is in the prior debug task.
 ```
 
 - [ ] **Step 2: Lint and syntax-check**
