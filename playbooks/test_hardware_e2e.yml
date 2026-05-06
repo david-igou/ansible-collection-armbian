@@ -116,3 +116,58 @@
           ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
                              | map(attribute='fstype') | first }}).
           Diagnostic bundle is in the prior debug task.
+
+    - name: Phase 2 — set DHCP option to armbian-nfsroot
+      block:
+        - name: Phase 2 — include routeros_dhcp enable_netboot
+          ansible.builtin.include_role:
+            name: routeros_dhcp
+            tasks_from: enable_netboot.yml
+          vars:
+            board_mac: "{{ board_mac }}"
+            netboot_mode: nfsroot
+      delegate_to: "{{ _routeros_target }}"
+
+    - name: Phase 2 — PoE cycle into nfsroot
+      ansible.builtin.include_role:
+        name: routeros_poe
+      vars:
+        poe_action: cycle
+
+    - name: Phase 2 — verify NFS-mounted boot
+      block:
+        - name: Phase 2 — reset connection so new identity takes effect
+          ansible.builtin.meta: reset_connection
+
+        - name: Phase 2 — wait for SSH (NFS-root identity)
+          ansible.builtin.wait_for_connection:
+            delay: 30
+            timeout: "{{ _wait_timeout }}"
+
+        - name: Phase 2 — gather facts
+          ansible.builtin.setup:
+
+        - name: Phase 2 — diagnostic bundle
+          ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+          vars:
+            _diag_phase: "phase 2 — nfsroot"
+
+        - name: Phase 2 — assert rootfs is NFS
+          ansible.builtin.assert:
+            that:
+              - (ansible_mounts | selectattr('mount', 'equalto', '/')
+                  | map(attribute='fstype') | first) in ['nfs', 'nfs4']
+            fail_msg: >-
+              Phase 2: expected NFS-mounted rootfs; got fstype
+              {{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                | map(attribute='fstype') | first }}.
+              Board did not PXE-boot into NFS root despite DHCP option
+              armbian-nfsroot being set. Diagnostic bundle is in the
+              prior debug task — check /proc/cmdline for nfsroot=, and
+              confirm the linux-u-boot-* deb on disk has PXE-first
+              BOOT_TARGETS baked in.
+      vars:
+        ansible_user: root
+        ansible_password: "{{ armbian_default_password }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        ansible_become: false
