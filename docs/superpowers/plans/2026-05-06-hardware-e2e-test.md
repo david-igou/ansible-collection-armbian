@@ -4,7 +4,7 @@
 
 **Goal:** A single Ansible playbook that toggles a single board through disk → nfsroot → disk, asserts `findmnt /` reaches the expected source at each phase, and emits a diagnostic bundle at every checkpoint to make it useful as a netboot-debugging tool.
 
-**Architecture:** One play with `hosts: boards`, all phases inside a single `block:` so failure cleanup runs via `always:`. PoE-cycle (via `routeros_poe` role) drives every transition; SSH `wait_for_connection` + `ansible.builtin.setup`'s `ansible_mounts` fact powers the assertion (matches the precedent in `playbooks/reprovision.yml`). Connection identity for the NFS-root phase is overridden via block-scoped `vars:` (root + `armbian_default_password`), restored automatically when the block exits. `routeros_dhcp` role tasks are `include_role`'d with `delegate_to` to the first host in `routeros_routers`, since the entry-points target a RouterOS host directly.
+**Architecture:** One play with `hosts: boards`, all phases inside a single `block:` so failure cleanup runs via `always:`. PoE-cycle (via `routeros_poe` role) drives every transition; SSH `wait_for_connection` + `ansible.builtin.setup`'s `ansible_mounts` fact powers the assertion (matches the precedent in `playbooks/reprovision.yml`). Connection identity for the NFS-root phase is overridden via block-scoped `vars:` (root + `armbian_default_password`), restored automatically when the block exits. `routeros_dhcp` role tasks are `include_role`'d inside a `block:` whose `delegate_to` points at the first host in `routeros_routers`, since the entry-points target a RouterOS host directly (Ansible's parser rejects `delegate_to` as a keyword on `include_role`, so the block-wrap is the standard idiom).
 
 **Tech Stack:** Ansible 2.15+, `community.routeros.command`, `ansible.posix` (already declared in `requirements.yml`), existing `routeros_dhcp` and `routeros_poe` roles.
 
@@ -347,12 +347,14 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-1 asse
 
 ```yaml
     - name: Phase 2 — set DHCP option to armbian-nfsroot
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: enable_netboot.yml
-      vars:
-        board_mac: "{{ board_mac }}"
-        netboot_mode: nfsroot
+      block:
+        - name: Phase 2 — include routeros_dhcp enable_netboot
+          ansible.builtin.include_role:
+            name: routeros_dhcp
+            tasks_from: enable_netboot.yml
+          vars:
+            board_mac: "{{ board_mac }}"
+            netboot_mode: nfsroot
       delegate_to: "{{ _routeros_target }}"
 
     - name: Phase 2 — PoE cycle into nfsroot
@@ -448,11 +450,13 @@ Add these tasks at the end of the existing `tasks:` list (after the phase-2 bloc
 
 ```yaml
     - name: Phase 3 — clear DHCP option
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: disable_netboot.yml
-      vars:
-        board_mac: "{{ board_mac }}"
+      block:
+        - name: Phase 3 — include routeros_dhcp disable_netboot
+          ansible.builtin.include_role:
+            name: routeros_dhcp
+            tasks_from: disable_netboot.yml
+          vars:
+            board_mac: "{{ board_mac }}"
       delegate_to: "{{ _routeros_target }}"
 
     - name: Phase 3 — PoE cycle back to disk
@@ -560,11 +564,13 @@ The shape becomes:
           when: leave_state | bool
 
         - name: Cleanup — clear DHCP option on RouterOS
-          ansible.builtin.include_role:
-            name: routeros_dhcp
-            tasks_from: disable_netboot.yml
-          vars:
-            board_mac: "{{ board_mac }}"
+          block:
+            - name: Cleanup — include routeros_dhcp disable_netboot
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: disable_netboot.yml
+              vars:
+                board_mac: "{{ board_mac }}"
           delegate_to: "{{ _routeros_target }}"
           when: not (leave_state | bool)
 
