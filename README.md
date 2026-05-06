@@ -92,6 +92,7 @@ differs, a per-strategy task file.
 | — | `enable_netboot.yml` | Ad-hoc | Boots a board into NFS root (read-only) for diagnostics or maintenance. |
 | — | `disable_netboot.yml` | Ad-hoc | Reverts a board to local disk boot. |
 | — | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream RouterOS PoE switch port. |
+| — | `test_hardware_e2e.yml` | Ad-hoc | Repeatable hardware regression test for the PXE-first boot-mode invariant. Drives a single board (manually-flashed custom Armbian image) through disk → nfsroot → disk via RouterOS DHCP toggle and PoE cycles, asserting `findmnt /` reports the expected source at each transition. Diagnostic bundle (cmdline, route, lsblk, U-Boot deb version, journal) emitted at every checkpoint. `-e leave_state=true` preserves the failure state for forensic debugging. |
 
 ## Installation
 
@@ -470,6 +471,7 @@ Use `-e poe_cycle_delay=<seconds>` to override the off→on dwell (default 5s).
 | — | `enable_netboot.yml --limit <host> -e netboot_mode=nfsroot` | Ad-hoc diskless boot |
 | — | `disable_netboot.yml --limit <host>` | Ad-hoc revert to disk |
 | — | `poe_control.yml --limit <host> -e poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
+| — | `test_hardware_e2e.yml --limit <host>` | Ad-hoc PXE-first hardware E2E test (`-e leave_state=true` to preserve failure state) |
 
 ## Testing
 
