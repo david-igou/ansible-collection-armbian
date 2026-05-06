@@ -164,6 +164,25 @@ ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e poe_action=cycl
 
 # Ad-hoc: power off all boards
 ansible-playbook playbooks/poe_control.yml --limit boards -e poe_action=off
+
+# Ad-hoc hardware E2E test: toggle a board through disk → nfsroot → disk
+# and assert each transition (post manually-flashed SD card).
+ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
+
+# Same, preserving the failure state for forensic debugging if a phase fails:
+ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
+
+# Same, with a USB-UART capturing serial console to /tmp/serial-<host>.log
+# on the serial host. Defaults to localhost (whatever connection the
+# inventory's localhost entry uses) at /dev/ttyUSB0 @ 1500000 baud
+# (Rockchip current). Serial host needs `socat` installed and the
+# connection user needs passwordless sudo. Override host/device/baud
+# independently:
+#   -e serial_host=<inventory-host>   if the dongle is on a separate machine
+#   -e serial_device=/dev/ttyUSB1     non-default device path
+#   -e serial_baud=115200             Allwinner / non-Rockchip baud
+# The diagnostic bundle prints the last 200 serial lines at every checkpoint.
+ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 ```
 
 ## Inventory: documentation vs. real
@@ -376,6 +395,7 @@ no NFS client on the control node, rootless-EE-friendly.
 | `enable/disable_netboot.yml` | **netboot server** (pxelinux.cfg over SSH) + RouterOS (DHCP) |
 | `reprovision.yml` | RouterOS (DHCP) + **boards** (flash via SSH into NFS root) |
 | `poe_control.yml` | **boards** (delegated to `routeros_switches` via `poe_switch` hostvar) |
+| `test_hardware_e2e.yml` | **boards** (single-board via --limit) + RouterOS (DHCP toggle, delegated) + RouterOS switch (PoE cycle, delegated to `poe_switch`) |
 
 ## SBC ecosystem reality: variation is the rule
 

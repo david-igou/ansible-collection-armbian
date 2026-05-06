@@ -1,0 +1,89 @@
+---
+# Gathers a fixed set of operator-readable diagnostics from the target
+# board and prints them as one debug message at the call site. Each
+# gather command uses failed_when: false / changed_when: false so a
+# missing tool (e.g., journalctl on a future minimal NFS rootfs) does
+# not abort the test. Imported at every verify checkpoint in
+# test_hardware_e2e.yml.
+#
+# Required: ansible.builtin.setup must have been called in the parent
+# play before this task file runs (we read ansible_mounts).
+
+- name: Diagnostic bundle — findmnt root source
+  ansible.builtin.command: findmnt -no SOURCE /
+  changed_when: false
+  failed_when: false
+  register: _diag_findmnt
+
+- name: Diagnostic bundle — kernel cmdline
+  ansible.builtin.slurp:
+    src: /proc/cmdline
+  register: _diag_cmdline
+  failed_when: false
+
+- name: Diagnostic bundle — IPv4 routes
+  ansible.builtin.command: ip -4 route
+  changed_when: false
+  failed_when: false
+  register: _diag_route
+
+- name: Diagnostic bundle — DNS resolver config
+  ansible.builtin.slurp:
+    src: /etc/resolv.conf
+  register: _diag_resolv
+  failed_when: false
+
+- name: Diagnostic bundle — block devices
+  ansible.builtin.command: lsblk -no NAME,SIZE,TYPE,MOUNTPOINT
+  changed_when: false
+  failed_when: false
+  register: _diag_lsblk
+
+- name: Diagnostic bundle — installed U-Boot debs
+  ansible.builtin.command: dpkg-query -W -f='${Package} ${Version}\n' linux-u-boot-*
+  changed_when: false
+  failed_when: false
+  register: _diag_uboot
+
+- name: Diagnostic bundle — last 100 journal lines this boot
+  ansible.builtin.command: journalctl -b 0 --no-pager -n 100
+  changed_when: false
+  failed_when: false
+  register: _diag_journal
+
+# Slurped from the serial host (the machine running socat), not the
+# board. The log is owned root:root mode 0644 (pre-created in
+# test_hardware_e2e.yml's start block) so no become is needed.
+# failed_when: false so missing/empty log doesn't abort.
+- name: Diagnostic bundle — read recent serial log (serial host)
+  ansible.builtin.slurp:
+    src: "{{ _serial_log | default('/tmp/serial-' ~ inventory_hostname ~ '.log') }}"
+  delegate_to: "{{ serial_host | default('localhost') }}"
+  run_once: true
+  register: _diag_serial
+  failed_when: false
+  when: capture_serial | default(false) | bool
+
+- name: Diagnostic bundle — print
+  ansible.builtin.debug:
+    msg:
+      - "==== diagnostic bundle: {{ _diag_phase | default('unknown') }} ===="
+      - "findmnt /:        {{ _diag_findmnt.stdout | default('(unavailable)') }}"
+      - "rootfs (facts):   {{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                            | map(attribute='device') | first | default('?') }}
+                            ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                              | map(attribute='fstype') | first | default('?') }})"
+      - "/proc/cmdline:    {{ _diag_cmdline.content | default('') | b64decode | trim }}"
+      - "ip -4 route:      {{ _diag_route.stdout_lines | default([]) }}"
+      - "resolv.conf:      {{ _diag_resolv.content | default('') | b64decode | trim }}"
+      - "lsblk:            {{ _diag_lsblk.stdout_lines | default([]) }}"
+      - "linux-u-boot-*:   {{ _diag_uboot.stdout_lines | default(['(none installed)']) }}"
+      - "journal (b 0):    {{ _diag_journal.stdout_lines | default([]) }}"
+
+- name: Diagnostic bundle — print serial tail (last 200 lines)
+  ansible.builtin.debug:
+    msg: "{{ ['==== serial tail (' ~ (serial_device | default('/dev/ttyUSB0'))
+              ~ ' @ ' ~ (serial_baud | default(1500000)) ~ 'b): '
+              ~ (_diag_phase | default('unknown')) ~ ' ===='] +
+             (_diag_serial.content | default('') | b64decode).split('\n')[-200:] }}"
+  when: capture_serial | default(false) | bool
