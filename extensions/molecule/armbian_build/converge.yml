@@ -1,0 +1,29 @@
+---
+# Real Armbian build for orangepi5pro on `current`, with the
+# pre_config_uboot_target__orangepi5pro_pxe_first userpatch baked into
+# the U-Boot binary so the produced image PXE-boots first by default.
+# Wall time: tens of minutes to hours depending on cluster IO.
+
+- name: Converge — build orangepi5pro Armbian image with PXE-first U-Boot
+  hosts: all
+  gather_facts: true
+  become: false
+
+  tasks:
+    - name: Apply armbian_build role
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.armbian_build
+      vars:
+        armbian_build_board: orangepi5pro
+        armbian_build_branch: current
+        armbian_build_release: bookworm
+        armbian_build_cache_dir: /var/lib/armbian_build
+        armbian_build_output_dir: /var/lib/armbian_build/output
+        armbian_build_userpatches:
+          - dest: "config/boards/orangepi5pro.conf"
+            content: |
+              function pre_config_uboot_target__orangepi5pro_pxe_first() {
+                  declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                  sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                      include/configs/rockchip-common.h
+              }

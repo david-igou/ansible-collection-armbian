@@ -1,0 +1,85 @@
+---
+# Smoke-test the converged builder. Asserts:
+#   - Exactly one .img.xz larger than 100 MiB landed in the per-board
+#     output directory and is a valid xz archive.
+#   - manifest.json parses and carries the expected schema fields.
+#   - The userpatch file lives at the documented path inside the build
+#     checkout and contains the expected hook function name.
+
+- name: Verify
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    _output_dir: /var/lib/armbian_build/output/orangepi5pro
+    _userpatch_path: /var/lib/armbian_build/build/userpatches/config/boards/orangepi5pro.conf
+
+  tasks:
+    - name: Find the produced .img.xz
+      ansible.builtin.find:
+        paths: "{{ _output_dir }}"
+        patterns: "(?i)Armbian.*orangepi5pro.*\\.img\\.xz$"
+        use_regex: true
+      register: _image_files
+
+    - name: Assert exactly one .img.xz was produced and is non-trivially sized
+      ansible.builtin.assert:
+        that:
+          - _image_files.files | length == 1
+          - _image_files.files[0].size > (100 * 1024 * 1024)
+        fail_msg: >-
+          Expected exactly one .img.xz larger than 100 MiB in {{ _output_dir }};
+          found {{ _image_files.files | length }}
+          ({{ _image_files.files | map(attribute='path') | list }})
+
+    - name: Test image with `xz -t`
+      ansible.builtin.command:
+        cmd: "xz -t {{ _image_files.files[0].path }}"
+      changed_when: false
+
+    - name: Read manifest.json
+      ansible.builtin.slurp:
+        src: "{{ _output_dir }}/manifest.json"
+      register: _manifest_raw
+
+    - name: Parse manifest and assert schema
+      vars:
+        _manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - _manifest.image_filename is string
+          - _manifest.image_filename | length > 0
+          - _manifest.armbian_build_ref is string
+          - _manifest.armbian_build_ref | length > 0
+          - _manifest.patch_hash is string
+          - _manifest.patch_hash | length > 0
+        fail_msg: "manifest.json missing expected fields: {{ _manifest }}"
+
+    - name: Stat the userpatch file
+      ansible.builtin.stat:
+        path: "{{ _userpatch_path }}"
+      register: _userpatch_stat
+
+    - name: Assert userpatch file exists
+      ansible.builtin.assert:
+        that:
+          - _userpatch_stat.stat.exists
+          - _userpatch_stat.stat.isreg
+
+    - name: Slurp the userpatch contents
+      ansible.builtin.slurp:
+        src: "{{ _userpatch_path }}"
+      register: _userpatch_raw
+
+    - name: Assert userpatch contents include the expected hook function
+      ansible.builtin.assert:
+        that:
+          - "'pre_config_uboot_target__orangepi5pro_pxe_first' in (_userpatch_raw.content | b64decode)"
+
+    - name: Print verification summary
+      ansible.builtin.debug:
+        msg:
+          - "Image: {{ _image_files.files[0].path }}"
+          - "Size: {{ (_image_files.files[0].size / 1024 / 1024) | round(1) }} MiB"
+          - "Manifest: {{ _manifest_raw.content | b64decode | from_json }}"
