@@ -51,6 +51,18 @@
   failed_when: false
   register: _diag_journal
 
+# Slurped from the control node, not the board. The log is owned root:root
+# mode 0644 (pre-created in test_hardware_e2e.yml's start block) so no
+# become is needed. failed_when: false so missing/empty log doesn't abort.
+- name: Diagnostic bundle — read recent serial log (control node)
+  ansible.builtin.slurp:
+    src: "{{ _serial_log | default('/tmp/serial-' ~ inventory_hostname ~ '.log') }}"
+  delegate_to: localhost
+  run_once: true
+  register: _diag_serial
+  failed_when: false
+  when: capture_serial | default(false) | bool
+
 - name: Diagnostic bundle — print
   ansible.builtin.debug:
     msg:
@@ -66,3 +78,11 @@
       - "lsblk:            {{ _diag_lsblk.stdout_lines | default([]) }}"
       - "linux-u-boot-*:   {{ _diag_uboot.stdout_lines | default(['(none installed)']) }}"
       - "journal (b 0):    {{ _diag_journal.stdout_lines | default([]) }}"
+
+- name: Diagnostic bundle — print serial tail (last 200 lines)
+  ansible.builtin.debug:
+    msg: "{{ ['==== serial tail (' ~ (serial_device | default('/dev/ttyUSB0'))
+              ~ ' @ ' ~ (serial_baud | default(1500000)) ~ 'b): '
+              ~ (_diag_phase | default('unknown')) ~ ' ===='] +
+             (_diag_serial.content | default('') | b64decode).split('\n')[-200:] }}"
+  when: capture_serial | default(false) | bool

@@ -171,6 +171,13 @@ ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
 
 # Same, preserving the failure state for forensic debugging if a phase fails:
 ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
+
+# Same, with a USB-UART on the control node capturing serial console to
+# /tmp/serial-<host>.log (default /dev/ttyUSB0 @ 1500000 baud — Rockchip
+# current). Override device/baud with -e serial_device=, -e serial_baud=
+# (e.g. 115200 for Allwinner). The diagnostic bundle prints the last 200
+# serial lines at every checkpoint.
+ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 ```
 
 ## Inventory: documentation vs. real

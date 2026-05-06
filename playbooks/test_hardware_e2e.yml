@@ -22,17 +22,31 @@
 # Pass `-e leave_state=true` to preserve the failure state for forensic
 # debugging.
 #
+# Optional serial capture: pass `-e capture_serial=true` to spawn a
+# background socat capture from a USB-UART on the control node. Defaults
+# to /dev/ttyUSB0 at 1500000 baud (Rockchip current). Override with
+# `-e serial_device=/dev/ttyUSB1 -e serial_baud=115200` for Allwinner or
+# alternate dongle assignment. The log lands at /tmp/serial-<host>.log on
+# the control node and a tail is printed at every diagnostic checkpoint.
+# Best-effort: socat-start failures abort the play (so the operator
+# notices), but slurp failures inside the diagnostic bundle do not.
+#
 # Usage:
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
+#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 
 - name: Hardware E2E PXE-first toggle test
   hosts: boards
   gather_facts: false
   vars:
     leave_state: false
+    capture_serial: false
+    serial_device: /dev/ttyUSB0
+    serial_baud: 1500000
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
+    _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
 
   tasks:
     - name: Pre-flight — assert exactly one board targeted
@@ -82,6 +96,49 @@
       register: _opt_probe
       changed_when: false
       failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
+
+    # Background serial capture on the control node. Pre-create the log
+    # file as root with mode 0644 so socat (also root, since the FTDI
+    # dongle is root:games) appends to a world-readable file — that
+    # lets the diagnostic_bundle slurp run without become later. socat
+    # is started with async/poll=0 (Ansible's fire-and-forget pattern);
+    # the always-block kills it by log-path-matching pkill.
+    - name: Pre-flight — start serial capture
+      when: capture_serial | bool
+      delegate_to: localhost
+      run_once: true
+      become: true
+      block:
+        - name: Serial — assert socat is available on the control node
+          ansible.builtin.command:
+            cmd: which socat
+          changed_when: false
+
+        - name: Serial — assert serial device exists
+          ansible.builtin.stat:
+            path: "{{ serial_device }}"
+          register: _serial_dev_stat
+          failed_when: not _serial_dev_stat.stat.exists
+
+        - name: Serial — truncate log file and ensure world-readable
+          ansible.builtin.copy:
+            dest: "{{ _serial_log }}"
+            content: ""
+            mode: "0644"
+
+        - name: Serial — configure tty line discipline
+          ansible.builtin.command:
+            cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
+          changed_when: true
+
+        - name: Serial — start socat capture in background
+          ansible.builtin.command:
+            cmd: >-
+              socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0
+              OPEN:{{ _serial_log }},append
+          async: 86400
+          poll: 0
+          changed_when: true
 
     - name: Test phases (cleanup runs in always)
       block:
@@ -300,3 +357,19 @@
               DHCP option. Investigate RouterOS lease state for
               {{ board_mac }} and the linux-u-boot-* deb on disk.
           when: not (leave_state | bool)
+
+        # Stop serial capture last so the cleanup phase's reboots are
+        # captured. The log file persists at {{ _serial_log }} on the
+        # control node regardless of leave_state — it's an artifact, not
+        # device state. failed_when: false because pkill exits 1 when
+        # nothing matched (the start block may have failed before socat
+        # spawned).
+        - name: Cleanup — stop serial capture
+          ansible.builtin.command:
+            cmd: pkill -f "socat.*{{ _serial_log }}"
+          delegate_to: localhost
+          run_once: true
+          become: true
+          changed_when: false
+          failed_when: false
+          when: capture_serial | bool
