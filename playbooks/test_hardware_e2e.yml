@@ -47,6 +47,7 @@
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
   tasks:
     - name: Pre-flight — assert exactly one board targeted
@@ -101,8 +102,11 @@
     # file as root with mode 0644 so socat (also root, since the FTDI
     # dongle is root:games) appends to a world-readable file — that
     # lets the diagnostic_bundle slurp run without become later. socat
-    # is started with async/poll=0 (Ansible's fire-and-forget pattern);
-    # the always-block kills it by log-path-matching pkill.
+    # is started with async/poll=0 (Ansible's fire-and-forget pattern)
+    # wrapped in a shell that records the post-exec PID to {{ _serial_pid }};
+    # the always-block reads that pidfile and kills the recorded PID.
+    # Pidfile-based cleanup is portable to minimal control nodes (UBI,
+    # alpine, distroless) that ship without pkill/pgrep.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
       delegate_to: localhost
@@ -131,11 +135,12 @@
             cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
           changed_when: true
 
-        - name: Serial — start socat capture in background
-          ansible.builtin.command:
-            cmd: >-
-              socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0
-              OPEN:{{ _serial_log }},append
+        # `echo $$` records the shell's own PID, which `exec` then
+        # replaces with socat — so the pidfile contains socat's PID.
+        - name: Serial — start socat capture in background (pidfile-tracked)
+          ansible.builtin.shell: |
+            echo $$ > {{ _serial_pid }}
+            exec socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0 OPEN:{{ _serial_log }},append
           async: 86400
           poll: 0
           changed_when: true
@@ -361,15 +366,17 @@
         # Stop serial capture last so the cleanup phase's reboots are
         # captured. The log file persists at {{ _serial_log }} on the
         # control node regardless of leave_state — it's an artifact, not
-        # device state. failed_when: false because pkill exits 1 when
-        # nothing matched (the start block may have failed before socat
-        # spawned).
+        # device state. The pidfile may be missing (start block failed
+        # before socat spawned) and the recorded PID may already be dead
+        # (socat exited on its own); both cases are non-failures.
         - name: Cleanup — stop serial capture
-          ansible.builtin.command:
-            cmd: pkill -f "socat.*{{ _serial_log }}"
+          ansible.builtin.shell: |
+            if [ -f {{ _serial_pid }} ]; then
+              kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
+              rm -f {{ _serial_pid }}
+            fi
           delegate_to: localhost
           run_once: true
           become: true
           changed_when: false
-          failed_when: false
           when: capture_serial | bool
