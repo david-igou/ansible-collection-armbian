@@ -1,8 +1,18 @@
 ---
-# Run armbian/build's compile.sh in Docker mode, locate the produced
-# .img.xz (kernel version is unknown ahead of time, so glob+age-filter),
-# and move both the image and its .sha sidecar into the per-board output
-# directory. Async/poll keeps long builds from tying up the SSH session.
+# Run armbian/build's compile.sh in Docker mode per the documented
+# approach (https://docs.armbian.com/Developer-Guide_Building-with-Docker/).
+# compile.sh auto-delegates to Docker when run as a non-root user with
+# Docker access (cli_standard_relaunch_docker_or_sudo in the build
+# command's pre_run). The container manages named volumes for cache/ccache
+# and bind-mounts ./userpatches and ./output from the build directory.
+#
+# IMPORTANT: This task runs with become: false so that compile.sh sees a
+# non-root EUID and triggers Docker auto-delegation. The ansible_user on
+# the builder host MUST be in the `docker` group.
+#
+# Locate the produced .img.xz (kernel version is unknown ahead of time,
+# so regex+age-filter), and move both the image and its .sha sidecar into
+# the per-board output directory.
 
 - name: Assert armbian_build_compile_args values are shell-token-safe
   ansible.builtin.assert:
@@ -22,13 +32,15 @@
 - name: Build Armbian image with userpatches applied
   ansible.builtin.command:
     cmd: >-
-      ./compile.sh docker
+      ./compile.sh
       BOARD={{ armbian_build_board }}
       BRANCH={{ armbian_build_branch }}
       RELEASE={{ armbian_build_release }}
-      USERPATCHES_DIR={{ armbian_build_cache_dir }}/userpatches
       {% for k, v in armbian_build_compile_args.items() %}{{ k }}={{ v }} {% endfor %}
     chdir: "{{ armbian_build_cache_dir }}/build"
+  become: false
+  environment:
+    GIT_CONFIG_GLOBAL: "{{ armbian_build_cache_dir }}/.gitconfig"
   async: "{{ armbian_build_timeout }}"
   poll: 30
   changed_when: true
@@ -36,7 +48,8 @@
 - name: Locate the produced .img.xz from this run
   ansible.builtin.find:
     paths: "{{ armbian_build_cache_dir }}/build/output/images"
-    patterns: "Armbian_*_{{ armbian_build_board }}_{{ armbian_build_release }}_{{ armbian_build_branch }}_*.img.xz"
+    patterns: "(?i)Armbian.*{{ armbian_build_board }}.*{{ armbian_build_release }}.*{{ armbian_build_branch }}.*\\.img\\.xz$"
+    use_regex: true
     age: -10m
   register: _produced_images
 

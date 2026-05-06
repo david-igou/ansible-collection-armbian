@@ -1,17 +1,23 @@
 ---
-# Ensure the cache, userpatches, and output directories exist; clone or
-# update armbian/build to the pinned ref. The build cache (cache/,
-# output/ inside the checkout) survives across runs so kernel build
-# artifacts can be reused for incremental builds.
+# Ensure the cache and output directories exist; clone or update
+# armbian/build to the pinned ref. The build's Docker named volumes
+# (armbian-cache, armbian-ccache) persist across runs for incremental
+# builds; the role only manages the checkout and output directories.
+#
+# All file operations run as the ansible_user (become: false) because
+# compile.sh requires user ownership of the build tree for Docker
+# auto-delegation. Only directory creation uses become (in case the
+# parent path like /var/lib/ is root-owned).
 
-- name: Ensure cache, userpatches, and output directories exist
+- name: Ensure cache and output directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    owner: "{{ armbian_build_user | default(ansible_user, true) | default(ansible_ssh_user, true) }}"
     mode: "0755"
+  become: true
   loop:
     - "{{ armbian_build_cache_dir }}"
-    - "{{ armbian_build_cache_dir }}/userpatches"
     - "{{ armbian_build_output_dir }}"
 
 - name: Clone or update armbian/build at the pinned ref
@@ -19,6 +25,7 @@
     repo: https://github.com/armbian/build.git
     dest: "{{ armbian_build_cache_dir }}/build"
     version: "{{ armbian_build_ref }}"
-    force: false                   # preserve untracked files (cache/, output/)
+    force: false
     update: true
-    depth: 1                       # shallow; we only need the pinned ref's tree
+    depth: 1
+  become: false

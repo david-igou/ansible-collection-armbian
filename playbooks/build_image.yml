@@ -30,6 +30,14 @@
   gather_facts: false
   vars:
     build_userpatches:
+      orangepi5:
+        - dest: "config/boards/orangepi5.conf"
+          content: |
+            function pre_config_uboot_target__orangepi5_pxe_first() {
+                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                    include/configs/rockchip-common.h
+            }
       orangepi5pro:
         - dest: "config/boards/orangepi5pro.conf"
           content: |
