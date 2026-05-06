@@ -222,7 +222,7 @@ Create the playbook with header comment, the play header, and pre-flight asserti
       run_once: true
       register: _opt_probe
       changed_when: false
-      failed_when: "'armbian-nfsroot' not in (_opt_probe.stdout_lines | join(' '))"
+      failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
 ```
 
 - [ ] **Step 2: Lint and syntax-check**
