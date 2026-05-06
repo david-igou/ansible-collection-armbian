@@ -1,0 +1,102 @@
+---
+# Builds custom Armbian images for boards opted in via
+# host_board_overrides.armbian_build_enabled, then publishes the
+# resulting artifact directories to the netboot server's HTTP export.
+#
+# Two plays:
+#   1. hosts: armbian_builders — invoke the armbian_build role per
+#      unique opted-in board.
+#   2. hosts: netboot_server — synchronize each <board>/ directory
+#      from the builder into nfs_assets_export/images/<board>/.
+#
+# Prerequisites for the publish play:
+#   - The builder's SSH user must have an SSH key authorised on the
+#     netboot_server as a user that exists there (typically ansible_user).
+#   - That user must have passwordless sudo on the netboot_server
+#     (the publish task uses rsync_path: 'sudo rsync' so the receive
+#     side writes as root, matching the directory created by the
+#     become: true file: task above it).
+#
+# The PXE-first userpatches table is playbook data, not role data —
+# the armbian_build role itself is intent-agnostic. Add a new board by
+# extending build_userpatches with another entry and setting
+# host_board_overrides.armbian_build_enabled: true on its hosts.
+#
+# Usage:
+#   ansible-playbook playbooks/build_image.yml
+
+- name: Build custom Armbian images on the builder host
+  hosts: armbian_builders
+  gather_facts: false
+  vars:
+    build_userpatches:
+      orangepi5:
+        - dest: "config/boards/orangepi5.conf"
+          content: |
+            function pre_config_uboot_target__orangepi5_pxe_first() {
+                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                    include/configs/rockchip-common.h
+            }
+      orangepi5pro:
+        - dest: "config/boards/orangepi5pro.conf"
+          content: |
+            function pre_config_uboot_target__orangepi5pro_pxe_first() {
+                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                    include/configs/rockchip-common.h
+            }
+  pre_tasks:
+    - name: Load board configs for board name lookup
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/bootloader/vars/boards.yml"
+        name: _bootloader_vars
+
+    - name: Resolve build targets from opted-in hosts
+      ansible.builtin.set_fact:
+        _build_targets: >-
+          {{ groups['boards']
+             | map('extract', hostvars)
+             | selectattr('host_board_overrides.armbian_build_enabled', 'defined')
+             | selectattr('host_board_overrides.armbian_build_enabled')
+             | map(attribute='board_model')
+             | unique
+             | map('extract', _bootloader_vars.board_configs, 'armbian_board_name')
+             | list }}
+
+    - name: Report build targets
+      ansible.builtin.debug:
+        msg: "Will build images for: {{ _build_targets }}"
+
+  tasks:
+    - name: Build image per opted-in board
+      ansible.builtin.include_role:
+        name: armbian_build
+      vars:
+        armbian_build_board: "{{ item }}"
+        armbian_build_userpatches: "{{ build_userpatches[item] }}"
+      loop: "{{ _build_targets }}"
+
+- name: Publish images to the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  vars:
+    _builder: "{{ groups['armbian_builders'][0] }}"
+  tasks:
+    - name: Ensure per-board image directory exists
+      ansible.builtin.file:
+        path: "{{ nfs_assets_export }}/images/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ hostvars[_builder]._build_targets }}"
+
+    - name: Pull image + manifest from builder to netboot server
+      ansible.posix.synchronize:
+        src: "{{ hostvars[_builder].armbian_build_output_dir }}/{{ item }}/"
+        dest: "{{ nfs_assets_export }}/images/{{ item }}/"
+        mode: pull
+        delete: false
+        rsync_path: "sudo rsync"
+      delegate_to: "{{ _builder }}"
+      loop: "{{ hostvars[_builder]._build_targets }}"

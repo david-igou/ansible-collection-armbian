@@ -1,0 +1,21 @@
+---
+# Compute the inputs that drive the rebuild decision and seed the
+# eventual manifest. patch_hash is sha256 of the canonical-JSON-encoded
+# armbian_build_userpatches list — pure function of what the caller
+# passed in.
+#
+# The five decision fields (patch_hash, armbian_build_ref, board,
+# branch, release) are exactly what check_manifest.yml will compare.
+
+- name: Compute patch_hash from userpatches
+  ansible.builtin.set_fact:
+    _patch_hash: "sha256:{{ armbian_build_userpatches | to_json(sort_keys=true) | hash('sha256') }}"
+
+- name: Assemble manifest decision-fields fact
+  ansible.builtin.set_fact:
+    _manifest_inputs:
+      patch_hash: "{{ _patch_hash }}"
+      armbian_build_ref: "{{ armbian_build_ref }}"
+      board: "{{ armbian_build_board }}"
+      branch: "{{ armbian_build_branch }}"
+      release: "{{ armbian_build_release }}"

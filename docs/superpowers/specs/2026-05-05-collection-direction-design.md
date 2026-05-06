@@ -54,7 +54,7 @@ isn't reason enough to churn the namespace.
   with the same patch + ref is a no-op.
 - **Consumption:** for opted-in boards, override
   `armbian_image_urls[<board_model>]` in inventory to point at the local
-  `image_server_url/images/<board>/<file>.img.xz`. `nfs_content` and
+  `image_server_url/<board>/<file>.img.xz`. `nfs_content` and
   `reprovision` consume it through the existing path with no role changes.
 
 ## v1 immediate deliverables (this PR)

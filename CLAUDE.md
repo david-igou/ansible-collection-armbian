@@ -486,7 +486,7 @@ Do not add per-board state to `group_vars/`.
    `vars/pxe_first_boards.yml` table, set
    `host_board_overrides.armbian_build_enabled: true` on each host of that
    model, and override `armbian_image_urls[<board_model>]` to the local
-   `image_server_url/images/<board>/<file>.img.xz` URL the role publishes.
+   `image_server_url/<board>/<file>.img.xz` URL the role publishes.
    `populate_nfs_content.yml` and `reprovision.yml` consume the custom image
    through the existing path. Run `playbooks/build_image.yml` against
    `armbian_builders` to (re)produce the image whenever the patch table or

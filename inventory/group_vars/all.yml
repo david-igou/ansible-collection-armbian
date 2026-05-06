@@ -52,6 +52,14 @@ armbian_image_urls:
   rock-5a: "https://armbian.chi.auroradev.org/dl/rock-5a/archive/Armbian_26.2.1_Rock-5a_noble_current_6.18.15_minimal.img.xz"
   orange-pi-zero-3: "https://armbian.chi.auroradev.org/dl/orangepizero3/archive/Armbian_26.2.1_Orangepizero3_noble_current_6.18.8_minimal.img.xz"
 
+# ── Custom build override (for boards built via playbooks/build_image.yml) ──
+# After a successful build, override the upstream URL to point at the locally
+# published copy on the netboot server. The exact filename includes the
+# version + kernel revision; copy it from the produced manifest.json.
+#
+#   armbian_image_urls:
+#     orange-pi-5-pro: "{{ image_server_url }}/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
+
 # Apt suite used to validate U-Boot package availability in
 # nfs_content/preflight.yml. Armbian's apt repo organises packages under
 # Debian suite directories; package contents are independent of OS suite

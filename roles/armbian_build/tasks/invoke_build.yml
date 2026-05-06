@@ -1,0 +1,92 @@
+---
+# Run armbian/build's compile.sh in Docker mode per the documented
+# approach (https://docs.armbian.com/Developer-Guide_Building-with-Docker/).
+# compile.sh auto-delegates to Docker when run as a non-root user with
+# Docker access (cli_standard_relaunch_docker_or_sudo in the build
+# command's pre_run). The container manages named volumes for cache/ccache
+# and bind-mounts ./userpatches and ./output from the build directory.
+#
+# IMPORTANT: This task runs with become: false so that compile.sh sees a
+# non-root EUID and triggers Docker auto-delegation. The ansible_user on
+# the builder host MUST be in the `docker` group.
+#
+# Locate the produced .img.xz (kernel version is unknown ahead of time,
+# so regex+age-filter), and move both the image and its .sha sidecar into
+# the per-board output directory.
+
+- name: Assert armbian_build_compile_args values are shell-token-safe
+  ansible.builtin.assert:
+    that:
+      - "' ' not in (item.value | string)"
+      - "'\"' not in (item.value | string)"
+      - "\"'\" not in (item.value | string)"
+    fail_msg: >-
+      armbian_build_compile_args[{{ item.key }}]={{ item.value }} contains
+      whitespace or quotes; values must be single shell tokens since they
+      are passed via command (not shell). Re-encode without spaces or
+      quote characters.
+  loop: "{{ armbian_build_compile_args | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Build Armbian image with userpatches applied
+  ansible.builtin.command:
+    cmd: >-
+      ./compile.sh
+      BOARD={{ armbian_build_board }}
+      BRANCH={{ armbian_build_branch }}
+      RELEASE={{ armbian_build_release }}
+      {% for k, v in armbian_build_compile_args.items() %}{{ k }}={{ v }} {% endfor %}
+    chdir: "{{ armbian_build_cache_dir }}/build"
+  become: false
+  environment:
+    GIT_CONFIG_GLOBAL: "{{ armbian_build_cache_dir }}/.gitconfig"
+  async: "{{ armbian_build_timeout }}"
+  poll: 30
+  changed_when: true
+
+- name: Locate the produced .img.xz from this run
+  ansible.builtin.find:
+    paths: "{{ armbian_build_cache_dir }}/build/output/images"
+    patterns: "(?i)Armbian.*{{ armbian_build_board }}.*{{ armbian_build_release }}.*{{ armbian_build_branch }}.*\\.img\\.xz$"
+    use_regex: true
+    age: -10m
+  register: _produced_images
+
+- name: Assert exactly one image was produced
+  ansible.builtin.assert:
+    that: _produced_images.files | length == 1
+    fail_msg: >-
+      Expected exactly one .img.xz produced for
+      {{ armbian_build_board }}/{{ armbian_build_release }}/{{ armbian_build_branch }},
+      found {{ _produced_images.files | length }}
+
+- name: Set produced image filename
+  ansible.builtin.set_fact:
+    _image_filename: "{{ _produced_images.files[0].path | basename }}"
+
+- name: Ensure per-board output directory exists
+  ansible.builtin.file:
+    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}"
+    state: directory
+    mode: "0755"
+
+- name: Move produced image into the per-board output directory
+  ansible.builtin.command:
+    cmd: >-
+      mv {{ _produced_images.files[0].path }}
+         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}
+  changed_when: true
+
+- name: Stat the .sha sidecar (may not exist depending on COMPRESS_OUTPUTIMAGE)
+  ansible.builtin.stat:
+    path: "{{ _produced_images.files[0].path }}.sha"
+  register: _sha_stat
+
+- name: Move the .sha sidecar if present
+  ansible.builtin.command:
+    cmd: >-
+      mv {{ _produced_images.files[0].path }}.sha
+         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
+  changed_when: true
+  when: _sha_stat.stat.exists

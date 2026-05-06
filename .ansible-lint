@@ -17,7 +17,9 @@ skip_list:
 # Declare external collection modules so syntax-check passes without
 # requiring the collections to be installed locally.
 mock_modules:
+  - ansible.posix.authorized_key
   - ansible.posix.mount
+  - ansible.posix.synchronize
   - community.routeros.command
   - community.routeros.api
 
