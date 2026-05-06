@@ -23,11 +23,22 @@
 # debugging.
 #
 # Optional serial capture: pass `-e capture_serial=true` to spawn a
-# background socat capture from a USB-UART on the control node. Defaults
-# to /dev/ttyUSB0 at 1500000 baud (Rockchip current). Override with
-# `-e serial_device=/dev/ttyUSB1 -e serial_baud=115200` for Allwinner or
-# alternate dongle assignment. The log lands at /tmp/serial-<host>.log on
-# the control node and a tail is printed at every diagnostic checkpoint.
+# background socat capture from a USB-UART on the *serial host*. The
+# serial host defaults to `localhost` (the inventory entry for it
+# determines the connection: SSH, local, etc.) and can be overridden
+# with `-e serial_host=<inventory-host>` for setups where the dongle is
+# attached to a machine that isn't the Ansible controller.
+#
+# Prerequisites on the serial host (whatever it is): `socat` installed
+# and on PATH; the user used in the connection has passwordless sudo
+# (the FTDI dongle is typically owned root:dialout/games and only root
+# can run stty/socat against it).
+#
+# Defaults to /dev/ttyUSB0 at 1500000 baud (Rockchip current). Override
+# device/baud with `-e serial_device=/dev/ttyUSB1 -e serial_baud=115200`
+# for Allwinner or alternate dongle assignment. The log lands at
+# /tmp/serial-<host>.log on the serial host and a tail is printed at
+# every diagnostic checkpoint (slurped over the same connection).
 # Best-effort: socat-start failures abort the play (so the operator
 # notices), but slurp failures inside the diagnostic bundle do not.
 #
@@ -42,6 +53,7 @@
   vars:
     leave_state: false
     capture_serial: false
+    serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
@@ -98,25 +110,21 @@
       changed_when: false
       failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
 
-    # Background serial capture on the control node. Pre-create the log
-    # file as root with mode 0644 so socat (also root, since the FTDI
-    # dongle is root:games) appends to a world-readable file — that
-    # lets the diagnostic_bundle slurp run without become later. socat
-    # is started with async/poll=0 (Ansible's fire-and-forget pattern)
-    # wrapped in a shell that records the post-exec PID to {{ _serial_pid }};
-    # the always-block reads that pidfile and kills the recorded PID.
-    # Pidfile-based cleanup is portable to minimal control nodes (UBI,
-    # alpine, distroless) that ship without pkill/pgrep.
-    #
-    # connection: local pins these tasks to the operator's machine (the
-    # box with the USB-UART). If `localhost` is also an inventory entry
-    # defined as an SSH host (e.g. mapped to a containerised control
-    # node's external host), `delegate_to: localhost` alone would SSH out
-    # rather than running in-process.
+    # Background serial capture on the serial host (the machine with
+    # the USB-UART attached). Defaults to localhost; can be overridden
+    # with -e serial_host=<inventory-host> for split-machine setups.
+    # Pre-create the log file as root with mode 0644 so socat (also
+    # root, since the FTDI dongle is typically root:dialout/games)
+    # appends to a world-readable file — that lets the diagnostic_bundle
+    # slurp run without become later. socat is started with async/poll=0
+    # (Ansible's fire-and-forget pattern) wrapped in a shell that
+    # records the post-exec PID to {{ _serial_pid }}; the always-block
+    # reads that pidfile and kills the recorded PID. Pidfile-based
+    # cleanup is portable to minimal serial hosts (UBI, alpine,
+    # distroless) that ship without pkill/pgrep.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
-      delegate_to: localhost
-      connection: local
+      delegate_to: "{{ serial_host }}"
       run_once: true
       become: true
       block:
@@ -382,8 +390,7 @@
               kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
               rm -f {{ _serial_pid }}
             fi
-          delegate_to: localhost
-          connection: local
+          delegate_to: "{{ serial_host }}"
           run_once: true
           become: true
           changed_when: false

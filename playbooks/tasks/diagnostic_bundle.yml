@@ -51,17 +51,14 @@
   failed_when: false
   register: _diag_journal
 
-# Slurped from the control node, not the board. The log is owned root:root
-# mode 0644 (pre-created in test_hardware_e2e.yml's start block) so no
-# become is needed. failed_when: false so missing/empty log doesn't abort.
-# connection: local pins this to the operator's machine — if `localhost`
-# is also an inventory SSH host, plain `delegate_to: localhost` would
-# SSH out and miss the log file.
-- name: Diagnostic bundle — read recent serial log (control node)
+# Slurped from the serial host (the machine running socat), not the
+# board. The log is owned root:root mode 0644 (pre-created in
+# test_hardware_e2e.yml's start block) so no become is needed.
+# failed_when: false so missing/empty log doesn't abort.
+- name: Diagnostic bundle — read recent serial log (serial host)
   ansible.builtin.slurp:
     src: "{{ _serial_log | default('/tmp/serial-' ~ inventory_hostname ~ '.log') }}"
-  delegate_to: localhost
-  connection: local
+  delegate_to: "{{ serial_host | default('localhost') }}"
   run_once: true
   register: _diag_serial
   failed_when: false
