@@ -18,8 +18,28 @@ jobs:
     if: github.event_name == 'pull_request'
   build-import:
     uses: ansible/ansible-content-actions/.github/workflows/build_import.yaml@46de405af31ba872a770a9b75c90121493c1cbe5 # main
+  # Inlined (instead of using ansible/ansible-content-actions/.../ansible_lint.yaml)
+  # because that reusable workflow has no hook for installing collection
+  # dependencies before lint. ansible-lint does NOT auto-install
+  # requirements.yml even with offline=false, and we no longer use
+  # mock_modules (it silently overwrites real installed modules with
+  # zero-arg stubs), so collections must be explicitly installed first.
   ansible-lint:
-    uses: ansible/ansible-content-actions/.github/workflows/ansible_lint.yaml@46de405af31ba872a770a9b75c90121493c1cbe5 # main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.14"
+      - name: Install ansible-core, ansible-lint, and collection deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core ansible-lint
+          ansible-galaxy collection install -r requirements.yml
+      - name: Run ansible-lint
+        run: ansible-lint playbooks/ roles/
   sanity:
     uses: ansible/ansible-content-actions/.github/workflows/sanity.yaml@46de405af31ba872a770a9b75c90121493c1cbe5 # main
   molecule:

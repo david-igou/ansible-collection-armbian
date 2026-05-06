@@ -14,16 +14,12 @@ skip_list:
   # deliberately shared across roles and don't use per-role prefixes.
   - var-naming[no-role-prefix]
 
-# Declare external collection modules so syntax-check passes without
-# requiring the collections to be installed locally.
-mock_modules:
-  - ansible.posix.authorized_key
-  - ansible.posix.mount
-  - ansible.posix.synchronize
-  - community.routeros.command
-  - community.routeros.api
-
+# External collections from requirements.yml (community.routeros,
+# ansible.posix, ansible.netcommon) must be installed before lint —
+# `make install` does it. We do NOT use ansible-lint's `mock_modules`
+# directive: it writes stub modules into the discovered collections
+# path on every lint run, silently overwriting the real installed
+# modules and causing later playbook runs to fail with
+# "Unsupported parameters" because the stub's argument_spec is empty.
 use_default_rules: true
-# mock_modules covers external collection deps, so offline mode works
-# without running `make install` first.
 offline: true

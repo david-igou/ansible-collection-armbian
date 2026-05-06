@@ -15,12 +15,15 @@ help: ## Show this help
 install: ## Install external collection dependencies
 	ansible-galaxy collection install -r requirements.yml
 
-lint: yamllint ansible-lint ## Run yamllint and ansible-lint
+lint: yamllint ansible-lint ## Run yamllint and ansible-lint (installs collections first)
 
 yamllint: ## Run yamllint on roles/, playbooks/, inventory/
 	yamllint -c .yamllint.yml roles/ playbooks/ inventory/
 
-ansible-lint: ## Run ansible-lint on roles/ and playbooks/
+# ansible-lint depends on install: with mock_modules removed from
+# .ansible-lint (to stop it clobbering real modules), the collections
+# referenced by the playbooks must be present at lint time.
+ansible-lint: install ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
 molecule: ## Run molecule test (SCENARIO=default PROVISIONER=podman)
