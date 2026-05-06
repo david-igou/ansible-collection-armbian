@@ -107,9 +107,16 @@
     # the always-block reads that pidfile and kills the recorded PID.
     # Pidfile-based cleanup is portable to minimal control nodes (UBI,
     # alpine, distroless) that ship without pkill/pgrep.
+    #
+    # connection: local pins these tasks to the operator's machine (the
+    # box with the USB-UART). If `localhost` is also an inventory entry
+    # defined as an SSH host (e.g. mapped to a containerised control
+    # node's external host), `delegate_to: localhost` alone would SSH out
+    # rather than running in-process.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
       delegate_to: localhost
+      connection: local
       run_once: true
       become: true
       block:
@@ -376,6 +383,7 @@
               rm -f {{ _serial_pid }}
             fi
           delegate_to: localhost
+          connection: local
           run_once: true
           become: true
           changed_when: false
