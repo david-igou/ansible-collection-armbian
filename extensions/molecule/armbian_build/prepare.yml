@@ -189,10 +189,30 @@
     # Once registered (with the F flag, which embeds the qemu binary into
     # the registration), the build container sees them already present
     # and the per-arch update-binfmts calls become no-ops.
+    #
+    # Some KubeVirt cluster nodes ship CentOS Stream 10 with the
+    # binfmt_misc kernel module unloaded and /proc/sys/fs/binfmt_misc
+    # unmounted. Without that, tonistiigi/binfmt's --install runs cleanly
+    # inside its privileged container but never persists to the host
+    # kernel — registrations vanish on container exit. Load + mount the
+    # filesystem explicitly first so the install survives.
+    - name: Load binfmt_misc kernel module
+      ansible.builtin.command:
+        cmd: modprobe binfmt_misc
+      changed_when: false
+
+    - name: Mount binfmt_misc on /proc/sys/fs/binfmt_misc
+      ansible.posix.mount:
+        path: /proc/sys/fs/binfmt_misc
+        src: binfmt_misc
+        fstype: binfmt_misc
+        state: mounted
+
     - name: Pre-register cross-architecture qemu binfmts on the host
       ansible.builtin.command:
         cmd: docker run --rm --privileged docker.io/tonistiigi/binfmt:latest --install all
       changed_when: true
+      register: _binfmt_install
 
     - name: Confirm aarch64 binfmt is registered
       ansible.builtin.stat:
@@ -202,7 +222,10 @@
     - name: Assert aarch64 binfmt registration
       ansible.builtin.assert:
         that: _aarch64_binfmt.stat.exists
-        fail_msg: "qemu-aarch64 binfmt is not registered on the host kernel — armbian/build's arch-test will fail."
+        fail_msg: >-
+          qemu-aarch64 binfmt is not registered on the host kernel — armbian/build's arch-test will fail.
+          tonistiigi/binfmt stdout: {{ _binfmt_install.stdout | default('') }}
+          stderr: {{ _binfmt_install.stderr | default('') }}
 
     - name: Verify Docker reachability as cloud-user
       ansible.builtin.command:
