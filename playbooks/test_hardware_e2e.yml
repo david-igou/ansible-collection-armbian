@@ -171,3 +171,53 @@
         ansible_password: "{{ armbian_default_password }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_become: false
+
+    - name: Phase 3 — clear DHCP option
+      block:
+        - name: Phase 3 — include routeros_dhcp disable_netboot
+          ansible.builtin.include_role:
+            name: routeros_dhcp
+            tasks_from: disable_netboot.yml
+          vars:
+            board_mac: "{{ board_mac }}"
+      delegate_to: "{{ _routeros_target }}"
+
+    - name: Phase 3 — PoE cycle back to disk
+      ansible.builtin.include_role:
+        name: routeros_poe
+      vars:
+        poe_action: cycle
+
+    - name: Phase 3 — reset connection so inventory identity takes effect
+      ansible.builtin.meta: reset_connection
+
+    - name: Phase 3 — wait for SSH (disk-boot identity)
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: "{{ _wait_timeout }}"
+
+    - name: Phase 3 — gather facts
+      ansible.builtin.setup:
+
+    - name: Phase 3 — diagnostic bundle
+      ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+      vars:
+        _diag_phase: "phase 3 — back to disk"
+
+    - name: Phase 3 — assert rootfs returned to local block device
+      ansible.builtin.assert:
+        that:
+          - (ansible_mounts | selectattr('mount', 'equalto', '/')
+              | map(attribute='fstype') | first) not in ['nfs', 'nfs4']
+          - (ansible_mounts | selectattr('mount', 'equalto', '/')
+              | map(attribute='device') | first) is match('^/dev/')
+        fail_msg: >-
+          Phase 3: expected rootfs on /dev/<block> after clearing the
+          DHCP option; got
+          {{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                            | map(attribute='device') | first }}
+          ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                             | map(attribute='fstype') | first }}).
+          Toggle is not bidirectional — DHCP option may not have been
+          cleared on the lease, or the board is not honouring DHCP
+          renewal. Diagnostic bundle is in the prior debug task.
