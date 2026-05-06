@@ -82,3 +82,37 @@
       register: _opt_probe
       changed_when: false
       failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
+
+    - name: Phase 1 — PoE cycle to disk-boot baseline
+      ansible.builtin.include_role:
+        name: routeros_poe
+      vars:
+        poe_action: cycle
+
+    - name: Phase 1 — wait for SSH (disk-boot identity)
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: "{{ _wait_timeout }}"
+
+    - name: Phase 1 — gather facts
+      ansible.builtin.setup:
+
+    - name: Phase 1 — diagnostic bundle
+      ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+      vars:
+        _diag_phase: "phase 1 — disk-boot baseline"
+
+    - name: Phase 1 — assert rootfs is on a local block device
+      ansible.builtin.assert:
+        that:
+          - (ansible_mounts | selectattr('mount', 'equalto', '/')
+              | map(attribute='fstype') | first) not in ['nfs', 'nfs4']
+          - (ansible_mounts | selectattr('mount', 'equalto', '/')
+              | map(attribute='device') | first) is match('^/dev/')
+        fail_msg: >-
+          Phase 1: expected rootfs on /dev/<block>; got
+          {{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                            | map(attribute='device') | first }}
+          ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                             | map(attribute='fstype') | first }}).
+          Diagnostic bundle is in the prior debug task.
