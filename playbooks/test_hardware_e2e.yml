@@ -1,0 +1,84 @@
+---
+# Hardware end-to-end test for the PXE-first boot toggle.
+#
+# Drives the target board through three phases:
+#   1. disk boot baseline (PoE cycle, assert local rootfs)
+#   2. nfsroot (set DHCP option, PoE cycle, assert NFS rootfs)
+#   3. back to disk (clear DHCP option, PoE cycle, assert local rootfs)
+#
+# Pre-condition (v1): the target board has a custom-built Armbian
+# image manually flashed to its SD card (or other primary storage)
+# and is wired to its poe_switch port. v1 does not call reprovision.yml;
+# the operator owns getting the custom image onto disk for now.
+#
+# Diagnostic bundle (playbooks/tasks/diagnostic_bundle.yml) runs at
+# every verify checkpoint to surface findmnt, kernel cmdline, routes,
+# resolv.conf, lsblk, U-Boot deb version, and the last 100 journal
+# lines so a failure tells the operator what went wrong without
+# re-SSHing.
+#
+# Failure cleanup: by default, the always-block clears the DHCP option
+# and PoE-cycles the board back to disk boot regardless of pass/fail.
+# Pass `-e leave_state=true` to preserve the failure state for forensic
+# debugging.
+#
+# Usage:
+#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
+#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
+
+- name: Hardware E2E PXE-first toggle test
+  hosts: boards
+  gather_facts: false
+  vars:
+    leave_state: false
+    _routeros_target: "{{ groups['routeros_routers'] | first }}"
+    _wait_timeout: 300
+
+  tasks:
+    - name: Pre-flight — assert exactly one board targeted
+      ansible.builtin.assert:
+        that: ansible_play_hosts | length == 1
+        fail_msg: >-
+          test_hardware_e2e.yml is single-board. Pass --limit <hostname>.
+          Got {{ ansible_play_hosts | length }} hosts: {{ ansible_play_hosts }}
+      run_once: true
+
+    - name: Pre-flight — assert per-board PoE state
+      ansible.builtin.assert:
+        that:
+          - poe_switch is defined
+          - poe_switch | length > 0
+          - poe_port is defined
+          - poe_port | length > 0
+        fail_msg: >-
+          {{ inventory_hostname }} needs poe_switch and poe_port hostvars set.
+          Add them to inventory/host_vars/{{ inventory_hostname }}.yml.
+
+    - name: Pre-flight — assert armbian_default_password is set
+      ansible.builtin.assert:
+        that:
+          - armbian_default_password is defined
+          - armbian_default_password | length > 0
+        fail_msg: >-
+          armbian_default_password must be set in group_vars (vault recommended).
+          Phase 2 SSH to the NFS-mounted board uses these credentials.
+      run_once: true
+
+    - name: Pre-flight — warn if board not opted into custom build
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: host_board_overrides.armbian_build_enabled is not true on
+          {{ inventory_hostname }}. v1 starts from a manually flashed SD card,
+          so this is allowed — but if you meant to use a custom build, the
+          inventory state is inconsistent.
+      when: not (host_board_overrides.armbian_build_enabled | default(false))
+
+    - name: Pre-flight — probe RouterOS for armbian-nfsroot option set
+      community.routeros.command:
+        commands:
+          - "/ip dhcp-server option sets print where name=armbian-nfsroot"
+      delegate_to: "{{ _routeros_target }}"
+      run_once: true
+      register: _opt_probe
+      changed_when: false
+      failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
