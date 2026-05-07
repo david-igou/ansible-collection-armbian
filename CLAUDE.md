@@ -172,6 +172,14 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 - `armbian_image_urls` — full `.img.xz` URL per board model. In v1 this points at
   the locally-published custom build under `image_server_url/<board>/<file>.img.xz`
   (the URL `playbooks/build_image.yml` publishes to).
+- `routeros_sbc_network_address` (required) — CIDR of the RouterOS DHCP
+  network the SBCs are attached to (e.g. `"10.10.9.0/24"`). Required
+  by the `routeros_dhcp` role's preflight, which asserts the network's
+  `next-server` field equals `tftp_server_ip`. U-Boot 2025.10's PXE
+  bootmeth uses BOOTP `siaddr` (next-server) as the TFTP source —
+  option 66 is silently ignored. The `next-server` value itself is
+  owned by your RouterOS-config repo; this collection only asserts.
+  See `docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md`.
 - `tftp_nfs_export` (overridable) — TFTP server's document root. Default
   `/mnt/ssd/containers/netbootxyz/config/menus` matches netboot.xyz container's
   dnsmasq `--tftp-root`. Override if you run TFTP differently.
