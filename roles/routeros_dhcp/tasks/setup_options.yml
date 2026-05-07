@@ -16,10 +16,11 @@
         code=66
         value="'{{ tftp_server_ip | default(netboot_server_ip) }}'"
   register: _opt_tftp
-  changed_when: "'already have' not in (_opt_tftp.stdout | default(''))"
+  changed_when: >
+    (_opt_tftp.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   failed_when: >
-    _opt_tftp.rc != 0 and
-    'already have' not in (_opt_tftp.stdout | default(''))
+    'failure' in (_opt_tftp.stdout | default([]) | join(' '))
+    and (_opt_tftp.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   tags: routeros, routeros_setup
 
 - name: Create DHCP options — boot file per mode (option 67)
@@ -36,10 +37,11 @@
         code=67
         value="'{{ netboot_modes.reprovision }}'"
   register: _opt_bootfile
-  changed_when: "'already have' not in (_opt_bootfile.stdout | default(''))"
+  changed_when: >
+    (_opt_bootfile.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   failed_when: >
-    _opt_bootfile.rc != 0 and
-    'already have' not in (_opt_bootfile.stdout | default(''))
+    'failure' in (_opt_bootfile.stdout | default([]) | join(' '))
+    and (_opt_bootfile.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   tags: routeros, routeros_setup
 
 - name: Create DHCP option sets — bundle TFTP + boot file per mode
@@ -54,8 +56,9 @@
         add name="{{ routeros_opt_set_reprovision_prefix }}"
         options="{{ routeros_opt_tftp_name }},{{ routeros_opt_set_reprovision_prefix }}-bootfile"
   register: _opt_sets
-  changed_when: "'already have' not in (_opt_sets.stdout | default(''))"
+  changed_when: >
+    (_opt_sets.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   failed_when: >
-    _opt_sets.rc != 0 and
-    'already have' not in (_opt_sets.stdout | default(''))
+    'failure' in (_opt_sets.stdout | default([]) | join(' '))
+    and (_opt_sets.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   tags: routeros, routeros_setup
