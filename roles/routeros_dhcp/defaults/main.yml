@@ -16,6 +16,12 @@ netboot_modes:
 # relative to this path.
 tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config/menus
 
+# NFS rootfs export root on the netboot server. pxelinux_cfg.j2 references
+# this path when constructing the per-host nfsroot= kernel parameter.
+# Default matches the nfs_content role's default; override here or in
+# inventory/group_vars/all.yml if your NFS layout differs.
+nfs_rootfs_path: /mnt/ssd/netboot/rootfs
+
 # CIDR of the RouterOS DHCP network the SBCs are attached to. Required.
 # This network's `next-server` field is what populates BOOTP siaddr in
 # DHCP replies, which U-Boot 2025.10's PXE bootmeth uses as the TFTP
