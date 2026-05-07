@@ -1,11 +1,11 @@
 ---
-# Builds custom Armbian images for boards opted in via
-# host_board_overrides.armbian_build_enabled, then publishes the
-# resulting artifact directories to the netboot server's HTTP export.
+# Builds custom Armbian images for every unique board_model in
+# groups['boards'], then publishes the resulting artifact directories to
+# the netboot server's HTTP export.
 #
 # Two plays:
 #   1. hosts: armbian_builders — invoke the armbian_build role per
-#      unique opted-in board, then stage each <board>/ directory on the
+#      unique board_model, then stage each <board>/ directory on the
 #      controller at /tmp/armbian_publish/<board>/.
 #   2. hosts: netboot_server — push each staged <board>/ directory from
 #      the controller into nfs_assets_export/images/<board>/.
@@ -21,8 +21,9 @@
 #
 # The PXE-first userpatches table is playbook data, not role data —
 # the armbian_build role itself is intent-agnostic. Add a new board by
-# extending build_userpatches with another entry and setting
-# host_board_overrides.armbian_build_enabled: true on its hosts.
+# extending build_userpatches with another entry and adding the host(s)
+# under groups['boards'] in inventory with a board_model that exists in
+# vars/boards.yml.
 #
 # Usage:
 #   ansible-playbook playbooks/build_image.yml
@@ -53,12 +54,28 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../vars/boards.yml"
 
-    - name: Resolve build targets from inventory hosts
+    - name: Resolve unique board_models from groups['boards']
       ansible.builtin.set_fact:
-        _build_targets: >-
+        _board_models: >-
           {{ groups['boards']
              | map('extract', hostvars, 'board_model')
              | unique
+             | list }}
+
+    - name: Assert every board_model has a board_configs entry
+      ansible.builtin.assert:
+        that:
+          - item in board_configs
+        fail_msg: >-
+          board_model '{{ item }}' (from groups['boards']) has no entry in
+          vars/boards.yml. Add it there or remove the host from the
+          boards group.
+      loop: "{{ _board_models }}"
+
+    - name: Resolve build targets from board_configs
+      ansible.builtin.set_fact:
+        _build_targets: >-
+          {{ _board_models
              | map('extract', board_configs, 'armbian_board_name')
              | list }}
 
@@ -67,7 +84,7 @@
         msg: "Will build images for: {{ _build_targets }}"
 
   tasks:
-    - name: Build image per opted-in board
+    - name: Build image per inventory board
       ansible.builtin.include_role:
         name: armbian_build
       vars:
