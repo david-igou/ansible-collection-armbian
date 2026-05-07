@@ -1,0 +1,22 @@
+---
+# Removes the per-board pxelinux.cfg file from the netboot server.
+# Sibling to write_pxelinux_cfg.yml: same path conventions, same
+# variable contract. Idempotent — file: state=absent is a no-op
+# when the file isn't there.
+#
+# Required variables:
+#   board_mac          MAC address (drives 01-<mac> filename)
+#   target_board_host  inventory hostname (label only; logging)
+#
+# Run from a play with hosts: netboot_server, become: true.
+# Operates on tftp_nfs_export as a local path; no NFS client mount
+# on the control node.
+
+- name: Remove per-board pxelinux.cfg for {{ target_board_host }}
+  ansible.builtin.file:
+    path: >-
+      {{ tftp_nfs_export }}/pxelinux.cfg/01-{{
+        board_mac | lower | replace(':', '-')
+      }}
+    state: absent
+  tags: pxelinux

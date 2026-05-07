@@ -26,6 +26,12 @@
   gather_facts: false
   vars:
     routeros_setup_options: true
+  pre_tasks:
+    - name: Preflight — verify RouterOS SBC network's next-server
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: preflight_next_server.yml
+      tags: preflight
   roles:
     - role: routeros_dhcp
       tags: routeros

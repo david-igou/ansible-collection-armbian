@@ -7,6 +7,11 @@
 # any destructive work; URL failures surface at config time, not
 # halfway through an extraction.
 #
+# Also pre-flights the RouterOS SBC network's next-server: the netboot
+# content this play writes is only useful if U-Boot's PXE bootmeth can
+# reach this server, which requires next-server set on the SBC network.
+# See docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md.
+#
 # For each unique board model in inventory:
 #   - Downloads the `.img.xz`, extracts the rootfs into
 #     `nfs_rootfs_path/_templates/<model>/`
@@ -27,6 +32,17 @@
 #
 # To re-run only the per-host clone step (e.g. after adding a host):
 #   ansible-playbook playbooks/populate_nfs_content.yml --tags nfs_content
+
+- name: Preflight RouterOS SBC network configuration
+  hosts: routeros_routers
+  gather_facts: false
+  tasks:
+    - name: Preflight — verify RouterOS SBC network's next-server
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: preflight_next_server.yml
+      run_once: true
+      tags: preflight
 
 - name: Populate NFS rootfs and TFTP content on the netboot server
   hosts: netboot_server

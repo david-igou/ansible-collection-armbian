@@ -1,14 +1,43 @@
 ---
-# Reverts boards to disk boot by clearing the armbian-nfsroot DHCP option
-# set from each board's static lease.
+# Reverts boards to disk boot by:
+#   - removing the per-board pxelinux.cfg/01-<MAC> from the netboot
+#     server (so U-Boot's PXE bootmeth fast-404s on the fallback
+#     chain and falls through to MMC)
+#   - clearing the armbian-nfsroot DHCP option set from each board's
+#     static lease (now ornamental — file presence is the
+#     load-bearing signal post-2026-05-07-bootflow-pxe-first-design,
+#     but kept for symmetry with enable_netboot.yml)
 #
 # Usage:
 #   ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
+
+- name: Remove per-board pxelinux.cfg on the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Remove pxelinux.cfg per target board
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: remove_pxelinux_cfg.yml
+      vars:
+        board_mac: "{{ hostvars[item]['board_mac'] }}"
+        target_board_host: "{{ item }}"
+      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+      loop_control:
+        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
 
 - name: Disable netboot for boards
   hosts: routeros_routers
   gather_facts: false
   tasks:
+    - name: Preflight — verify RouterOS SBC network's next-server
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: preflight_next_server.yml
+      run_once: true
+      tags: preflight
+
     - name: Disable netboot on RouterOS for each target board
       ansible.builtin.include_role:
         name: routeros_dhcp
