@@ -170,18 +170,17 @@ Expected: locates the "SBC ecosystem reality: variation is the rule" header and 
 
 - [ ] **Step 2: Add a new bullet to that list**
 
-Append the following bullet to the existing list (alongside "U-Boot deb naming"):
+Append the following bullet to the existing list (alongside "U-Boot deb naming"). Note: the bullet deliberately does NOT pin specific U-Boot versions (`v2025.10` / `v2026.04`) — those are tracked in `armbian/build`'s upstream board configs and would age silently if mainline ships newer releases. The principle (per-DTB-declaration drives MMC index) is timeless; the version numbers are transient.
 
 ```markdown
 - **MMC controller index in U-Boot**: which `mmc dev N` enumerates the
   SD card slot is per-board, depending on what the U-Boot DTB declares.
-  On `orangepi5` (mainline U-Boot v2026.04, U-Boot DT exposes only the
-  SD controller) the SD card is `mmc 0`; on `orangepi5pro` (mainline
-  U-Boot v2025.10, U-Boot DT exposes eMMC slot + SDIO + SD) the SD
-  card is `mmc 1`. `boot.scr` reads `${devnum}` from the bootflow
-  framework so most boots don't care, but anything that hard-codes
-  `mmc dev N` (manual U-Boot scripts, recovery aids, future
-  per-board hooks) must consult `mmc list` on the actual board.
+  On `orangepi5` the U-Boot DT exposes only the SD controller and the
+  SD card is `mmc 0`; on `orangepi5pro` the U-Boot DT exposes eMMC slot
+  + SDIO + SD and the SD card is `mmc 1`. `boot.scr` reads `${devnum}`
+  from the bootflow framework so most boots don't care, but anything
+  that hard-codes `mmc dev N` (manual U-Boot scripts, recovery aids,
+  future per-board hooks) must consult `mmc list` on the actual board.
 ```
 
 - [ ] **Step 3: Lint**
@@ -310,17 +309,21 @@ This step modifies only TrueNAS filesystem state; no commit.
 - [ ] **Step 2 (option A): Delete `/workspace/armbian_build` and re-publish from `/var/lib/armbian_build`**
 
 ```bash
-ssh igou@localhost 'rm -rf /workspace/armbian_build'
-# Next playbook run uses inventory default; the role's manifest-skip
-# logic will detect the absent /var/lib/armbian_build/output/orangepi5pro/
-# manifest, so a full BUILD will re-trigger. Pre-warm by copying the
-# new build's manifest+image into the inventory-declared location:
+# Pre-warm /var/lib/armbian_build/output/orangepi5pro/ FIRST, before
+# anything destructive. The cp must succeed before the rm — otherwise
+# the new build's manifest+image is gone with the source dir.
 ssh igou@localhost '
   mkdir -p /var/lib/armbian_build/output/orangepi5pro
-  cp -p /workspace/armbian_build/output/orangepi5pro/* /var/lib/armbian_build/output/orangepi5pro/ 2>/dev/null || true
+  cp -p /workspace/armbian_build/output/orangepi5pro/* /var/lib/armbian_build/output/orangepi5pro/
 '
-# (If /workspace/armbian_build is already deleted, skip the pre-warm — the
-# next build will be cold but correct.)
+# Verify the pre-warm landed before the rm.
+ssh igou@localhost 'ls /var/lib/armbian_build/output/orangepi5pro/'
+
+# Now safe to delete /workspace/armbian_build. The next playbook run
+# uses the inventory's declared cache_dir (/var/lib/armbian_build) and
+# the role's manifest-skip logic will hit the pre-warmed manifest and
+# skip the rebuild.
+ssh igou@localhost 'sudo rm -rf /workspace/armbian_build'
 ```
 
 Expected: `/workspace/armbian_build` is gone; `/var/lib/armbian_build/output/orangepi5pro/` contains the 6.18.27 image + manifest.json.
