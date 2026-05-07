@@ -31,11 +31,38 @@ the SD image, and the operator writes the SD card once with a tool like
 point on, the U-Boot binary is fixed. Whether the board boots from SD or
 NFS depends entirely on what RouterOS hands it via DHCP:
 
-- DHCP lease has the `armbian-nfsroot` option set assigned → U-Boot's PXE
-  target succeeds, board NFS-roots from the netboot server.
-- DHCP lease has no option assigned → PXE target falls through (no
-  `next-server`), `bootflow scan` continues down the list, lands on
+- DHCP lease has the `armbian-nfsroot` option set assigned → per-board
+  `pxelinux.cfg/01-<MAC>` exists on the netboot server's TFTP root →
+  U-Boot's PXE bootmeth loads it, fetches kernel/initrd/DTB,
+  NFS-roots from the netboot server.
+- DHCP lease has no option set assigned → per-board `pxelinux.cfg/01-<MAC>`
+  is absent → U-Boot's PXE bootmeth fast-404s through the fallback
+  chain (`01-<MAC>` → `0A0A0919` → ... → `default`, ~5–10 s total)
+  → `bootflow scan` aborts the network bootdev and proceeds to
   mmc1's `boot.scr`, board boots local SD rootfs.
+
+## External RouterOS prerequisite
+
+The SBC RouterOS network's `next-server` field must be set to the
+TFTP server's IP. U-Boot 2025.10's PXE bootmeth derives the TFTP
+source (`serverip`) from BOOTP `siaddr` (RFC 951 next-server) — DHCP
+option 66 is parsed but silently ignored for `serverip` selection.
+Without `next-server`, U-Boot falls back to the DHCP server's own IP
+(via option 54), which has no TFTP daemon, and every netboot attempt
+hangs in retries until the chip's watchdog resets the board.
+
+This collection does not write `next-server`; it is owned by the
+operator's separate RouterOS-config repo. The
+`routeros_dhcp/preflight_next_server` task asserts the value is set
+correctly before any play that depends on netboot working
+(`setup_routeros_dhcp.yml`, `enable_netboot.yml`,
+`disable_netboot.yml`, `populate_nfs_content.yml`). The fail message
+names the exact RouterOS command to run if the assertion fires.
+
+The required inventory variable is `routeros_sbc_network_address`
+(CIDR; e.g. `"10.10.9.0/24"`). See
+[`docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md`](superpowers/specs/2026-05-07-bootflow-pxe-first-design.md)
+for the full design context.
 
 ## Roles
 
