@@ -10,6 +10,12 @@ routeros_opt_set_nfsroot_prefix: "armbian-nfsroot"
 netboot_modes:
   nfsroot: "pxelinux.cfg/nfsroot-default"
 
+# TFTP server document root on the netboot server. Must match the TFTP
+# daemon's --tftp-root. Default matches the netboot.xyz container layout.
+# write_pxelinux_cfg.yml and remove_pxelinux_cfg.yml write/remove files
+# relative to this path.
+tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config/menus
+
 # CIDR of the RouterOS DHCP network the SBCs are attached to. Required.
 # This network's `next-server` field is what populates BOOTP siaddr in
 # DHCP replies, which U-Boot 2025.10's PXE bootmeth uses as the TFTP
