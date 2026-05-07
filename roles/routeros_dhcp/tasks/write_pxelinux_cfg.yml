@@ -8,19 +8,9 @@
 #   board_mac          MAC address of the board (drives 01-<mac> filename)
 #   board_model        board model key (drives kernel/initrd/DTB paths)
 #   target_board_host  inventory hostname (drives nfsroot path + label)
-#   netboot_mode       'nfsroot' or 'reprovision' (drives DEFAULT label)
-
-- name: Validate netboot_mode
-  ansible.builtin.assert:
-    that:
-      - netboot_mode is defined
-      - netboot_mode in ['nfsroot', 'reprovision']
-    fail_msg: "netboot_mode must be 'nfsroot' or 'reprovision'"
-  tags: pxelinux
 
 # Load the per-board configs the pxelinux template needs (board console,
-# DTB filename). These live in the collection-level vars/boards.yml so
-# this role does not depend on any other role being present.
+# DTB filename) from the collection-level vars/boards.yml.
 - name: Load board configs
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../../vars/boards.yml"
