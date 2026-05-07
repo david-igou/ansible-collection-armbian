@@ -22,10 +22,10 @@
          | list | unique }}
 
 # ── Preflight ─────────────────────────────────────────────────────────
-# Validate apt package and image URL for every board model before any
-# destructive work. Failures here are cheap to fix; failures at flash
-# time on a board half-way through the workflow are not.
-- name: Preflight — validate U-Boot packages and image URLs
+# Validate every board model's image URL before any destructive work.
+# Failures here are cheap to fix; failures during extraction on a board
+# half-way through the workflow are not.
+- name: Preflight — validate image URLs
   ansible.builtin.include_tasks: preflight.yml
 
 - name: Ensure local working directories exist on the netboot server
