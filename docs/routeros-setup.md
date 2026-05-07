@@ -132,7 +132,7 @@ assignment — a network-level option set would override it and make
 
 The old `next-server-rock5b` and `netboot.xyz-rpi4-snp.efi` option entries can
 stay or be removed; they don't conflict with the role's own object names
-(`armbian-tftp-server`, `armbian-{nfsroot,reprovision}-bootfile`).
+(`armbian-tftp-server`, `armbian-nfsroot-bootfile`).
 
 ## DHCP Server PXE Objects
 
@@ -148,29 +148,20 @@ reference / manual recovery:
 /ip dhcp-server option/add \
     name=armbian-nfsroot-bootfile code=67 value="'pxelinux.cfg/nfsroot-default'"
 
-# Option 67 — boot file for reprovision mode
-/ip dhcp-server option/add \
-    name=armbian-reprovision-bootfile code=67 \
-    value="'pxelinux.cfg/reprovision-default'"
-
-# Option sets
+# Option set
 /ip dhcp-server option sets/add \
     name=armbian-nfsroot \
     options=armbian-tftp-server,armbian-nfsroot-bootfile
-
-/ip dhcp-server option sets/add \
-    name=armbian-reprovision \
-    options=armbian-tftp-server,armbian-reprovision-bootfile
 ```
 
 ## Triggering Netboot Manually
 
-To queue a board for reprovision without Ansible:
+To queue a board for netboot without Ansible:
 
 ```routeros
 /ip dhcp-server lease/set \
     [find mac-address="AA:BB:CC:DD:EE:01"] \
-    dhcp-option-set=armbian-reprovision
+    dhcp-option-set=armbian-nfsroot
 ```
 
 To revert to disk boot:
@@ -214,7 +205,7 @@ Required ports (board → netboot server):
 A single `dst-address=10.10.9.224` accept covers all of these; tighten with
 `dst-port`/`protocol` matches if you want.
 
-Reprovision-environment → RouterOS SSH (control node → rb5009):
+Control node → RouterOS SSH:
 
 | Port | Protocol | Service       |
 |------|----------|---------------|
@@ -234,8 +225,7 @@ After assigning an option set, verify the lease shows it:
     where mac-address="AA:BB:CC:DD:EE:01"
 ```
 
-Look for `dhcp-option-set: armbian-reprovision` (or `armbian-nfsroot`) in the
-output.
+Look for `dhcp-option-set: armbian-nfsroot` in the output.
 
 ## Manual SSH Access
 
