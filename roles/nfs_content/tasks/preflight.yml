@@ -1,54 +1,10 @@
 ---
 # Pre-flight validation for populate_nfs_content.yml.
 #
-# Catches two classes of misconfiguration that would otherwise surface
-# late and far from the cause:
-#   1. board_configs.<model>.uboot_apt_package names a package that
-#      doesn't exist in the Armbian apt repo. Failure currently shows
-#      up much later, on the board itself, mid-flash.
-#   2. armbian_image_urls[<model>] is unreachable (404, dead mirror,
-#      typo). Failure currently shows up after we've created loop
-#      devices and started extracting.
-
-- name: Fetch Armbian apt Packages index for U-Boot package validation
-  ansible.builtin.get_url:
-    url: "{{ armbian_apt_packages_url }}"
-    dest: "{{ armbian_image_cache }}/Packages.gz"
-    force: true
-    timeout: 30
-    mode: "0644"
-  register: _packages_dl
-
-- name: Read available linux-u-boot-* package names from apt index
-  ansible.builtin.shell: |
-    set -o pipefail
-    zcat "{{ armbian_image_cache }}/Packages.gz" \
-      | awk '/^Package: linux-u-boot-/ {print $2}' \
-      | sort -u
-  args:
-    executable: /bin/bash
-  register: _available_uboot_packages
-  changed_when: false
-
-- name: Validate each board's uboot_apt_package exists in apt repo
-  ansible.builtin.fail:
-    msg: |
-      board_configs.{{ item }}.uboot_apt_package =
-      '{{ board_configs[item].uboot_apt_package }}' is NOT present in the
-      Armbian apt repo for suite '{{ armbian_apt_suite | default("bookworm") }}'.
-
-      Available packages for this board family
-      (matching '*{{ board_configs[item].armbian_board_name }}*'):
-        {{ _available_uboot_packages.stdout_lines
-           | select('search', board_configs[item].armbian_board_name)
-           | list | join('\n        ') | default('(none — board name may be wrong)') }}
-
-      Adjust board_configs.{{ item }}.uboot_apt_package in
-      roles/bootloader/vars/boards.yml to one of the above.
-  when: board_configs[item].uboot_apt_package not in _available_uboot_packages.stdout_lines
-  loop: "{{ _board_models }}"
-  loop_control:
-    label: "{{ item }} → {{ board_configs[item].uboot_apt_package }}"
+# Catches one class of misconfiguration that would otherwise surface
+# late: armbian_image_urls[<model>] is unreachable (404, dead mirror,
+# typo). Without this check, failure shows up after we've created loop
+# devices and started extracting.
 
 - name: Validate each board's image URL is reachable
   ansible.builtin.uri:
@@ -68,13 +24,12 @@
   ansible.builtin.fail:
     msg: |
       armbian_image_urls['{{ item }}'] is not set in
-      inventory/group_vars/all.yml. Add the full .img.xz URL from
-      https://dl.armbian.com/{{ board_configs[item].armbian_dl_dir }}/.
+      inventory/group_vars/all.yml. Add the full .img.xz URL.
   when: armbian_image_urls[item] is not defined
   loop: "{{ _board_models }}"
 
 - name: Preflight passed
   ansible.builtin.debug:
     msg: >-
-      Preflight OK: validated U-Boot packages and image URLs for
+      Preflight OK: validated image URLs for
       {{ _board_models | length }} board model(s).

@@ -109,7 +109,7 @@
         regexp: "^/dev/"
         state: absent
 
-- name: Copy Armbian image to assets for reprovision HTTP download
+- name: Copy Armbian image to assets for HTTP download
   ansible.builtin.copy:
     src: "{{ _image_cache }}"
     dest: "{{ nfs_assets_export }}/images/{{ _model }}.img.xz"
