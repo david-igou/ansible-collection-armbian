@@ -9,6 +9,13 @@
   hosts: routeros_routers
   gather_facts: false
   tasks:
+    - name: Preflight — verify RouterOS SBC network's next-server
+      ansible.builtin.include_role:
+        name: routeros_dhcp
+        tasks_from: preflight_next_server.yml
+      run_once: true
+      tags: preflight
+
     - name: Disable netboot on RouterOS for each target board
       ansible.builtin.include_role:
         name: routeros_dhcp
