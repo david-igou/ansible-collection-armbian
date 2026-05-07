@@ -1,28 +1,19 @@
 ---
 # Enables network boot for one or more boards.
 # Writes per-host pxelinux.cfg directly on the netboot server over SSH,
-# assigns the PXE DHCP option set on RouterOS, and optionally reboots
-# boards to apply the change.
-#
-# WIP: on Armbian Rockchip `current` U-Boot debs (v2025.10 era), this
-# playbook will land in a no-op — `bootflow scan -lb` walks mmc1 first
-# and Armbian's /boot/boot.scr wins before PXE/DHCP are reached. See
-# https://github.com/david-igou/ansible-collection-armbian_netboot/issues/3
+# assigns the armbian-nfsroot DHCP option set on RouterOS, and optionally
+# reboots boards to apply the change.
 #
 # Usage:
-#   # Enable NFS root (diskless mode) for a specific board
-#   ansible-playbook playbooks/enable_netboot.yml \
-#     --limit rock-5b-01 \
-#     -e netboot_mode=nfsroot
+#   # Enable NFS root mode for a specific board
+#   ansible-playbook playbooks/enable_netboot.yml --limit orange-pi-5-pro-01
 #
-#   # Enable reprovision mode for all boards
-#   ansible-playbook playbooks/enable_netboot.yml \
-#     -e netboot_mode=reprovision
+#   # Enable for all boards
+#   ansible-playbook playbooks/enable_netboot.yml
 #
 #   # Enable without rebooting (e.g. board is currently off)
 #   ansible-playbook playbooks/enable_netboot.yml \
-#     --limit orange-pi-5-01 \
-#     -e netboot_mode=nfsroot \
+#     --limit orange-pi-5-pro-01 \
 #     -e netboot_reboot=false
 
 # Per-board pxelinux.cfg files are written directly on the netboot

@@ -1,14 +1,8 @@
 ---
 # Removes the PXE DHCP option set from a board's static lease, reverting it
-# to normal disk boot.
+# to disk boot.
 #
-# Called automatically by reprovision.yml after flashing (via SSH to RouterOS).
-# Can also be run manually via the disable_netboot.yml playbook to cancel a
-# queued netboot.
-#
-# For non-SPI boards: the SD card can remain inserted — when DHCP provides no
-# next-server, U-Boot's PXE attempt fails gracefully and it falls through to
-# the local disk.
+# Called via the disable_netboot.yml playbook to revert a board to disk boot.
 #
 # Required variables: board_mac
 

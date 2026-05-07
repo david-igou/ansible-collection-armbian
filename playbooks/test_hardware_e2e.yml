@@ -91,15 +91,6 @@
           Phase 2 SSH to the NFS-mounted board uses these credentials.
       run_once: true
 
-    - name: Pre-flight — warn if board not opted into custom build
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: host_board_overrides.armbian_build_enabled is not true on
-          {{ inventory_hostname }}. v1 starts from a manually flashed SD card,
-          so this is allowed — but if you meant to use a custom build, the
-          inventory state is inconsistent.
-      when: not (host_board_overrides.armbian_build_enabled | default(false))
-
     - name: Pre-flight — probe RouterOS for armbian-nfsroot option set
       community.routeros.command:
         commands:
@@ -206,7 +197,6 @@
                 tasks_from: enable_netboot.yml
               vars:
                 board_mac: "{{ board_mac }}"
-                netboot_mode: nfsroot
           delegate_to: "{{ _routeros_target }}"
 
         - name: Phase 2 — PoE cycle into nfsroot

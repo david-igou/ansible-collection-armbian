@@ -1,10 +1,9 @@
 ---
-# Reverts boards to disk boot by removing the PXE DHCP option set.
-# Use this if you need to manually cancel a queued reprovision or NFS boot.
-# (Normally the reprovision script calls RouterOS directly on completion.)
+# Reverts boards to disk boot by clearing the armbian-nfsroot DHCP option
+# set from each board's static lease.
 #
 # Usage:
-#   ansible-playbook playbooks/disable_netboot.yml --limit rock-5b-01
+#   ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
 
 - name: Disable netboot for boards
   hosts: routeros_routers

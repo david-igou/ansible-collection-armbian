@@ -1,0 +1,24 @@
+---
+# Per-board metadata for boards in v1 scope. Keyed by board_model
+# (matches inventory host_vars and pxelinux paths).
+#
+# v1 fields:
+#   armbian_dl_dir       dl.armbian.com subdirectory (documentation
+#                        pointer; not used by code post-slim)
+#   armbian_board_name   armbian/build BOARD= target. Used by
+#                        playbooks/build_image.yml to map board_model
+#                        to the build target string.
+#   armbian_support      Armbian support tier (standard / community /
+#                        wip / unsupported). Documentation only.
+#   dtb                  Device tree path under /boot/dtb/. Used by
+#                        roles/nfs_content/tasks/per_board.yml.
+#   console              Kernel console parameter. Used by
+#                        roles/routeros_dhcp/templates/pxelinux_cfg.j2.
+
+board_configs:
+  orange-pi-5-pro:
+    armbian_dl_dir: orangepi5pro
+    armbian_board_name: orangepi5pro
+    armbian_support: community
+    dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+    console: ttyS2,1500000n8

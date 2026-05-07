@@ -3,10 +3,8 @@
 # enable_netboot / disable_netboot runs reuse:
 #
 #   - dhcp-option `armbian-tftp-server`           (option 66)
-#   - dhcp-option `armbian-nfsroot-bootfile`      (option 67, nfsroot)
-#   - dhcp-option `armbian-reprovision-bootfile`  (option 67, reprovision)
-#   - option set  `armbian-nfsroot`               (bundles 66 + nfsroot 67)
-#   - option set  `armbian-reprovision`           (bundles 66 + reprovision 67)
+#   - dhcp-option `armbian-nfsroot-bootfile`      (option 67)
+#   - option set  `armbian-nfsroot`               (bundles 66 + 67)
 #
 # Per-board state is exclusively the `dhcp-option` field on each static
 # lease — set by enable_netboot.yml / cleared by disable_netboot.yml.

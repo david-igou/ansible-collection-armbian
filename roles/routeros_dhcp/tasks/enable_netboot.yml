@@ -8,20 +8,7 @@
 # runs in a separate play against `hosts: netboot_server` so the control
 # node never NFS-mounts the export.
 #
-# Once `flash_bootloader.yml` has installed PXE-first U-Boot to the
-# board's persistent storage (SPI / eMMC / SD), the DHCP option flip
-# handled here is the only thing needed to switch the board into PXE
-# mode — no board-side configuration change is required at this point.
-#
-# Required variables: board_mac, netboot_mode
-
-- name: Validate netboot_mode
-  ansible.builtin.assert:
-    that:
-      - netboot_mode is defined
-      - netboot_mode in ['nfsroot', 'reprovision']
-    fail_msg: "netboot_mode must be 'nfsroot' or 'reprovision'"
-  tags: routeros, enable_netboot
+# Required variables: board_mac
 
 - name: Assign netboot DHCP option set for {{ board_mac }}
   community.routeros.command:
@@ -29,7 +16,5 @@
       - >
         /ip dhcp-server lease
         set [find mac-address="{{ board_mac }}"]
-        dhcp-option="{{ routeros_opt_set_nfsroot_prefix
-          if netboot_mode == 'nfsroot'
-          else routeros_opt_set_reprovision_prefix }}"
+        dhcp-option="{{ routeros_opt_set_nfsroot_prefix }}"
   tags: routeros, enable_netboot
