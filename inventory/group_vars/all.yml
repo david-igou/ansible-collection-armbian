@@ -2,18 +2,17 @@
 # ── Addresses ────────────────────────────────────────────────────────────────
 # IP of the netboot server, used as the default for both TFTP and NFS roles
 # when they share an address. These are collection-level variables (they end
-# up inside RouterOS DHCP options, pxelinux.cfg, and reprovision HTTP URLs —
-# not as SSH targets), so they are not duplicates of `ansible_host`.
+# up inside RouterOS DHCP options, pxelinux.cfg, and HTTP image URLs — not
+# as SSH targets), so they are not duplicates of `ansible_host`.
 #
 # When TFTP/HTTP and NFS run on different hosts (e.g. netboot.xyz container
 # on a macvlan network at one IP, NFS exported from the host at another),
 # override `tftp_server_ip` and `nfs_server_ip` independently:
 #
-#   tftp_server_ip: "10.10.45.242"   # netbootxyz container — DHCP option 66 + image_server_url
-#   nfs_server_ip:  "10.10.9.213"    # NFS server (nfsroot=<ip>:<path> in pxelinux.cfg)
+#   tftp_server_ip: "10.10.45.242"   # netbootxyz container
+#   nfs_server_ip:  "10.10.9.213"    # NFS server
 #
-# In a simple single-host setup (TFTP+HTTP+NFS all on the same machine),
-# leave both unset and just set netboot_server_ip.
+# In a single-host setup, leave both unset and just set netboot_server_ip.
 netboot_server_ip: "192.168.1.10"
 # tftp_server_ip: "{{ netboot_server_ip }}"
 # nfs_server_ip:  "{{ netboot_server_ip }}"
@@ -33,43 +32,13 @@ tftp_nfs_export: /opt/netbootxyz/config
 nfs_assets_export: /opt/netbootxyz/assets
 
 # ── Armbian image URLs ────────────────────────────────────────────────────────
-# Set to the full .img.xz URL for each board model. Pinning a versioned URL
-# is more reproducible; pinning the alias (e.g.
-# https://dl.armbian.com/rock-5b/Noble_current_minimal) follows whatever
-# Armbian currently calls "stable" for that channel.
-# Browse https://dl.armbian.com/<armbian_dl_dir>/ to find the current URL.
-#
-# Branch availability is per-board (see board_configs.<model>.uboot_apt_package
-# in roles/bootloader/vars/boards.yml). Some community boards (orange-pi-5-pro,
-# orange-pi-5-max) have no `current` deb published — only `edge`/`vendor` — so
-# their U-Boot packages use the edge stream even when the rootfs image is
-# current-branch (the binaries are typically identical for those boards).
+# Set to the full .img.xz URL for each board model. v1 expects this to
+# point at the locally-published custom build (not the upstream
+# dl.armbian.com URL) — playbooks/build_image.yml publishes the custom
+# .img.xz to nfs_assets_export/images/<board>/, served over HTTP at
+# image_server_url/<board>/.
 armbian_image_urls:
-  orange-pi-5: "https://armbian.chi.auroradev.org/dl/orangepi5/archive/Armbian_26.2.1_Orangepi5_noble_current_6.18.8_minimal.img.xz"
-  orange-pi-5-pro: "https://github.com/armbian/community/releases/download/26.2.0-trunk.821/Armbian_community_26.2.0-trunk.821_Orangepi5pro_trixie_current_6.18.26_minimal.img.xz"
-  orange-pi-5-max: "https://github.com/armbian/community/releases/download/26.2.0-trunk.821/Armbian_community_26.2.0-trunk.821_Orangepi5-max_trixie_edge_7.0.3_minimal.img.xz"
-  rock-5b: "https://armbian.chi.auroradev.org/dl/rock-5b/archive/Armbian_26.2.1_Rock-5b_noble_current_6.18.8_minimal.img.xz"
-  rock-5a: "https://armbian.chi.auroradev.org/dl/rock-5a/archive/Armbian_26.2.1_Rock-5a_noble_current_6.18.15_minimal.img.xz"
-  orange-pi-zero-3: "https://armbian.chi.auroradev.org/dl/orangepizero3/archive/Armbian_26.2.1_Orangepizero3_noble_current_6.18.8_minimal.img.xz"
-
-# ── Custom build override (for boards built via playbooks/build_image.yml) ──
-# After a successful build, override the upstream URL to point at the locally
-# published copy on the netboot server. The exact filename includes the
-# version + kernel revision; copy it from the produced manifest.json.
-#
-#   armbian_image_urls:
-#     orange-pi-5-pro: "{{ image_server_url }}/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
-
-# Apt suite used to validate U-Boot package availability in
-# nfs_content/preflight.yml. Armbian's apt repo organises packages under
-# Debian suite directories; package contents are independent of OS suite
-# for hardware-side debs.
-armbian_apt_suite: "bookworm"
-
-# Default U-Boot branch advisory — informational only; the canonical
-# branch source is each board_configs.<model>.uboot_apt_package field.
-# This value is not currently consumed by any task.
-armbian_branch: "current"
+  orange-pi-5-pro: "{{ image_server_url }}/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
 
 # ── Board SSH defaults ────────────────────────────────────────────────────────
 ansible_user: "armbian"
@@ -77,7 +46,7 @@ ansible_become: true
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 
 # ── Armbian default credentials (NFS root environment) ───────────────────────
-# Used by reprovision.yml to SSH into boards booted from the NFS rootfs.
-# The fresh Armbian image has root/1234 until first interactive login.
-# Encrypt with ansible-vault before committing.
+# Used by test_hardware_e2e.yml to SSH into boards booted from the NFS
+# rootfs (root/1234 on a fresh Armbian image until first interactive
+# login). Encrypt with ansible-vault before committing real values.
 armbian_default_password: "1234"
