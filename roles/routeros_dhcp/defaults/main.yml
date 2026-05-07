@@ -5,9 +5,7 @@ routeros_dhcp_server_name: "dhcp1"
 # DHCP option names created once during setup (setup_options.yml playbook)
 routeros_opt_tftp_name: "armbian-tftp-server"
 routeros_opt_set_nfsroot_prefix: "armbian-nfsroot"
-routeros_opt_set_reprovision_prefix: "armbian-reprovision"
 
-# Boot modes and their pxelinux config paths served from TFTP
+# Boot mode pxelinux config path served from TFTP
 netboot_modes:
   nfsroot: "pxelinux.cfg/nfsroot-default"
-  reprovision: "pxelinux.cfg/reprovision-default"

@@ -4,8 +4,8 @@
 #
 # RouterOS DHCP option structure for PXE:
 #   option 66 (TFTP server)  → routeros_opt_tftp_name
-#   option 67 (boot file)    → one per mode (nfsroot, reprovision)
-#   option sets              → bundle option 66 + 67 per mode
+#   option 67 (boot file)    → armbian-nfsroot-bootfile (nfsroot mode)
+#   option set               → armbian-nfsroot (bundles 66 + nfsroot 67)
 
 - name: Create DHCP option — TFTP server (option 66)
   community.routeros.command:
@@ -23,7 +23,7 @@
     and (_opt_tftp.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   tags: routeros, routeros_setup
 
-- name: Create DHCP options — boot file per mode (option 67)
+- name: Create DHCP option — nfsroot boot file (option 67)
   community.routeros.command:
     commands:
       - >
@@ -31,11 +31,6 @@
         add name="{{ routeros_opt_set_nfsroot_prefix }}-bootfile"
         code=67
         value="'{{ netboot_modes.nfsroot }}'"
-      - >
-        /ip dhcp-server option
-        add name="{{ routeros_opt_set_reprovision_prefix }}-bootfile"
-        code=67
-        value="'{{ netboot_modes.reprovision }}'"
   register: _opt_bootfile
   changed_when: >
     (_opt_bootfile.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
@@ -44,17 +39,13 @@
     and (_opt_bootfile.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
   tags: routeros, routeros_setup
 
-- name: Create DHCP option sets — bundle TFTP + boot file per mode
+- name: Create DHCP option set — bundle TFTP + nfsroot boot file
   community.routeros.command:
     commands:
       - >
         /ip dhcp-server option sets
         add name="{{ routeros_opt_set_nfsroot_prefix }}"
         options="{{ routeros_opt_tftp_name }},{{ routeros_opt_set_nfsroot_prefix }}-bootfile"
-      - >
-        /ip dhcp-server option sets
-        add name="{{ routeros_opt_set_reprovision_prefix }}"
-        options="{{ routeros_opt_tftp_name }},{{ routeros_opt_set_reprovision_prefix }}-bootfile"
   register: _opt_sets
   changed_when: >
     (_opt_sets.stdout | default([]) | join(' ') | regex_search('already exists|must be unique')) is none
