@@ -47,7 +47,7 @@ image_server_url: "http://{{ tftp_server_ip | default(netboot_server_ip) }}"
 # on the netboot server), then uncomment and edit:
 #
 # armbian_image_urls:
-#   orange-pi-5-pro: "{{ image_server_url }}/images/orangepi5pro/Armbian_<version>_orangepi5pro_bookworm_current_<kernel>.img.xz"
+#   orange-pi-5-pro: "{{ image_server_url }}/images/orangepi5pro/Armbian-unofficial_<armbian-build-tag>_Orangepi5pro_bookworm_current_<kernel>_minimal.img.xz"
 armbian_image_urls: {}
 
 # ── Board SSH defaults ────────────────────────────────────────────────────────
