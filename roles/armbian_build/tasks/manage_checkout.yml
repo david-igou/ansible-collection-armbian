@@ -29,3 +29,5 @@
     update: true
     depth: 1
   become: false
+  environment:
+    HOME: ""

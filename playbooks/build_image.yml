@@ -5,17 +5,19 @@
 #
 # Two plays:
 #   1. hosts: armbian_builders — invoke the armbian_build role per
-#      unique opted-in board.
-#   2. hosts: netboot_server — synchronize each <board>/ directory
-#      from the builder into nfs_assets_export/images/<board>/.
+#      unique opted-in board, then stage each <board>/ directory on the
+#      controller at /tmp/armbian_publish/<board>/.
+#   2. hosts: netboot_server — push each staged <board>/ directory from
+#      the controller into nfs_assets_export/images/<board>/.
+#
+# The controller mediates the transfer so the only SSH trust required is
+# controller→builder and controller→netboot_server (already needed for
+# Ansible to reach them). No builder↔netboot_server SSH key is required.
 #
 # Prerequisites for the publish play:
-#   - The builder's SSH user must have an SSH key authorised on the
-#     netboot_server as a user that exists there (typically ansible_user).
-#   - That user must have passwordless sudo on the netboot_server
-#     (the publish task uses rsync_path: 'sudo rsync' so the receive
-#     side writes as root, matching the directory created by the
-#     become: true file: task above it).
+#   - netboot_server's ansible_user must have passwordless sudo (the
+#     publish task uses rsync_path: 'sudo rsync' so the receive side
+#     writes the root-owned per-board directories with --mkpath).
 #
 # The PXE-first userpatches table is playbook data, not role data —
 # the armbian_build role itself is intent-agnostic. Add a new board by
@@ -25,7 +27,7 @@
 # Usage:
 #   ansible-playbook playbooks/build_image.yml
 
-- name: Build custom Armbian images on the builder host
+- name: Build custom Armbian images and stage them on the controller
   hosts: armbian_builders
   gather_facts: false
   vars:
@@ -77,26 +79,42 @@
         armbian_build_userpatches: "{{ build_userpatches[item] }}"
       loop: "{{ _build_targets }}"
 
-- name: Publish images to the netboot server
+    # rsync invoked via command (not ansible.posix.synchronize) so it
+    # always uses SSH — synchronize short-circuits to a local copy when
+    # both endpoints are localhost, which is wrong if the controller and
+    # the builder don't share a filesystem (e.g. controller in a
+    # container, builder on the host reachable via ssh igou@localhost).
+    # connection: local forces this task to run on the controller itself,
+    # not via SSH back to an inventory entry named localhost.
+    - name: Stage built image directory on the controller
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --compress
+          - --delete
+          - --mkpath
+          - --rsh
+          - "ssh -p {{ ansible_port | default(22) }}"
+          - "{{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ armbian_build_output_dir }}/{{ item }}/"
+          - "/tmp/armbian_publish/{{ item }}/"
+      delegate_to: localhost
+      connection: local
+      changed_when: true
+      loop: "{{ _build_targets }}"
+
+- name: Publish staged images to the netboot server
   hosts: netboot_server
-  become: true
   gather_facts: false
   vars:
     _builder: "{{ groups['armbian_builders'][0] }}"
   tasks:
-    - name: Ensure per-board image directory exists
-      ansible.builtin.file:
-        path: "{{ nfs_assets_export }}/images/{{ item }}"
-        state: directory
-        mode: "0755"
-      loop: "{{ hostvars[_builder]._build_targets }}"
-
-    - name: Pull image + manifest from builder to netboot server
+    - name: Push staged image + manifest to netboot server (sudo on receive)
       ansible.posix.synchronize:
-        src: "{{ hostvars[_builder].armbian_build_output_dir }}/{{ item }}/"
+        src: "/tmp/armbian_publish/{{ item }}/"
         dest: "{{ nfs_assets_export }}/images/{{ item }}/"
-        mode: pull
         delete: false
         rsync_path: "sudo rsync"
-      delegate_to: "{{ _builder }}"
+        rsync_opts:
+          - "--mkpath"
       loop: "{{ hostvars[_builder]._build_targets }}"
