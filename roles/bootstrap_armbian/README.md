@@ -8,8 +8,8 @@ before bootstrap. After this runs:
 - `bootstrap_armbian_user` exists with the listed SSH keys in
   `~/.ssh/authorized_keys`
 - `/etc/sudoers.d/<user>` grants passwordless sudo
-- `/root/.not_logged_in_yet` is gone (Armbian's first-login TUI prompt
-  would otherwise hang the `apt install` step in the `bootloader` role)
+- `/root/.not_logged_in_yet` is gone (drops Armbian's first-login TUI
+  prompt so subsequent unattended SSH sessions don't hang)
 - `PasswordAuthentication no` in `/etc/ssh/sshd_config` (sshd
   restarted via handler)
 
@@ -17,10 +17,9 @@ Idempotent — re-running against a board already bootstrapped reconciles
 authorized_keys and is otherwise a no-op.
 
 This is the **first** play in the bootstrap sequence. Subsequent
-playbooks (`flash_bootloader.yml`, `populate_nfs_content.yml`,
-`reprovision.yml`) connect as the provisioned user — set
-`ansible_user` on `inventory/group_vars/all.yml` (or per-host) to
-match `bootstrap_armbian_user`.
+playbooks (e.g. `populate_nfs_content.yml`) connect as the provisioned
+user — set `ansible_user` on `inventory/group_vars/all.yml` (or
+per-host) to match `bootstrap_armbian_user`.
 
 ## Role variables
 

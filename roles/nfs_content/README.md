@@ -15,9 +15,6 @@ Armbian board to PXE-boot:
   identity.
 - Kernel, DTB, and initrd staged for TFTP (per-model; shared by all
   hosts of that model).
-- A copy of each `.img.xz` published to the netboot HTTP assets directory
-  so the `reprovision` role can fetch it from inside the NFS-booted
-  environment.
 
 The role runs **on the netboot server itself** (e.g. a TrueNAS host) over
 SSH and operates on the export paths directly. It does not mount NFS on the
@@ -38,7 +35,6 @@ netboot server (`become: true`).
 | Variable | Default | Description |
 |---|---|---|
 | `nfs_rootfs_path` | `/mnt/ssd/netboot/rootfs` | NFS export root for per-board rootfs trees on the netboot server. |
-| `nfs_reprovision_path` | `/exports/reprovision` | NFS export path used by the reprovision flow. |
 | `tftp_nfs_export` | `/mnt/ssd/containers/netbootxyz/config/menus` | TFTP server's document root. The default matches the netboot.xyz container's `dnsmasq --tftp-root=/config/menus`. Override if you serve TFTP from a different root. |
 | `nfs_assets_export` | `/mnt/ssd/containers/netbootxyz/assets` | HTTP server's document root. The default matches the netboot.xyz container's nginx (`root /assets;`). |
 | `armbian_image_cache` | `/mnt/ssd/netboot/cache` | Local cache for downloaded `.img.xz` files on the netboot server. |
