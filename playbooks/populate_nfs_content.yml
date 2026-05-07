@@ -3,9 +3,8 @@
 # in inventory. Runs against the netboot server itself over SSH; the
 # control node does not need an NFS client mount.
 #
-# Pre-flights every board's `uboot_apt_package` against the Armbian apt
-# repo and HEAD-checks every `armbian_image_urls` entry before any
-# destructive work; failures here surface at apt/URL config time, not
+# Pre-flights every `armbian_image_urls` entry with an HTTP HEAD before
+# any destructive work; URL failures surface at config time, not
 # halfway through an extraction.
 #
 # For each unique board model in inventory:
@@ -13,7 +12,6 @@
 #     `nfs_rootfs_path/_templates/<model>/`
 #   - Stages kernel / initrd / DTB into the TFTP tree
 #   - Publishes a copy of the `.img.xz` to the HTTP assets directory
-#     for the reprovision role to fetch
 #
 # For each inventory host:
 #   - Reflink-clones the model template into
