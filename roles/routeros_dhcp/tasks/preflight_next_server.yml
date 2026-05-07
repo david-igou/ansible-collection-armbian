@@ -6,7 +6,7 @@
 # the exact RouterOS command the user can run in their
 # RouterOS-config repo to fix it.
 #
-# This file is intended to be included from playbooks that depend on netboot working (wiring landed by separate commits in this branch):
+# This file is included from playbooks that depend on netboot working:
 #   - setup_routeros_dhcp.yml   (option-set creation)
 #   - enable_netboot.yml        (per-board lease assignment)
 #   - disable_netboot.yml       (per-board lease clear)

@@ -21,6 +21,13 @@ netboot_server_ip: "192.168.1.10"
 # collection mutates. Visible on RouterOS as `/ip dhcp-server print`.
 routeros_dhcp_server_name: "dhcp1"
 
+# CIDR of the RouterOS DHCP network the SBCs are attached to. Required by
+# the routeros_dhcp role's preflight, which asserts this network's
+# next-server field equals tftp_server_ip. The next-server value itself
+# is owned by your RouterOS-config repo, not this collection.
+# Example: "10.10.9.0/24"
+routeros_sbc_network_address: ""
+
 # ── NFS export paths on the netboot server ───────────────────────────────────
 # These must already exist and be exported before running
 # populate_nfs_content.yml.

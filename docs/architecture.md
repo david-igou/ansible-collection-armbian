@@ -157,16 +157,15 @@ shared by every board:
 - `dhcp-option set armbian-nfsroot` — bundles the two `dhcp-option`
   entries above.
 
-Per-board RouterOS state is exclusively the `dhcp-option` field on each
-static lease:
-
-```
-NFS-root mode:  dhcp-option=armbian-nfsroot
-SD mode:        dhcp-option=""
-```
-
-`enable_netboot.yml` sets the field, `disable_netboot.yml` clears it.
-That's the entire control surface.
+Per-board state spans two things: the `dhcp-option-set` field on the
+static lease (RouterOS) and the per-board `pxelinux.cfg/01-<MAC>`
+file (netboot server). `enable_netboot.yml` writes the file and
+assigns the option set; `disable_netboot.yml` removes the file and
+clears the option set. File presence is the load-bearing signal —
+without a per-board pxelinux.cfg, U-Boot's PXE bootmeth fast-404s
+through the fallback chain and proceeds to MMC. The option-set
+assignment is now ornamental but kept for symmetry with the
+historical control surface.
 
 ## Out of v1 scope (deferred)
 
