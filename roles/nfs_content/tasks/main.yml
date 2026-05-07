@@ -12,7 +12,7 @@
 
 - name: Load board configs
   ansible.builtin.include_vars:
-    file: "{{ role_path }}/../bootloader/vars/boards.yml"
+    file: "{{ role_path }}/../../vars/boards.yml"
 
 - name: Gather unique board models from inventory
   ansible.builtin.set_fact:

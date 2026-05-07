@@ -19,12 +19,11 @@
   tags: pxelinux
 
 # Load the per-board configs the pxelinux template needs (board console,
-# DTB filename). These live in the bootloader role's vars/ tree; we
-# include them here rather than depending on the bootloader role being
-# referenced from this play.
+# DTB filename). These live in the collection-level vars/boards.yml so
+# this role does not depend on any other role being present.
 - name: Load board configs
   ansible.builtin.include_vars:
-    file: "{{ role_path }}/../bootloader/vars/boards.yml"
+    file: "{{ role_path }}/../../vars/boards.yml"
   tags: pxelinux
 
 - name: Ensure pxelinux.cfg directory exists on netboot server
