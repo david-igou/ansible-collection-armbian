@@ -298,6 +298,14 @@ The dimensions that vary in practice:
   `/usr/lib/linux-u-boot-<branch>-<board>` (segments swapped). Heads-up
   for any future board onboarding that needs to consume the U-Boot deb
   path.
+- **MMC controller index in U-Boot**: which `mmc dev N` enumerates the
+  SD card slot is per-board, depending on what the U-Boot DTB declares.
+  On `orangepi5` the U-Boot DT exposes only the SD controller and the
+  SD card is `mmc 0`; on `orangepi5pro` the U-Boot DT exposes eMMC slot
+  + SDIO + SD and the SD card is `mmc 1`. `boot.scr` reads `${devnum}`
+  from the bootflow framework so most boots don't care, but anything
+  that hard-codes `mmc dev N` (manual U-Boot scripts, recovery aids,
+  future per-board hooks) must consult `mmc list` on the actual board.
 
 ## Adding a new board (post-v1)
 
