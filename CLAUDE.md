@@ -8,11 +8,11 @@ The `david_igou.armbian_netboot` Ansible collection for managing Armbian-based
 ARM SBCs end-to-end. PXE-netboot is a workflow built on the collection's
 primitives — it is not the framing.
 
-A RouterOS DHCP change is the sole trigger for switching a board between disk boot
-and netboot. The netboot server (running netboot.xyz + NFS) is assumed to already
-be running; this collection manages its NFS export contents, RouterOS DHCP
-configuration, PoE power state, and (via `armbian_build`) the custom Armbian
-images those workflows consume.
+Per-board pxelinux.cfg presence on rb5009's TFTP server is the sole trigger for
+switching a board between disk boot and netboot. The netboot server (TrueNAS,
+running NFS) is assumed to already be running; this collection manages its NFS
+export contents, rb5009's SBC TFTP layout, PoE power state, and (via
+`armbian_build`) the custom Armbian images those workflows consume.
 
 ## Mental model: roles + workflow playbooks
 
@@ -28,23 +28,23 @@ parameters, in what order.
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
 | `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
-| `routeros_dhcp` | Shared DHCP option set (`armbian-nfsroot`) + per-lease assignment on RouterOS |
+| `routeros_dhcp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
 ## ✅ Status: v1 = orangepi5pro netboot capability only
 
 This collection is currently scoped to a single deliverable: a custom
 Armbian SD image for `orangepi5pro` whose U-Boot tries PXE first, so
-toggling a RouterOS DHCP option set switches the board between an NFS
-rootfs and the local SD rootfs. v1 explicitly does not include
+adding/removing per-board pxelinux.cfg on rb5009 switches the board between
+an NFS rootfs and the local SD rootfs. v1 explicitly does not include
 reprovisioning, on-host bootloader flashing, or any board other than
 `orangepi5pro`. Reprovisioning and on-host bootloader flashing have
 been deleted from the repo, not deferred-in-place; they will be
 re-introduced post-v1 against the slimmer model.
 
 The "what runs over NFS / why" question is deferred — v1 just
-demonstrates that a board can be flipped between SD and NFS via DHCP.
-See `playbooks/test_hardware_e2e.yml` for the assertion harness.
+demonstrates that a board can be flipped between SD and NFS via rb5009's
+TFTP layout. See `playbooks/test_hardware_e2e.yml` for the assertion harness.
 
 Spec: [`docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md)
 
@@ -68,8 +68,7 @@ david_igou/armbian_netboot/   (this repo root)
 ├── playbooks/
 │   ├── bootstrap_armbian.yml        # (0) Provision SSH-key user on flashed boards
 │   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
-│   ├── stage_netboot_assets.yml     # (2) Populate NFS rootfs + TFTP content
-│   ├── setup_routeros_dhcp.yml      # (3) Create RouterOS DHCP option objects
+│   ├── stage_netboot_assets.yml     # (2) Populate NFS rootfs + rb5009 TFTP content
 │   ├── build_image.yml              # Build custom Armbian .img.xz for orangepi5pro
 │   ├── enable_netboot.yml           # Toggle board into NFS-root mode
 │   ├── disable_netboot.yml          # Revert to disk boot
@@ -111,11 +110,8 @@ ansible-playbook playbooks/bootstrap_armbian.yml --limit orange-pi-5-pro-01
 ansible-playbook playbooks/bootstrap_routeros_user.yml \
   -e ansible_user=<existing-admin>
 
-# (3) Populate NFS exports with rootfs/kernel/DTB.
+# (3) Stage netboot assets on TrueNAS (NFS rootfs) + rb5009 (TFTP kernel/initrd/dtb).
 ansible-playbook playbooks/stage_netboot_assets.yml
-
-# (4) Create the shared RouterOS DHCP option objects.
-ansible-playbook playbooks/setup_routeros_dhcp.yml
 
 # Toggle a board into NFS-root mode (board reboots immediately).
 ansible-playbook playbooks/enable_netboot.yml --limit orange-pi-5-pro-01
@@ -163,26 +159,22 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 
 - `netboot_server_ip` — IP used as the default for both TFTP/HTTP (DHCP option 66 +
   `image_server_url`) and NFS (`nfsroot=<ip>:<path>` in pxelinux.cfg).
-- `tftp_server_ip` (optional) — overrides `netboot_server_ip` for the TFTP/HTTP role.
-  Set in split-host topologies (e.g. netboot.xyz container on a macvlan network at one
-  IP, NFS exported from the host at another).
+- `sbc_tftp_flash_dir` (overridable) — top-level dir on rb5009's flash for SBC TFTP
+  content. Default `sbc`. Used as `flash:/<sbc_tftp_flash_dir>/...` in `/file` paths
+  and as the prefix of `real-filename` in `/ip tftp` rules.
+- `sbc_tftp_cache_dir` (overridable) — control-node cache where kernel/initrd/dtb
+  fetched from TrueNAS get stashed before `net_put` to rb5009. Default
+  `{{ playbook_dir }}/../.cache/sbc-tftp/` (gitignored).
 - `nfs_server_ip` (optional) — overrides `netboot_server_ip` for the NFS role.
-- `routeros_dhcp_server_name` — `/ip dhcp-server` name on RouterOS (default `dhcp1`).
 - `armbian_default_password` — Armbian NFS root SSH password (default `1234`); encrypt with vault
 - `armbian_image_urls` — full `.img.xz` URL per board model. In v1 this points at
   the locally-published custom build under `image_server_url/<board>/<file>.img.xz`
   (the URL `playbooks/build_image.yml` publishes to).
-- `routeros_sbc_network_address` (required) — CIDR of the RouterOS DHCP
-  network the SBCs are attached to (e.g. `"10.10.9.0/24"`). Required
-  by the `routeros_dhcp` role's preflight, which asserts the network's
-  `next-server` field equals `tftp_server_ip`. U-Boot 2025.10's PXE
-  bootmeth uses BOOTP `siaddr` (next-server) as the TFTP source —
-  option 66 is silently ignored. The `next-server` value itself is
-  owned by your RouterOS-config repo; this collection only asserts.
-  See `docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md`.
-- `tftp_nfs_export` (overridable) — TFTP server's document root. Default
-  `/mnt/ssd/containers/netbootxyz/config/menus` matches netboot.xyz container's
-  dnsmasq `--tftp-root`. Override if you run TFTP differently.
+- **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
+  rb5009's IP for that subnet (e.g. `10.10.9.1` for vlan9). This is owned by your
+  separate RouterOS-config repo (e.g. igou-ansible's `deploy_netboot_binaries.yml`)
+  and not asserted by this collection. Without it, U-Boot can't reach rb5009's TFTP
+  daemon to fetch per-board pxelinux.cfg + per-model kernel/initrd/dtb.
 - `nfs_assets_export` (overridable) — HTTP server's document root. Default
   `/mnt/ssd/containers/netbootxyz/assets` matches netboot.xyz container's nginx root.
 
@@ -193,8 +185,8 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 **Three RouterOS groups in `inventory/hosts.yml`**:
 
 - `routeros_routers` — devices that run a DHCP server. All per-board plays
-  (`enable_netboot.yml`, `disable_netboot.yml`) and `setup_routeros_dhcp.yml`
-  target this group; the DHCP-mutating commands would fail on switches.
+  (`enable_netboot.yml`, `disable_netboot.yml`) target this group; the
+  DHCP-mutating commands would fail on switches.
 - `routeros_switches` — devices that don't run DHCP but should still get the SSH user.
 - `routeros_netboot` — subset that `bootstrap_routeros_user.yml` provisions the
   `ansible-netboot` user on (typically the same as `routeros_routers + routeros_switches`).
@@ -215,9 +207,9 @@ required by `playbooks/poe_control.yml`.
 
 ## Architecture
 
-**The intended invariant**: RouterOS DHCP options are the *only* control surface for
-switching boot mode. U-Boot tries PXE first and falls through to disk when DHCP provides
-no `next-server`.
+**The intended invariant**: per-board pxelinux.cfg presence on rb5009's TFTP server
+is the *only* control surface for switching boot mode. U-Boot tries PXE first and
+falls through to disk when no `pxelinux.cfg/01-<MAC>` is registered for the board.
 
 This invariant is delivered by custom Armbian images built via the `armbian_build`
 role — stock Armbian Rockchip `current` ships PXE at position 6 in `BOOT_TARGETS`
@@ -232,13 +224,14 @@ configured.
 HEAD-checks every board's `armbian_image_urls` entry (failing on 4xx/dead mirror)
 before any image download or NFS write.
 
-## How NFS content is managed
+## How netboot content is managed
 
-`stage_netboot_assets.yml` connects to the netboot server over SSH
-(`hosts: netboot_server`, `become: true`) and operates on the export paths
-(`nfs_rootfs_path`, `tftp_nfs_export`, `nfs_assets_export`) directly as filesystem paths
-— no NFS client mount on the control node is required. This makes the role compatible with rootless execution environments
-(`ansible-navigator` + rootless podman).
+`stage_netboot_assets.yml` writes two pieces of state. First, it connects to the
+netboot server (TrueNAS) over SSH (`hosts: netboot_server`, `become: true`) and
+operates on `nfs_rootfs_path` + `nfs_assets_export` directly as filesystem paths —
+no NFS client mount on the control node is required. Then it stages per-model
+kernel/initrd/dtb to rb5009 by `net_put`-ing files into `flash:/<sbc_tftp_flash_dir>/`
+and registering corresponding `/ip tftp` rules.
 
 Inside `nfs_rootfs_path` two layouts coexist:
 
@@ -253,14 +246,13 @@ Per-host clones are made with `cp --reflink=auto`, which is a zero-cost CoW snap
 XFS, btrfs, and ZFS (one rootfs's worth of bytes regardless of host count) and a full copy
 on ext4. Hostname, machine-id, and SSH host keys are reset per-host so two same-model
 boards have independent identity on the wire — see `roles/netboot_assets/tasks/per_host.yml`.
-The `pxelinux.cfg/01-<mac>` files point each board at its own per-host export.
+The `pxelinux.cfg/01-<mac>` files (on rb5009) point each board at its own per-host export.
 
-`enable_netboot.yml` writes per-board `pxelinux.cfg/01-<mac>` files directly on
-the netboot server over SSH, via the `routeros_dhcp` role's `write_pxelinux_cfg.yml`
-task file (run from a `hosts: netboot_server`, `become: true` play). The control
-node never NFS-mounts the export. Combined with `netboot_assets`'s same model, every
-write to the netboot server happens over SSH — no NFS client on the control node,
-rootless-EE-friendly.
+`enable_netboot.yml` renders per-board `pxelinux.cfg/01-<mac>` content locally and
+`net_put`s it to rb5009's flash, then registers a `/ip tftp` row exposing that file.
+`disable_netboot.yml` removes the row first, then the file. The control node never
+NFS-mounts anything and never SSHes to the netboot server during enable/disable —
+rb5009 is the entire control surface for boot-mode toggles.
 
 ## Where things run
 
@@ -268,12 +260,11 @@ rootless-EE-friendly.
 |---|---|
 | `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
-| `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS/TFTP content) |
-| `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |
+| `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS rootfs) + **rb5009** (kernel/initrd/dtb via `net_put` + `/ip tftp` registration) |
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
-| `enable_netboot.yml` / `disable_netboot.yml` | **netboot server** (pxelinux.cfg over SSH) + RouterOS (DHCP) |
+| `enable_netboot.yml` / `disable_netboot.yml` | **rb5009** (per-board pxelinux.cfg + `/ip tftp` row) + **boards** (reboot trigger) |
 | `poe_control.yml` | **boards** (delegated to `routeros_switches` via `poe_switch` hostvar) |
-| `test_hardware_e2e.yml` | **boards** + RouterOS (DHCP, delegated) + RouterOS switch (PoE, delegated) |
+| `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 
 ## SBC ecosystem reality: variation is the rule
 
@@ -331,15 +322,32 @@ board comes online:
 5. Run `playbooks/build_image.yml` to produce the image, then
    `stage_netboot_assets.yml` and the rest of the v1 sequence.
 
-## RouterOS DHCP objects
+## rb5009 SBC TFTP layout
 
-Three objects are created once by `setup_routeros_dhcp.yml` and reused for all boards:
-- `dhcp-option armbian-tftp-server` (option 66 → TFTP server IP)
-- `dhcp-option armbian-nfsroot-bootfile` (option 67 → pxelinux.cfg/nfsroot-default)
-- `dhcp-option set armbian-nfsroot` (bundles the two above)
+The collection writes file + `/ip tftp` row state on rb5009; no DHCP option-sets,
+no lease mutations.
 
-Per-board `enable_netboot` sets `dhcp-option=armbian-nfsroot` on the static lease;
-`disable_netboot` clears it. This is the only per-board RouterOS state.
+```
+flash:/sbc/
+├── pxelinux.cfg/
+│   └── 01-<MAC>           # per-board (enable_netboot.yml writes; disable removes)
+└── armbian/
+    └── <model>/
+        ├── vmlinuz        # per-model (stage_netboot_assets.yml writes)
+        ├── initrd.img
+        └── board.dtb
+```
+
+Each file has a corresponding `/ip tftp` rule with `req-filename` matching the
+path U-Boot requests (e.g. `pxelinux.cfg/01-c0-74-2b-fb-4d-fd`,
+`armbian/orange-pi-5-pro/vmlinuz`) and `real-filename` pointing at the flash
+path. Per-board state is the file + the row; both are added by `enable_netboot.yml`
+and removed (row first) by `disable_netboot.yml`. Per-model assets are added once
+by `stage_netboot_assets.yml` and persist across enable/disable cycles.
+
+The SBC subnet's `next-server` (set by your separate RouterOS-config repo) points
+at rb5009; combined with U-Boot's PXE bootmeth using `siaddr` for `serverip`, that
+sends every TFTP request straight at rb5009.
 
 ## PoE power control
 
@@ -363,8 +371,12 @@ knows its own switch and port, so delegation routes the command correctly withou
 - `vars/boards.yml` — authoritative per-board metadata (v1: orangepi5pro)
 - `roles/netboot_assets/tasks/preflight.yml` — image URL HEAD validation
 - `roles/netboot_assets/tasks/per_host.yml` — per-host rootfs clone + identity reset
+- `roles/netboot_assets/tasks/stage_rb5009.yml` — net_put kernel/initrd/dtb to rb5009
+- `roles/netboot_assets/tasks/plumbing_check.yml` — assert /ip tftp rows exist on rb5009
+- `roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml` — render locally, net_put per-board pxelinux.cfg to rb5009
+- `roles/routeros_dhcp/tasks/remove_pxelinux_cfg.yml` — remove /ip tftp row + flash file
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs (edit before first run)
-- `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host TFTP boot config
+- `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host PXE boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
 - `playbooks/build_image.yml` — custom Armbian image build pipeline
 - `galaxy.yml` — collection namespace, version, external dependencies
