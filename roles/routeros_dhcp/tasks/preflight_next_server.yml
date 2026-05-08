@@ -10,7 +10,7 @@
 #   - setup_routeros_dhcp.yml   (option-set creation)
 #   - enable_netboot.yml        (per-board lease assignment)
 #   - disable_netboot.yml       (per-board lease clear)
-#   - populate_nfs_content.yml  (TFTP/NFS content)
+#   - stage_netboot_assets.yml  (TFTP/NFS content)
 #
 # Each play that includes it must target a host that can reach
 # RouterOS via community.routeros.command (i.e. routeros_routers or

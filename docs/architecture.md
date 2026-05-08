@@ -56,7 +56,7 @@ operator's separate RouterOS-config repo. The
 `routeros_dhcp/preflight_next_server` task asserts the value is set
 correctly before any play that depends on netboot working
 (`setup_routeros_dhcp.yml`, `enable_netboot.yml`,
-`disable_netboot.yml`, `populate_nfs_content.yml`). The fail message
+`disable_netboot.yml`, `stage_netboot_assets.yml`). The fail message
 names the exact RouterOS command to run if the assertion fires.
 
 The required inventory variable is `routeros_sbc_network_address`
@@ -76,11 +76,11 @@ roles ship in v1.
 | `armbian_build` | `.img.xz` Armbian image with PXE-first U-Boot baked in, published to netboot server |
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
-| `nfs_content` | rootfs / TFTP / pxelinux content under server exports |
+| `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
 | `routeros_dhcp` | Shared DHCP option set (`armbian-nfsroot`) + per-lease assignment on RouterOS |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
-The `armbian_build`, `nfs_content`, and `routeros_dhcp` roles each own one
+The `armbian_build`, `netboot_assets`, and `routeros_dhcp` roles each own one
 piece of off-board state — the build host, the netboot server's exports,
 the RouterOS DHCP configuration. The two `bootstrap_*` roles bring a fresh
 board or a fresh RouterOS device into a state where the other roles can
@@ -98,7 +98,7 @@ setup-only; the rest are run as needed:
 2. (Once)   Bootstrap RouterOS SSH user                 → bootstrap_routeros_user.yml
 3. (Once per board) Bootstrap SD-rootfs SSH user        → bootstrap_armbian.yml
 4. (Once)   Create RouterOS DHCP option objects         → setup_routeros_dhcp.yml
-5.          Populate NFS exports for a board            → populate_nfs_content.yml
+5.          Populate NFS exports for a board            → stage_netboot_assets.yml
 6.          Toggle board into NFS-root mode             → enable_netboot.yml
 7.          Toggle board back to SD                     → disable_netboot.yml
 ```
@@ -112,7 +112,7 @@ RouterOS DHCP option to send it into NFS or back to SD.
 
 ## NFS content layout
 
-`populate_nfs_content.yml` connects to the netboot server over SSH and
+`stage_netboot_assets.yml` connects to the netboot server over SSH and
 writes three kinds of content under the server's exports. The control
 node never NFS-mounts anything.
 

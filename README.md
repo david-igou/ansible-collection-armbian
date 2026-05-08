@@ -72,7 +72,7 @@ that combines existing primitives means adding a playbook (no role changes).
 | [`armbian_build`](roles/armbian_build/) | Custom Armbian `.img.xz` with PXE-first U-Boot baked in, published to the netboot server |
 | [`bootstrap_armbian`](roles/bootstrap_armbian/) | SSH-key user with passwordless sudo on a freshly flashed Armbian board |
 | [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | RouterOS user, group, and SSH-key state over network_cli |
-| [`nfs_content`](roles/nfs_content/) | rootfs / TFTP / pxelinux content under server exports |
+| [`netboot_assets`](roles/netboot_assets/) | rootfs / TFTP / pxelinux content under server exports |
 | [`routeros_dhcp`](roles/routeros_dhcp/) | Shared `armbian-nfsroot` DHCP option set + per-lease assignment on RouterOS |
 | [`routeros_poe`](roles/routeros_poe/) | PoE port state (on/off) on RouterOS switch ports |
 
@@ -80,10 +80,10 @@ that combines existing primitives means adding a playbook (no role changes).
 
 | # | Playbook | Frequency | What it does |
 |---|---|---|---|
-| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for `orange-pi-5-pro` on the `armbian_builders` host and publishes it to the netboot server's HTTP root for `populate_nfs_content` to consume. |
+| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for `orange-pi-5-pro` on the `armbian_builders` host and publishes it to the netboot server's HTTP root for `stage_netboot_assets` to consume. |
 | 1 | `bootstrap_armbian.yml` | Once per board, right after flashing the custom image | Connects as root with `armbian_default_password`, creates the inventory's `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's first-login TUI prompt, disables sshd password auth. |
 | 2 | `bootstrap_routeros_user.yml` | Once per RouterOS device | Provisions the `ansible-netboot` SSH user, group, and keys on the router (and any switches). |
-| 3 | `populate_nfs_content.yml` | Once per environment, then on every inventory change | Populates the netboot server's NFS rootfs templates, per-host clones, and TFTP kernel/initrd/DTB tree from the Armbian image. |
+| 3 | `stage_netboot_assets.yml` | Once per environment, then on every inventory change | Populates the netboot server's NFS rootfs templates, per-host clones, and TFTP kernel/initrd/DTB tree from the Armbian image. |
 | 4 | `setup_routeros_dhcp.yml` | Once per RouterOS device | Creates the shared `armbian-nfsroot` DHCP option set on RouterOS. |
 | 5 | `enable_netboot.yml` | Ad-hoc | Sets the board's RouterOS lease to `dhcp-option=armbian-nfsroot` and reboots it; the board comes up on the NFS rootfs. |
 | 6 | `disable_netboot.yml` | Ad-hoc | Clears the RouterOS DHCP option for a board; the next reboot lands on the local SD rootfs. |
@@ -142,7 +142,7 @@ From this point on every other playbook authenticates as `ansible-netboot`.
 #### 0.3 Populate the NFS exports
 
 ```bash
-ansible-playbook playbooks/populate_nfs_content.yml
+ansible-playbook playbooks/stage_netboot_assets.yml
 ```
 
 Runs over SSH against the netboot server. Pre-flight HEAD-checks every
@@ -219,10 +219,10 @@ second run is a no-op aside from authorized_keys reconciliation.
 Edit the SSH key list in `playbooks/bootstrap_armbian.yml` (or override
 `bootstrap_armbian_ssh_keys` via `-e`) before first run.
 
-#### 1.5 Re-run populate_nfs_content.yml
+#### 1.5 Re-run stage_netboot_assets.yml
 
 ```bash
-ansible-playbook playbooks/populate_nfs_content.yml
+ansible-playbook playbooks/stage_netboot_assets.yml
 ```
 
 Creates the per-host rootfs clone for the new host. Existing boards are
@@ -299,7 +299,7 @@ lines at every checkpoint.
 | 0 | `build_image.yml` | Per `armbian/build` ref or patch-table change |
 | 1 | `bootstrap_armbian.yml --limit <host>` | Once per board, right after flashing |
 | 2 | `bootstrap_routeros_user.yml -e ansible_user=<existing-admin>` | Once per RouterOS device |
-| 3 | `populate_nfs_content.yml` | Once per environment + on every inventory change |
+| 3 | `stage_netboot_assets.yml` | Once per environment + on every inventory change |
 | 4 | `setup_routeros_dhcp.yml` | Once per RouterOS device |
 | 5 | `enable_netboot.yml --limit <host>` | Ad-hoc — toggle into NFS root |
 | 6 | `disable_netboot.yml --limit <host>` | Ad-hoc — revert to SD rootfs |

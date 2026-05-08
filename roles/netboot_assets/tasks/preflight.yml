@@ -1,5 +1,5 @@
 ---
-# Pre-flight validation for populate_nfs_content.yml.
+# Pre-flight validation for stage_netboot_assets.yml.
 #
 # Catches one class of misconfiguration that would otherwise surface
 # late: armbian_image_urls[<model>] is unreachable (404, dead mirror,

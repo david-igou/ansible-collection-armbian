@@ -18,10 +18,10 @@
 - `vars/boards.yml` — collection-level shared board metadata table; one entry (`orange-pi-5-pro`).
 
 **Modify:**
-- `roles/nfs_content/tasks/preflight.yml` — drop apt-package existence check; keep image URL HEAD check.
-- `roles/nfs_content/tasks/main.yml` — `include_vars` path moves to new `vars/boards.yml`.
-- `roles/nfs_content/defaults/main.yml` — drop `nfs_reprovision_path`.
-- `roles/nfs_content/tasks/per_board.yml` — drop reprovision wording in the assets-copy task name.
+- `roles/netboot_assets/tasks/preflight.yml` — drop apt-package existence check; keep image URL HEAD check.
+- `roles/netboot_assets/tasks/main.yml` — `include_vars` path moves to new `vars/boards.yml`.
+- `roles/netboot_assets/defaults/main.yml` — drop `nfs_reprovision_path`.
+- `roles/netboot_assets/tasks/per_board.yml` — drop reprovision wording in the assets-copy task name.
 - `roles/routeros_dhcp/defaults/main.yml` — drop `routeros_opt_set_reprovision_prefix`, drop `netboot_modes.reprovision`.
 - `roles/routeros_dhcp/tasks/setup_options.yml` — drop the reprovision option-67 entry and the `armbian-reprovision` option set.
 - `roles/routeros_dhcp/tasks/enable_netboot.yml` — drop `netboot_mode` validation, unconditionally set `dhcp-option=armbian-nfsroot`.
@@ -29,13 +29,13 @@
 - `roles/routeros_dhcp/tasks/disable_netboot.yml` — trim the "called from reprovision.yml" comment.
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — drop the `reprovision` branch (`netboot_mode`-conditional sections).
 - `roles/routeros_dhcp/README.md` — drop reprovision option-set documentation.
-- `roles/nfs_content/README.md` — drop reprovision references.
+- `roles/netboot_assets/README.md` — drop reprovision references.
 - `roles/bootstrap_armbian/README.md` — drop references to deleted playbooks.
 - `playbooks/build_image.yml` — `include_vars` path moves; drop the `host_board_overrides.armbian_build_enabled` filter (build all unique board_models in inventory).
 - `playbooks/enable_netboot.yml` — drop the `netboot_mode=reprovision` example from the comment block.
 - `playbooks/disable_netboot.yml` — drop the "cancel a queued reprovision" wording in the comment.
 - `playbooks/setup_routeros_dhcp.yml` — drop the `armbian-reprovision*` lines from the comment block.
-- `playbooks/populate_nfs_content.yml` — drop "for the reprovision role to fetch" wording.
+- `playbooks/stage_netboot_assets.yml` — drop "for the reprovision role to fetch" wording.
 - `playbooks/test_hardware_e2e.yml` — drop the `host_board_overrides.armbian_build_enabled` warning task; drop `netboot_mode: nfsroot` (now redundant) from the enable-netboot include.
 - `inventory/hosts.yml` — prune to `orange-pi-5-pro` only; drop `host_board_overrides` example block.
 - `inventory/group_vars/all.yml` — drop `armbian_apt_suite`, `armbian_branch`; prune `armbian_image_urls` to `orange-pi-5-pro`.
@@ -77,7 +77,7 @@
 #   armbian_support      Armbian support tier (standard / community /
 #                        wip / unsupported). Documentation only.
 #   dtb                  Device tree path under /boot/dtb/. Used by
-#                        roles/nfs_content/tasks/per_board.yml.
+#                        roles/netboot_assets/tasks/per_board.yml.
 #   console              Kernel console parameter. Used by
 #                        roles/routeros_dhcp/templates/pxelinux_cfg.j2.
 
@@ -107,20 +107,20 @@ git commit -m "Add collection-level vars/boards.yml for v1 board metadata"
 
 ---
 
-### Task 2: Slim `nfs_content` preflight and defaults
+### Task 2: Slim `netboot_assets` preflight and defaults
 
 **Why now:** Drops the apt-package check that depends on `uboot_apt_package` (a field that won't exist in the new `vars/boards.yml`). Also drops the `nfs_reprovision_path` default. Doing this before migrating the include_vars path means the consumer is field-aligned with the new vars file ahead of the path switch.
 
 **Files:**
-- Modify: `roles/nfs_content/tasks/preflight.yml`
-- Modify: `roles/nfs_content/defaults/main.yml`
-- Modify: `roles/nfs_content/tasks/per_board.yml` (comment trim only)
+- Modify: `roles/netboot_assets/tasks/preflight.yml`
+- Modify: `roles/netboot_assets/defaults/main.yml`
+- Modify: `roles/netboot_assets/tasks/per_board.yml` (comment trim only)
 
-- [ ] **Step 1: Replace `roles/nfs_content/tasks/preflight.yml`**
+- [ ] **Step 1: Replace `roles/netboot_assets/tasks/preflight.yml`**
 
 ```yaml
 ---
-# Pre-flight validation for populate_nfs_content.yml.
+# Pre-flight validation for stage_netboot_assets.yml.
 #
 # Catches one class of misconfiguration that would otherwise surface
 # late: armbian_image_urls[<model>] is unreachable (404, dead mirror,
@@ -156,7 +156,7 @@ git commit -m "Add collection-level vars/boards.yml for v1 board metadata"
       {{ _board_models | length }} board model(s).
 ```
 
-- [ ] **Step 2: Drop `nfs_reprovision_path` and the apt URL var from `roles/nfs_content/defaults/main.yml`**
+- [ ] **Step 2: Drop `nfs_reprovision_path` and the apt URL var from `roles/netboot_assets/defaults/main.yml`**
 
 Remove these lines from the file:
 
@@ -168,7 +168,7 @@ And remove the `armbian_apt_packages_url` block at the bottom of the file (the `
 
 Also delete the comment lines mentioning the reprovision role's HTTP download from the `nfs_assets_export` doc block (`# reprovision role downloads from ...`).
 
-- [ ] **Step 3: Trim reprovision wording in `roles/nfs_content/tasks/per_board.yml`**
+- [ ] **Step 3: Trim reprovision wording in `roles/netboot_assets/tasks/per_board.yml`**
 
 Find the task whose name is "Copy Armbian image to assets for reprovision HTTP download" (around line 112) and rename it to:
 
@@ -189,10 +189,10 @@ Expected: passes (or fails only on pre-existing warnings unrelated to these file
 - [ ] **Step 5: Commit**
 
 ```bash
-git add roles/nfs_content/tasks/preflight.yml \
-        roles/nfs_content/defaults/main.yml \
-        roles/nfs_content/tasks/per_board.yml
-git commit -m "Slim nfs_content preflight to URL HEAD only and drop reprovision defaults"
+git add roles/netboot_assets/tasks/preflight.yml \
+        roles/netboot_assets/defaults/main.yml \
+        roles/netboot_assets/tasks/per_board.yml
+git commit -m "Slim netboot_assets preflight to URL HEAD only and drop reprovision defaults"
 ```
 
 ---
@@ -202,11 +202,11 @@ git commit -m "Slim nfs_content preflight to URL HEAD only and drop reprovision 
 **Why now:** Moves all consumers of board metadata to the new file in one commit, so the next tasks can delete `roles/bootloader/` without a flush of broken includes.
 
 **Files:**
-- Modify: `roles/nfs_content/tasks/main.yml`
+- Modify: `roles/netboot_assets/tasks/main.yml`
 - Modify: `roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml`
 - Modify: `playbooks/build_image.yml`
 
-- [ ] **Step 1: Update `roles/nfs_content/tasks/main.yml`**
+- [ ] **Step 1: Update `roles/netboot_assets/tasks/main.yml`**
 
 Find the block at lines 13-15 and replace:
 
@@ -224,7 +224,7 @@ with:
     file: "{{ role_path }}/../../vars/boards.yml"
 ```
 
-(The role lives at `roles/nfs_content/`, so `../../vars/boards.yml` resolves to the collection root.)
+(The role lives at `roles/netboot_assets/`, so `../../vars/boards.yml` resolves to the collection root.)
 
 - [ ] **Step 2: Update `roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml`**
 
@@ -283,7 +283,7 @@ In the `pre_tasks` block (lines 51-67), replace the existing `include_vars` and 
 
 ```bash
 make lint
-ansible-playbook --syntax-check playbooks/populate_nfs_content.yml playbooks/enable_netboot.yml playbooks/build_image.yml
+ansible-playbook --syntax-check playbooks/stage_netboot_assets.yml playbooks/enable_netboot.yml playbooks/build_image.yml
 ```
 
 Expected: lint passes, syntax-check passes.
@@ -291,7 +291,7 @@ Expected: lint passes, syntax-check passes.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add roles/nfs_content/tasks/main.yml \
+git add roles/netboot_assets/tasks/main.yml \
         roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml \
         playbooks/build_image.yml
 git commit -m "Migrate board metadata include_vars to collection-level vars/boards.yml
@@ -451,7 +451,7 @@ bundle."
 # Writes the per-board pxelinux.cfg file directly on the netboot server's
 # filesystem. Designed to be run from a play with `hosts: netboot_server`,
 # `become: true` — it operates on `tftp_nfs_export` as a local path, the
-# same way nfs_content does. No NFS mount on the control node.
+# same way netboot_assets does. No NFS mount on the control node.
 #
 # Required variables:
 #   board_mac          MAC address of the board (drives 01-<mac> filename)
@@ -562,7 +562,7 @@ unconditionally sets dhcp-option=armbian-nfsroot."
 - Modify: `playbooks/enable_netboot.yml`
 - Modify: `playbooks/disable_netboot.yml`
 - Modify: `playbooks/setup_routeros_dhcp.yml`
-- Modify: `playbooks/populate_nfs_content.yml`
+- Modify: `playbooks/stage_netboot_assets.yml`
 
 - [ ] **Step 1: Update `playbooks/enable_netboot.yml` header**
 
@@ -627,7 +627,7 @@ Replace the comment block (lines 1-21) with:
 #   ansible-playbook playbooks/setup_routeros_dhcp.yml
 ```
 
-- [ ] **Step 4: Update `playbooks/populate_nfs_content.yml` comment**
+- [ ] **Step 4: Update `playbooks/stage_netboot_assets.yml` comment**
 
 In the comment block (lines 13-15), replace:
 
@@ -671,7 +671,7 @@ yamllint -c .yamllint.yml playbooks/
 git add playbooks/enable_netboot.yml \
         playbooks/disable_netboot.yml \
         playbooks/setup_routeros_dhcp.yml \
-        playbooks/populate_nfs_content.yml
+        playbooks/stage_netboot_assets.yml
 git commit -m "Trim reprovision references from playbook usage docs"
 ```
 
@@ -737,7 +737,7 @@ git commit -m "Drop host_board_overrides and netboot_mode refs from test_hardwar
 
 **Files:**
 - Modify: `roles/routeros_dhcp/README.md`
-- Modify: `roles/nfs_content/README.md`
+- Modify: `roles/netboot_assets/README.md`
 - Modify: `roles/bootstrap_armbian/README.md`
 
 - [ ] **Step 1: Read and trim `roles/routeros_dhcp/README.md`**
@@ -748,10 +748,10 @@ cat roles/routeros_dhcp/README.md
 
 Remove every reference to `armbian-reprovision`, the reprovision option set, `routeros_opt_set_reprovision_prefix`, and any "Enable PXE reprovision mode for a board" example block. The README's structural sections (Overview, Tasks, Variables, Usage) all stay — just collapse the per-mode listings to nfsroot-only.
 
-- [ ] **Step 2: Read and trim `roles/nfs_content/README.md`**
+- [ ] **Step 2: Read and trim `roles/netboot_assets/README.md`**
 
 ```bash
-cat roles/nfs_content/README.md
+cat roles/netboot_assets/README.md
 ```
 
 Remove every reference to `nfs_reprovision_path` (variable), the reprovision role, and "so the `reprovision` role can fetch it from inside the NFS-booted ..." wording.
@@ -780,7 +780,7 @@ make lint
 
 ```bash
 git add roles/routeros_dhcp/README.md \
-        roles/nfs_content/README.md \
+        roles/netboot_assets/README.md \
         roles/bootstrap_armbian/README.md
 git commit -m "Trim reprovision and bootloader references from role READMEs"
 ```
@@ -903,7 +903,7 @@ Spec: docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md"
 #
 # Multiple hosts of the same board_model are supported: each gets its
 # own NFS rootfs export, hostname, machine-id, and SSH host keys (see
-# nfs_content/tasks/per_host.yml). The model-level template in
+# netboot_assets/tasks/per_host.yml). The model-level template in
 # nfs_rootfs_path/_templates/<board_model>/ is shared via
 # `cp --reflink=auto`, so storage cost stays at one rootfs per model
 # on filesystems that support reflinks (XFS, btrfs, ZFS).
@@ -918,7 +918,7 @@ all:
           ansible_become: true
 
     # Hosts that run armbian/build to produce custom .img.xz images,
-    # consumed by populate_nfs_content via armbian_image_urls overridden
+    # consumed by stage_netboot_assets via armbian_image_urls overridden
     # to the netboot server's HTTP assets path.
     armbian_builders:
       hosts:
@@ -1032,7 +1032,7 @@ routeros_dhcp_server_name: "dhcp1"
 
 # ── NFS export paths on the netboot server ───────────────────────────────────
 # These must already exist and be exported before running
-# populate_nfs_content.yml.
+# stage_netboot_assets.yml.
 # nfs_rootfs_path is the parent export. Inside it:
 #   _templates/<board_model>/   per-model rootfs templates (extracted images)
 #   <inventory_hostname>/       per-host rootfs (cp --reflink from template)
@@ -1152,7 +1152,7 @@ Spec: [`docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](docs/su
 | `armbian_build` | `.img.xz` Armbian image with PXE-first U-Boot baked in, published to netboot server |
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
-| `nfs_content` | rootfs / TFTP / pxelinux content under server exports |
+| `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
 | `routeros_dhcp` | Shared DHCP option set (`armbian-nfsroot`) + per-lease assignment on RouterOS |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 ```
@@ -1171,13 +1171,13 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── armbian_build/             # Build custom .img.xz on armbian_builders host
 │   ├── bootstrap_armbian/         # Provision passwordless-sudo SSH-key user
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
-│   ├── nfs_content/               # Populate NFS exports (preflight + per-model + per-host)
+│   ├── netboot_assets/               # Populate NFS exports (preflight + per-model + per-host)
 │   ├── routeros_dhcp/             # RouterOS DHCP option management (nfsroot mode)
 │   └── routeros_poe/              # PoE power control via RouterOS switch
 ├── playbooks/
 │   ├── bootstrap_armbian.yml        # (0) Provision SSH-key user on flashed boards
 │   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
-│   ├── populate_nfs_content.yml     # (2) Populate NFS rootfs + TFTP content
+│   ├── stage_netboot_assets.yml     # (2) Populate NFS rootfs + TFTP content
 │   ├── setup_routeros_dhcp.yml      # (3) Create RouterOS DHCP option objects
 │   ├── build_image.yml              # Build custom Armbian .img.xz for orangepi5pro
 │   ├── enable_netboot.yml           # Toggle board into NFS-root mode
@@ -1224,7 +1224,7 @@ ansible-playbook playbooks/bootstrap_routeros_user.yml \
   -e ansible_user=<existing-admin>
 
 # (3) Populate NFS exports with rootfs/kernel/DTB.
-ansible-playbook playbooks/populate_nfs_content.yml
+ansible-playbook playbooks/stage_netboot_assets.yml
 
 # (4) Create the shared RouterOS DHCP option objects.
 ansible-playbook playbooks/setup_routeros_dhcp.yml
@@ -1252,7 +1252,7 @@ ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 |---|---|
 | `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
-| `populate_nfs_content.yml` | **netboot server** (image extraction, NFS/TFTP content) |
+| `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS/TFTP content) |
 | `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `enable_netboot.yml` / `disable_netboot.yml` | **netboot server** (pxelinux.cfg over SSH) + RouterOS (DHCP) |
@@ -1291,7 +1291,7 @@ board comes online:
 4. Add an `armbian_image_urls[<board_model>]` entry pointing at the
    locally-published custom build.
 5. Run `playbooks/build_image.yml` to produce the image, then
-   `populate_nfs_content.yml` and the rest of the v1 sequence.
+   `stage_netboot_assets.yml` and the rest of the v1 sequence.
 ```
 
 **Trim "SBC ecosystem reality" — keep the framing about why naming/DTB/console varies, but drop these bullets:**
@@ -1314,8 +1314,8 @@ Keep:
 ## Key files
 
 - `vars/boards.yml` — authoritative per-board metadata (v1: orangepi5pro)
-- `roles/nfs_content/tasks/preflight.yml` — image URL HEAD validation
-- `roles/nfs_content/tasks/per_host.yml` — per-host rootfs clone + identity reset
+- `roles/netboot_assets/tasks/preflight.yml` — image URL HEAD validation
+- `roles/netboot_assets/tasks/per_host.yml` — per-host rootfs clone + identity reset
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs (edit before first run)
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host TFTP boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
@@ -1490,7 +1490,7 @@ If all checks pass, the plan is complete. The final state of `git log --oneline`
 - Roles & playbooks kept vs deleted → Tasks 9 (playbooks) + 10 (roles).
 - Slimming inside `routeros_dhcp` → Tasks 4 + 5.
 - Board metadata location (`vars/boards.yml`) → Task 1; consumers migrated in Task 3.
-- Per-role cleanup (`nfs_content` preflight + URL HEAD) → Task 2.
+- Per-role cleanup (`netboot_assets` preflight + URL HEAD) → Task 2.
 - `inventory/group_vars/all.yml` cleanup → Task 12.
 - `inventory/hosts.yml` non-v1 board pruning → Task 11.
 - Documentation rewrite (CLAUDE.md, architecture.md, board-bootloader.md delete, routeros-setup.md trim) → Tasks 13 + 14 + 10 + 15.

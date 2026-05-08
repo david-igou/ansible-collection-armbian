@@ -2,7 +2,7 @@
 # Writes the per-board pxelinux.cfg file directly on the netboot server's
 # filesystem. Designed to be run from a play with `hosts: netboot_server`,
 # `become: true` — it operates on `tftp_nfs_export` as a local path, the
-# same way nfs_content does. No NFS mount on the control node.
+# same way netboot_assets does. No NFS mount on the control node.
 #
 # Required variables:
 #   board_mac          MAC address of the board (drives 01-<mac> filename)

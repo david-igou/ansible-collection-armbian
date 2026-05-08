@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the `armbian_build` role + `playbooks/build_image.yml` so a custom Armbian image with PXE-first `BOOT_TARGETS` can be produced for `orangepi5pro` and consumed by the existing `nfs_content` / `reprovision` workflows via the `armbian_image_urls` indirection.
+**Goal:** Land the `armbian_build` role + `playbooks/build_image.yml` so a custom Armbian image with PXE-first `BOOT_TARGETS` can be produced for `orangepi5pro` and consumed by the existing `netboot_assets` / `reprovision` workflows via the `armbian_image_urls` indirection.
 
 **Architecture:** A single-purpose role generates `.img.xz` + `manifest.json` in an output directory on a builder host given a board, branch, release, and a list of userpatches. The role is intent-agnostic — PXE-first specifics live as data in `playbooks/build_image.yml`, not inside the role. A second play in the same playbook publishes the artifact directly from the builder to the netboot server's HTTP export via `synchronize` (mode pull, delegated to the builder).
 
@@ -1016,7 +1016,7 @@ Revert the edit before committing.
 
 Update `inventory/group_vars/all.yml` (or the equivalent in `.inventory/`) `armbian_image_urls[orange-pi-5-pro]` to the local URL produced (filename from `manifest.json`).
 
-Run: `ansible-playbook playbooks/populate_nfs_content.yml --limit netboot_server`
+Run: `ansible-playbook playbooks/stage_netboot_assets.yml --limit netboot_server`
 Run: `ansible-playbook playbooks/reprovision.yml --limit orangepi5pro-01`
 
 Expected: reprovision completes; the board comes up from disk with the custom image.
@@ -1048,6 +1048,6 @@ git commit -am "Remove WIP banners after armbian_build v1 acceptance"
 - [ ] `roles/armbian_build/` exists with the layout from the spec.
 - [ ] `playbooks/build_image.yml` produces `Armbian_*_orangepi5pro_*_current_*.img.xz` + `manifest.json` in the builder's output dir, then publishes to `nfs_assets_export/images/orangepi5pro/`.
 - [ ] Loop-mounting the produced `.img.xz` and grepping `BOOT_TARGETS` shows `"pxe dhcp mmc1 mmc0 nvme scsi usb spi"`.
-- [ ] `host_board_overrides.armbian_build_enabled: true` on opi5pro-01 + the `armbian_image_urls[orange-pi-5-pro]` override makes `populate_nfs_content.yml` + `reprovision.yml` consume the custom image.
+- [ ] `host_board_overrides.armbian_build_enabled: true` on opi5pro-01 + the `armbian_image_urls[orange-pi-5-pro]` override makes `stage_netboot_assets.yml` + `reprovision.yml` consume the custom image.
 - [ ] After reprovision, `enable_netboot.yml` + reboot lands the board in NFS root.
 - [ ] WIP banners removed from `README.md`, `CLAUDE.md`, `docs/architecture.md`, and the affected role READMEs.

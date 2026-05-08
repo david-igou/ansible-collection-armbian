@@ -27,7 +27,7 @@ parameters, in what order.
 | `armbian_build` | `.img.xz` Armbian image with PXE-first U-Boot baked in, published to netboot server |
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
-| `nfs_content` | rootfs / TFTP / pxelinux content under server exports |
+| `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
 | `routeros_dhcp` | Shared DHCP option set (`armbian-nfsroot`) + per-lease assignment on RouterOS |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
@@ -62,13 +62,13 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── armbian_build/             # Build custom .img.xz on armbian_builders host
 │   ├── bootstrap_armbian/         # Provision passwordless-sudo SSH-key user
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
-│   ├── nfs_content/               # Populate NFS exports (preflight + per-model + per-host)
+│   ├── netboot_assets/               # Populate NFS exports (preflight + per-model + per-host)
 │   ├── routeros_dhcp/             # RouterOS DHCP option management (nfsroot mode)
 │   └── routeros_poe/              # PoE power control via RouterOS switch
 ├── playbooks/
 │   ├── bootstrap_armbian.yml        # (0) Provision SSH-key user on flashed boards
 │   ├── bootstrap_routeros_user.yml  # (1) Provision RouterOS user/group/SSH keys
-│   ├── populate_nfs_content.yml     # (2) Populate NFS rootfs + TFTP content
+│   ├── stage_netboot_assets.yml     # (2) Populate NFS rootfs + TFTP content
 │   ├── setup_routeros_dhcp.yml      # (3) Create RouterOS DHCP option objects
 │   ├── build_image.yml              # Build custom Armbian .img.xz for orangepi5pro
 │   ├── enable_netboot.yml           # Toggle board into NFS-root mode
@@ -112,7 +112,7 @@ ansible-playbook playbooks/bootstrap_routeros_user.yml \
   -e ansible_user=<existing-admin>
 
 # (3) Populate NFS exports with rootfs/kernel/DTB.
-ansible-playbook playbooks/populate_nfs_content.yml
+ansible-playbook playbooks/stage_netboot_assets.yml
 
 # (4) Create the shared RouterOS DHCP option objects.
 ansible-playbook playbooks/setup_routeros_dhcp.yml
@@ -228,13 +228,13 @@ compile-time `BOOT_TARGETS`, which the `armbian_build` role patches via
 configured.
 
 ### Pre-flight validation
-`populate_nfs_content.yml` runs `roles/nfs_content/tasks/preflight.yml` first, which
+`stage_netboot_assets.yml` runs `roles/netboot_assets/tasks/preflight.yml` first, which
 HEAD-checks every board's `armbian_image_urls` entry (failing on 4xx/dead mirror)
 before any image download or NFS write.
 
 ## How NFS content is managed
 
-`populate_nfs_content.yml` connects to the netboot server over SSH
+`stage_netboot_assets.yml` connects to the netboot server over SSH
 (`hosts: netboot_server`, `become: true`) and operates on the export paths
 (`nfs_rootfs_path`, `tftp_nfs_export`, `nfs_assets_export`) directly as filesystem paths
 — no NFS client mount on the control node is required. This makes the role compatible with rootless execution environments
@@ -252,13 +252,13 @@ nfs_rootfs_path/
 Per-host clones are made with `cp --reflink=auto`, which is a zero-cost CoW snapshot on
 XFS, btrfs, and ZFS (one rootfs's worth of bytes regardless of host count) and a full copy
 on ext4. Hostname, machine-id, and SSH host keys are reset per-host so two same-model
-boards have independent identity on the wire — see `roles/nfs_content/tasks/per_host.yml`.
+boards have independent identity on the wire — see `roles/netboot_assets/tasks/per_host.yml`.
 The `pxelinux.cfg/01-<mac>` files point each board at its own per-host export.
 
 `enable_netboot.yml` writes per-board `pxelinux.cfg/01-<mac>` files directly on
 the netboot server over SSH, via the `routeros_dhcp` role's `write_pxelinux_cfg.yml`
 task file (run from a `hosts: netboot_server`, `become: true` play). The control
-node never NFS-mounts the export. Combined with `nfs_content`'s same model, every
+node never NFS-mounts the export. Combined with `netboot_assets`'s same model, every
 write to the netboot server happens over SSH — no NFS client on the control node,
 rootless-EE-friendly.
 
@@ -268,7 +268,7 @@ rootless-EE-friendly.
 |---|---|
 | `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `bootstrap_routeros_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
-| `populate_nfs_content.yml` | **netboot server** (image extraction, NFS/TFTP content) |
+| `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS/TFTP content) |
 | `setup_routeros_dhcp.yml` | RouterOS (shared DHCP option objects) |
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `enable_netboot.yml` / `disable_netboot.yml` | **netboot server** (pxelinux.cfg over SSH) + RouterOS (DHCP) |
@@ -329,7 +329,7 @@ board comes online:
 4. Add an `armbian_image_urls[<board_model>]` entry pointing at the
    locally-published custom build.
 5. Run `playbooks/build_image.yml` to produce the image, then
-   `populate_nfs_content.yml` and the rest of the v1 sequence.
+   `stage_netboot_assets.yml` and the rest of the v1 sequence.
 
 ## RouterOS DHCP objects
 
@@ -361,8 +361,8 @@ knows its own switch and port, so delegation routes the command correctly withou
 ## Key files
 
 - `vars/boards.yml` — authoritative per-board metadata (v1: orangepi5pro)
-- `roles/nfs_content/tasks/preflight.yml` — image URL HEAD validation
-- `roles/nfs_content/tasks/per_host.yml` — per-host rootfs clone + identity reset
+- `roles/netboot_assets/tasks/preflight.yml` — image URL HEAD validation
+- `roles/netboot_assets/tasks/per_host.yml` — per-host rootfs clone + identity reset
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs (edit before first run)
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host TFTP boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)

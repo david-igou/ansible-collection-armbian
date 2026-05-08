@@ -1,4 +1,4 @@
-# nfs_content
+# netboot_assets
 
 Populates the netboot server's NFS exports with everything needed for an
 Armbian board to PXE-boot:
@@ -51,7 +51,7 @@ be set in inventory (typically `inventory/group_vars/all.yml`).
   become: true
   gather_facts: false
   roles:
-    - role: david_igou.armbian_netboot.nfs_content
+    - role: david_igou.armbian_netboot.netboot_assets
 ```
 
 ## License

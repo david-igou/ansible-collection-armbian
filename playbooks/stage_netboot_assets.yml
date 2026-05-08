@@ -28,10 +28,10 @@
 # URL, or add a new host to inventory. It is idempotent.
 #
 # Usage:
-#   ansible-playbook playbooks/populate_nfs_content.yml
+#   ansible-playbook playbooks/stage_netboot_assets.yml
 #
 # To re-run only the per-host clone step (e.g. after adding a host):
-#   ansible-playbook playbooks/populate_nfs_content.yml --tags nfs_content
+#   ansible-playbook playbooks/stage_netboot_assets.yml --tags netboot_assets
 
 - name: Preflight RouterOS SBC network configuration
   hosts: routeros_routers

@@ -30,7 +30,7 @@ routeros_sbc_network_address: ""
 
 # ── NFS export paths on the netboot server ───────────────────────────────────
 # These must already exist and be exported before running
-# populate_nfs_content.yml.
+# stage_netboot_assets.yml.
 # nfs_rootfs_path is the parent export. Inside it:
 #   _templates/<board_model>/   per-model rootfs templates (extracted images)
 #   <inventory_hostname>/       per-host rootfs (cp --reflink from template)

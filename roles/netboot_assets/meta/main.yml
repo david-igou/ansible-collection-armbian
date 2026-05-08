@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: nfs_content
+  role_name: netboot_assets
   author: David Igou
   description: Populate netboot.xyz NFS exports with Armbian rootfs, kernel, DTB, and image assets via NFS mounts on the control node
   license: GPL-3.0-or-later
