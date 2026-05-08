@@ -1,31 +1,23 @@
 ---
-# Populates the netboot server's NFS rootfs / TFTP exports for every board
-# in inventory. Runs against the netboot server itself over SSH; the
-# control node does not need an NFS client mount.
+# Stages netboot assets on both TrueNAS (NFS rootfs) and rb5009 (TFTP
+# kernel/initrd/dtb).
 #
-# Pre-flights every `armbian_image_urls` entry with an HTTP HEAD before
+# Pre-flights every armbian_image_urls entry with an HTTP HEAD before
 # any destructive work; URL failures surface at config time, not
 # halfway through an extraction.
 #
-# Also pre-flights the RouterOS SBC network's next-server: the netboot
-# content this play writes is only useful if U-Boot's PXE bootmeth can
-# reach this server, which requires next-server set on the SBC network.
-# See docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md.
+# Play 1 (netboot_server, become): extracts each model's .img.xz on
+# TrueNAS, populates the per-model rootfs template + per-host clones,
+# stages kernel/initrd/dtb in a TrueNAS-side cache, and fetches them
+# to the control-node sbc_tftp_cache_dir.
 #
-# For each unique board model in inventory:
-#   - Downloads the `.img.xz`, extracts the rootfs into
-#     `nfs_rootfs_path/_templates/<model>/`
-#   - Stages kernel / initrd / DTB into the TFTP tree
-#   - Publishes a copy of the `.img.xz` to the HTTP assets directory
+# Play 2 (routeros_routers): net_puts kernel/initrd/dtb from the
+# control node to flash:/sbc/armbian/<model>/ on rb5009, with /ip tftp
+# row registration per file. Ends with a plumbing-check assertion that
+# all expected rows exist.
 #
-# For each inventory host:
-#   - Reflink-clones the model template into
-#     `nfs_rootfs_path/<inventory_hostname>/`
-#   - Resets hostname / machine-id / SSH host keys for unique on-the-wire
-#     identity
-#
-# Re-run this playbook whenever you add a board model, change an image
-# URL, or add a new host to inventory. It is idempotent.
+# Re-run whenever you add a board model, change an image URL, or add
+# a new host to inventory. Idempotent.
 #
 # Usage:
 #   ansible-playbook playbooks/stage_netboot_assets.yml
@@ -33,21 +25,26 @@
 # To re-run only the per-host clone step (e.g. after adding a host):
 #   ansible-playbook playbooks/stage_netboot_assets.yml --tags netboot_assets
 
-- name: Preflight RouterOS SBC network configuration
-  hosts: routeros_routers
-  gather_facts: false
-  tasks:
-    - name: Preflight — verify RouterOS SBC network's next-server
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: preflight_next_server.yml
-      run_once: true
-      tags: preflight
-
-- name: Populate NFS rootfs and TFTP content on the netboot server
+- name: Extract netboot assets on TrueNAS and fetch SBC TFTP cache to control node
   hosts: netboot_server
   become: true
   gather_facts: false
   roles:
     - role: netboot_assets
       tags: netboot_assets
+
+- name: Stage SBC TFTP assets on rb5009
+  hosts: routeros_routers
+  gather_facts: false
+  tasks:
+    - name: net_put kernel/initrd/dtb + register /ip tftp rows
+      ansible.builtin.include_role:
+        name: netboot_assets
+        tasks_from: stage_rb5009.yml
+      tags: netboot_assets
+
+    - name: Plumbing check — verify /ip tftp rows landed
+      ansible.builtin.include_role:
+        name: netboot_assets
+        tasks_from: plumbing_check.yml
+      tags: netboot_assets, preflight
