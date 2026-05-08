@@ -194,9 +194,11 @@
             - name: Phase 2 — include routeros_dhcp enable_netboot
               ansible.builtin.include_role:
                 name: routeros_dhcp
-                tasks_from: enable_netboot.yml
+                tasks_from: write_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ board_mac }}"
+                board_model: "{{ board_model }}"
+                target_board_host: "{{ inventory_hostname }}"
           delegate_to: "{{ _routeros_target }}"
 
         - name: Phase 2 — PoE cycle into nfsroot
@@ -253,9 +255,10 @@
             - name: Phase 3 — include routeros_dhcp disable_netboot
               ansible.builtin.include_role:
                 name: routeros_dhcp
-                tasks_from: disable_netboot.yml
+                tasks_from: remove_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
           delegate_to: "{{ _routeros_target }}"
 
         - name: Phase 3 — PoE cycle back to disk
@@ -323,9 +326,10 @@
             - name: Cleanup — include routeros_dhcp disable_netboot
               ansible.builtin.include_role:
                 name: routeros_dhcp
-                tasks_from: disable_netboot.yml
+                tasks_from: remove_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
           delegate_to: "{{ _routeros_target }}"
           when: not (leave_state | bool)
 
