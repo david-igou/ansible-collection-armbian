@@ -49,5 +49,5 @@
   become: true
   gather_facts: false
   roles:
-    - role: nfs_content
-      tags: nfs_content
+    - role: netboot_assets
+      tags: netboot_assets
