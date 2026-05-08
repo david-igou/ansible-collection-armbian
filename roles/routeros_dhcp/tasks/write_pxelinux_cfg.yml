@@ -46,7 +46,7 @@
   register: _pxe_local_stat
   tags: pxelinux
 
-- name: Ensure flash:/{{ sbc_tftp_flash_dir }}/pxelinux.cfg directory exists on rb5009
+- name: Ensure pxelinux.cfg directory exists on rb5009 under flash:/{{ sbc_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
@@ -86,7 +86,7 @@
   changed_when: false
   tags: pxelinux
 
-- name: Add /ip tftp row for {{ _pxe_filename }} (if absent)
+- name: Add /ip tftp row (if absent) for board {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-

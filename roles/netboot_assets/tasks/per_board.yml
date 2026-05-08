@@ -114,7 +114,7 @@
         regexp: "^/dev/"
         state: absent
 
-- name: Ensure control-node SBC TFTP cache for {{ _model }} exists
+- name: Ensure control-node SBC TFTP cache directory exists for model {{ _model }}
   ansible.builtin.file:
     path: "{{ sbc_tftp_cache_dir }}/{{ _model }}"
     state: directory

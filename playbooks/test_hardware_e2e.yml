@@ -190,6 +190,7 @@
               Diagnostic bundle is in the prior debug task.
 
         - name: Phase 2 — set DHCP option to armbian-nfsroot
+          delegate_to: "{{ _routeros_target }}"
           block:
             - name: Phase 2 — include routeros_dhcp enable_netboot
               ansible.builtin.include_role:
@@ -199,7 +200,6 @@
                 board_mac: "{{ board_mac }}"
                 board_model: "{{ board_model }}"
                 target_board_host: "{{ inventory_hostname }}"
-          delegate_to: "{{ _routeros_target }}"
 
         - name: Phase 2 — PoE cycle into nfsroot
           ansible.builtin.include_role:
@@ -208,6 +208,11 @@
             poe_action: cycle
 
         - name: Phase 2 — verify NFS-mounted boot
+          vars:
+            ansible_user: root
+            ansible_password: "{{ armbian_default_password }}"
+            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            ansible_become: false
           block:
             - name: Phase 2 — reset connection so new identity takes effect
               ansible.builtin.meta: reset_connection
@@ -244,13 +249,9 @@
                   prior debug task — check /proc/cmdline for nfsroot=, and
                   confirm the linux-u-boot-* deb on disk has PXE-first
                   BOOT_TARGETS baked in.
-          vars:
-            ansible_user: root
-            ansible_password: "{{ armbian_default_password }}"
-            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            ansible_become: false
 
         - name: Phase 3 — clear DHCP option
+          delegate_to: "{{ _routeros_target }}"
           block:
             - name: Phase 3 — include routeros_dhcp disable_netboot
               ansible.builtin.include_role:
@@ -259,7 +260,6 @@
               vars:
                 board_mac: "{{ board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
-          delegate_to: "{{ _routeros_target }}"
 
         - name: Phase 3 — PoE cycle back to disk
           ansible.builtin.include_role:
@@ -322,6 +322,8 @@
           when: leave_state | bool
 
         - name: Cleanup — clear DHCP option on RouterOS
+          delegate_to: "{{ _routeros_target }}"
+          when: not (leave_state | bool)
           block:
             - name: Cleanup — include routeros_dhcp disable_netboot
               ansible.builtin.include_role:
@@ -330,8 +332,6 @@
               vars:
                 board_mac: "{{ board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
-          delegate_to: "{{ _routeros_target }}"
-          when: not (leave_state | bool)
 
         - name: Cleanup — PoE cycle back to disk boot
           ansible.builtin.include_role:

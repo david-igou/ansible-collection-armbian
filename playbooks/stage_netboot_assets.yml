@@ -37,7 +37,7 @@
   hosts: routeros_routers
   gather_facts: false
   tasks:
-    - name: net_put kernel/initrd/dtb + register /ip tftp rows
+    - name: Net_put kernel/initrd/dtb + register /ip tftp rows
       ansible.builtin.include_role:
         name: netboot_assets
         tasks_from: stage_rb5009.yml

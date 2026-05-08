@@ -25,7 +25,7 @@
   changed_when: false  # idempotent — RouterOS returns no output when find is empty
   tags: pxelinux
 
-- name: Remove flash file {{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}
+- name: Remove pxelinux.cfg flash file for board {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-

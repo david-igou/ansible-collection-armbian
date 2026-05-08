@@ -29,7 +29,7 @@
         do={/file add name="{{ sbc_tftp_flash_dir }}" type=directory}
   changed_when: false
 
-- name: Ensure flash:/{{ sbc_tftp_flash_dir }}/armbian directory exists
+- name: Ensure armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
@@ -37,7 +37,7 @@
         do={/file add name="{{ sbc_tftp_flash_dir }}/armbian" type=directory}
   changed_when: false
 
-- name: Ensure flash:/{{ sbc_tftp_flash_dir }}/armbian/<model> directory exists
+- name: Ensure per-model armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
