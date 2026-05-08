@@ -1,47 +1,46 @@
 # routeros_dhcp
 
-Manages MikroTik RouterOS DHCP option objects so a board's PXE behaviour
-*should* be controllable entirely from the router. The intended invariant:
-U-Boot tries PXE first and falls through to disk when DHCP provides no
-`next-server`, so flipping the lease's option set is enough to toggle a
-board's boot mode.
+Manages per-board `pxelinux.cfg/01-<MAC>` files on rb5009's flash and the
+corresponding `/ip tftp` rows so U-Boot's PXE bootmeth can fetch the
+config when the board DHCPs. Adding the file + row puts the board into
+NFS-root mode; removing them lets the board fall through to its local SD
+rootfs. This pair of file presence + `/ip tftp` row is the v1 collection's
+sole control surface — there are no DHCP option-sets, no lease mutations,
+no on-board state to mutate.
 
-> **WIP.** Stock Armbian Rockchip `current` debs don't deliver this invariant —
-> their compile-time `BOOT_TARGETS` puts PXE at position 6, behind mmc1 where the
-> SD card's `boot.scr` wins via `bootflow scan`. This role's tasks (creating DHCP
-> option sets, writing `pxelinux.cfg/01-<mac>`, flipping the lease's option) are
-> correct in isolation, but `enable_netboot` won't actually cause the board to
-> PXE-boot until the board has been flashed with a custom Armbian U-Boot deb
-> built by the `armbian_build` role
-> ([#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)).
-> Empirical evidence:
-> [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2).
+This is achievable only because the U-Boot binary on the SD card has been
+compiled with `BOOT_TARGETS` ordered with `pxe` first. Stock Armbian
+Rockchip `current` ships PXE at position 6, behind mmc1 where the SD
+card's `boot.scr` wins via `bootflow scan`. Until the board has been
+flashed with a custom Armbian image built by the `armbian_build` role,
+this role's writes will land correctly on rb5009 but the board itself
+won't actually try PXE.
+See [issue #2](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/2)
+for empirical evidence on stock images.
 
-The role has four task entry-points, each designed to be included from a
-play with the right `hosts:` target:
+The role exposes two task entry-points, both designed to be included with
+`hosts: routeros_routers` (network_cli):
 
-- `setup_options.yml` — `hosts: routeros_routers`. Runs once. Creates
-  the DHCP option objects (option 66 / 67) and the `armbian-nfsroot`
-  option set that bundles them.
-- `write_pxelinux_cfg.yml` — `hosts: netboot_server` (`become: true`).
-  Writes `pxelinux.cfg/01-<mac>` on the netboot server's TFTP root over
-  SSH. No NFS mount on the control node. Required vars: `board_mac`,
-  `board_model`, `target_board_host`.
-- `enable_netboot.yml` — `hosts: routeros_routers`. Sets
-  `dhcp-option=armbian-nfsroot` on a board's static lease. Run after
-  `write_pxelinux_cfg.yml` (the file must exist before the board renews
-  DHCP).
-- `disable_netboot.yml` — `hosts: routeros_routers`. Clears the lease's
-  `dhcp-option` so the board boots from disk on next DHCP renewal.
+- `write_pxelinux_cfg.yml` — renders the per-board `pxelinux.cfg/01-<MAC>`
+  locally from the Jinja template, `net_put`s it to
+  `flash:/<sbc_tftp_flash_dir>/pxelinux.cfg/01-<MAC>` on rb5009, and
+  registers a matching `/ip tftp` row. Required vars: `board_mac`,
+  `board_model`, `target_board_host`. Idempotent — gates on file size
+  and `/ip tftp` row count.
+- `remove_pxelinux_cfg.yml` — removes the `/ip tftp` row first (so a
+  stale request fails closed if `/file remove` later errors), then
+  removes the file from rb5009's flash. Required var: `board_mac`.
+  Idempotent.
+
+The corresponding per-model assets (kernel/initrd/dtb under
+`flash:/<sbc_tftp_flash_dir>/armbian/<model>/`) are owned by the
+`netboot_assets` role's `stage_rb5009.yml` task — not this role.
 
 ## Role variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `routeros_dhcp_server_name` | `dhcp1` | DHCP server name on RouterOS. |
-| `routeros_opt_tftp_name` | `armbian-tftp-server` | DHCP option object name for option 66 (TFTP server). |
-| `routeros_opt_set_nfsroot_prefix` | `armbian-nfsroot` | Option-set name for nfsroot mode. |
-| `netboot_modes` | *(see defaults)* | Map of mode name to TFTP `pxelinux.cfg` filename. |
+| `sbc_tftp_flash_dir` | `sbc` | Top-level directory on rb5009's flash for SBC TFTP content. Used as the `name=` prefix in `/file` paths and as the `real-filename` prefix in `/ip tftp` rules. Mirrored as a default in `roles/netboot_assets/defaults/main.yml`. |
 
 SSH connection identity (`ansible_host`, `ansible_user`, `ansible_port`) lives
 on the RouterOS host entry in `inventory/hosts.yml`, not on collection-level
@@ -50,17 +49,23 @@ variables. Authentication is SSH-key based — provision the user and key with
 
 ## Example
 
+Most users invoke this role indirectly via `enable_netboot.yml` and
+`disable_netboot.yml`. To call it directly:
+
 ```yaml
 - name: Enable PXE netboot for a board
-  hosts: rock-5b-01
-  roles:
-    - role: david_igou.armbian_netboot.routeros_dhcp
+  hosts: routeros_routers
+  gather_facts: false
+  tasks:
+    - name: Write per-board pxelinux.cfg + /ip tftp row
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.routeros_dhcp
+        tasks_from: write_pxelinux_cfg.yml
       vars:
-        routeros_action: enable
+        board_mac: "aa:bb:cc:dd:ee:11"
+        board_model: orange-pi-5-pro
+        target_board_host: orange-pi-5-pro-01
 ```
-
-Most users invoke this role indirectly via `enable_netboot.yml`,
-`disable_netboot.yml`, and `setup_routeros_dhcp.yml`.
 
 ## License
 
