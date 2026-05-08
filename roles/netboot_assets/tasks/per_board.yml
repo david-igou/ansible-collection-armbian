@@ -25,8 +25,13 @@
     path: "{{ _template_dir }}/bin/bash"
   register: _template_populated
 
-- name: Populate rootfs template from Armbian image
-  when: not _template_populated.stat.exists
+- name: Check if SBC TFTP cache is already populated for {{ _model }}
+  ansible.builtin.stat:
+    path: "{{ _tftp_truenas_cache }}/vmlinuz"
+  register: _tftp_cache_populated
+
+- name: Populate rootfs template + TFTP cache from Armbian image
+  when: not _template_populated.stat.exists or not _tftp_cache_populated.stat.exists
   block:
     - name: Download Armbian image for {{ _model }}
       ansible.builtin.get_url:
