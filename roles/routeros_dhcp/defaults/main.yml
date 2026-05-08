@@ -9,3 +9,10 @@
 # /file paths (sbc/...) and as the prefix of real-filename in /ip tftp
 # rules. Pairs with the same default in roles/netboot_assets/defaults.
 sbc_tftp_flash_dir: "sbc"
+
+# Local cache on the control node where the rendered pxelinux.cfg is
+# written before being net_put to rb5009. Mirrored as a default in
+# roles/netboot_assets/defaults/main.yml so direct callers of
+# write_pxelinux_cfg.yml (e.g. test_hardware_e2e.yml) get the variable
+# in scope without having to also load netboot_assets defaults first.
+sbc_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"

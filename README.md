@@ -51,8 +51,8 @@ that combines existing primitives means adding a playbook (no role changes).
 - A netboot server (e.g. a TrueNAS host) reachable over SSH that exports the
   per-host NFS rootfs to the boards. The HTTP assets root defaults match the
   [netboot.xyz container](https://github.com/netbootxyz/docker-netbootxyz)
-  (`/assets/` on port 80). Override `nfs_assets_export` / `image_server_url`
-  in `group_vars/all.yml` if you serve HTTP differently.
+  (`/assets/` on port 80). Override `nfs_assets_export` in `group_vars/all.yml`
+  if you serve HTTP differently.
 - A MikroTik RouterOS rb5009 with SSH access. The collection writes per-board
   `pxelinux.cfg/01-<MAC>` and per-model kernel/initrd/dtb to `flash:/sbc/`
   and registers corresponding `/ip tftp` rows; no DHCP option-sets or lease

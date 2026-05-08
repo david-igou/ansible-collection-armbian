@@ -157,8 +157,9 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 
 `inventory/group_vars/all.yml` — collection-level variables:
 
-- `netboot_server_ip` — IP used as the default for both TFTP/HTTP (DHCP option 66 +
-  `image_server_url`) and NFS (`nfsroot=<ip>:<path>` in pxelinux.cfg).
+- `netboot_server_ip` — IP used as the default fallback for `nfs_server_ip` when
+  not separately overridden. Written into pxelinux.cfg's `nfsroot=<ip>:<path>`
+  directive.
 - `sbc_tftp_flash_dir` (overridable) — top-level dir on rb5009's flash for SBC TFTP
   content. Default `sbc`. Used as `flash:/<sbc_tftp_flash_dir>/...` in `/file` paths
   and as the prefix of `real-filename` in `/ip tftp` rules.
@@ -168,8 +169,8 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 - `nfs_server_ip` (optional) — overrides `netboot_server_ip` for the NFS role.
 - `armbian_default_password` — Armbian NFS root SSH password (default `1234`); encrypt with vault
 - `armbian_image_urls` — full `.img.xz` URL per board model. In v1 this points at
-  the locally-published custom build under `image_server_url/<board>/<file>.img.xz`
-  (the URL `playbooks/build_image.yml` publishes to).
+  the locally-published custom build (the URL `playbooks/build_image.yml` publishes
+  to on the netboot server's HTTP assets root).
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
   rb5009's IP for that subnet (e.g. `10.10.9.1` for vlan9). This is owned by your
   separate RouterOS-config repo (e.g. igou-ansible's `deploy_netboot_binaries.yml`)

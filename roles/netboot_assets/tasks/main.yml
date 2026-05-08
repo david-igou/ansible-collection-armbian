@@ -38,15 +38,6 @@
     - "{{ armbian_image_mount }}"
     - "{{ nfs_rootfs_path }}/_templates"
 
-- name: Ensure TFTP armbian and pxelinux.cfg subdirectories exist
-  ansible.builtin.file:
-    path: "{{ tftp_nfs_export }}/{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - armbian
-    - pxelinux.cfg
-
 - name: Ensure assets images directory exists
   ansible.builtin.file:
     path: "{{ nfs_assets_export }}/images"
