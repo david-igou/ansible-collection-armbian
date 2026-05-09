@@ -10,6 +10,14 @@
     _template_dir: "{{ nfs_rootfs_path }}/_templates/{{ _model }}"
     _tftp_truenas_cache: "{{ armbian_image_cache }}/sbc-tftp/{{ _model }}"
     _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
+    # Local FS path on the netboot server where the image is *already*
+    # published (build_image.yml writes here, and the final task in this
+    # file copies _image_cache to the same prefix). When the netboot
+    # server hosts the HTTP server itself (e.g. macvlan netboot.xyz
+    # container on TrueNAS), the URL in armbian_image_urls is unreachable
+    # from this host — fall back to a local copy when the published file
+    # exists.
+    _local_image_path: "{{ nfs_assets_export }}/{{ armbian_image_urls[_model] | regex_replace('^https?://[^/]+/', '') }}"
 
 - name: Ensure per-model template and TrueNAS cache directories exist
   ansible.builtin.file:
@@ -33,12 +41,26 @@
 - name: Populate rootfs template + TFTP cache from Armbian image
   when: not _template_populated.stat.exists or not _tftp_cache_populated.stat.exists
   block:
+    - name: Check if image is already published on the netboot server
+      ansible.builtin.stat:
+        path: "{{ _local_image_path }}"
+      register: _local_image_stat
+
+    - name: Copy Armbian image from local publish path
+      ansible.builtin.copy:
+        src: "{{ _local_image_path }}"
+        dest: "{{ _image_cache }}"
+        mode: "0644"
+        remote_src: true
+      when: _local_image_stat.stat.exists
+
     - name: Download Armbian image for {{ _model }}
       ansible.builtin.get_url:
         url: "{{ armbian_image_urls[_model] }}"
         dest: "{{ _image_cache }}"
         mode: "0644"
         timeout: 600
+      when: not _local_image_stat.stat.exists
 
     - name: Decompress image
       ansible.builtin.shell: |

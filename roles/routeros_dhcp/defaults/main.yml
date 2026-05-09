@@ -16,3 +16,10 @@ sbc_tftp_flash_dir: "sbc"
 # write_pxelinux_cfg.yml (e.g. test_hardware_e2e.yml) get the variable
 # in scope without having to also load netboot_assets defaults first.
 sbc_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"
+
+# NFS rootfs export root on the netboot server. templates/pxelinux_cfg.j2
+# references it when constructing the per-host nfsroot= kernel parameter.
+# Mirrored as a default in roles/netboot_assets/defaults/main.yml so that
+# enable_netboot.yml (which only loads routeros_dhcp) can render the
+# template without netboot_assets being in scope.
+nfs_rootfs_path: /mnt/ssd/netboot/rootfs

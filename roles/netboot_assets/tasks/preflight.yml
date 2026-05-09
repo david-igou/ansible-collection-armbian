@@ -6,19 +6,34 @@
 # typo). Without this check, failure shows up after we've created loop
 # devices and started extracting.
 
-- name: Validate each board's image URL is reachable
+# Prefer a local-FS check first: when the netboot server also hosts the
+# HTTP image server (e.g. a macvlan netboot.xyz container on TrueNAS),
+# the URL in armbian_image_urls is unreachable from this host. Only
+# HEAD-check models without a published local copy.
+- name: Stat local image publish path per model
+  ansible.builtin.stat:
+    path: "{{ nfs_assets_export }}/{{ armbian_image_urls[item] | regex_replace('^https?://[^/]+/', '') }}"
+  register: _local_image_pf
+  loop: "{{ _board_models }}"
+  loop_control:
+    label: "{{ item }}"
+  when: armbian_image_urls[item] is defined
+
+- name: Validate each board's image URL is reachable (skipped when local copy exists)
   ansible.builtin.uri:
-    url: "{{ armbian_image_urls[item] }}"
+    url: "{{ armbian_image_urls[item.item] }}"
     method: HEAD
     status_code: [200, 302]
     follow_redirects: all
     timeout: 30
   register: _image_url_check
   failed_when: _image_url_check.status not in [200, 302]
-  loop: "{{ _board_models }}"
+  loop: "{{ _local_image_pf.results }}"
   loop_control:
-    label: "{{ item }} → {{ armbian_image_urls[item] | default('(unset)') }}"
-  when: armbian_image_urls[item] is defined
+    label: "{{ item.item }} → {{ armbian_image_urls[item.item] | default('(unset)') }}"
+  when:
+    - armbian_image_urls[item.item] is defined
+    - not (item.stat.exists | default(false))
 
 - name: Fail if any board lacks an image URL
   ansible.builtin.fail:

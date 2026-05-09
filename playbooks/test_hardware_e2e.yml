@@ -201,8 +201,11 @@
                 name: routeros_dhcp
                 tasks_from: write_pxelinux_cfg.yml
               vars:
-                board_mac: "{{ board_mac }}"
-                board_model: "{{ board_model }}"
+                # Use hostvars[] so delegate_to: rb5009 doesn't recurse on
+                # `board_mac: "{{ board_mac }}"` (rb5009 has no such hostvar
+                # → fallback to task-scope → infinite loop in set_fact).
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                board_model: "{{ hostvars[inventory_hostname].board_model }}"
                 target_board_host: "{{ inventory_hostname }}"
 
         - name: Phase 2 — PoE cycle into nfsroot
@@ -262,7 +265,7 @@
                 name: routeros_dhcp
                 tasks_from: remove_pxelinux_cfg.yml
               vars:
-                board_mac: "{{ board_mac }}"
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
 
         - name: Phase 3 — PoE cycle back to disk
@@ -334,7 +337,7 @@
                 name: routeros_dhcp
                 tasks_from: remove_pxelinux_cfg.yml
               vars:
-                board_mac: "{{ board_mac }}"
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
 
         - name: Cleanup — PoE cycle back to disk boot
