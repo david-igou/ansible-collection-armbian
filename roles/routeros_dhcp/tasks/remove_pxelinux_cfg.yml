@@ -24,7 +24,7 @@
   community.routeros.command:
     commands:
       - >-
-        /ip tftp remove [find req-filename=".*{{ _pxe_filename }}$"]
+        /ip tftp remove [find req-filename=".*{{ _pxe_filename }}"]
   register: _pxe_tftp_rm
   retries: 3
   delay: 5
