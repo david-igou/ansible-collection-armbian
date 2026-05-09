@@ -20,6 +20,33 @@
     _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
   tags: pxelinux
 
+# pxelinux_verbose=true requires per-board earlycon metadata. Without
+# it the rendered APPEND line ends up with an empty `earlycon=` arg,
+# which the kernel silently ignores and the operator never sees the
+# diagnostics they asked for. Assert here so it fails loudly at render
+# time, with a pointer to vars/boards.yml.
+- name: Resolve effective verbose flag for {{ target_board_host }}
+  ansible.builtin.set_fact:
+    _pxe_verbose: >-
+      {{ (hostvars[target_board_host].pxelinux_verbose
+          | default(pxelinux_verbose | default(false)))
+         | bool }}
+  tags: pxelinux
+
+- name: Assert per-board earlycon is defined when pxelinux_verbose is true
+  ansible.builtin.assert:
+    that:
+      - board_configs[board_model].earlycon is defined
+      - board_configs[board_model].earlycon | length > 0
+    fail_msg: >-
+      pxelinux_verbose=true was requested for {{ target_board_host }}
+      ({{ board_model }}) but board_configs.{{ board_model }}.earlycon is
+      not set in vars/boards.yml. Add it (format: <driver>,<bus>,<mmio_addr>,
+      e.g. uart8250,mmio32,0xfeb50000 for RK3588S UART2) or unset
+      pxelinux_verbose for this board.
+  when: _pxe_verbose | bool
+  tags: pxelinux
+
 - name: Ensure local pxelinux.cfg cache directory exists on control node
   ansible.builtin.file:
     path: "{{ sbc_tftp_cache_dir }}/pxelinux.cfg"

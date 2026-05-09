@@ -43,6 +43,27 @@ armbian_image_urls:
 # board_configs.<model>.uboot_apt_package field in the collection.
 armbian_branch: "current"
 
+# Verbose / diagnostic kernel cmdline for PXE-booted boards.
+#
+# When true, roles/routeros_dhcp/templates/pxelinux_cfg.j2 appends a
+# diagnostic suffix to the APPEND line (earlycon, loglevel=8,
+# initcall_debug, systemd.log_target=console, …). The intent is to make
+# the kernel-init and userspace-init phases visible on serial when
+# investigating boards that boot but never reach sshd — see issue #38
+# for the failure modes that motivated this.
+#
+# Per-host overrides win: setting `pxelinux_verbose: true` in
+# host_vars/<board>.yml flips just that board into verbose mode without
+# affecting the rest of the fleet. Most useful as a one-off via -e:
+#
+#   ansible-playbook playbooks/enable_netboot.yml \
+#     --limit orange-pi-5-pro-01 \
+#     -e pxelinux_verbose=true
+#
+# Requires per-board earlycon metadata in vars/boards.yml; the
+# routeros_dhcp role asserts this at render time.
+pxelinux_verbose: false
+
 # The collection's path defaults (nfs_rootfs_path, nfs_assets_export,
 # armbian_image_cache, armbian_image_mount, sbc_tftp_flash_dir,
 # sbc_tftp_cache_dir) match the TrueNAS / rb5009 layout. Do not
