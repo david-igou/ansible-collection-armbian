@@ -173,24 +173,25 @@ Spec: [`superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](superpowers/
 
 ## Known issues
 
-### klibc-nfs v3 mount fails on Armbian kernel 6.18.27
+### "kernel lacks NFS v3 support" usually means a stale vmlinuz
 
-The pxelinux.cfg APPEND uses `nfsvers=3` because Debian klibc-nfs in the
-initramfs only supports NFS v2/v3 (v4 mounts fail with
-`bad NFS version '4'`). On Armbian builds with kernel 6.18.27 the
-initramfs's `nfsmount` then fails with
-`mount: the kernel lacks NFS v3 support` even though `nfsv3.ko` is
-present in the initramfs — the module isn't autoloaded by the
-klibc-nfs scripts. Kernel 6.18.26 mounts NFS v3 successfully with the
-same template.
+If the initramfs's `nfsmount` reports `mount: the kernel lacks NFS v3
+support` while looping on `Begin: Retrying nfs mount`, the cause is
+almost always a **kernel/module version mismatch** between the vmlinuz
+served by rb5009 and the `/lib/modules/<version>/` tree carried by the
+freshly-staged initramfs and NFS rootfs. modprobe inside the initramfs
+walks `/lib/modules/$(uname -r)/`, finds nothing if the kernel version
+on rb5009 doesn't match the staged module tree, and so nfsv3.ko never
+gets loaded — even though it's physically present in the initramfs at
+the *other* kernel version's path.
 
-Workarounds while this is unresolved:
-
-  - Pin `armbian_image_urls.<model>` to the 6.18.26-vintage `.img.xz`.
-  - Or add an explicit `modprobe nfsv3` to the initramfs via an
-    `/etc/initramfs-tools/scripts/nfs-top/` hook in the per-host
-    rootfs, then rebuild the initramfs.
+`stage_netboot_assets.yml` always force-removes the rb5009 copies of
+`vmlinuz`, `initrd.img`, and `board.dtb` before net_put, so a re-stage
+always pushes the freshly-extracted kernel and modules. (Earlier
+versions only re-uploaded if the file size differed, which silently
+skipped a re-upload when two distinct Armbian builds happened to
+produce a vmlinuz of the same byte count.)
 
 The PXE/TFTP/DHCP plumbing in this collection is unaffected — U-Boot
-loads the kernel + initrd + dtb correctly; the failure is strictly
-inside the initramfs's NFS mount step.
+loads kernel + initrd + dtb correctly; if the symptom returns,
+re-running `stage_netboot_assets.yml` is the right first step.
