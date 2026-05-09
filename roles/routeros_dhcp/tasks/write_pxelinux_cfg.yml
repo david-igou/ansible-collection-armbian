@@ -75,12 +75,22 @@
   when: (_pxe_size_match.stdout[0] | trim | int) == 0
   tags: pxelinux
 
+# req-filename uses a permissive regex (".*<filename>$") instead of the
+# literal "pxelinux.cfg/<filename>". RouterOS' /ip tftp matches req-filename
+# as a regex against the wire-level TFTP request, and U-Boot's PXE bootmeth
+# sends a path that doesn't string-match the literal "pxelinux.cfg/01-<mac>"
+# even though that's what U-Boot prints to the console (verified via TFTP
+# logs: HITS=0 with the literal rule, requests succeed once the regex is
+# permissive). Per-model rules (armbian/<model>/{vmlinuz,initrd,dtb}) are
+# fetched relative to the pxelinux.cfg URL and do match their literal
+# req-filename, so they're untouched. Anchored at $ to avoid matching
+# if a longer path happens to contain this filename as a prefix.
 - name: Count /ip tftp rows for {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-
         /ip tftp print count-only where
-        req-filename="pxelinux.cfg/{{ _pxe_filename }}"
+        req-filename=".*{{ _pxe_filename }}$"
         and real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
   register: _pxe_tftp_count
   changed_when: false
@@ -91,7 +101,7 @@
     commands:
       - >-
         /ip tftp add
-        req-filename="pxelinux.cfg/{{ _pxe_filename }}"
+        req-filename=".*{{ _pxe_filename }}$"
         real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
         allow=yes read-only=yes
   when: (_pxe_tftp_count.stdout[0] | trim | int) == 0

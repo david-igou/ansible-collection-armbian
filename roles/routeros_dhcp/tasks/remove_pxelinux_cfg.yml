@@ -17,11 +17,12 @@
     _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
   tags: pxelinux
 
+# Match the same regex used by write_pxelinux_cfg.yml when adding the row.
 - name: Remove /ip tftp row for {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-
-        /ip tftp remove [find req-filename="pxelinux.cfg/{{ _pxe_filename }}"]
+        /ip tftp remove [find req-filename=".*{{ _pxe_filename }}$"]
   changed_when: false  # idempotent — RouterOS returns no output when find is empty
   tags: pxelinux
 
