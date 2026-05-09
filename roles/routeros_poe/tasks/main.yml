@@ -24,11 +24,19 @@
     fail_msg: "poe_action must be 'on', 'off', or 'cycle'. Got: '{{ poe_action }}'"
   tags: poe
 
+# Retry guards on each routeros command — network_cli persistent connections
+# to RouterOS drop intermittently mid-play; one transient drop should not
+# fail a PoE cycle. See routeros_dhcp/write_pxelinux_cfg.yml for the failure
+# modes documented from hardware testing.
 - name: Power on PoE port
   community.routeros.command:
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=auto'
   delegate_to: "{{ poe_switch }}"
+  register: _poe_on
+  retries: 3
+  delay: 5
+  until: _poe_on is succeeded
   when: poe_action == 'on'
   tags: poe
 
@@ -37,6 +45,10 @@
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=off'
   delegate_to: "{{ poe_switch }}"
+  register: _poe_off
+  retries: 3
+  delay: 5
+  until: _poe_off is succeeded
   when: poe_action == 'off'
   tags: poe
 
@@ -45,6 +57,10 @@
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=off'
   delegate_to: "{{ poe_switch }}"
+  register: _poe_cycle_off
+  retries: 3
+  delay: 5
+  until: _poe_cycle_off is succeeded
   when: poe_action == 'cycle'
   tags: poe
 
@@ -59,5 +75,9 @@
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=auto'
   delegate_to: "{{ poe_switch }}"
+  register: _poe_cycle_on
+  retries: 3
+  delay: 5
+  until: _poe_cycle_on is succeeded
   when: poe_action == 'cycle'
   tags: poe

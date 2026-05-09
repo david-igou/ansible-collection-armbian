@@ -18,11 +18,17 @@
   tags: pxelinux
 
 # Match the same regex used by write_pxelinux_cfg.yml when adding the row.
+# Retries guard transient network_cli persistent-connection drops — see the
+# comment block in write_pxelinux_cfg.yml for the failure modes.
 - name: Remove /ip tftp row for {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-
         /ip tftp remove [find req-filename=".*{{ _pxe_filename }}$"]
+  register: _pxe_tftp_rm
+  retries: 3
+  delay: 5
+  until: _pxe_tftp_rm is succeeded
   changed_when: false  # idempotent — RouterOS returns no output when find is empty
   tags: pxelinux
 
@@ -31,5 +37,9 @@
     commands:
       - >-
         /file remove [find name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"]
+  register: _pxe_file_rm
+  retries: 3
+  delay: 5
+  until: _pxe_file_rm is succeeded
   changed_when: false  # idempotent — same as above
   tags: pxelinux

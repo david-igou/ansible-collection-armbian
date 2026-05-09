@@ -21,12 +21,20 @@
          | map('extract', hostvars, 'board_model')
          | list | unique }}
 
+# All RouterOS-targeted tasks below carry retries: 3 / delay: 5 /
+# until: <register> is succeeded — network_cli persistent connections to
+# RouterOS drop intermittently mid-play under both paramiko and pylibssh,
+# and a single drop should not fail the staging of multi-megabyte assets.
 - name: Ensure top-level flash directory exists on rb5009
   community.routeros.command:
     commands:
       - >-
         :if ([/file find name="{{ sbc_tftp_flash_dir }}" type=directory] = "")
         do={/file add name="{{ sbc_tftp_flash_dir }}" type=directory}
+  register: _stage_top_dir
+  retries: 3
+  delay: 5
+  until: _stage_top_dir is succeeded
   changed_when: false
 
 - name: Ensure armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
@@ -35,6 +43,10 @@
       - >-
         :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian" type=directory] = "")
         do={/file add name="{{ sbc_tftp_flash_dir }}/armbian" type=directory}
+  register: _stage_armbian_dir
+  retries: 3
+  delay: 5
+  until: _stage_armbian_dir is succeeded
   changed_when: false
 
 - name: Ensure per-model armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
@@ -43,6 +55,10 @@
       - >-
         :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
         do={/file add name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
+  register: _stage_model_dir
+  retries: 3
+  delay: 5
+  until: _stage_model_dir is succeeded
   changed_when: false
   loop: "{{ _models }}"
 
@@ -79,6 +95,9 @@
                     | selectattr('item.1', 'equalto', item.1)
                     | map(attribute='stat.size') | first }}
   register: _router_size_match
+  retries: 3
+  delay: 5
+  until: _router_size_match is succeeded
   changed_when: false
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:
@@ -90,6 +109,10 @@
     dest: "{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
   vars:
     ansible_command_timeout: 300
+  register: _stage_net_put
+  retries: 3
+  delay: 5
+  until: _stage_net_put is succeeded
   when: (_router_size_match.results[ansible_loop.index0].stdout[0] | trim | int) == 0
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:
@@ -104,6 +127,9 @@
         req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
         and real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
   register: _tftp_row_count
+  retries: 3
+  delay: 5
+  until: _tftp_row_count is succeeded
   changed_when: false
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:
@@ -117,6 +143,10 @@
         req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
         real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
         allow=yes read-only=yes
+  register: _stage_tftp_add
+  retries: 3
+  delay: 5
+  until: _stage_tftp_add is succeeded
   when: (_tftp_row_count.results[ansible_loop.index0].stdout[0] | trim | int) == 0
   changed_when: true
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
