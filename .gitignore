@@ -166,7 +166,14 @@ cython_debug/
 # Ansible
 .ansible/
 .inventory
+# ansible.netcommon's net_put/net_get + community.routeros file
+# transfers leave UUID-named scratch copies under playbooks/ when
+# they're invoked from a play whose source is in this directory.
+# These are session-local temp files (typically a copy of the
+# kernel/initrd staged to rb5009) and should never be tracked.
+playbooks/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*
 
 # Editor / IDE
 .cursor/
+.claude/
 .cache/
