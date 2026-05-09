@@ -170,3 +170,27 @@ bootloader flashing, and additional boards are deferred and will be
 re-introduced post-v1 against the slimmer model.
 
 Spec: [`superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](superpowers/specs/2026-05-07-v1-scope-narrowing-design.md)
+
+## Known issues
+
+### klibc-nfs v3 mount fails on Armbian kernel 6.18.27
+
+The pxelinux.cfg APPEND uses `nfsvers=3` because Debian klibc-nfs in the
+initramfs only supports NFS v2/v3 (v4 mounts fail with
+`bad NFS version '4'`). On Armbian builds with kernel 6.18.27 the
+initramfs's `nfsmount` then fails with
+`mount: the kernel lacks NFS v3 support` even though `nfsv3.ko` is
+present in the initramfs — the module isn't autoloaded by the
+klibc-nfs scripts. Kernel 6.18.26 mounts NFS v3 successfully with the
+same template.
+
+Workarounds while this is unresolved:
+
+  - Pin `armbian_image_urls.<model>` to the 6.18.26-vintage `.img.xz`.
+  - Or add an explicit `modprobe nfsv3` to the initramfs via an
+    `/etc/initramfs-tools/scripts/nfs-top/` hook in the per-host
+    rootfs, then rebuild the initramfs.
+
+The PXE/TFTP/DHCP plumbing in this collection is unaffected — U-Boot
+loads the kernel + initrd + dtb correctly; the failure is strictly
+inside the initramfs's NFS mount step.
