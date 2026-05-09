@@ -1,22 +1,19 @@
 ---
-# Reverts boards to disk boot by:
-#   - removing the per-board pxelinux.cfg/01-<MAC> from the netboot
-#     server (so U-Boot's PXE bootmeth fast-404s on the fallback
-#     chain and falls through to MMC)
-#   - clearing the armbian-nfsroot DHCP option set from each board's
-#     static lease (now ornamental — file presence is the
-#     load-bearing signal post-2026-05-07-bootflow-pxe-first-design,
-#     but kept for symmetry with enable_netboot.yml)
+# Reverts boards to disk boot by removing per-board pxelinux.cfg
+# /ip tftp row + flash file from rb5009. U-Boot's PXE bootmeth then
+# fast-404s through the fallback chain and falls through to MMC.
 #
 # Usage:
 #   ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
+#
+# To disable without rebooting:
+#   ansible-playbook playbooks/disable_netboot.yml --limit ... -e netboot_reboot=false
 
-- name: Remove per-board pxelinux.cfg on the netboot server
-  hosts: netboot_server
-  become: true
+- name: Remove SBC TFTP entries on rb5009 for each target board
+  hosts: routeros_routers
   gather_facts: false
   tasks:
-    - name: Remove pxelinux.cfg per target board
+    - name: Remove per-board pxelinux.cfg + /ip tftp row
       ansible.builtin.include_role:
         name: routeros_dhcp
         tasks_from: remove_pxelinux_cfg.yml
@@ -27,24 +24,14 @@
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
 
-- name: Disable netboot for boards
-  hosts: routeros_routers
+- name: Reboot boards to revert to disk boot
+  hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   tasks:
-    - name: Preflight — verify RouterOS SBC network's next-server
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: preflight_next_server.yml
-      run_once: true
-      tags: preflight
-
-    - name: Disable netboot on RouterOS for each target board
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: disable_netboot.yml
-      vars:
-        board_mac: "{{ hostvars[item]['board_mac'] }}"
-        board_model: "{{ hostvars[item]['board_model'] }}"
-      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
-      loop_control:
-        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
+    - name: Reboot to fall through to SD
+      ansible.builtin.command: reboot
+      async: 1
+      poll: 0
+      ignore_errors: true # noqa: ignore-errors
+      changed_when: true
+      when: netboot_reboot | default(true) | bool

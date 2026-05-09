@@ -46,8 +46,8 @@ import public-key-file=ansible-netboot.pub user=ansible-netboot
 
 Notes:
 - The policy enables `ssh` (the protocol this collection uses) plus the `read`
-  / `write` permissions needed for `/ip dhcp-server` changes. `rest-api` and
-  the legacy `api` are explicitly disabled — neither is needed.
+  / `write` permissions needed for `/file` and `/ip tftp` mutations on rb5009.
+  `rest-api` and the legacy `api` are explicitly disabled — neither is needed.
 - Authentication is SSH-key only; no password is set on the user.
 - The `address=10.10.0.0/16` constraint pins the user to the management
   subnet — adjust if your control node lives elsewhere.
@@ -62,12 +62,6 @@ routeros:
       ansible_host: 10.10.99.1
       ansible_user: ansible-netboot
       ansible_port: 3480
-```
-
-Collection-level settings in `inventory/group_vars/all.yml`:
-
-```yaml
-routeros_dhcp_server_name: "dhcp_vlan70"
 ```
 
 ### Provisioning the user with `bootstrap_routeros_user.yml`
@@ -99,8 +93,8 @@ works for every user that needs SSH (including `igou`) — it sets
 
 ## Static DHCP Leases
 
-Each board needs a static lease on `dhcp_vlan70` keyed on its MAC address before
-the playbooks can flip PXE options on it:
+Each board needs a static lease on `dhcp_vlan70` keyed on its MAC address so
+U-Boot's PXE request lands on a deterministic IP:
 
 ```routeros
 /ip dhcp-server lease/add \
@@ -115,73 +109,51 @@ The `board_mac` value in `inventory/hosts.yml` must match exactly
 `rock-5b` lease (`10.10.70.249`, MAC `00:E0:4C:68:00:3B`) in
 `05-router-dhcp-static.rsc`.
 
-## Remove the legacy `boottest` option set on vlan70
+## Network-level `next-server` (owned externally)
 
-`05-router-specific.rsc` previously assigned a `boottest` option set at the
-**network** level on `10.10.70.0/24`:
+U-Boot 2025.10's PXE bootmeth uses BOOTP `siaddr` (RFC 951 next-server) as the
+TFTP source — it parses DHCP option 66 but silently ignores it for `serverip`
+selection. So the **SBC subnet's `next-server` field must point at rb5009's IP
+for that subnet** (e.g. `10.10.9.1` for vlan9, or whichever IP rb5009 carries
+on the SBC's VLAN). Without it, U-Boot can't reach rb5009's TFTP daemon to
+fetch per-board pxelinux.cfg + per-model kernel/initrd/dtb.
 
-```routeros
-# This is what you want to REMOVE — it forces every vlan70 lease into PXE
-/ip dhcp-server network
-set [find address=10.10.70.0/24] dhcp-option-set=""
-```
+This collection does **not** write `next-server`. Network-level RouterOS
+fields are owned by your separate routeros-config repository (e.g.
+`igou-ansible`'s `deploy_netboot_binaries.yml`). The collection assumes
+`next-server` is already correctly set and only manages per-file/per-row state
+under `flash:/sbc/` and the `/ip tftp` namespace.
 
-The collection's whole control surface is **per-lease** `dhcp-option`
-assignment — a network-level option set would override it and make
-`enable_netboot` / `disable_netboot` no-ops from the board's perspective.
+## What the collection writes on rb5009
 
-The old `next-server-rock5b` and `netboot.xyz-rpi4-snp.efi` option entries can
-stay or be removed; they don't conflict with the role's own object names
-(`armbian-tftp-server`, `armbian-nfsroot-bootfile`).
-
-## DHCP Server PXE Objects
-
-`playbooks/setup_routeros_dhcp.yml` creates these on the rb5009 automatically. For
-reference / manual recovery:
+`stage_netboot_assets.yml` populates per-model assets (kernel/initrd/dtb)
+under `flash:/sbc/armbian/<model>/` and registers an `/ip tftp` row per file.
+`enable_netboot.yml` adds a per-board `pxelinux.cfg/01-<MAC>` plus its row;
+`disable_netboot.yml` removes both (row first). To inspect after a run:
 
 ```routeros
-# Option 66 — TFTP server (= netboot_server_ip = 10.10.9.224)
-/ip dhcp-server option/add \
-    name=armbian-tftp-server code=66 value="'10.10.9.224'"
-
-# Option 67 — boot file for NFS root mode
-/ip dhcp-server option/add \
-    name=armbian-nfsroot-bootfile code=67 value="'pxelinux.cfg/nfsroot-default'"
-
-# Option set
-/ip dhcp-server option sets/add \
-    name=armbian-nfsroot \
-    options=armbian-tftp-server,armbian-nfsroot-bootfile
+/file print where name~"^sbc/"
+/ip tftp print where real-filename~"^sbc/"
 ```
 
-## Triggering Netboot Manually
-
-To queue a board for netboot without Ansible:
+To remove the per-board state by hand (equivalent to `disable_netboot.yml`
+for one board):
 
 ```routeros
-/ip dhcp-server lease/set \
-    [find mac-address="AA:BB:CC:DD:EE:01"] \
-    dhcp-option-set=armbian-nfsroot
+/ip tftp remove [find req-filename="pxelinux.cfg/01-AA-BB-CC-DD-EE-01"]
+/file remove [find name="sbc/pxelinux.cfg/01-AA-BB-CC-DD-EE-01"]
 ```
 
-To revert to disk boot:
-
-```routeros
-/ip dhcp-server lease/set \
-    [find mac-address="AA:BB:CC:DD:EE:01"] \
-    dhcp-option-set=""
-```
-
-To power-cycle the board after flipping the option, toggle the PoE port on the
-crs328 (`crs328.igou.systems` — SSH port 3480). See `04-host-specific-crs328.rsc`
+To power-cycle the board afterwards, toggle the PoE port on the crs328
+(`crs328.igou.systems` — SSH port 3480). See `04-host-specific-crs328.rsc`
 for the switch baseline.
 
 ## Firewall Rules
 
-Boards on vlan70 need to reach the netboot server on vlan9. The baseline
-`05-router-firewall.rsc` only allows vlan70 → Internet (`!not_in_internet`),
-which excludes RFC1918 — so without an explicit rule, TFTP/NFS to
-`10.10.9.224` is dropped.
+Boards on vlan70 need to reach the netboot server on vlan9 (NFS rootfs +
+HTTP assets) and rb5009 itself for TFTP. The baseline `05-router-firewall.rsc`
+only allows vlan70 → Internet (`!not_in_internet`), which excludes RFC1918 —
+so without explicit rules, the relevant traffic is dropped.
 
 Add to `05-router-firewall.rsc`:
 
@@ -196,14 +168,15 @@ Required ports (board → netboot server):
 
 | Port    | Protocol | Service           |
 |---------|----------|-------------------|
-| 69      | UDP      | TFTP              |
 | 2049    | TCP/UDP  | NFS               |
 | 111     | TCP/UDP  | rpcbind (NFS)     |
 | 80      | TCP      | nginx (images)    |
-| 8080    | TCP      | netboot.xyz HTTP  |
 
-A single `dst-address=10.10.9.224` accept covers all of these; tighten with
-`dst-port`/`protocol` matches if you want.
+TFTP (UDP/69) is served by rb5009 itself, not the netboot server — no
+forward-chain rule needed for it; rb5009's input chain handles it.
+
+A single `dst-address=10.10.9.224` accept covers the netboot server's ports;
+tighten with `dst-port`/`protocol` matches if you want.
 
 Control node → RouterOS SSH:
 
@@ -215,17 +188,6 @@ The control node lives on `10.10.0.0/16` and the rb5009 already accepts
 management traffic on its mgmt VLAN — no extra rule needed if your control node
 is on vlan99 / vlan10 / vlan9. Adjust the port to match the `ansible_port` set
 on the RouterOS host entry if you've changed it from the default.
-
-## Verifying DHCP PXE Options
-
-After assigning an option set, verify the lease shows it:
-
-```routeros
-/ip dhcp-server lease/print detail \
-    where mac-address="AA:BB:CC:DD:EE:01"
-```
-
-Look for `dhcp-option-set: armbian-nfsroot` in the output.
 
 ## Manual SSH Access
 

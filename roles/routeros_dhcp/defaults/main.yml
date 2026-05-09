@@ -1,31 +1,25 @@
 ---
-# Name of the DHCP server on RouterOS to manage
-routeros_dhcp_server_name: "dhcp1"
+# Defaults for the routeros_dhcp role.
+#
+# This role writes/removes per-board pxelinux.cfg files on rb5009 over
+# network_cli, with corresponding /ip tftp registrations. It is invoked
+# via tasks_from: write_pxelinux_cfg.yml or remove_pxelinux_cfg.yml.
 
-# DHCP option names created once during setup (setup_options.yml playbook)
-routeros_opt_tftp_name: "armbian-tftp-server"
-routeros_opt_set_nfsroot_prefix: "armbian-nfsroot"
+# Top-level directory on rb5009's flash for SBC TFTP content. Used in
+# /file paths (sbc/...) and as the prefix of real-filename in /ip tftp
+# rules. Pairs with the same default in roles/netboot_assets/defaults.
+sbc_tftp_flash_dir: "sbc"
 
-# Boot mode pxelinux config path served from TFTP
-netboot_modes:
-  nfsroot: "pxelinux.cfg/nfsroot-default"
+# Local cache on the control node where the rendered pxelinux.cfg is
+# written before being net_put to rb5009. Mirrored as a default in
+# roles/netboot_assets/defaults/main.yml so direct callers of
+# write_pxelinux_cfg.yml (e.g. test_hardware_e2e.yml) get the variable
+# in scope without having to also load netboot_assets defaults first.
+sbc_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"
 
-# TFTP server document root on the netboot server. Must match the TFTP
-# daemon's --tftp-root. Default matches the netboot.xyz container layout.
-# write_pxelinux_cfg.yml and remove_pxelinux_cfg.yml write/remove files
-# relative to this path.
-tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config/menus
-
-# NFS rootfs export root on the netboot server. pxelinux_cfg.j2 references
-# this path when constructing the per-host nfsroot= kernel parameter.
-# Default matches the nfs_content role's default; override here or in
-# inventory/group_vars/all.yml if your NFS layout differs.
+# NFS rootfs export root on the netboot server. templates/pxelinux_cfg.j2
+# references it when constructing the per-host nfsroot= kernel parameter.
+# Mirrored as a default in roles/netboot_assets/defaults/main.yml so that
+# enable_netboot.yml (which only loads routeros_dhcp) can render the
+# template without netboot_assets being in scope.
 nfs_rootfs_path: /mnt/ssd/netboot/rootfs
-
-# CIDR of the RouterOS DHCP network the SBCs are attached to. Required.
-# This network's `next-server` field is what populates BOOTP siaddr in
-# DHCP replies, which U-Boot 2025.10's PXE bootmeth uses as the TFTP
-# source (option 66 is silently ignored). The next-server value itself
-# is owned by an external RouterOS-config repo; this role only asserts
-# the value is correct via preflight_next_server.yml.
-routeros_sbc_network_address: ""

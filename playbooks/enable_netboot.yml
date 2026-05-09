@@ -1,8 +1,12 @@
 ---
 # Enables network boot for one or more boards.
-# Writes per-host pxelinux.cfg directly on the netboot server over SSH,
-# assigns the armbian-nfsroot DHCP option set on RouterOS, and optionally
-# reboots boards to apply the change.
+# Writes per-board pxelinux.cfg + /ip tftp row directly on rb5009 over
+# network_cli, then reboots the boards to apply.
+#
+# Pre-condition: stage_netboot_assets.yml has run successfully so that
+# the per-model kernel/initrd/dtb /ip tftp rows exist on rb5009. The
+# plumbing-check preflight catches missing rows with an actionable
+# error message.
 #
 # Usage:
 #   # Enable NFS root mode for a specific board
@@ -16,14 +20,23 @@
 #     --limit orange-pi-5-pro-01 \
 #     -e netboot_reboot=false
 
-# Per-board pxelinux.cfg files are written directly on the netboot
-# server over SSH — no NFS mount on the control node.
-- name: Write per-board pxelinux.cfg on the netboot server
-  hosts: netboot_server
-  become: true
+- name: Configure SBC TFTP on rb5009 for each target board
+  hosts: routeros_routers
   gather_facts: false
   tasks:
-    - name: Generate pxelinux.cfg per target board
+    - name: Plumbing check — assert per-model /ip tftp rows exist
+      ansible.builtin.include_role:
+        name: netboot_assets
+        tasks_from: plumbing_check.yml
+      vars:
+        _check_models: >-
+          {{ query('inventory_hostnames', target_hosts | default('boards'))
+             | map('extract', hostvars, 'board_model')
+             | list | unique }}
+      run_once: true
+      tags: preflight
+
+    - name: Write per-board pxelinux.cfg + /ip tftp row
       ansible.builtin.include_role:
         name: routeros_dhcp
         tasks_from: write_pxelinux_cfg.yml
@@ -31,27 +44,6 @@
         board_mac: "{{ hostvars[item]['board_mac'] }}"
         board_model: "{{ hostvars[item]['board_model'] }}"
         target_board_host: "{{ item }}"
-      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
-      loop_control:
-        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
-
-- name: Configure PXE boot on RouterOS
-  hosts: routeros_routers
-  gather_facts: false
-  tasks:
-    - name: Preflight — verify RouterOS SBC network's next-server
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: preflight_next_server.yml
-      run_once: true
-      tags: preflight
-
-    - name: Enable netboot on RouterOS for each target board
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: enable_netboot.yml
-      vars:
-        board_mac: "{{ hostvars[item]['board_mac'] }}"
       loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"

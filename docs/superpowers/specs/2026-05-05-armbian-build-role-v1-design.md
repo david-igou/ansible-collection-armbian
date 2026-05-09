@@ -8,7 +8,7 @@
 Land the `armbian_build` role + `playbooks/build_image.yml` in v1, producing a
 custom Armbian `.img.xz` image for `orangepi5pro` with PXE-first
 `BOOT_TARGETS` patched at U-Boot compile time. The image is consumed by the
-existing `nfs_content` and `reprovision` workflows through the
+existing `netboot_assets` and `reprovision` workflows through the
 `armbian_image_urls` indirection — no downstream role changes.
 
 ## Architecture & boundaries
@@ -43,7 +43,7 @@ plays:
 `playbooks/build_image.yml` filters hosts in the `boards` group by that
 flag and deduplicates to one build per `armbian_board_name`.
 
-**What stays unchanged.** `nfs_content`, `reprovision`, `bootloader`, and
+**What stays unchanged.** `netboot_assets`, `reprovision`, `bootloader`, and
 the inventory structure are not modified by this work. Consumption is via
 the existing `armbian_image_urls[<board_model>]` indirection — operators
 flip the URL to point at the locally published image after a build.
@@ -446,7 +446,7 @@ All deferred to follow-up issues already filed per the direction spec:
   `"pxe dhcp mmc1 mmc0 nvme scsi usb spi"`.
 - [ ] `host_board_overrides.armbian_build_enabled: true` on opi5pro-01 +
   the `armbian_image_urls[orange-pi-5-pro]` override makes the existing
-  `populate_nfs_content.yml` + `reprovision.yml` flow consume the custom
+  `stage_netboot_assets.yml` + `reprovision.yml` flow consume the custom
   image.
 - [ ] After reprovision, `enable_netboot.yml` + reboot lands the board in
   NFS root (closes the empirical question raised in #2).

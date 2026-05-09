@@ -1,7 +1,7 @@
 ---
 breaking_changes:
   - >-
-    ``nfs_content`` role and ``playbooks/setup_netboot.yml`` now run
+    ``netboot_assets`` role and ``playbooks/setup_netboot.yml`` now run
     against the ``netboot_server`` host (over SSH) instead of the
     Ansible control node. The role no longer mounts NFS exports
     locally; it operates on ``nfs_rootfs_path``, ``tftp_nfs_export``,
@@ -16,7 +16,7 @@ breaking_changes:
 
 minor_changes:
   - >-
-    ``nfs_content`` is now compatible with rootless execution
+    ``netboot_assets`` is now compatible with rootless execution
     environments (``ansible-navigator`` + rootless podman). The
     previous design relied on ``ansible.posix.mount`` of
     ``fstype: nfs`` and ``losetup`` on the control node, both of

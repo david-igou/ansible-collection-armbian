@@ -34,7 +34,7 @@ breaking_changes:
 
 minor_changes:
   - >-
-    Added ``roles/nfs_content/tasks/preflight.yml`` (run automatically at
+    Added ``roles/netboot_assets/tasks/preflight.yml`` (run automatically at
     the start of ``setup_netboot.yml``). Fetches Armbian's apt
     ``Packages.gz`` once and asserts every board's ``uboot_apt_package``
     exists; HEAD-checks every ``armbian_image_urls`` entry. Fail-fast

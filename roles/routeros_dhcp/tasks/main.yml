@@ -1,9 +1,4 @@
 ---
-# Default entry point — included by other tasks files as needed.
-# Run setup_options.yml once to create the shared DHCP option objects.
-# Use enable_netboot.yml / disable_netboot.yml per board.
-
-- name: Include setup_options tasks
-  ansible.builtin.include_tasks: setup_options.yml
-  when: routeros_setup_options | default(false) | bool
-  tags: routeros
+# This role is invoked exclusively via tasks_from: include_role calls
+# (write_pxelinux_cfg.yml, remove_pxelinux_cfg.yml). main.yml is
+# intentionally empty; including the role with no tasks_from is a no-op.

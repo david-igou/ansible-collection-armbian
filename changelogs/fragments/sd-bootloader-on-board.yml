@@ -31,7 +31,7 @@ minor_changes:
     pre-reading from the netboot server's rootfs template is required
     anymore.
   - >-
-    ``nfs_content`` no longer caches U-Boot binaries from each Armbian
+    ``netboot_assets`` no longer caches U-Boot binaries from each Armbian
     image (the ``armbian_image_cache/uboot-<model>/`` directory is no
     longer populated). The bootloader role pulls U-Boot exclusively
     from the apt-installed deb on the board itself, regardless of which

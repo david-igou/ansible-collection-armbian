@@ -11,7 +11,7 @@
 #   armbian_support      Armbian support tier (standard / community /
 #                        wip / unsupported). Documentation only.
 #   dtb                  Device tree path under /boot/dtb/. Used by
-#                        roles/nfs_content/tasks/per_board.yml.
+#                        roles/netboot_assets/tasks/per_board.yml.
 #   console              Kernel console parameter. Used by
 #                        roles/routeros_dhcp/templates/pxelinux_cfg.j2.
 

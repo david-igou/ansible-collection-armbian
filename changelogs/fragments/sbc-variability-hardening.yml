@@ -58,7 +58,7 @@ bugfixes:
     the PXE SD card being treated as primary storage when NVMe is
     missing or named differently).
   - >-
-    ``nfs_content`` now tries multiple known DTB locations in the
+    ``netboot_assets`` now tries multiple known DTB locations in the
     Armbian rootfs (``/boot/dtb/<dtb>``, ``/boot/dtbs/<dtb>``,
     ``/boot/dtb-<version>/<dtb>``, ``/boot/dtbs/<version>/<dtb>``) and
     hard-fails if none match, instead of silently logging a warning and

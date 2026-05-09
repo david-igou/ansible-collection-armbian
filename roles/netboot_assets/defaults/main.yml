@@ -15,13 +15,6 @@
 # reflinks where the filesystem supports them (XFS, btrfs, ZFS), so disk
 # cost stays at one rootfs per model regardless of host count.
 nfs_rootfs_path: /mnt/ssd/netboot/rootfs
-# `tftp_nfs_export` must point at the TFTP server's actual document root.
-# The default matches the netboot.xyz container, whose dnsmasq is launched
-# with `--tftp-root=/config/menus`. If you serve TFTP from elsewhere
-# (e.g. dnsmasq directly on the host with a different root), override
-# this — the role writes `armbian/<model>/{vmlinuz,initrd.img,board.dtb}`
-# and `pxelinux.cfg/01-<mac>` relative to this path.
-tftp_nfs_export: /mnt/ssd/containers/netbootxyz/config/menus
 # `nfs_assets_export` must point at the HTTP server's document root. The
 # default matches the netboot.xyz container, whose nginx serves `/` from
 # `/assets/`. The role writes `images/<model>.img.xz` here.
@@ -33,3 +26,14 @@ nfs_assets_export: /mnt/ssd/containers/netbootxyz/assets
 # the boot pool is small and not appropriate for caching multi-GB images.
 armbian_image_cache: /mnt/ssd/netboot/cache
 armbian_image_mount: /mnt/ssd/netboot/.loop-mount
+
+# Top-level directory on rb5009's flash for SBC TFTP content. Used in
+# /file paths and as the prefix of real-filename in /ip tftp rules.
+# Mirrored as a default in roles/routeros_dhcp/defaults/main.yml.
+sbc_tftp_flash_dir: "sbc"
+
+# Local cache on the control node where kernel/initrd/dtb get fetched
+# from TrueNAS before being net_put to rb5009. Resolved relative to the
+# playbook directory; lands at <repo-root>/.cache/sbc-tftp/<model>/.
+# Gitignored.
+sbc_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"

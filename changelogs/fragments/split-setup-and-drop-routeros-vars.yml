@@ -2,7 +2,7 @@
 breaking_changes:
   - >-
     ``playbooks/setup_netboot.yml`` has been split into two separate
-    playbooks: ``populate_nfs_content.yml`` (runs against the netboot
+    playbooks: ``stage_netboot_assets.yml`` (runs against the netboot
     server to populate NFS rootfs / TFTP content) and
     ``setup_routeros_dhcp.yml`` (runs against RouterOS to create the
     shared DHCP option objects). Each is responsible for one role's
@@ -26,7 +26,7 @@ minor_changes:
     did not exist in the sample inventory.
   - >-
     The README has been restructured around a numbered lifecycle (1.
-    bootstrap_routeros_user → 2. populate_nfs_content →
+    bootstrap_routeros_user → 2. stage_netboot_assets →
     3. setup_routeros_dhcp → 4. flash_bootloader → 5. reprovision)
     with an order column on the playbooks table so the run sequence
     is unambiguous. Phase 0 of the lifecycle splits NFS content

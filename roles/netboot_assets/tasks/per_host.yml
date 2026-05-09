@@ -51,7 +51,7 @@
       changed_when: true
 
 # Per-host identity customisation runs every time (idempotent), so an
-# operator can rerun populate_nfs_content.yml after renaming a host without
+# operator can rerun stage_netboot_assets.yml after renaming a host without
 # needing to nuke the rootfs.
 - name: Set per-host /etc/hostname
   ansible.builtin.copy:
@@ -81,6 +81,17 @@
   args:
     executable: /bin/bash
   changed_when: true
+
+# Suppress armbian-firstrun-config's interactive password-change prompt
+# on first root login. Without this, the first SSH-as-root session
+# triggers a passwd dialog which Ansible's non-interactive session
+# cannot satisfy, and Phase 2 of test_hardware_e2e.yml hangs at
+# wait_for_connection.
+- name: Touch /root/.no_armbian_first_login to skip first-login prompt
+  ansible.builtin.file:
+    path: "{{ _host_rootfs_dir }}/root/.no_armbian_first_login"
+    state: touch
+    mode: "0644"
 
 - name: Per-host rootfs ready
   ansible.builtin.debug:

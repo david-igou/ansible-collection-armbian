@@ -4,7 +4,7 @@
 
 **Goal:** Restore the v1 "PXE-first U-Boot with fast fall-through to SD" invariant by adding a RouterOS-side preflight that asserts the SBC network's `next-server` field is set correctly, and extending `disable_netboot` to remove the per-board `pxelinux.cfg` so file-presence symmetrically tracks lease state.
 
-**Architecture:** Single new preflight task file in the `routeros_dhcp` role; included at the top of every playbook that depends on netboot working (`setup_routeros_dhcp.yml`, `enable_netboot.yml`, `disable_netboot.yml`, `populate_nfs_content.yml`). Adds a required role variable (`routeros_sbc_network_address`). Adds a sibling role task file `remove_pxelinux_cfg.yml` and a new netboot-server play in `playbooks/disable_netboot.yml`. Documentation updates fix the wrong "no next-server" wording in `docs/architecture.md` and document the new required inventory variable in `CLAUDE.md`.
+**Architecture:** Single new preflight task file in the `routeros_dhcp` role; included at the top of every playbook that depends on netboot working (`setup_routeros_dhcp.yml`, `enable_netboot.yml`, `disable_netboot.yml`, `stage_netboot_assets.yml`). Adds a required role variable (`routeros_sbc_network_address`). Adds a sibling role task file `remove_pxelinux_cfg.yml` and a new netboot-server play in `playbooks/disable_netboot.yml`. Documentation updates fix the wrong "no next-server" wording in `docs/architecture.md` and document the new required inventory variable in `CLAUDE.md`.
 
 **Tech Stack:** Ansible collection (`david_igou.armbian_netboot`); RouterOS via `community.routeros.command`; netboot server (TrueNAS) accessed over SSH for filesystem ops; mainline U-Boot v2025.10's `bootflow` framework on the SD-resident image.
 
@@ -25,11 +25,11 @@
 - `playbooks/setup_routeros_dhcp.yml` — add `pre_tasks:` block invoking the preflight via `include_role` + `tasks_from`.
 - `playbooks/enable_netboot.yml` — add the preflight to the existing `Configure PXE boot on RouterOS` play.
 - `playbooks/disable_netboot.yml` — add the preflight + add a new play before the existing one that removes the per-board `pxelinux.cfg` on the netboot server.
-- `playbooks/populate_nfs_content.yml` — add a separate pre-play targeting `routeros_routers` that runs the preflight before the netboot-server play.
+- `playbooks/stage_netboot_assets.yml` — add a separate pre-play targeting `routeros_routers` that runs the preflight before the netboot-server play.
 - `docs/architecture.md` — replace the wrong "no `next-server`" wording (lines 36–38) and add a one-paragraph "RouterOS prerequisite" section explaining that the SBC network's `next-server` is owned by an external repo and is the load-bearing knob.
 - `CLAUDE.md` — under the "Required configuration before first run" section, add `routeros_sbc_network_address` to the list of required inventory variables.
 
-**Verification approach:** No formal test suite. Per task: `make lint` (yamllint + ansible-lint, both must pass), `ansible-playbook --syntax-check` for any modified playbook. End-to-end: a hardware run-through against opi5pro-01 — `setup_routeros_dhcp.yml`, then `populate_nfs_content.yml`, then a power-cycle confirming the board boots from SD via the fast-404 fall-through, then `enable_netboot.yml --limit opi5pro-01.igou.systems` + power-cycle confirming NFS root, then `disable_netboot.yml` + power-cycle confirming SD. Time the cold-boot path; should be ≤30 s in disabled-netboot mode.
+**Verification approach:** No formal test suite. Per task: `make lint` (yamllint + ansible-lint, both must pass), `ansible-playbook --syntax-check` for any modified playbook. End-to-end: a hardware run-through against opi5pro-01 — `setup_routeros_dhcp.yml`, then `stage_netboot_assets.yml`, then a power-cycle confirming the board boots from SD via the fast-404 fall-through, then `enable_netboot.yml --limit opi5pro-01.igou.systems` + power-cycle confirming NFS root, then `disable_netboot.yml` + power-cycle confirming SD. Time the cold-boot path; should be ≤30 s in disabled-netboot mode.
 
 ---
 
@@ -73,7 +73,7 @@ Create `roles/routeros_dhcp/tasks/preflight_next_server.yml` with this exact con
 #   - setup_routeros_dhcp.yml   (option-set creation)
 #   - enable_netboot.yml        (per-board lease assignment)
 #   - disable_netboot.yml       (per-board lease clear)
-#   - populate_nfs_content.yml  (TFTP/NFS content)
+#   - stage_netboot_assets.yml  (TFTP/NFS content)
 #
 # Each play that includes it must target a host that can reach
 # RouterOS via community.routeros.command (i.e. routeros_routers or
@@ -348,14 +348,14 @@ RouterOS play.
 
 ---
 
-### Task 5: Wire preflight into populate_nfs_content.yml
+### Task 5: Wire preflight into stage_netboot_assets.yml
 
 **Files:**
-- Modify: `playbooks/populate_nfs_content.yml`
+- Modify: `playbooks/stage_netboot_assets.yml`
 
 - [ ] **Step 1: Add a separate pre-play targeting routeros_routers**
 
-Edit `playbooks/populate_nfs_content.yml`. The existing play targets `netboot_server` (truenas), so the preflight needs a separate play because RouterOS access is through a different host. Insert a new play *before* the existing one. The file becomes:
+Edit `playbooks/stage_netboot_assets.yml`. The existing play targets `netboot_server` (truenas), so the preflight needs a separate play because RouterOS access is through a different host. Insert a new play *before* the existing one. The file becomes:
 
 ```yaml
 ---
@@ -388,10 +388,10 @@ Edit `playbooks/populate_nfs_content.yml`. The existing play targets `netboot_se
 # URL, or add a new host to inventory. It is idempotent.
 #
 # Usage:
-#   ansible-playbook playbooks/populate_nfs_content.yml
+#   ansible-playbook playbooks/stage_netboot_assets.yml
 #
 # To re-run only the per-host clone step (e.g. after adding a host):
-#   ansible-playbook playbooks/populate_nfs_content.yml --tags nfs_content
+#   ansible-playbook playbooks/stage_netboot_assets.yml --tags netboot_assets
 
 - name: Preflight RouterOS SBC network configuration
   hosts: routeros_routers
@@ -408,14 +408,14 @@ Edit `playbooks/populate_nfs_content.yml`. The existing play targets `netboot_se
   become: true
   gather_facts: false
   roles:
-    - role: nfs_content
-      tags: nfs_content
+    - role: netboot_assets
+      tags: netboot_assets
 ```
 
 - [ ] **Step 2: Syntax-check + lint**
 
 ```bash
-ansible-playbook --syntax-check playbooks/populate_nfs_content.yml
+ansible-playbook --syntax-check playbooks/stage_netboot_assets.yml
 make lint
 ```
 
@@ -424,8 +424,8 @@ Expected: clean.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add playbooks/populate_nfs_content.yml
-git commit -m "Wire preflight_next_server into populate_nfs_content.yml
+git add playbooks/stage_netboot_assets.yml
+git commit -m "Wire preflight_next_server into stage_netboot_assets.yml
 
 Separate pre-play targeting routeros_routers because the main play
 runs on netboot_server (truenas). Same fail-fast shape as the other
@@ -637,7 +637,7 @@ operator's separate RouterOS-config repo. The
 `routeros_dhcp/preflight_next_server` task asserts the value is set
 correctly before any play that depends on netboot working
 (`setup_routeros_dhcp.yml`, `enable_netboot.yml`,
-`disable_netboot.yml`, `populate_nfs_content.yml`). The fail message
+`disable_netboot.yml`, `stage_netboot_assets.yml`). The fail message
 names the exact RouterOS command to run if the assertion fires.
 
 The required inventory variable is `routeros_sbc_network_address`
@@ -764,7 +764,7 @@ Expected: all three preflight tasks pass.
 The current image on truenas (`6.18.27`) was just published; the per-host TFTP/NFS content has not been re-extracted. Run:
 
 ```bash
-ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/populate_nfs_content.yml
+ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/stage_netboot_assets.yml
 ```
 
 Expected: `localhost ok=N changed>=1`, `truenas.igou.systems ok=M changed>=1`, no failures.
@@ -835,10 +835,10 @@ Expected: full SD → NFS → SD test passes; the test asserts each transition.
 - Spec §"Modify: playbooks/setup_routeros_dhcp.yml" → Task 2.
 - Spec §"Modify: playbooks/enable_netboot.yml" → Task 3.
 - Spec §"Modify: playbooks/disable_netboot.yml — preflight wiring" → Task 4.
-- Spec §"Modify: playbooks/populate_nfs_content.yml" → Task 5.
+- Spec §"Modify: playbooks/stage_netboot_assets.yml" → Task 5.
 - Spec §"Modify: roles/routeros_dhcp/tasks/disable_netboot.yml" (extend to delete file) → Task 6 (implemented as a sibling task file `remove_pxelinux_cfg.yml` per role-task convention rather than mutating the existing RouterOS-only file).
 - Spec §"Modify: docs/architecture.md" → Task 7.
-- Spec §"Not changed: roles/armbian_build/*, setup_options.yml, pxelinux_cfg.j2, nfs_content/*" → none of these are touched, confirmed.
+- Spec §"Not changed: roles/armbian_build/*, setup_options.yml, pxelinux_cfg.j2, netboot_assets/*" → none of these are touched, confirmed.
 - Spec §"Required: routeros_sbc_network_address (CIDR)" + CLAUDE.md note → Task 8.
 - Spec §"Open question: end-to-end NFS-root validation" → Task 9 explicitly handles this with a pause-and-investigate gate.
 

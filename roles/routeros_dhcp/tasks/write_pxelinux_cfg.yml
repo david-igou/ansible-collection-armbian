@@ -1,34 +1,109 @@
 ---
-# Writes the per-board pxelinux.cfg file directly on the netboot server's
-# filesystem. Designed to be run from a play with `hosts: netboot_server`,
-# `become: true` — it operates on `tftp_nfs_export` as a local path, the
-# same way nfs_content does. No NFS mount on the control node.
+# Writes the per-board pxelinux.cfg file to flash:/{{ sbc_tftp_flash_dir }}/
+# pxelinux.cfg/01-<MAC> on rb5009, registers a /ip tftp row for it.
+# Designed to be run from a play with hosts: routeros_routers,
+# gather_facts: false.
 #
 # Required variables:
 #   board_mac          MAC address of the board (drives 01-<mac> filename)
-#   board_model        board model key (drives kernel/initrd/DTB paths)
+#   board_model        board model key (drives kernel/initrd/dtb paths
+#                      embedded in the rendered template)
 #   target_board_host  inventory hostname (drives nfsroot path + label)
 
-# Load the per-board configs the pxelinux template needs (board console,
-# DTB filename) from the collection-level vars/boards.yml.
 - name: Load board configs
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../../vars/boards.yml"
   tags: pxelinux
 
-- name: Ensure pxelinux.cfg directory exists on netboot server
-  ansible.builtin.file:
-    path: "{{ tftp_nfs_export }}/pxelinux.cfg"
-    state: directory
-    mode: "0755"
+- name: Compute pxelinux.cfg filename for {{ target_board_host }}
+  ansible.builtin.set_fact:
+    _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
   tags: pxelinux
 
-- name: Generate pxelinux.cfg for {{ target_board_host }}
+- name: Ensure local pxelinux.cfg cache directory exists on control node
+  ansible.builtin.file:
+    path: "{{ sbc_tftp_cache_dir }}/pxelinux.cfg"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  tags: pxelinux
+
+- name: Render pxelinux.cfg locally for {{ target_board_host }}
   ansible.builtin.template:
     src: "{{ role_path }}/templates/pxelinux_cfg.j2"
-    dest: >-
-      {{ tftp_nfs_export }}/pxelinux.cfg/01-{{
-        board_mac | lower | replace(':', '-')
-      }}
+    dest: "{{ sbc_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
     mode: "0644"
+  delegate_to: localhost
+  become: false
+  tags: pxelinux
+
+- name: Stat rendered pxelinux.cfg locally
+  ansible.builtin.stat:
+    path: "{{ sbc_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  delegate_to: localhost
+  become: false
+  register: _pxe_local_stat
+  tags: pxelinux
+
+- name: Ensure pxelinux.cfg directory exists on rb5009 under flash:/{{ sbc_tftp_flash_dir }}
+  community.routeros.command:
+    commands:
+      - >-
+        :if ([/file find name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg" type=directory] = "")
+        do={/file add name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg" type=directory}
+  changed_when: false
+  tags: pxelinux
+
+- name: Count router-side pxelinux.cfg matching local size
+  community.routeros.command:
+    commands:
+      - >-
+        /file print count-only where
+        name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        and size={{ _pxe_local_stat.stat.size }}
+  register: _pxe_size_match
+  changed_when: false
+  tags: pxelinux
+
+- name: Upload pxelinux.cfg to rb5009 if size differs
+  ansible.netcommon.net_put:
+    src: "{{ sbc_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+    dest: "{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  vars:
+    ansible_command_timeout: 60
+  when: (_pxe_size_match.stdout[0] | trim | int) == 0
+  tags: pxelinux
+
+# req-filename uses a permissive regex (".*<filename>$") instead of the
+# literal "pxelinux.cfg/<filename>". RouterOS' /ip tftp matches req-filename
+# as a regex against the wire-level TFTP request, and U-Boot's PXE bootmeth
+# sends a path that doesn't string-match the literal "pxelinux.cfg/01-<mac>"
+# even though that's what U-Boot prints to the console (verified via TFTP
+# logs: HITS=0 with the literal rule, requests succeed once the regex is
+# permissive). Per-model rules (armbian/<model>/{vmlinuz,initrd,dtb}) are
+# fetched relative to the pxelinux.cfg URL and do match their literal
+# req-filename, so they're untouched. Anchored at $ to avoid matching
+# if a longer path happens to contain this filename as a prefix.
+- name: Count /ip tftp rows for {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp print count-only where
+        req-filename=".*{{ _pxe_filename }}$"
+        and real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  register: _pxe_tftp_count
+  changed_when: false
+  tags: pxelinux
+
+- name: Add /ip tftp row (if absent) for board {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp add
+        req-filename=".*{{ _pxe_filename }}$"
+        real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        allow=yes read-only=yes
+  when: (_pxe_tftp_count.stdout[0] | trim | int) == 0
+  changed_when: true
   tags: pxelinux

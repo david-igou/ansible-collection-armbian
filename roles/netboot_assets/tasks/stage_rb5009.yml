@@ -1,0 +1,125 @@
+---
+# Stages per-model SBC TFTP assets (kernel, initrd, dtb) on rb5009.
+#
+# Run from a play with hosts: routeros_routers, gather_facts: false.
+# Iterates over the unique board_models in inventory; for each model,
+# creates flash:/{{ sbc_tftp_flash_dir }}/armbian/<model>/, net_puts the
+# three files (size-gated for idempotency), and registers a /ip tftp row
+# per file.
+#
+# Pre-condition: roles/netboot_assets/tasks/per_board.yml has fetched
+# the assets to {{ sbc_tftp_cache_dir }}/<model>/{vmlinuz,initrd.img,board.dtb}
+# on the control node.
+#
+# Required facts (set via vars in the calling play):
+#   _models: list of unique board_model strings present in inventory
+
+- name: Resolve unique board models from inventory
+  ansible.builtin.set_fact:
+    _models: >-
+      {{ groups['boards']
+         | map('extract', hostvars, 'board_model')
+         | list | unique }}
+
+- name: Ensure top-level flash directory exists on rb5009
+  community.routeros.command:
+    commands:
+      - >-
+        :if ([/file find name="{{ sbc_tftp_flash_dir }}" type=directory] = "")
+        do={/file add name="{{ sbc_tftp_flash_dir }}" type=directory}
+  changed_when: false
+
+- name: Ensure armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
+  community.routeros.command:
+    commands:
+      - >-
+        :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian" type=directory] = "")
+        do={/file add name="{{ sbc_tftp_flash_dir }}/armbian" type=directory}
+  changed_when: false
+
+- name: Ensure per-model armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
+  community.routeros.command:
+    commands:
+      - >-
+        :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
+        do={/file add name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
+  changed_when: false
+  loop: "{{ _models }}"
+
+- name: Stat each local SBC TFTP asset
+  ansible.builtin.stat:
+    path: "{{ sbc_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+  delegate_to: localhost
+  become: false
+  loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+  register: _local_asset_stat
+
+- name: Assert each local SBC TFTP asset exists
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      {{ sbc_tftp_cache_dir }}/{{ item.item.0 }}/{{ item.item.1 }} is
+      missing on the control node. Run stage_netboot_assets.yml's
+      first play (TrueNAS extraction + fetch) before staging on rb5009.
+  loop: "{{ _local_asset_stat.results }}"
+  loop_control:
+    label: "{{ item.item.0 }}/{{ item.item.1 }}"
+
+- name: Count router-side files matching local size
+  community.routeros.command:
+    commands:
+      - >-
+        /file print count-only where
+        name="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        and size={{ _local_asset_stat.results
+                    | selectattr('item.0', 'equalto', item.0)
+                    | selectattr('item.1', 'equalto', item.1)
+                    | map(attribute='stat.size') | first }}
+  register: _router_size_match
+  changed_when: false
+  loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+
+- name: Upload SBC TFTP asset if size differs from router copy
+  ansible.netcommon.net_put:
+    src: "{{ sbc_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+    dest: "{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+  vars:
+    ansible_command_timeout: 300
+  when: (_router_size_match.results[ansible_loop.index0].stdout[0] | trim | int) == 0
+  loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+    extended: true
+
+- name: Count /ip tftp rows for each (model, asset) pair
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp print count-only where
+        req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
+        and real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+  register: _tftp_row_count
+  changed_when: false
+  loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+
+- name: Add /ip tftp row for each (model, asset) pair
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp add
+        req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
+        real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        allow=yes read-only=yes
+  when: (_tftp_row_count.results[ansible_loop.index0].stdout[0] | trim | int) == 0
+  changed_when: true
+  loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+    extended: true

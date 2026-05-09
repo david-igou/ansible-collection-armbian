@@ -3,8 +3,10 @@
 #
 # Drives the target board through three phases:
 #   1. disk boot baseline (PoE cycle, assert local rootfs)
-#   2. nfsroot (set DHCP option, PoE cycle, assert NFS rootfs)
-#   3. back to disk (clear DHCP option, PoE cycle, assert local rootfs)
+#   2. nfsroot (write per-board pxelinux.cfg + /ip tftp row on rb5009,
+#      PoE cycle, assert NFS rootfs)
+#   3. back to disk (remove per-board pxelinux.cfg + /ip tftp row from
+#      rb5009, PoE cycle, assert local rootfs)
 #
 # Pre-condition (v1): the target board has a custom-built Armbian
 # image manually flashed to its SD card (or other primary storage)
@@ -17,10 +19,10 @@
 # lines so a failure tells the operator what went wrong without
 # re-SSHing.
 #
-# Failure cleanup: by default, the always-block clears the DHCP option
-# and PoE-cycles the board back to disk boot regardless of pass/fail.
-# Pass `-e leave_state=true` to preserve the failure state for forensic
-# debugging.
+# Failure cleanup: by default, the always-block removes the per-board
+# pxelinux.cfg + /ip tftp row from rb5009 and PoE-cycles the board back
+# to disk boot regardless of pass/fail. Pass `-e leave_state=true` to
+# preserve the failure state for forensic debugging.
 #
 # Optional serial capture: pass `-e capture_serial=true` to spawn a
 # background socat capture from a USB-UART on the *serial host*. The
@@ -91,15 +93,17 @@
           Phase 2 SSH to the NFS-mounted board uses these credentials.
       run_once: true
 
-    - name: Pre-flight — probe RouterOS for armbian-nfsroot option set
-      community.routeros.command:
-        commands:
-          - "/ip dhcp-server option sets print where name=armbian-nfsroot"
+    - name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
       delegate_to: "{{ _routeros_target }}"
       run_once: true
-      register: _opt_probe
-      changed_when: false
-      failed_when: "' armbian-nfsroot ' not in ' ' + (_opt_probe.stdout_lines | join(' ')) + ' '"
+      block:
+        - name: Pre-flight — include netboot_assets plumbing_check
+          ansible.builtin.include_role:
+            name: netboot_assets
+            tasks_from: plumbing_check.yml
+          vars:
+            _check_models:
+              - "{{ board_model }}"
 
     # Background serial capture on the serial host (the machine with
     # the USB-UART attached). Defaults to localhost; can be overridden
@@ -189,15 +193,20 @@
               {{ _root_device }} ({{ _root_fstype }}).
               Diagnostic bundle is in the prior debug task.
 
-        - name: Phase 2 — set DHCP option to armbian-nfsroot
+        - name: Phase 2 — write per-board pxelinux.cfg + /ip tftp row on rb5009
+          delegate_to: "{{ _routeros_target }}"
           block:
-            - name: Phase 2 — include routeros_dhcp enable_netboot
+            - name: Phase 2 — include routeros_dhcp write_pxelinux_cfg
               ansible.builtin.include_role:
                 name: routeros_dhcp
-                tasks_from: enable_netboot.yml
+                tasks_from: write_pxelinux_cfg.yml
               vars:
-                board_mac: "{{ board_mac }}"
-          delegate_to: "{{ _routeros_target }}"
+                # Use hostvars[] so delegate_to: rb5009 doesn't recurse on
+                # `board_mac: "{{ board_mac }}"` (rb5009 has no such hostvar
+                # → fallback to task-scope → infinite loop in set_fact).
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                board_model: "{{ hostvars[inventory_hostname].board_model }}"
+                target_board_host: "{{ inventory_hostname }}"
 
         - name: Phase 2 — PoE cycle into nfsroot
           ansible.builtin.include_role:
@@ -206,6 +215,11 @@
             poe_action: cycle
 
         - name: Phase 2 — verify NFS-mounted boot
+          vars:
+            ansible_user: root
+            ansible_password: "{{ armbian_default_password }}"
+            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            ansible_become: false
           block:
             - name: Phase 2 — reset connection so new identity takes effect
               ansible.builtin.meta: reset_connection
@@ -237,26 +251,22 @@
                 fail_msg: >-
                   Phase 2: expected NFS-mounted rootfs; got fstype
                   {{ _root_fstype }}.
-                  Board did not PXE-boot into NFS root despite DHCP option
-                  armbian-nfsroot being set. Diagnostic bundle is in the
-                  prior debug task — check /proc/cmdline for nfsroot=, and
-                  confirm the linux-u-boot-* deb on disk has PXE-first
-                  BOOT_TARGETS baked in.
-          vars:
-            ansible_user: root
-            ansible_password: "{{ armbian_default_password }}"
-            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            ansible_become: false
+                  Board did not PXE-boot into NFS root despite per-board
+                  pxelinux.cfg + /ip tftp row being written on rb5009.
+                  Diagnostic bundle is in the prior debug task — check
+                  /proc/cmdline for nfsroot=, and confirm rb5009's /ip tftp
+                  serves armbian/<model>/{vmlinuz,initrd.img,board.dtb}.
 
-        - name: Phase 3 — clear DHCP option
+        - name: Phase 3 — remove per-board pxelinux.cfg + /ip tftp row from rb5009
+          delegate_to: "{{ _routeros_target }}"
           block:
-            - name: Phase 3 — include routeros_dhcp disable_netboot
+            - name: Phase 3 — include routeros_dhcp remove_pxelinux_cfg
               ansible.builtin.include_role:
                 name: routeros_dhcp
-                tasks_from: disable_netboot.yml
+                tasks_from: remove_pxelinux_cfg.yml
               vars:
-                board_mac: "{{ board_mac }}"
-          delegate_to: "{{ _routeros_target }}"
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
 
         - name: Phase 3 — PoE cycle back to disk
           ansible.builtin.include_role:
@@ -299,35 +309,36 @@
               - _root_fstype not in ['nfs', 'nfs4']
               - _root_device is match('^/dev/')
             fail_msg: >-
-              Phase 3: expected rootfs on /dev/<block> after clearing the
-              DHCP option; got {{ _root_device }} ({{ _root_fstype }}).
-              Toggle is not bidirectional — DHCP option may not have been
-              cleared on the lease, or the board is not honouring DHCP
-              renewal. To distinguish: run
-              `/ip dhcp-server lease print where mac-address={{ board_mac }}`
-              on {{ _routeros_target }}; if dhcp-options is non-empty the
-              clear didn't take, if empty the board cached an old lease.
-              Diagnostic bundle is in the prior debug task.
+              Phase 3: expected rootfs on /dev/<block> after removing the
+              per-board pxelinux.cfg + /ip tftp row from rb5009; got
+              {{ _root_device }} ({{ _root_fstype }}).
+              Toggle is not bidirectional — the per-board file and/or
+              /ip tftp row may still exist on rb5009. To distinguish: run
+              `/ip tftp print where req-filename~"pxelinux.cfg/01-{{ board_mac | lower | replace(':', '-') }}"`
+              on {{ _routeros_target }}; if non-empty, the remove didn't
+              take. Diagnostic bundle is in the prior debug task.
       always:
         - name: Cleanup — print exit-state notice if leave_state
           ansible.builtin.debug:
             msg: >-
               leave_state=true: not cleaning up. Board may be in NFS
-              root; clear DHCP manually with:
+              root; remove the per-board pxelinux.cfg + /ip tftp row
+              from rb5009 manually with:
               ansible-playbook playbooks/disable_netboot.yml
               --limit {{ inventory_hostname }}
           when: leave_state | bool
 
-        - name: Cleanup — clear DHCP option on RouterOS
-          block:
-            - name: Cleanup — include routeros_dhcp disable_netboot
-              ansible.builtin.include_role:
-                name: routeros_dhcp
-                tasks_from: disable_netboot.yml
-              vars:
-                board_mac: "{{ board_mac }}"
+        - name: Cleanup — remove per-board pxelinux.cfg from rb5009
           delegate_to: "{{ _routeros_target }}"
           when: not (leave_state | bool)
+          block:
+            - name: Cleanup — include routeros_dhcp remove_pxelinux_cfg
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: remove_pxelinux_cfg.yml
+              vars:
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
 
         - name: Cleanup — PoE cycle back to disk boot
           ansible.builtin.include_role:
@@ -363,9 +374,10 @@
             that:
               - _root_fstype not in ['nfs', 'nfs4']
             fail_msg: >-
-              Cleanup left the board in NFS root mode despite clearing the
-              DHCP option. Investigate RouterOS lease state for
-              {{ board_mac }} and the linux-u-boot-* deb on disk.
+              Cleanup left the board in NFS root mode despite removing the
+              per-board pxelinux.cfg + /ip tftp row from rb5009. Investigate
+              rb5009's /ip tftp rows for {{ board_mac }} and the
+              linux-u-boot-* deb on disk.
           when: not (leave_state | bool)
 
         # Stop serial capture last so the cleanup phase's reboots are

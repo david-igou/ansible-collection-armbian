@@ -63,7 +63,7 @@ The collection does not write this knob — the user's separate RouterOS-config 
 │ - setup_routeros_dhcp.yml  ─┐ preflight assert: next-server is   │
 │ - enable_netboot.yml        │ correct on the SBC network. Fail   │
 │ - disable_netboot.yml       │ fast w/ remediation cmd if not.    │
-│ - populate_nfs_content.yml ─┘                                     │
+│ - stage_netboot_assets.yml ─┘                                     │
 │                                                                  │
 │ - enable_netboot:    write per-board pxelinux.cfg/01-<MAC>       │
 │                      assign dhcp-option-set on lease             │
@@ -80,7 +80,7 @@ The collection does not write this knob — the user's separate RouterOS-config 
 
 **Modify: `playbooks/setup_routeros_dhcp.yml`** — include the new preflight task before the existing option-set creation.
 
-**Modify: `playbooks/enable_netboot.yml`, `playbooks/disable_netboot.yml`, `playbooks/populate_nfs_content.yml`** — include the same preflight at the top of each play. Cheap, idempotent, catches misconfiguration before per-host work.
+**Modify: `playbooks/enable_netboot.yml`, `playbooks/disable_netboot.yml`, `playbooks/stage_netboot_assets.yml`** — include the same preflight at the top of each play. Cheap, idempotent, catches misconfiguration before per-host work.
 
 **Modify: `roles/routeros_dhcp/tasks/disable_netboot.yml`** — extend to also delete the per-board `pxelinux.cfg/01-<MAC>` on the netboot server. Today it only clears the lease's option-set; with the new design, the file presence/absence is what determines mode (option-set assignment becomes documentation/double-signal, not the active lever). Symmetric with `enable_netboot.yml` writing the file.
 
@@ -90,7 +90,7 @@ The collection does not write this knob — the user's separate RouterOS-config 
 - `roles/armbian_build/*` — no U-Boot patches needed; the `BOOT_TARGETS` userpatch is now a no-op but harmless. Documenting this in the role's README is in scope; removing the patch is out of scope (a separate cleanup).
 - `roles/routeros_dhcp/tasks/setup_options.yml` — option 66 / option-set definitions stay as-is. They're now ornamental (U-Boot ignores option 66, and the option-set's signal is duplicated by file presence) but harmless.
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — content unchanged.
-- `roles/nfs_content/*` — unaffected.
+- `roles/netboot_assets/*` — unaffected.
 - The `armbian-reprovision*` RouterOS objects — already orphan; their cleanup is separately tracked in the post-rebuild followups plan.
 
 ### Data flow
@@ -130,7 +130,7 @@ This repo has no formal unit test suite for role behaviour. The closest harness 
 
 - Removing the `armbian_build` role's `BOOT_TARGETS` userpatch. It's now confirmed inert (modern bootflow ignores it) but is harmless and removing it is a separate, low-priority cleanup.
 - Removing orphan RouterOS objects (`armbian-reprovision*`) — already tracked in `2026-05-07-post-rebuild-followups.md`.
-- Restoring per-board NFS-root boot to a working state on the new image. The design assumes the existing `pxelinux_cfg.j2` content + TFTP-served `armbian/<board>/{vmlinuz,initrd,dtb}` work correctly when reached. We've verified U-Boot reaches the right TFTP server; we have not verified an end-to-end NFS-root boot since the existing `populate_nfs_content.yml` machinery hasn't been rerun against this image. Validating that is the *implementation plan's* responsibility, not this design's.
+- Restoring per-board NFS-root boot to a working state on the new image. The design assumes the existing `pxelinux_cfg.j2` content + TFTP-served `armbian/<board>/{vmlinuz,initrd,dtb}` work correctly when reached. We've verified U-Boot reaches the right TFTP server; we have not verified an end-to-end NFS-root boot since the existing `stage_netboot_assets.yml` machinery hasn't been rerun against this image. Validating that is the *implementation plan's* responsibility, not this design's.
 - Changing the `routeros_dhcp` role's `setup_options.yml` to drop the now-ornamental option 66 / option-set definitions. Pre-existing state; can be cleaned up later if desired.
 
 ## Open question (escalated to implementation plan)

@@ -41,9 +41,9 @@ transitions in `test_hardware_e2e.yml`.
 
 Kept:
 - Roles: `armbian_build`, `bootstrap_armbian`, `bootstrap_routeros_user`,
-  `nfs_content`, `routeros_dhcp` (slimmed), `routeros_poe`
+  `netboot_assets`, `routeros_dhcp` (slimmed), `routeros_poe`
 - Playbooks: `build_image.yml`, `bootstrap_armbian.yml`,
-  `bootstrap_routeros_user.yml`, `populate_nfs_content.yml`,
+  `bootstrap_routeros_user.yml`, `stage_netboot_assets.yml`,
   `setup_routeros_dhcp.yml`, `enable_netboot.yml`, `disable_netboot.yml`,
   `poe_control.yml`, `test_hardware_e2e.yml` (and its
   `playbooks/tasks/diagnostic_bundle.yml` companion)
@@ -74,7 +74,7 @@ deferred — it would touch RouterOS state on every existing deployment.
 
 The shared board table moves out of the deleted `bootloader` role and
 into a single collection-level file: `vars/boards.yml`. Roles that need
-it (`nfs_content/tasks/preflight.yml`,
+it (`netboot_assets/tasks/preflight.yml`,
 `routeros_dhcp/tasks/write_pxelinux_cfg.yml`) load it via
 `include_vars` or `vars_files` rather than the cross-role file path.
 
@@ -101,7 +101,7 @@ override hook can return.
 
 ## Per-role cleanup
 
-`nfs_content`:
+`netboot_assets`:
 - `preflight.yml` drops the apt-package existence check (no
   `uboot_apt_package` field in v1) and stops fetching Armbian's
   `Packages.gz`. Keeps the `armbian_image_urls[<board>]` HEAD check.
@@ -164,7 +164,7 @@ override hook can return.
 2. (Once)   Bootstrap RouterOS SSH user                 → bootstrap_routeros_user.yml
 3. (Once per board) Bootstrap SD-rootfs SSH user        → bootstrap_armbian.yml
 4. (Once)   Create RouterOS DHCP option objects         → setup_routeros_dhcp.yml
-5.          Populate NFS exports for a board            → populate_nfs_content.yml
+5.          Populate NFS exports for a board            → stage_netboot_assets.yml
 6.          Toggle board into NFS-root mode             → enable_netboot.yml
 7.          Toggle board back to SD                     → disable_netboot.yml
 

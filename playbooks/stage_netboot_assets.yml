@@ -1,0 +1,50 @@
+---
+# Stages netboot assets on both TrueNAS (NFS rootfs) and rb5009 (TFTP
+# kernel/initrd/dtb).
+#
+# Pre-flights every armbian_image_urls entry with an HTTP HEAD before
+# any destructive work; URL failures surface at config time, not
+# halfway through an extraction.
+#
+# Play 1 (netboot_server, become): extracts each model's .img.xz on
+# TrueNAS, populates the per-model rootfs template + per-host clones,
+# stages kernel/initrd/dtb in a TrueNAS-side cache, and fetches them
+# to the control-node sbc_tftp_cache_dir.
+#
+# Play 2 (routeros_routers): net_puts kernel/initrd/dtb from the
+# control node to flash:/sbc/armbian/<model>/ on rb5009, with /ip tftp
+# row registration per file. Ends with a plumbing-check assertion that
+# all expected rows exist.
+#
+# Re-run whenever you add a board model, change an image URL, or add
+# a new host to inventory. Idempotent.
+#
+# Usage:
+#   ansible-playbook playbooks/stage_netboot_assets.yml
+#
+# To re-run only the per-host clone step (e.g. after adding a host):
+#   ansible-playbook playbooks/stage_netboot_assets.yml --tags netboot_assets
+
+- name: Extract netboot assets on TrueNAS and fetch SBC TFTP cache to control node
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  roles:
+    - role: netboot_assets
+      tags: netboot_assets
+
+- name: Stage SBC TFTP assets on rb5009
+  hosts: routeros_routers
+  gather_facts: false
+  tasks:
+    - name: Net_put kernel/initrd/dtb + register /ip tftp rows
+      ansible.builtin.include_role:
+        name: netboot_assets
+        tasks_from: stage_rb5009.yml
+      tags: netboot_assets
+
+    - name: Plumbing check — verify /ip tftp rows landed
+      ansible.builtin.include_role:
+        name: netboot_assets
+        tasks_from: plumbing_check.yml
+      tags: netboot_assets, preflight

@@ -8,7 +8,7 @@ breaking_changes:
     ``roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml`` that runs
     against ``hosts: netboot_server`` (``become: true``) and writes
     files directly on the server's filesystem over SSH — the same
-    pattern ``nfs_content`` already uses. The control node no longer
+    pattern ``netboot_assets`` already uses. The control node no longer
     needs an NFS client.
   - >-
     ``playbooks/enable_netboot.yml`` and ``playbooks/reprovision.yml``

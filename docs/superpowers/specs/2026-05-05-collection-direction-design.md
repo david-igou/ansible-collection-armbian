@@ -20,7 +20,7 @@ the desired state, and if not, make it so."
 | `routeros_dhcp` | shared DHCP option-set objects + per-lease assignment | RouterOS host, lease MAC, option-set name |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state | user, group, key |
 | `armbian_build` *(new)* | `.img.xz` artifact + manifest, published to netboot server | board, branch, release, patches, output path |
-| `nfs_content` | rootfs / TFTP / pxelinux content under server exports | image URL, model, host identity |
+| `netboot_assets` | rootfs / TFTP / pxelinux content under server exports | image URL, model, host identity |
 | `bootloader` | U-Boot flashed on a target device | board metadata, target device, apt source |
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a fresh board | user, key |
 | `reprovision` | Armbian image flashed to a disk | image URL, target device |
@@ -54,7 +54,7 @@ isn't reason enough to churn the namespace.
   with the same patch + ref is a no-op.
 - **Consumption:** for opted-in boards, override
   `armbian_image_urls[<board_model>]` in inventory to point at the local
-  `image_server_url/<board>/<file>.img.xz`. `nfs_content` and
+  `image_server_url/<board>/<file>.img.xz`. `netboot_assets` and
   `reprovision` consume it through the existing path with no role changes.
 
 ## v1 immediate deliverables (this PR)

@@ -1,22 +1,35 @@
 ---
-# Removes the per-board pxelinux.cfg file from the netboot server.
-# Sibling to write_pxelinux_cfg.yml: same path conventions, same
-# variable contract. Idempotent — file: state=absent is a no-op
-# when the file isn't there.
+# Removes the per-board pxelinux.cfg /ip tftp row + flash file from
+# rb5009. Sibling to write_pxelinux_cfg.yml.
+#
+# Order: /ip tftp remove BEFORE /file remove. Mid-teardown failure
+# fails closed (no row → no serve), so a board mid-decommission can't
+# accidentally reach a stale config.
 #
 # Required variables:
 #   board_mac          MAC address (drives 01-<mac> filename)
 #   target_board_host  inventory hostname (label only; logging)
 #
-# Run from a play with hosts: netboot_server, become: true.
-# Operates on tftp_nfs_export as a local path; no NFS client mount
-# on the control node.
+# Run from a play with hosts: routeros_routers, gather_facts: false.
 
-- name: Remove per-board pxelinux.cfg for {{ target_board_host }}
-  ansible.builtin.file:
-    path: >-
-      {{ tftp_nfs_export }}/pxelinux.cfg/01-{{
-        board_mac | lower | replace(':', '-')
-      }}
-    state: absent
+- name: Compute pxelinux.cfg filename for {{ target_board_host }}
+  ansible.builtin.set_fact:
+    _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
+  tags: pxelinux
+
+# Match the same regex used by write_pxelinux_cfg.yml when adding the row.
+- name: Remove /ip tftp row for {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp remove [find req-filename=".*{{ _pxe_filename }}$"]
+  changed_when: false  # idempotent — RouterOS returns no output when find is empty
+  tags: pxelinux
+
+- name: Remove pxelinux.cfg flash file for board {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /file remove [find name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"]
+  changed_when: false  # idempotent — same as above
   tags: pxelinux

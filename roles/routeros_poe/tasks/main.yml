@@ -24,7 +24,7 @@
     fail_msg: "poe_action must be 'on', 'off', or 'cycle'. Got: '{{ poe_action }}'"
   tags: poe
 
-- name: Power on PoE port {{ poe_port }} on {{ poe_switch }}
+- name: Power on PoE port
   community.routeros.command:
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=auto'
@@ -32,7 +32,7 @@
   when: poe_action == 'on'
   tags: poe
 
-- name: Power off PoE port {{ poe_port }} on {{ poe_switch }}
+- name: Power off PoE port
   community.routeros.command:
     commands:
       - '/interface ethernet poe set [find name="{{ poe_port }}"] poe-out=off'
@@ -48,7 +48,7 @@
   when: poe_action == 'cycle'
   tags: poe
 
-- name: Power cycle — wait {{ poe_cycle_delay }}s for capacitors to drain
+- name: Power cycle — wait for capacitors to drain
   ansible.builtin.pause:
     seconds: "{{ poe_cycle_delay }}"
   when: poe_action == 'cycle'

@@ -17,7 +17,7 @@ Idempotent — re-running against a board already bootstrapped reconciles
 authorized_keys and is otherwise a no-op.
 
 This is the **first** play in the bootstrap sequence. Subsequent
-playbooks (e.g. `populate_nfs_content.yml`) connect as the provisioned
+playbooks (e.g. `stage_netboot_assets.yml`) connect as the provisioned
 user — set `ansible_user` on `inventory/group_vars/all.yml` (or
 per-host) to match `bootstrap_armbian_user`.
 

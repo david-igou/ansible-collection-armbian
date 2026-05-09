@@ -190,7 +190,7 @@ every verify checkpoint. Gathers and prints (via `ansible.builtin.debug`):
 - `lsblk -no NAME,SIZE,TYPE,MOUNTPOINT`
 - `dpkg -l 'linux-u-boot-*'` (meaningful only in disk-boot mode — no-op in
   NFS root, since the NFS rootfs is the per-host clone created by
-  `nfs_content` and may not have `linux-u-boot-*` installed)
+  `netboot_assets` and may not have `linux-u-boot-*` installed)
 - `journalctl -b 0 --no-pager | tail -100`
 
 Every gather task uses `failed_when: false` and `changed_when: false` so a

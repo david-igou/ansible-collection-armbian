@@ -28,7 +28,7 @@ The `bootcmd=bootflow scan -lb` modern bootmeth framework (mainline U-Boot v2025
 - `/workspace/armbian_build/build/cache/sources/u-boot-worktree/u-boot-orangepi5/` on the builder host — orphan U-Boot v2026.04 source worktree from the orangepi5 build (the `orangepi5pro` build uses `u-boot-orangepi5pro/v2025.10/`).
 - `truenas:/mnt/ssd/containers/netbootxyz/assets/images/orangepi5pro/Armbian-unofficial_26.05.0-trunk_Orangepi5pro_bookworm_current_6.18.26_minimal.img.xz` (+ `.sha`) — older, currently-unreferenced image; orangepi5pro filename means it's not the same broken build as the on-disk SD content but is still stale relative to the 6.18.27 we just published.
 
-**Verification approach:** No formal test suite. After each task: `yamllint -c .yamllint.yml <changed.yml>`, `ansible-lint <changed.yml>` if applicable, and a `nfs_content/preflight.yml` HEAD-check against the pinned URL (run as part of `populate_nfs_content.yml`) to confirm the URL resolves 200. Cleanup tasks are verified by `ls` confirming the stale files are gone and the new files remain.
+**Verification approach:** No formal test suite. After each task: `yamllint -c .yamllint.yml <changed.yml>`, `ansible-lint <changed.yml>` if applicable, and a `netboot_assets/preflight.yml` HEAD-check against the pinned URL (run as part of `stage_netboot_assets.yml`) to confirm the URL resolves 200. Cleanup tasks are verified by `ls` confirming the stale files are gone and the new files remain.
 
 ---
 
@@ -115,10 +115,10 @@ sed -i 's|_6\.18\.26_|_6.18.27_|' /workspace/ansible-collection-armbian_netboot/
 Run: `curl -ILs http://10.10.45.242/images/orangepi5pro/Armbian-unofficial_26.05.0-trunk_Orangepi5pro_bookworm_current_6.18.27_minimal.img.xz | head -1`
 Expected: `HTTP/1.1 200 OK` (or `301`/`302`).
 
-- [ ] **Step 3: Run the nfs_content preflight to confirm the playbook agrees**
+- [ ] **Step 3: Run the netboot_assets preflight to confirm the playbook agrees**
 
-Run: `ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/populate_nfs_content.yml --check --tags preflight`
-Expected: PoE roles + nfs_content preflight report `ok` for the orange-pi-5-pro URL HEAD task.
+Run: `ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/stage_netboot_assets.yml --check --tags preflight`
+Expected: PoE roles + netboot_assets preflight report `ok` for the orange-pi-5-pro URL HEAD task.
 
 This step touches only the user's private inventory; no commit.
 
@@ -285,7 +285,7 @@ Expected: two `removed '...'` lines, no errors.
 - [ ] **Step 4: Re-run preflight to confirm the 6.18.27 URL still resolves**
 
 ```bash
-ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/populate_nfs_content.yml --check --tags preflight
+ANSIBLE_INVENTORY=.inventory ansible-playbook playbooks/stage_netboot_assets.yml --check --tags preflight
 ```
 
 Expected: orange-pi-5-pro URL HEAD task `ok`.
@@ -368,4 +368,4 @@ This step is configuration; no commit unless option B was chosen and the invento
 
 **Type consistency:** Filenames and paths used in Task 5 (delete) match the artefact names verified in the 2026-05-07 session and shown in earlier tasks. Task 6's `_6.18.26_minimal.img.xz` deletion is safe because Task 2 pins `armbian_image_urls` to `_6.18.27_` first (Task 2 is gated as a prerequisite for Task 6 in Step 2 of Task 6).
 
-**Risk note:** Task 6 (delete on TrueNAS) and Task 7 option A (delete `/workspace/armbian_build`) are destructive. Both have explicit verification steps preceding the `rm`. If anyone runs Task 6 before Task 2, `populate_nfs_content.yml`'s preflight will fail loudly (HEAD-check 404), so the breakage is loud, not silent. Acceptable.
+**Risk note:** Task 6 (delete on TrueNAS) and Task 7 option A (delete `/workspace/armbian_build`) are destructive. Both have explicit verification steps preceding the `rm`. If anyone runs Task 6 before Task 2, `stage_netboot_assets.yml`'s preflight will fail loudly (HEAD-check 404), so the breakage is loud, not silent. Acceptable.

@@ -1,69 +1,55 @@
 ---
-# ── Addresses ────────────────────────────────────────────────────────────────
-# IP of the netboot server, used as the default for both TFTP and NFS roles
-# when they share an address. These are collection-level variables (they end
-# up inside RouterOS DHCP options, pxelinux.cfg, and HTTP image URLs — not
-# as SSH targets), so they are not duplicates of `ansible_host`.
+# Variables that apply to every host in this inventory.
 #
-# When TFTP/HTTP and NFS run on different hosts (e.g. netboot.xyz container
-# on a macvlan network at one IP, NFS exported from the host at another),
-# override `tftp_server_ip` and `nfs_server_ip` independently:
+# Most cross-cutting collection-level variables live here so they're loaded
+# regardless of which group a play targets. Per-host SSH settings
+# (ansible_host, ansible_user, ansible_port) live on the host entries
+# themselves; per-group connection plumbing
+# (ansible_connection / ansible_network_os) lives in group_vars/<group>.yml.
+
+# ── armbian_netboot collection ──────────────────────────────────────────────
+# Two-host topology:
 #
-#   tftp_server_ip: "10.10.45.242"   # netbootxyz container
-#   nfs_server_ip:  "10.10.9.213"    # NFS server
+#   TFTP for SBCs   → rb5009 (RouterOS), per-subnet IP (e.g. 10.10.9.1
+#                     for vlan9). flash:/sbc/ holds per-model
+#                     kernel/initrd/dtb + per-board pxelinux.cfg.
+#                     Provisioned via /ip tftp rules registered by
+#                     stage_netboot_assets.yml + enable_netboot.yml.
+#   NFS rootfs      → TrueNAS host, 10.10.9.213. Exports
+#                     /mnt/ssd/netboot/rootfs to 10.10.9.0/24.
+#   HTTP for images → netbootxyz container on TrueNAS, 10.10.45.242
+#                     (read by armbian_image_urls below). Used only by
+#                     stage_netboot_assets.yml when fetching .img.xz.
 #
-# In a single-host setup, leave both unset and just set netboot_server_ip.
-netboot_server_ip: "192.168.1.10"
-# tftp_server_ip: "{{ netboot_server_ip }}"
-# nfs_server_ip:  "{{ netboot_server_ip }}"
+# `next-server` for the SBC subnet must point at rb5009 (the local
+# subnet's rb5009 IP). This collection does NOT manage next-server —
+# it is owned by the operator's separate RouterOS-config repo (e.g.
+# igou-ansible's deploy_netboot_binaries.yml).
+netboot_server_ip: "10.10.9.213"
+nfs_server_ip: "10.10.9.213"
 
-# Name of the RouterOS DHCP server that owns the static leases this
-# collection mutates. Visible on RouterOS as `/ip dhcp-server print`.
-routeros_dhcp_server_name: "dhcp1"
+# Per-board Armbian .img.xz URLs, keyed by board_model. Lives at the
+# `all` scope (not `boards`) because the consumer is the netboot_assets
+# role running against the netboot_server, which is not in the boards
+# group. Required by the collection's preflight — missing entries fail
+# fast in stage_netboot_assets.yml. Browse
+# https://dl.armbian.com/<board>/ or the aliased redirect (e.g.
+# https://dl.armbian.com/orangepi5pro/Trixie_current_minimal) for a
+# newer one.
+armbian_image_urls:
+  orange-pi-5-pro: "http://10.10.45.242/images/orangepi5pro/Armbian-unofficial_<version>_Orangepi5pro_<dist>_current_<kver>_minimal.img.xz"
 
-# CIDR of the RouterOS DHCP network the SBCs are attached to. Required by
-# the routeros_dhcp role's preflight, which asserts this network's
-# next-server field equals tftp_server_ip. The next-server value itself
-# is owned by your RouterOS-config repo, not this collection.
-# Example: "10.10.9.0/24"
-routeros_sbc_network_address: ""
+# U-Boot branch — informational; the canonical branch source is each
+# board_configs.<model>.uboot_apt_package field in the collection.
+armbian_branch: "current"
 
-# ── NFS export paths on the netboot server ───────────────────────────────────
-# These must already exist and be exported before running
-# populate_nfs_content.yml.
-# nfs_rootfs_path is the parent export. Inside it:
-#   _templates/<board_model>/   per-model rootfs templates (extracted images)
-#   <inventory_hostname>/       per-host rootfs (cp --reflink from template)
-nfs_rootfs_path: /exports/rootfs
-tftp_nfs_export: /opt/netbootxyz/config
-nfs_assets_export: /opt/netbootxyz/assets
-
-# URL prefix where built Armbian images are served. Defaults to the
-# netboot server's HTTP root (matches netboot.xyz's nginx serving
-# /assets/ at port 80 on netboot_server_ip). Override if your image
-# server lives elsewhere — e.g. a different port or a CDN.
-image_server_url: "http://{{ tftp_server_ip | default(netboot_server_ip) }}"
-
-# ── Armbian image URLs ────────────────────────────────────────────────────────
-# Set per-board to the full .img.xz URL. v1 expects this to point at
-# the locally-published custom build that playbooks/build_image.yml
-# produces, served from nfs_assets_export/images/<board>/.
+# The collection's path defaults (nfs_rootfs_path, nfs_assets_export,
+# armbian_image_cache, armbian_image_mount, sbc_tftp_flash_dir,
+# sbc_tftp_cache_dir) match the TrueNAS / rb5009 layout. Do not
+# override them here unless your topology differs:
 #
-# Run playbooks/build_image.yml first; copy the exact published
-# filename from its output (or check nfs_assets_export/images/<board>/
-# on the netboot server), then uncomment and edit:
-#
-# armbian_image_urls:
-#   orange-pi-5-pro: "{{ image_server_url }}/images/orangepi5pro/Armbian-unofficial_<armbian-build-tag>_Orangepi5pro_bookworm_current_<kernel>_minimal.img.xz"
-armbian_image_urls: {}
-
-# ── Board SSH defaults ────────────────────────────────────────────────────────
-ansible_user: "armbian"
-ansible_become: true
-ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-
-# ── Armbian default credentials (NFS root environment) ───────────────────────
-# Used by test_hardware_e2e.yml to SSH into boards booted from the NFS
-# rootfs (root/1234 on a fresh Armbian image until first interactive
-# login). Encrypt with ansible-vault before committing real values.
-armbian_default_password: "1234"
+#   nfs_rootfs_path     /mnt/ssd/netboot/rootfs                         (TrueNAS NFS export)
+#   nfs_assets_export   /mnt/ssd/containers/netbootxyz/assets           (TrueNAS HTTP root)
+#   armbian_image_cache /mnt/ssd/netboot/cache                          (TrueNAS)
+#   sbc_tftp_flash_dir  sbc                                             (rb5009 flash:/)
+#   sbc_tftp_cache_dir  {{ playbook_dir }}/../.cache/sbc-tftp           (control node)
