@@ -17,6 +17,8 @@
            | list | unique
          ) }}
 
+# Retry guard: network_cli persistent connections to RouterOS sometimes
+# drop mid-play under both paramiko and pylibssh transports.
 - name: Count /ip tftp rows per (model, asset) pair
   community.routeros.command:
     commands:
@@ -24,6 +26,9 @@
         /ip tftp print count-only where
         req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
   register: _plumbing_row_count
+  retries: 3
+  delay: 5
+  until: _plumbing_row_count is succeeded
   changed_when: false
   loop: "{{ _check_models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:

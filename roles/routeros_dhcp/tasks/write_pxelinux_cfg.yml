@@ -46,12 +46,22 @@
   register: _pxe_local_stat
   tags: pxelinux
 
+# All RouterOS-targeted tasks below carry a retries/until guard. ansible's
+# network_cli persistent connection to RouterOS occasionally drops mid-play
+# under both paramiko and pylibssh transports — observed failure modes are
+# "command timeout triggered, timeout value is 30 secs", "No existing session",
+# and "Unable to decode JSON from response to get_capabilities()". Each task
+# retries 3x with a 5s backoff so a single dead session doesn't fail the play.
 - name: Ensure pxelinux.cfg directory exists on rb5009 under flash:/{{ sbc_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
         :if ([/file find name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg" type=directory] = "")
         do={/file add name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg" type=directory}
+  register: _pxe_dir_ensure
+  retries: 3
+  delay: 5
+  until: _pxe_dir_ensure is succeeded
   changed_when: false
   tags: pxelinux
 
@@ -63,6 +73,9 @@
         name="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
         and size={{ _pxe_local_stat.stat.size }}
   register: _pxe_size_match
+  retries: 3
+  delay: 5
+  until: _pxe_size_match is succeeded
   changed_when: false
   tags: pxelinux
 
@@ -72,10 +85,14 @@
     dest: "{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
   vars:
     ansible_command_timeout: 60
+  register: _pxe_net_put
+  retries: 3
+  delay: 5
+  until: _pxe_net_put is succeeded
   when: (_pxe_size_match.stdout[0] | trim | int) == 0
   tags: pxelinux
 
-# req-filename uses a permissive regex (".*<filename>$") instead of the
+# req-filename uses a permissive regex (".*<filename>") instead of the
 # literal "pxelinux.cfg/<filename>". RouterOS' /ip tftp matches req-filename
 # as a regex against the wire-level TFTP request, and U-Boot's PXE bootmeth
 # sends a path that doesn't string-match the literal "pxelinux.cfg/01-<mac>"
@@ -83,16 +100,22 @@
 # logs: HITS=0 with the literal rule, requests succeed once the regex is
 # permissive). Per-model rules (armbian/<model>/{vmlinuz,initrd,dtb}) are
 # fetched relative to the pxelinux.cfg URL and do match their literal
-# req-filename, so they're untouched. Anchored at $ to avoid matching
-# if a longer path happens to contain this filename as a prefix.
+# req-filename, so they're untouched. The MAC-bearing filename is unique
+# enough that an end-anchor is unnecessary — and "$" must be avoided
+# because RouterOS' shell interprets "$" inside double-quoted strings as
+# a variable reference, mangling the rule (req-filename and real-filename
+# get concatenated, real-filename ends up empty).
 - name: Count /ip tftp rows for {{ _pxe_filename }}
   community.routeros.command:
     commands:
       - >-
         /ip tftp print count-only where
-        req-filename=".*{{ _pxe_filename }}$"
+        req-filename=".*{{ _pxe_filename }}"
         and real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
   register: _pxe_tftp_count
+  retries: 3
+  delay: 5
+  until: _pxe_tftp_count is succeeded
   changed_when: false
   tags: pxelinux
 
@@ -101,9 +124,13 @@
     commands:
       - >-
         /ip tftp add
-        req-filename=".*{{ _pxe_filename }}$"
+        req-filename=".*{{ _pxe_filename }}"
         real-filename="{{ sbc_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
         allow=yes read-only=yes
+  register: _pxe_tftp_add
+  retries: 3
+  delay: 5
+  until: _pxe_tftp_add is succeeded
   when: (_pxe_tftp_count.stdout[0] | trim | int) == 0
   changed_when: true
   tags: pxelinux
