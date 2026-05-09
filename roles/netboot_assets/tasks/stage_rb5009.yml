@@ -84,26 +84,31 @@
   loop_control:
     label: "{{ item.item.0 }}/{{ item.item.1 }}"
 
-- name: Count router-side files matching local size
+# Force-remove existing router-side assets so the next net_put always
+# pushes the freshly-extracted content. The earlier size-match guard
+# silently skipped re-uploads when an updated kernel image happened
+# to compress to the same byte count as the previous one — that path
+# left rb5009 serving a stale vmlinuz against fresh /lib/modules in
+# the rootfs/initramfs, which broke modprobe inside the initramfs and
+# manifested as "kernel lacks NFS v3 support" mid-mount. Always staging
+# costs ~6s of net_put per re-stage and avoids the silent-mismatch
+# class of bug entirely.
+- name: Remove router-side SBC TFTP asset (force fresh net_put on every stage)
   community.routeros.command:
     commands:
       - >-
-        /file print count-only where
-        name="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
-        and size={{ _local_asset_stat.results
-                    | selectattr('item.0', 'equalto', item.0)
-                    | selectattr('item.1', 'equalto', item.1)
-                    | map(attribute='stat.size') | first }}
-  register: _router_size_match
+        /file remove
+        [find name="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
+  register: _stage_pre_remove
   retries: 3
   delay: 5
-  until: _router_size_match is succeeded
+  until: _stage_pre_remove is succeeded
   changed_when: false
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:
     label: "{{ item.0 }}/{{ item.1 }}"
 
-- name: Upload SBC TFTP asset if size differs from router copy
+- name: Upload SBC TFTP asset to rb5009
   ansible.netcommon.net_put:
     src: "{{ sbc_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
     dest: "{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
@@ -113,11 +118,19 @@
   retries: 3
   delay: 5
   until: _stage_net_put is succeeded
-  when: (_router_size_match.results[ansible_loop.index0].stdout[0] | trim | int) == 0
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
   loop_control:
     label: "{{ item.0 }}/{{ item.1 }}"
     extended: true
+
+# net_put can leave the persistent ansible-connection daemon in a bad
+# state after large transfers (observed: ConnectionRefusedError on the
+# pc/<id> socket on the very next task). reset_connection helps in
+# some cases; if it fails on the first run after a fresh re-stage,
+# the rules below are still created — running the playbook a second
+# time clears the failure.
+- name: Reset network_cli connection after net_put burst
+  ansible.builtin.meta: reset_connection
 
 - name: Count /ip tftp rows for each (model, asset) pair
   community.routeros.command:
