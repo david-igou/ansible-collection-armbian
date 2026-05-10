@@ -232,13 +232,21 @@
                 state: started
               delegate_to: localhost
 
+            # ignore_errors: true (no failed_when override) so the
+            # registered _inv_probe.failed reflects the real outcome
+            # of the wait_for_connection. Both `failed_when: false`
+            # and `ignore_errors: true` was the wrong combination —
+            # `failed_when: false` forces _inv_probe.failed = false
+            # regardless of underlying outcome, so the auto-bootstrap
+            # block's `when: _inv_probe is failed` always evaluated
+            # false and the auto-bootstrap path never fired (iter 6,
+            # #38 comment 4414184226).
             - name: Phase 1 — short SSH probe as inventory user
               ansible.builtin.wait_for_connection:
                 timeout: 30
                 sleep: 5
                 delay: 0
               register: _inv_probe
-              failed_when: false
               ignore_errors: true # noqa: ignore-errors
 
             - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
@@ -477,13 +485,14 @@
           delegate_to: localhost
           when: not (leave_state | bool)
 
+        # See the matching comment on the Phase 1 probe — the same
+        # `failed_when: false` masking bug applies here.
         - name: Cleanup — short SSH probe as inventory user
           ansible.builtin.wait_for_connection:
             timeout: 30
             sleep: 5
             delay: 0
           register: _cleanup_inv_probe
-          failed_when: false
           ignore_errors: true # noqa: ignore-errors
           when: not (leave_state | bool)
 
