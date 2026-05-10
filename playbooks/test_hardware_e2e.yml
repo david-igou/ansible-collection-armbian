@@ -190,10 +190,22 @@
     # entries for this board up-front so subsequent ssh probes start
     # from a clean state and any errors that surface later carry only
     # the actionable signal.
+    # `connection: local` forces in-process execution on the actual
+    # controller. Without it, inventory's explicit `localhost` entry
+    # under armbian_builders (ansible_host=localhost ansible_user=igou,
+    # default ssh connection) routes `delegate_to: localhost` through
+    # SSH to igou@localhost — which in this devcontainer hits the
+    # *host* machine, not the container. (In this specific environment
+    # /home/igou/.ssh is bind-mounted host→container so the file edited
+    # is the same one either way, but the SSH-out path needs the agent
+    # alive: when the agent flakes, this otherwise-trivial cleanup task
+    # would also fail. Going local removes the dependency entirely.)
+    # Pattern matches build_image.yml:114-115's local-rsync invocation.
     - name: Pre-flight — clear stale known_hosts entries on controller
       ansible.builtin.command:
         cmd: "ssh-keygen -R {{ item }}"
       delegate_to: localhost
+      connection: local
       become: false
       loop: "{{ [inventory_hostname, ansible_host | default(inventory_hostname)] | unique }}"
       changed_when: false
