@@ -12,6 +12,11 @@
 #
 # Run from a play with hosts: routeros_routers, gather_facts: false.
 
+# Force a fresh persistent-connection daemon at role entry — same
+# reasoning as the symmetric reset in write_pxelinux_cfg.yml.
+- name: Force fresh persistent connection at remove_pxelinux_cfg entry
+  ansible.builtin.meta: reset_connection
+
 - name: Compute pxelinux.cfg filename for {{ target_board_host }}
   ansible.builtin.set_fact:
     _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"

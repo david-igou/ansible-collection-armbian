@@ -10,6 +10,19 @@
 #                      embedded in the rendered template)
 #   target_board_host  inventory hostname (drives nfsroot path + label)
 
+# Force a fresh persistent-connection daemon at role entry. Iter 8
+# (#38) failed at the first routeros call here because the daemon
+# spawned for an earlier delegated routeros call (diag-bundle TFTP
+# slurp at end of Phase 1) had idle-timed-out by the time Phase 2
+# reached this role — community.routeros.command's retries:3 doesn't
+# help when the underlying ~/.ansible/pc/<id> socket is gone, only
+# when individual commands transient-fail. Reset up-front pre-empts
+# that failure class. The `[persistent_connection]` 120 s timeouts
+# in ansible.cfg complement this by reducing the rate of daemon
+# death in the first place.
+- name: Force fresh persistent connection at write_pxelinux_cfg entry
+  ansible.builtin.meta: reset_connection
+
 - name: Load board configs
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../../vars/boards.yml"
