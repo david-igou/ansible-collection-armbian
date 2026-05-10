@@ -51,6 +51,32 @@
   failed_when: false
   register: _diag_journal
 
+# rb5009-side TFTP log entries help disambiguate failures that look
+# similar from the board side: signature #5 (NetbootXYZ-fallback —
+# U-Boot's PXE bootmeth lands on rb5009's default `netboot.xyz.kpxe`
+# rule because the per-board pxelinux.cfg lookup didn't match) vs.
+# signature #2 (PHY DMA stuck — board never sent BOOTP, so rb5009
+# never logged a TFTP hit at all). The board-side diag can't tell
+# those apart; rb5009's log can. failed_when:false keeps the bundle
+# tolerant of a transient routeros disconnect or absent log entries.
+# `when` guard so the bundle stays usable from playbooks that don't
+# define `_routeros_target` (currently only test_hardware_e2e.yml does).
+- name: Diagnostic bundle — rb5009 TFTP log entries
+  community.routeros.command:
+    commands:
+      - '/log print without-paging where topics~"tftp"'
+  delegate_to: "{{ _routeros_target }}"
+  register: _diag_tftp
+  failed_when: false
+  changed_when: false
+  when: _routeros_target is defined
+
+- name: Diagnostic bundle — normalize rb5009 TFTP log output
+  ansible.builtin.set_fact:
+    _diag_tftp_lines: >-
+      {{ ((_diag_tftp | default({})).stdout_lines | default([[]]))[0]
+         | default(['(rb5009 unreachable, /log access blocked, or no /system/logging entry for tftp topic)']) }}
+
 # Slurped from the serial host (the machine running socat), not the
 # board. The log is owned root:root mode 0644 (pre-created in
 # test_hardware_e2e.yml's start block) so no become is needed.
@@ -79,6 +105,7 @@
       - "lsblk:            {{ _diag_lsblk.stdout_lines | default([]) }}"
       - "linux-u-boot-*:   {{ _diag_uboot.stdout_lines | default(['(none installed)']) }}"
       - "journal (b 0):    {{ _diag_journal.stdout_lines | default([]) }}"
+      - "rb5009 TFTP log:  {{ _diag_tftp_lines | default(['(skipped — _routeros_target undefined)']) }}"
 
 - name: Diagnostic bundle — print serial tail (last 200 lines)
   ansible.builtin.debug:
