@@ -249,33 +249,36 @@
               register: _inv_probe
               ignore_errors: true # noqa: ignore-errors
 
+            # Iter 7 (#38) showed the prior `command: ansible-playbook
+            # …` sub-playbook invocation pattern fails because
+            # `delegate_to: localhost` resolves through inventory to an
+            # SSH connection back to the host (cursor's SSH_AUTH_SOCK is
+            # forwarded), and `ansible-playbook` is installed inside the
+            # container, not on the host. Use include_role instead —
+            # runs in-process, no SSH-out, no PATH dependency. The
+            # vars: block mirrors playbooks/bootstrap_armbian.yml's
+            # play-level connection overrides for the freshly-flashed
+            # state. Feasible because PR #43 moved
+            # bootstrap_armbian_ssh_keys into inventory, so include_role
+            # resolves the keys without duplicating them here.
             - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
               when: _inv_probe is failed
-              delegate_to: localhost
               block:
                 - name: Phase 1 — auto-bootstrap notice
                   ansible.builtin.debug:
                     msg: >-
                       Inventory user can't authenticate to {{ inventory_hostname }}
                       but the board is reachable on TCP/22 — treating this as a
-                      freshly reflashed image and running bootstrap_armbian.yml
-                      inline.
+                      freshly reflashed image and running bootstrap_armbian inline.
 
-                - name: Phase 1 — auto-bootstrap (sub-playbook invocation)
-                  ansible.builtin.command:
-                    argv:
-                      - ansible-playbook
-                      - "{{ playbook_dir }}/bootstrap_armbian.yml"
-                      - --limit
-                      - "{{ inventory_hostname }}"
-                      - -e
-                      - "armbian_default_password={{ armbian_default_password }}"
-                  changed_when: true
-                  register: _autobootstrap
-
-                - name: Phase 1 — auto-bootstrap output
-                  ansible.builtin.debug:
-                    msg: "{{ _autobootstrap.stdout_lines | default([]) }}"
+                - name: Phase 1 — auto-bootstrap (run bootstrap_armbian role)
+                  ansible.builtin.include_role:
+                    name: bootstrap_armbian
+                  vars:
+                    ansible_user: root
+                    ansible_password: "{{ armbian_default_password }}"
+                    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                    ansible_become: false
 
             - name: Phase 1 — wait for SSH (disk-boot identity)
               ansible.builtin.wait_for_connection:
@@ -496,34 +499,30 @@
           ignore_errors: true # noqa: ignore-errors
           when: not (leave_state | bool)
 
+        # Same include_role refactor as Phase 1's auto-bootstrap (see
+        # the comment block at line ~252). The sub-playbook invocation
+        # pattern fails because ansible-playbook isn't on the host's
+        # PATH; include_role runs in-process.
         - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
           when:
             - not (leave_state | bool)
             - _cleanup_inv_probe is failed
-          delegate_to: localhost
           block:
             - name: Cleanup — auto-bootstrap notice
               ansible.builtin.debug:
                 msg: >-
                   Inventory user can't authenticate to {{ inventory_hostname }}
-                  during cleanup. Running bootstrap_armbian.yml inline so the
+                  during cleanup. Running bootstrap_armbian inline so the
                   board is left in a usable state.
 
-            - name: Cleanup — auto-bootstrap (sub-playbook invocation)
-              ansible.builtin.command:
-                argv:
-                  - ansible-playbook
-                  - "{{ playbook_dir }}/bootstrap_armbian.yml"
-                  - --limit
-                  - "{{ inventory_hostname }}"
-                  - -e
-                  - "armbian_default_password={{ armbian_default_password }}"
-              changed_when: true
-              register: _cleanup_autobootstrap
-
-            - name: Cleanup — auto-bootstrap output
-              ansible.builtin.debug:
-                msg: "{{ _cleanup_autobootstrap.stdout_lines | default([]) }}"
+            - name: Cleanup — auto-bootstrap (run bootstrap_armbian role)
+              ansible.builtin.include_role:
+                name: bootstrap_armbian
+              vars:
+                ansible_user: root
+                ansible_password: "{{ armbian_default_password }}"
+                ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                ansible_become: false
 
         - name: Cleanup — wait for SSH after cleanup cycle
           ansible.builtin.wait_for_connection:
