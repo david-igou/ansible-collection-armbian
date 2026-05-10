@@ -80,14 +80,32 @@
 # Slurped from the serial host (the machine running socat), not the
 # board. The log is owned root:root mode 0644 (pre-created in
 # test_hardware_e2e.yml's start block) so no become is needed.
-# failed_when: false so missing/empty log doesn't abort.
+# failed_when:false + ignore_unreachable:true together keep the bundle
+# tolerant of the absent-dongle / missing-log / unreachable-serial-host
+# cases — none of those should abort an otherwise-successful test.
+#
+# The vars: block counter-overrides any block-level connection vars
+# that may be in scope when this task is imported (e.g.
+# test_hardware_e2e.yml Phase 2's verify-NFS-mounted-boot block sets
+# ansible_user=root + ansible_password=armbian_default_password +
+# StrictHostKeyChecking=no for the board-side SSH; without this
+# counter-override those propagate to the delegated localhost SSH
+# and cause `ssh root@localhost: Permission denied (publickey)` —
+# observed as iter 9's only failure (#38)). Resolve back to whatever
+# the serial host's inventory entry defines (typically `igou` on
+# localhost), and clear the inherited password + ssh_common_args.
 - name: Diagnostic bundle — read recent serial log (serial host)
   ansible.builtin.slurp:
     src: "{{ _serial_log | default('/tmp/serial-' ~ inventory_hostname ~ '.log') }}"
   delegate_to: "{{ serial_host | default('localhost') }}"
+  vars:
+    ansible_user: "{{ hostvars[serial_host | default('localhost')]['ansible_user'] | default(omit) }}"
+    ansible_password: ""
+    ansible_ssh_common_args: ""
   run_once: true
   register: _diag_serial
   failed_when: false
+  ignore_unreachable: true
   when: capture_serial | default(false) | bool
 
 - name: Diagnostic bundle — print
