@@ -10,19 +10,6 @@
 #                      embedded in the rendered template)
 #   target_board_host  inventory hostname (drives nfsroot path + label)
 
-# Force a fresh persistent-connection daemon at role entry. Iter 8
-# (#38) failed at the first routeros call here because the daemon
-# spawned for an earlier delegated routeros call (diag-bundle TFTP
-# slurp at end of Phase 1) had idle-timed-out by the time Phase 2
-# reached this role — community.routeros.command's retries:3 doesn't
-# help when the underlying ~/.ansible/pc/<id> socket is gone, only
-# when individual commands transient-fail. Reset up-front pre-empts
-# that failure class. The `[persistent_connection]` 120 s timeouts
-# in ansible.cfg complement this by reducing the rate of daemon
-# death in the first place.
-- name: Force fresh persistent connection at write_pxelinux_cfg entry
-  ansible.builtin.meta: reset_connection
-
 - name: Load board configs
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../../vars/boards.yml"
@@ -86,12 +73,22 @@
   register: _pxe_local_stat
   tags: pxelinux
 
-# All RouterOS-targeted tasks below carry a retries/until guard. ansible's
-# network_cli persistent connection to RouterOS occasionally drops mid-play
-# under both paramiko and pylibssh transports — observed failure modes are
-# "command timeout triggered, timeout value is 30 secs", "No existing session",
-# and "Unable to decode JSON from response to get_capabilities()". Each task
-# retries 3x with a 5s backoff so a single dead session doesn't fail the play.
+# Each routeros-targeted task below is preceded by an explicit
+# `meta: reset_connection`, forcing a fresh persistent-connection
+# daemon for every command. Iter 12 (#38) showed that PR #46's
+# role-entry reset wasn't enough — the daemon can die *between* tasks
+# inside a routeros burst (paramiko disconnect, RouterOS-side idle
+# eviction, OOM, etc.) and the existing per-task `retries:3
+# until:succeeded` guards only cover module-level failures, not
+# connection-establishment failures (`ConnectionRefusedError [Errno
+# 111]` on `~/.ansible/pc/<id>`). Resetting per-task makes every
+# command start with a known-fresh daemon — the daemon only has to
+# survive one command instead of a burst, eliminating the inherited-
+# dead-daemon failure class entirely. Cost: ~1 s per reset × 5 tasks
+# = ~5 s additional latency per write. Acceptable.
+- name: Reset persistent connection before pxelinux dir ensure
+  ansible.builtin.meta: reset_connection
+
 - name: Ensure pxelinux.cfg directory exists on rb5009 under flash:/{{ sbc_tftp_flash_dir }}
   community.routeros.command:
     commands:
@@ -104,6 +101,9 @@
   until: _pxe_dir_ensure is succeeded
   changed_when: false
   tags: pxelinux
+
+- name: Reset persistent connection before pxelinux size check
+  ansible.builtin.meta: reset_connection
 
 - name: Count router-side pxelinux.cfg matching local size
   community.routeros.command:
@@ -118,6 +118,10 @@
   until: _pxe_size_match is succeeded
   changed_when: false
   tags: pxelinux
+
+- name: Reset persistent connection before pxelinux net_put
+  ansible.builtin.meta: reset_connection
+  when: (_pxe_size_match.stdout[0] | trim | int) == 0
 
 - name: Upload pxelinux.cfg to rb5009 if size differs
   ansible.netcommon.net_put:
@@ -145,6 +149,9 @@
 # because RouterOS' shell interprets "$" inside double-quoted strings as
 # a variable reference, mangling the rule (req-filename and real-filename
 # get concatenated, real-filename ends up empty).
+- name: Reset persistent connection before /ip tftp count
+  ansible.builtin.meta: reset_connection
+
 - name: Count /ip tftp rows for {{ _pxe_filename }}
   community.routeros.command:
     commands:
@@ -158,6 +165,10 @@
   until: _pxe_tftp_count is succeeded
   changed_when: false
   tags: pxelinux
+
+- name: Reset persistent connection before /ip tftp add
+  ansible.builtin.meta: reset_connection
+  when: (_pxe_tftp_count.stdout[0] | trim | int) == 0
 
 - name: Add /ip tftp row (if absent) for board {{ _pxe_filename }}
   community.routeros.command:

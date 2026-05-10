@@ -12,19 +12,19 @@
 #
 # Run from a play with hosts: routeros_routers, gather_facts: false.
 
-# Force a fresh persistent-connection daemon at role entry — same
-# reasoning as the symmetric reset in write_pxelinux_cfg.yml.
-- name: Force fresh persistent connection at remove_pxelinux_cfg entry
-  ansible.builtin.meta: reset_connection
-
 - name: Compute pxelinux.cfg filename for {{ target_board_host }}
   ansible.builtin.set_fact:
     _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
   tags: pxelinux
 
-# Match the same regex used by write_pxelinux_cfg.yml when adding the row.
-# Retries guard transient network_cli persistent-connection drops — see the
-# comment block in write_pxelinux_cfg.yml for the failure modes.
+# Per-task `meta: reset_connection` mirrors the pattern in
+# write_pxelinux_cfg.yml — see the comment block there for the
+# rationale (iter 12 #38: PR #46's role-entry reset wasn't enough,
+# the daemon can die mid-burst and module-level retries don't catch
+# connection-establishment failures).
+- name: Reset persistent connection before /ip tftp remove
+  ansible.builtin.meta: reset_connection
+
 - name: Remove /ip tftp row for {{ _pxe_filename }}
   community.routeros.command:
     commands:
@@ -36,6 +36,9 @@
   until: _pxe_tftp_rm is succeeded
   changed_when: false  # idempotent — RouterOS returns no output when find is empty
   tags: pxelinux
+
+- name: Reset persistent connection before /file remove
+  ansible.builtin.meta: reset_connection
 
 - name: Remove pxelinux.cfg flash file for board {{ _pxe_filename }}
   community.routeros.command:
