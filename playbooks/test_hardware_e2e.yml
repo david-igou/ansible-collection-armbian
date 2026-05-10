@@ -58,6 +58,13 @@
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
+#
+# For iteration runs that should leave per-iter artifacts (separate
+# serial logs per settings, indexable GitHub-issue comments) prefer
+# `playbooks/scripts/run-iter.sh <iter-number> -- <ansible-playbook
+# extras>` — it sets `_serial_log` to a per-iter path on the serial
+# host, slurps it back to /tmp/iter-<N>/, and posts a single
+# comment with both logs inlined. See the script's docstring.
 
 - name: Hardware E2E PXE-first toggle test
   hosts: boards
