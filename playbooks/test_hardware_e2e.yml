@@ -24,6 +24,15 @@
 # to disk boot regardless of pass/fail. Pass `-e leave_state=true` to
 # preserve the failure state for forensic debugging.
 #
+# Skip-baseline mode: pass `-e skip_baseline=true` to bypass Phase 1
+# entirely (the SD-side disk-boot baseline + assertions). Useful when
+# the board's local boot is broken (signatures #1/#3/#4/#5 from
+# the orange-pi-5-pro tracker) but the PXE/NFS path is healthy and
+# you want to validate the toggle's nfsroot direction. Phase 3 still
+# runs and tries to assert return-to-disk; on a board with broken SD
+# Phase 3 will also fail, but Phase 2's diagnostic bundle is the
+# artifact that matters.
+#
 # Optional serial capture: pass `-e capture_serial=true` to spawn a
 # background socat capture from a USB-UART on the *serial host*. The
 # serial host defaults to `localhost` (the inventory entry for it
@@ -48,12 +57,14 @@
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
+#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
 
 - name: Hardware E2E PXE-first toggle test
   hosts: boards
   gather_facts: false
   vars:
     leave_state: false
+    skip_baseline: false
     capture_serial: false
     serial_host: localhost
     serial_device: /dev/ttyUSB0
@@ -176,105 +187,117 @@
 
     - name: Test phases (cleanup runs in always)
       block:
-        - name: Phase 1 — PoE cycle to disk-boot baseline
-          ansible.builtin.include_role:
-            name: routeros_poe
-          vars:
-            poe_action: cycle
-
-        # Auto-bootstrap detection. After a fresh SD-card reflash the
-        # board boots cleanly but the inventory user (ansible_user)
-        # doesn't exist yet — only the Armbian default root user does.
-        # The original Phase 1 wait_for_connection then sits for
-        # _wait_timeout seconds with `Permission denied (publickey,
-        # password)` and ultimately reports an opaque "timed out" that
-        # looks identical to a hardware boot hang. The detection below
-        # distinguishes those:
-        #   1. wait_for TCP/22 — identity-agnostic; a real boot failure
-        #      still times out here.
-        #   2. one short wait_for_connection probe as the inventory
-        #      user — succeeds quickly if bootstrap already ran.
-        #   3. if (1) succeeds and (2) fails, the board is freshly
-        #      reflashed; shell out to bootstrap_armbian.yml inline,
-        #      then fall through to the regular Phase 1 wait below.
-        # Sub-playbook invocation (rather than include_role) keeps the
-        # auto-bootstrap path fully aligned with the operator's manual
-        # workflow — same playbook, same vars, same SSH keys baked in
-        # — without duplicating the connection/var setup here.
-        - name: Phase 1 — wait for board TCP/22 (identity-agnostic)
-          ansible.builtin.wait_for:
-            host: "{{ ansible_host | default(inventory_hostname) }}"
-            port: 22
-            timeout: "{{ _tcp_probe_timeout | default(180) }}"
-            state: started
-          delegate_to: localhost
-
-        - name: Phase 1 — short SSH probe as inventory user
-          ansible.builtin.wait_for_connection:
-            timeout: 30
-            sleep: 5
-            delay: 0
-          register: _inv_probe
-          failed_when: false
-          ignore_errors: true # noqa: ignore-errors
-
-        - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
-          when: _inv_probe is failed
-          delegate_to: localhost
+        # Phase 1 (disk-boot baseline) is opt-out via skip_baseline=true.
+        # Use case: the board's SD-side boot is broken (e.g. progressive
+        # SD corruption from a streak of failed boots) but PXE/NFS still
+        # works. Skipping Phase 1 lets Phase 2 still validate the
+        # nfsroot-toggle path against rb5009's per-board pxelinux.cfg
+        # without depending on a clean local boot first. Phase 3 still
+        # runs and asserts the return-to-disk transition; on a board
+        # with broken SD that assertion will fail too — which is fine,
+        # the artifact you care about is Phase 2's diagnostic bundle.
+        - name: Phase 1 — disk-boot baseline (skippable via skip_baseline=true)
+          when: not (skip_baseline | bool)
           block:
-            - name: Phase 1 — auto-bootstrap notice
-              ansible.builtin.debug:
-                msg: >-
-                  Inventory user can't authenticate to {{ inventory_hostname }}
-                  but the board is reachable on TCP/22 — treating this as a
-                  freshly reflashed image and running bootstrap_armbian.yml
-                  inline.
+            - name: Phase 1 — PoE cycle to disk-boot baseline
+              ansible.builtin.include_role:
+                name: routeros_poe
+              vars:
+                poe_action: cycle
 
-            - name: Phase 1 — auto-bootstrap (sub-playbook invocation)
-              ansible.builtin.command:
-                argv:
-                  - ansible-playbook
-                  - "{{ playbook_dir }}/bootstrap_armbian.yml"
-                  - --limit
-                  - "{{ inventory_hostname }}"
-                  - -e
-                  - "armbian_default_password={{ armbian_default_password }}"
-              changed_when: true
-              register: _autobootstrap
+            # Auto-bootstrap detection. After a fresh SD-card reflash the
+            # board boots cleanly but the inventory user (ansible_user)
+            # doesn't exist yet — only the Armbian default root user does.
+            # The original Phase 1 wait_for_connection then sits for
+            # _wait_timeout seconds with `Permission denied (publickey,
+            # password)` and ultimately reports an opaque "timed out" that
+            # looks identical to a hardware boot hang. The detection below
+            # distinguishes those:
+            #   1. wait_for TCP/22 — identity-agnostic; a real boot failure
+            #      still times out here.
+            #   2. one short wait_for_connection probe as the inventory
+            #      user — succeeds quickly if bootstrap already ran.
+            #   3. if (1) succeeds and (2) fails, the board is freshly
+            #      reflashed; shell out to bootstrap_armbian.yml inline,
+            #      then fall through to the regular Phase 1 wait below.
+            # Sub-playbook invocation (rather than include_role) keeps the
+            # auto-bootstrap path fully aligned with the operator's manual
+            # workflow — same playbook, same vars, same SSH keys baked in
+            # — without duplicating the connection/var setup here.
+            - name: Phase 1 — wait for board TCP/22 (identity-agnostic)
+              ansible.builtin.wait_for:
+                host: "{{ ansible_host | default(inventory_hostname) }}"
+                port: 22
+                timeout: "{{ _tcp_probe_timeout | default(180) }}"
+                state: started
+              delegate_to: localhost
 
-            - name: Phase 1 — auto-bootstrap output
-              ansible.builtin.debug:
-                msg: "{{ _autobootstrap.stdout_lines | default([]) }}"
+            - name: Phase 1 — short SSH probe as inventory user
+              ansible.builtin.wait_for_connection:
+                timeout: 30
+                sleep: 5
+                delay: 0
+              register: _inv_probe
+              failed_when: false
+              ignore_errors: true # noqa: ignore-errors
 
-        - name: Phase 1 — wait for SSH (disk-boot identity)
-          ansible.builtin.wait_for_connection:
-            delay: 30
-            timeout: "{{ _wait_timeout }}"
+            - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
+              when: _inv_probe is failed
+              delegate_to: localhost
+              block:
+                - name: Phase 1 — auto-bootstrap notice
+                  ansible.builtin.debug:
+                    msg: >-
+                      Inventory user can't authenticate to {{ inventory_hostname }}
+                      but the board is reachable on TCP/22 — treating this as a
+                      freshly reflashed image and running bootstrap_armbian.yml
+                      inline.
 
-        - name: Phase 1 — gather facts
-          ansible.builtin.setup:
+                - name: Phase 1 — auto-bootstrap (sub-playbook invocation)
+                  ansible.builtin.command:
+                    argv:
+                      - ansible-playbook
+                      - "{{ playbook_dir }}/bootstrap_armbian.yml"
+                      - --limit
+                      - "{{ inventory_hostname }}"
+                      - -e
+                      - "armbian_default_password={{ armbian_default_password }}"
+                  changed_when: true
+                  register: _autobootstrap
 
-        - name: Phase 1 — capture root mount facts
-          ansible.builtin.set_fact:
-            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                                             | map(attribute='fstype') | first }}"
-            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                                             | map(attribute='device') | first }}"
+                - name: Phase 1 — auto-bootstrap output
+                  ansible.builtin.debug:
+                    msg: "{{ _autobootstrap.stdout_lines | default([]) }}"
 
-        - name: Phase 1 — diagnostic bundle
-          ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
-          vars:
-            _diag_phase: "phase 1 — disk-boot baseline"
+            - name: Phase 1 — wait for SSH (disk-boot identity)
+              ansible.builtin.wait_for_connection:
+                delay: 30
+                timeout: "{{ _wait_timeout }}"
 
-        - name: Phase 1 — assert rootfs is on a local block device
-          ansible.builtin.assert:
-            that:
-              - _root_fstype not in ['nfs', 'nfs4']
-              - _root_device is match('^/dev/')
-            fail_msg: >-
-              Phase 1: expected rootfs on /dev/<block>; got
-              {{ _root_device }} ({{ _root_fstype }}).
-              Diagnostic bundle is in the prior debug task.
+            - name: Phase 1 — gather facts
+              ansible.builtin.setup:
+
+            - name: Phase 1 — capture root mount facts
+              ansible.builtin.set_fact:
+                _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                                 | map(attribute='fstype') | first }}"
+                _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                                 | map(attribute='device') | first }}"
+
+            - name: Phase 1 — diagnostic bundle
+              ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+              vars:
+                _diag_phase: "phase 1 — disk-boot baseline"
+
+            - name: Phase 1 — assert rootfs is on a local block device
+              ansible.builtin.assert:
+                that:
+                  - _root_fstype not in ['nfs', 'nfs4']
+                  - _root_device is match('^/dev/')
+                fail_msg: >-
+                  Phase 1: expected rootfs on /dev/<block>; got
+                  {{ _root_device }} ({{ _root_fstype }}).
+                  Diagnostic bundle is in the prior debug task.
 
         - name: Phase 2 — write per-board pxelinux.cfg + /ip tftp row on rb5009
           delegate_to: "{{ _routeros_target }}"
@@ -433,6 +456,65 @@
         - name: Cleanup — reset connection to inventory identity
           ansible.builtin.meta: reset_connection
           when: not (leave_state | bool)
+
+        # Same TCP-probe + auto-bootstrap pattern as Phase 1's pre-wait.
+        # Iter 5 (#38) showed the cleanup wait timing at 330s with the
+        # same buried "Permission denied (publickey, password)" error
+        # that PR #41 fixed for Phase 1 — the cleanup PoE cycle gave
+        # the freshly-reflashed board another chance to boot, sshd came
+        # up, but Phase 1's auto-bootstrap had never run (TCP didn't
+        # come up there) so the inventory user still didn't exist.
+        # Auto-bootstrap during cleanup makes the test leave the board
+        # in a usable state regardless of which path Phase 1 took. The
+        # leave_state guard preserves the existing forensic-mode
+        # contract: leave_state=true means "do not mutate."
+        - name: Cleanup — wait for board TCP/22 (identity-agnostic)
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host | default(inventory_hostname) }}"
+            port: 22
+            timeout: "{{ _tcp_probe_timeout | default(180) }}"
+            state: started
+          delegate_to: localhost
+          when: not (leave_state | bool)
+
+        - name: Cleanup — short SSH probe as inventory user
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            sleep: 5
+            delay: 0
+          register: _cleanup_inv_probe
+          failed_when: false
+          ignore_errors: true # noqa: ignore-errors
+          when: not (leave_state | bool)
+
+        - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
+          when:
+            - not (leave_state | bool)
+            - _cleanup_inv_probe is failed
+          delegate_to: localhost
+          block:
+            - name: Cleanup — auto-bootstrap notice
+              ansible.builtin.debug:
+                msg: >-
+                  Inventory user can't authenticate to {{ inventory_hostname }}
+                  during cleanup. Running bootstrap_armbian.yml inline so the
+                  board is left in a usable state.
+
+            - name: Cleanup — auto-bootstrap (sub-playbook invocation)
+              ansible.builtin.command:
+                argv:
+                  - ansible-playbook
+                  - "{{ playbook_dir }}/bootstrap_armbian.yml"
+                  - --limit
+                  - "{{ inventory_hostname }}"
+                  - -e
+                  - "armbian_default_password={{ armbian_default_password }}"
+              changed_when: true
+              register: _cleanup_autobootstrap
+
+            - name: Cleanup — auto-bootstrap output
+              ansible.builtin.debug:
+                msg: "{{ _cleanup_autobootstrap.stdout_lines | default([]) }}"
 
         - name: Cleanup — wait for SSH after cleanup cycle
           ansible.builtin.wait_for_connection:
