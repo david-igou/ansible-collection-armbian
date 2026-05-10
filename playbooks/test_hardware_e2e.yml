@@ -111,18 +111,6 @@
           Phase 2 SSH to the NFS-mounted board uses these credentials.
       run_once: true
 
-    - name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
-      delegate_to: "{{ _routeros_target }}"
-      run_once: true
-      block:
-        - name: Pre-flight — include netboot_assets plumbing_check
-          ansible.builtin.include_role:
-            name: netboot_assets
-            tasks_from: plumbing_check.yml
-          vars:
-            _check_models:
-              - "{{ board_model }}"
-
     # Background serial capture on the serial host (the machine with
     # the USB-UART attached). Defaults to localhost; can be overridden
     # with -e serial_host=<inventory-host> for split-machine setups.
@@ -135,6 +123,13 @@
     # reads that pidfile and kills the recorded PID. Pidfile-based
     # cleanup is portable to minimal serial hosts (UBI, alpine,
     # distroless) that ship without pkill/pgrep.
+    #
+    # Ordered before the rb5009 plumbing-check below so that any
+    # plumbing-check failure (RouterOS unreachable, controller SSH
+    # agent dead, etc.) still leaves a serial trace from whatever
+    # boot activity happened during the run. iters 17-26 of #38
+    # produced empty serial logs because plumbing-check aborted the
+    # play before socat ever started.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
       delegate_to: "{{ serial_host }}"
@@ -172,6 +167,18 @@
           async: 86400
           poll: 0
           changed_when: true
+
+    - name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
+      delegate_to: "{{ _routeros_target }}"
+      run_once: true
+      block:
+        - name: Pre-flight — include netboot_assets plumbing_check
+          ansible.builtin.include_role:
+            name: netboot_assets
+            tasks_from: plumbing_check.yml
+          vars:
+            _check_models:
+              - "{{ board_model }}"
 
     # Stale known_hosts entries on the controller (typically left by
     # a prior boot, a reflash, or a per_host NFS rootfs identity reset)
