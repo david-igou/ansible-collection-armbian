@@ -338,16 +338,74 @@
           vars:
             poe_action: cycle
 
-        - name: Phase 2 — verify NFS-mounted boot
-          vars:
-            ansible_user: root
-            ansible_password: "{{ armbian_default_password }}"
-            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            ansible_become: false
+        # Same auto-bootstrap pattern as Phase 1's pre-wait. The
+        # per-host NFS rootfs is initially cloned from
+        # _templates/<model>/ (stock Armbian image), so a never-
+        # bootstrapped clone only has the Armbian default `root` user
+        # with the default password — but per-host clones persist
+        # across test sessions, and any prior iter that auto-
+        # bootstrapped this rootfs (e.g. iter 10 of #38, when stale
+        # rb5009 state caused Phase 1 to accidentally NFS-boot) leaves
+        # the inventory user provisioned + sshd password-auth
+        # disabled. The original Phase 2 verify hard-coded the
+        # never-bootstrapped state's connection vars (root + armbian
+        # password) and broke on iter 15 once the rootfs had been
+        # bootstrapped (iter 15 of #38: "Permission denied
+        # (publickey)" for root@board for the full 330 s wait).
+        #
+        # The probe + auto-bootstrap structure makes Phase 2 work
+        # both ways:
+        #   1. wait_for TCP/22 — identity-agnostic; a real NFS-boot
+        #      hardware/network failure surfaces here.
+        #   2. one short wait_for_connection probe as the inventory
+        #      user (key auth) — succeeds quickly if the per-host
+        #      NFS rootfs is already bootstrapped.
+        #   3. if (1) succeeds and (2) fails, bootstrap_armbian
+        #      inline against the NFS-rootfs root account; then fall
+        #      through to the regular wait below as the inv user.
+        - name: Phase 2 — wait for board TCP/22 (NFS boot, identity-agnostic)
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host | default(inventory_hostname) }}"
+            port: 22
+            timeout: "{{ _tcp_probe_timeout | default(180) }}"
+            state: started
+          delegate_to: localhost
+
+        - name: Phase 2 — reset connection so new identity takes effect
+          ansible.builtin.meta: reset_connection
+
+        - name: Phase 2 — short SSH probe as inventory user (NFS rootfs may be bootstrapped)
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            sleep: 5
+            delay: 0
+          register: _phase2_inv_probe
+          ignore_errors: true # noqa: ignore-errors
+
+        - name: Phase 2 — auto-bootstrap if NFS rootfs is fresh (never bootstrapped)
+          when: _phase2_inv_probe is failed
           block:
-            - name: Phase 2 — reset connection so new identity takes effect
+            - name: Phase 2 — auto-bootstrap notice
+              ansible.builtin.debug:
+                msg: >-
+                  Inventory user can't authenticate to {{ inventory_hostname }}'s
+                  NFS rootfs — this is a fresh per-host clone. Running
+                  bootstrap_armbian inline.
+
+            - name: Phase 2 — auto-bootstrap (run bootstrap_armbian role)
+              ansible.builtin.include_role:
+                name: bootstrap_armbian
+              vars:
+                ansible_user: root
+                ansible_password: "{{ armbian_default_password }}"
+                ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                ansible_become: false
+
+            - name: Phase 2 — reset connection after auto-bootstrap
               ansible.builtin.meta: reset_connection
 
+        - name: Phase 2 — verify NFS-mounted boot
+          block:
             - name: Phase 2 — wait for SSH (NFS-root identity)
               ansible.builtin.wait_for_connection:
                 delay: 30
