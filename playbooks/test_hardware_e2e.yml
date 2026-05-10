@@ -155,6 +155,25 @@
           poll: 0
           changed_when: true
 
+    # Stale known_hosts entries on the controller (typically left by
+    # a prior boot, a reflash, or a per_host NFS rootfs identity reset)
+    # don't *prevent* connections (host_key_checking=False handles the
+    # auth side) but ssh's "REMOTE HOST IDENTIFICATION HAS CHANGED"
+    # warning still pollutes any failure-mode error message that wraps
+    # the underlying ssh stderr — making real failures (kernel hang,
+    # missing inventory user) hard to read in the e2e output. Drop any
+    # entries for this board up-front so subsequent ssh probes start
+    # from a clean state and any errors that surface later carry only
+    # the actionable signal.
+    - name: Pre-flight — clear stale known_hosts entries on controller
+      ansible.builtin.command:
+        cmd: "ssh-keygen -R {{ item }}"
+      delegate_to: localhost
+      become: false
+      loop: "{{ [inventory_hostname, ansible_host | default(inventory_hostname)] | unique }}"
+      changed_when: false
+      failed_when: false  # exits 1 when no entries — that's fine
+
     - name: Test phases (cleanup runs in always)
       block:
         - name: Phase 1 — PoE cycle to disk-boot baseline
@@ -162,6 +181,70 @@
             name: routeros_poe
           vars:
             poe_action: cycle
+
+        # Auto-bootstrap detection. After a fresh SD-card reflash the
+        # board boots cleanly but the inventory user (ansible_user)
+        # doesn't exist yet — only the Armbian default root user does.
+        # The original Phase 1 wait_for_connection then sits for
+        # _wait_timeout seconds with `Permission denied (publickey,
+        # password)` and ultimately reports an opaque "timed out" that
+        # looks identical to a hardware boot hang. The detection below
+        # distinguishes those:
+        #   1. wait_for TCP/22 — identity-agnostic; a real boot failure
+        #      still times out here.
+        #   2. one short wait_for_connection probe as the inventory
+        #      user — succeeds quickly if bootstrap already ran.
+        #   3. if (1) succeeds and (2) fails, the board is freshly
+        #      reflashed; shell out to bootstrap_armbian.yml inline,
+        #      then fall through to the regular Phase 1 wait below.
+        # Sub-playbook invocation (rather than include_role) keeps the
+        # auto-bootstrap path fully aligned with the operator's manual
+        # workflow — same playbook, same vars, same SSH keys baked in
+        # — without duplicating the connection/var setup here.
+        - name: Phase 1 — wait for board TCP/22 (identity-agnostic)
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host | default(inventory_hostname) }}"
+            port: 22
+            timeout: "{{ _tcp_probe_timeout | default(180) }}"
+            state: started
+          delegate_to: localhost
+
+        - name: Phase 1 — short SSH probe as inventory user
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            sleep: 5
+            delay: 0
+          register: _inv_probe
+          failed_when: false
+          ignore_errors: true # noqa: ignore-errors
+
+        - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
+          when: _inv_probe is failed
+          delegate_to: localhost
+          block:
+            - name: Phase 1 — auto-bootstrap notice
+              ansible.builtin.debug:
+                msg: >-
+                  Inventory user can't authenticate to {{ inventory_hostname }}
+                  but the board is reachable on TCP/22 — treating this as a
+                  freshly reflashed image and running bootstrap_armbian.yml
+                  inline.
+
+            - name: Phase 1 — auto-bootstrap (sub-playbook invocation)
+              ansible.builtin.command:
+                argv:
+                  - ansible-playbook
+                  - "{{ playbook_dir }}/bootstrap_armbian.yml"
+                  - --limit
+                  - "{{ inventory_hostname }}"
+                  - -e
+                  - "armbian_default_password={{ armbian_default_password }}"
+              changed_when: true
+              register: _autobootstrap
+
+            - name: Phase 1 — auto-bootstrap output
+              ansible.builtin.debug:
+                msg: "{{ _autobootstrap.stdout_lines | default([]) }}"
 
         - name: Phase 1 — wait for SSH (disk-boot identity)
           ansible.builtin.wait_for_connection:
