@@ -14,6 +14,12 @@
 #                        roles/netboot_assets/tasks/per_board.yml.
 #   console              Kernel console parameter. Used by
 #                        roles/routeros_dhcp/templates/pxelinux_cfg.j2.
+#   earlycon             earlycon= argument that drives kernel output
+#                        before the ttyS* driver loads. Format is
+#                        "<driver>,<bus>,<mmio_addr>" — for RK3588S the
+#                        UART2 base is 0xfeb50000. Required when
+#                        pxelinux_verbose=true; consulted only by the
+#                        verbose path in pxelinux_cfg.j2.
 
 board_configs:
   orange-pi-5-pro:
@@ -22,3 +28,4 @@ board_configs:
     armbian_support: community
     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
     console: ttyS2,1500000n8
+    earlycon: uart8250,mmio32,0xfeb50000
