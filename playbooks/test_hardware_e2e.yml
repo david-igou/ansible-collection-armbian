@@ -194,6 +194,29 @@
 
     - name: Test phases (cleanup runs in always)
       block:
+        # Wipe any stale `pxelinux.cfg/01-<MAC>` row + file on rb5009
+        # before Phase 1's opening PoE cycle. The board's PXE-first
+        # U-Boot tries TFTP on every power-on; a leftover row + file
+        # from a prior aborted run, or an out-of-band enable_netboot.yml
+        # during a gap between test runs, silently NFS-boots the board
+        # and trips Phase 1's "rootfs is on a local block device"
+        # assertion ~2 min in (iter 27 of #38, comment-4415444511). The
+        # remove role's `/file remove [find …]` and `/ip tftp remove
+        # [find …]` no-op when find returns empty, so this is a ~3 s
+        # idempotent step on already-clean state. The Phase 1 assertion
+        # is retained as a tripwire for any other source of unexpected
+        # NFS-boot.
+        - name: Pre-flight — wipe any stale per-board pxelinux.cfg from rb5009
+          delegate_to: "{{ _routeros_target }}"
+          block:
+            - name: Pre-flight — include routeros_dhcp remove_pxelinux_cfg
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: remove_pxelinux_cfg.yml
+              vars:
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
+
         # Phase 1 (disk-boot baseline) is opt-out via skip_baseline=true.
         # Use case: the board's SD-side boot is broken (e.g. progressive
         # SD corruption from a streak of failed boots) but PXE/NFS still
