@@ -146,6 +146,33 @@
             cmd: which socat
           changed_when: false
 
+        # Defensive pre-start: kill any socat already reading
+        # {{ serial_device }} from a leaked prior run. Without this,
+        # multiple socats race for bytes from the kernel's serial
+        # read queue and the *current* run's log gets only a fraction
+        # of the output (typically zero — older socats in the queue
+        # win). #38 comment-4415733253 captured 7 leaked socats on
+        # the host across iters 17/32/33/38/39 + two from
+        # pre-PR-#49 runs, all draining /dev/ttyUSB0 simultaneously
+        # and producing iter 39's empty serial-iter-39.log.
+        #
+        # `[s]ocat` regex avoids self-match: pkill -f matches against
+        # full cmdline, so a literal pattern `socat -u <dev>` would
+        # also match the shell that's running `pkill -f "socat -u
+        # <dev>"` and kill the parent shell mid-task (iter 40 of #38:
+        # rc=-15 SIGTERM). The regex `[s]ocat` matches the literal
+        # string "socat" but the cmdline `pkill -f "[s]ocat ..."`
+        # contains the bracket characters and is not matched.
+        # Stale pidfile is also removed here — the existing kill task
+        # in Cleanup tolerates a missing pidfile, but starting a new
+        # run with the wrong PID recorded (from a prior socat killed
+        # externally) would confuse cleanup later.
+        - name: Serial — kill any pre-existing socat on this device
+          ansible.builtin.shell: |
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+            rm -f {{ _serial_pid }}
+          changed_when: false
+
         - name: Serial — assert serial device exists
           ansible.builtin.stat:
             path: "{{ serial_device }}"
@@ -647,12 +674,24 @@
         # device state. The pidfile may be missing (start block failed
         # before socat spawned) and the recorded PID may already be dead
         # (socat exited on its own); both cases are non-failures.
+        #
+        # Belt-and-suspenders: kill the pidfile-recorded PID first (the
+        # primary mechanism, dependable when the pidfile is fresh), then
+        # `pkill -f` any remaining socat reading {{ serial_device }} as
+        # a backstop for stale pidfiles. The post-Phase-1+2+3 cleanup
+        # only runs on plays that entered the Test phases block, so
+        # plays that abort earlier (plumbing-check failure, agent flake
+        # mid-pre-flight) still leak — those are caught by the
+        # defensive pre-start kill in the Pre-flight serial-capture
+        # block on the *next* run. Net effect: max one zombie socat
+        # in flight between any two runs.
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |
             if [ -f {{ _serial_pid }} ]; then
               kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
               rm -f {{ _serial_pid }}
             fi
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
           delegate_to: "{{ serial_host }}"
           run_once: true
           become: true
