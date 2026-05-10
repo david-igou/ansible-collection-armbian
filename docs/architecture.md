@@ -195,3 +195,45 @@ produce a vmlinuz of the same byte count.)
 The PXE/TFTP/DHCP plumbing in this collection is unaffected — U-Boot
 loads kernel + initrd + dtb correctly; if the symptom returns,
 re-running `stage_netboot_assets.yml` is the right first step.
+
+### Hardware/firmware failure signatures observed on `orange-pi-5-pro`
+
+When `playbooks/test_hardware_e2e.yml` reports an opaque
+`wait_for_connection: timed out` for `orange-pi-5-pro`, the underlying
+cause is almost always one of these five distinct hardware/firmware
+failure modes — not a software regression in this collection. Each
+signature has a unique serial-side fingerprint; grep the `socat`
+capture (or whichever serial log the e2e wrote) for the fragment in
+column 2 to disambiguate. Issue
+[#38](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/38)
+carries the full per-signature stanza (frequency, triggers, false
+friends, history) — this table is the fast lookup.
+
+| #  | Short name                       | Serial fingerprint (literal grep target)         | Root cause                                                                                                                                  | Mitigation                                                                                                                                                                                                                                                                |
+|----|----------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1  | SD voltage-select fail           | `Card did not respond to voltage select! : -110` | RK3588S SD-controller voltage-init flake; PSU sag during cold start.                                                                        | Increase PoE drain via `-e poe_cycle_delay=20–30` (the 5 s default is too short for this board's PSU caps). Hardware-side: known-good 802.3at PSU.                                                                                                                        |
+| 2  | Ethernet PHY DMA stuck           | `EQOS_DMA_MODE_SWR stuck` then `FAILED: -110`    | U-Boot `eth_eqos` driver fails GMAC DMA reset; PHY never transmits.                                                                         | Longer PoE drain helps. No in-band recovery while U-Boot is in BOOTP-retry; only a power cycle clears it. Symptomatically silent against the e2e — Phase 2 NFS-mount assertion catches the silent fall-through to SD boot.                                                |
+| 3  | Mid-kernel-load SoC reset        | `Starting kernel ...` immediately followed by `DDR 9fa84341ce typ` (RK3588S DDR re-init) | SoC resets at the U-Boot → kernel handoff. PSU sag during the kernel-image checksum / read.                                                 | Out of software's reach — the kernel never executes a single instruction so cmdline flags are moot. Persistent recurrence indicates marginal PSU/SoC; physical recovery path. PR #40's verbose mode does NOT help with this signature.                                    |
+| 4  | Silent post-`Starting kernel`    | `Starting kernel ...` then total serial silence  | Kernel runs but stalls before ttyS2 driver init (or after, with output suppressed). User-space init failures land here too.                 | This is the only signature `pxelinux_verbose=true` (PR #40) helps with. `earlycon` covers the pre-ttyS2 window; `initcall_debug` + `systemd.log_target=console` catch kernel-init and userspace-init stalls. Only effective on the PXE path (Phase 2), not Phase 1 SD boot. |
+| 5  | NetbootXYZ fallback              | `Filename 'netboot.xyz.kpxe'` followed by a normal `Starting kernel ...` from NetbootXYZ | Cascade: per-board `pxelinux.cfg/01-<MAC>` lookup fails → fall-through PXE attempts ALL fail → U-Boot picks rb5009's default tftp rule, which serves NetbootXYZ. Board lands in NetbootXYZ menu, no sshd. | Confirm rb5009-side via the diagnostic bundle's TFTP log slurp (PR #42). Then check that the per-board `/ip tftp` row exists with the right `req-filename` regex (`/ip tftp print where real-filename~"01-<mac>"` on rb5009). Often a downstream symptom of an earlier-stage failure (#1/#3) that just happened to trip the fallback rule. |
+
+Software/hardware boundaries to keep in mind:
+
+- Signatures **#1 and #2** are firmware/U-Boot-level. The kernel never
+  starts. Kernel cmdline is irrelevant.
+- Signature **#3** is at the U-Boot → kernel handoff. The kernel
+  doesn't process any cmdline; verbose mode does not help.
+- Signature **#4** is post-kernel-start. Verbose mode (`earlycon` +
+  `initcall_debug` + `systemd.log_target=console`) is designed for
+  this signature — but only on the PXE path (Phase 2), since
+  pxelinux.cfg is not consulted on Phase 1 SD boot.
+- Signature **#5** is a downstream symptom; the immediate fix is
+  confirming rb5009's `/ip tftp` rules, but the root cause is usually
+  earlier in the boot chain.
+
+The recurring root-cause theme across #1/#3/#4 is **PSU margin during
+high-current transients** (SD-controller voltage init, DDR re-init,
+kernel image read). When a board exhibits multiple of these
+signatures across sessions, the practical answer is hardware
+inspection (PSU lead, SD seat, board swap) — not more software
+mitigation.

@@ -22,14 +22,20 @@
   gather_facts: false
 
   vars:
+    # Connection overrides for the freshly-flashed-image state: the
+    # board only has the Armbian default root user with the default
+    # password until this playbook provisions the inventory user.
+    # The role-level vars (bootstrap_armbian_user,
+    # bootstrap_armbian_ssh_keys) are sourced from inventory
+    # (inventory/group_vars/all.yml in this repo, the operator's
+    # equivalent in their real inventory). The role asserts
+    # bootstrap_armbian_ssh_keys is non-empty before doing anything
+    # destructive, so a missing inventory definition fails fast and
+    # actionably.
     ansible_user: root
     ansible_password: "{{ armbian_default_password }}"
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     ansible_become: false
-
-    bootstrap_armbian_ssh_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWgNfV1zdod84sj28d+z7YBLkaD5ZImElWt8zHw+u7/"
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINHO7UsiIgAepf5+s2z+1CbPQf2eqJo8aNK/vT9Oaf4B"
 
   roles:
     - role: bootstrap_armbian
