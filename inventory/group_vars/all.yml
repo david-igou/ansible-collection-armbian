@@ -43,6 +43,20 @@ armbian_image_urls:
 # board_configs.<model>.uboot_apt_package field in the collection.
 armbian_branch: "current"
 
+# Public SSH keys installed on a board's freshly-flashed Armbian image
+# by `playbooks/bootstrap_armbian.yml`. Used by both the operator's
+# manual bootstrap workflow and the e2e harness's auto-bootstrap path
+# (test_hardware_e2e.yml shells out to bootstrap_armbian.yml when it
+# detects a freshly-reflashed board).
+#
+# Required (the role asserts non-empty before doing anything destructive).
+# Duplicate this list verbatim into your real inventory's
+# group_vars/all/<file>.yml — the doc-only inventory here is not loaded
+# at runtime.
+bootstrap_armbian_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWgNfV1zdod84sj28d+z7YBLkaD5ZImElWt8zHw+u7/"
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINHO7UsiIgAepf5+s2z+1CbPQf2eqJo8aNK/vT9Oaf4B"
+
 # Verbose / diagnostic kernel cmdline for PXE-booted boards.
 #
 # When true, roles/routeros_dhcp/templates/pxelinux_cfg.j2 appends a
