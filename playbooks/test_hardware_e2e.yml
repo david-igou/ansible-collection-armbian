@@ -76,6 +76,14 @@
     serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
+    # boot_retry_attempts: 0 preserves prior behavior (no retries).
+    # Each value above 0 adds another attempt at the per-phase
+    # routeros_poe cycle + wait_for TCP/22 sequence. Useful against
+    # PoE-HAT-driven cold-boot intermittency (#38) where the same
+    # hardware succeeds on retry. boot_retry_attempts: 2 (= up to 3
+    # total attempts per phase) tends to drive eventually-consistent
+    # green rates on flaky setups.
+    boot_retry_attempts: 0
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
@@ -229,12 +237,6 @@
         - name: Phase 1 — disk-boot baseline (skippable via skip_baseline=true)
           when: not (skip_baseline | bool)
           block:
-            - name: Phase 1 — PoE cycle to disk-boot baseline
-              ansible.builtin.include_role:
-                name: routeros_poe
-              vars:
-                poe_action: cycle
-
             # Auto-bootstrap detection. After a fresh SD-card reflash the
             # board boots cleanly but the inventory user (ansible_user)
             # doesn't exist yet — only the Armbian default root user does.
@@ -243,8 +245,10 @@
             # password)` and ultimately reports an opaque "timed out" that
             # looks identical to a hardware boot hang. The detection below
             # distinguishes those:
-            #   1. wait_for TCP/22 — identity-agnostic; a real boot failure
-            #      still times out here.
+            #   1. wait_for TCP/22 (inside cold_boot_with_retry, with
+            #      optional retry on cold-boot intermittency) —
+            #      identity-agnostic; a real boot failure still times
+            #      out across all attempts.
             #   2. one short wait_for_connection probe as the inventory
             #      user — succeeds quickly if bootstrap already ran.
             #   3. if (1) succeeds and (2) fails, the board is freshly
@@ -254,13 +258,11 @@
             # auto-bootstrap path fully aligned with the operator's manual
             # workflow — same playbook, same vars, same SSH keys baked in
             # — without duplicating the connection/var setup here.
-            - name: Phase 1 — wait for board TCP/22 (identity-agnostic)
-              ansible.builtin.wait_for:
-                host: "{{ ansible_host | default(inventory_hostname) }}"
-                port: 22
-                timeout: "{{ _tcp_probe_timeout | default(180) }}"
-                state: started
-              delegate_to: localhost
+            - name: Phase 1 — PoE cycle + wait for TCP/22 (with retries)
+              ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+              vars:
+                _phase_label: "Phase 1"
+                _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
 
             # ignore_errors: true (no failed_when override) so the
             # registered _inv_probe.failed reflects the real outcome
@@ -355,12 +357,6 @@
                 board_model: "{{ hostvars[inventory_hostname].board_model }}"
                 target_board_host: "{{ inventory_hostname }}"
 
-        - name: Phase 2 — PoE cycle into nfsroot
-          ansible.builtin.include_role:
-            name: routeros_poe
-          vars:
-            poe_action: cycle
-
         # Same auto-bootstrap pattern as Phase 1's pre-wait. The
         # per-host NFS rootfs is initially cloned from
         # _templates/<model>/ (stock Armbian image), so a never-
@@ -378,21 +374,21 @@
         #
         # The probe + auto-bootstrap structure makes Phase 2 work
         # both ways:
-        #   1. wait_for TCP/22 — identity-agnostic; a real NFS-boot
-        #      hardware/network failure surfaces here.
+        #   1. wait_for TCP/22 (inside cold_boot_with_retry, with
+        #      optional retries) — identity-agnostic; a real NFS-boot
+        #      hardware/network failure still surfaces across all
+        #      attempts.
         #   2. one short wait_for_connection probe as the inventory
         #      user (key auth) — succeeds quickly if the per-host
         #      NFS rootfs is already bootstrapped.
         #   3. if (1) succeeds and (2) fails, bootstrap_armbian
         #      inline against the NFS-rootfs root account; then fall
         #      through to the regular wait below as the inv user.
-        - name: Phase 2 — wait for board TCP/22 (NFS boot, identity-agnostic)
-          ansible.builtin.wait_for:
-            host: "{{ ansible_host | default(inventory_hostname) }}"
-            port: 22
-            timeout: "{{ _tcp_probe_timeout | default(180) }}"
-            state: started
-          delegate_to: localhost
+        - name: Phase 2 — PoE cycle + wait for TCP/22 (with retries)
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "Phase 2"
+            _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 2 — reset connection so new identity takes effect
           ansible.builtin.meta: reset_connection
@@ -545,13 +541,6 @@
                 board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
 
-        - name: Cleanup — PoE cycle back to disk boot
-          ansible.builtin.include_role:
-            name: routeros_poe
-          vars:
-            poe_action: cycle
-          when: not (leave_state | bool)
-
         - name: Cleanup — reset connection to inventory identity
           ansible.builtin.meta: reset_connection
           when: not (leave_state | bool)
@@ -567,13 +556,11 @@
         # in a usable state regardless of which path Phase 1 took. The
         # leave_state guard preserves the existing forensic-mode
         # contract: leave_state=true means "do not mutate."
-        - name: Cleanup — wait for board TCP/22 (identity-agnostic)
-          ansible.builtin.wait_for:
-            host: "{{ ansible_host | default(inventory_hostname) }}"
-            port: 22
-            timeout: "{{ _tcp_probe_timeout | default(180) }}"
-            state: started
-          delegate_to: localhost
+        - name: Cleanup — PoE cycle + wait for TCP/22 (with retries)
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "Cleanup"
+            _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
           when: not (leave_state | bool)
 
         # See the matching comment on the Phase 1 probe — the same

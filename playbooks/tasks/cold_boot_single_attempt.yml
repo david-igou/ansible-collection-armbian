@@ -1,0 +1,33 @@
+---
+# One attempt at PoE cycle + wait_for TCP/22. Wrapped in block/rescue
+# so a failure here doesn't propagate up the include chain — the outer
+# loop in cold_boot_with_retry.yml advances to the next attempt
+# instead. Caller is responsible for asserting _boot_succeeded after
+# the loop completes.
+
+- block:
+    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — PoE cycle"
+      ansible.builtin.include_role:
+        name: routeros_poe
+      vars:
+        poe_action: cycle
+
+    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — wait for board TCP/22"
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        timeout: "{{ _tcp_probe_timeout | default(180) }}"
+        state: started
+      delegate_to: localhost
+
+    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — succeeded"
+      ansible.builtin.set_fact:
+        _boot_succeeded: true
+
+  rescue:
+    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — failed, will retry if attempts remain"
+      ansible.builtin.debug:
+        msg: >-
+          {{ _phase_label }} cold boot attempt {{ _attempt_num }} of
+          {{ _boot_max_attempts }} failed (PoE cycle or TCP/22 timeout).
+          Will continue to the next attempt if any remain.

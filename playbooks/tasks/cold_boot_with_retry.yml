@@ -1,0 +1,53 @@
+---
+# Reusable cold-boot-with-retry sequence for test_hardware_e2e.yml.
+#
+# Wraps a routeros_poe cycle + wait_for TCP/22 in a retry loop. The
+# dominant failure mode in #38 is "board didn't come up after PoE
+# cycle" (TCP/22 timeout at 180 s) — recurrence ~30-40 % even on the
+# best PoE-HAT + drain-delay config, dropping to 0 % on a direct
+# USB-C PSU (#38 comment-4416940505 — the HAT's buck-converter
+# transient response under cold-boot inrush is the bottleneck, not
+# raw current capacity). Until that's fixed at the hardware level
+# (different HAT, or external PoE-injector + barrel-jack-to-USB-C),
+# retrying the cold boot converts the dominant hard-fail into
+# eventually-consistent automation.
+#
+# Inputs (vars from caller):
+#   _phase_label         human label (e.g. "Phase 1", "Phase 2", "Cleanup")
+#   _boot_max_attempts   total attempts incl. first; 1 = no retry,
+#                        2 = one retry, etc. Caller usually computes
+#                        as (boot_retry_attempts | default(0)) + 1.
+#
+# Outputs:
+#   _boot_succeeded      fact set true if any attempt succeeded.
+#                        Asserted at the end of this file.
+#
+# Each attempt: routeros_poe cycle (off → poe_cycle_delay drain → on)
+# + wait_for TCP/22 with _tcp_probe_timeout (default 180 s). A failure
+# in either step is caught by the per-attempt rescue and the loop
+# advances to the next attempt; the outer assert at the end fails the
+# play only if all attempts exhaust.
+
+- name: "{{ _phase_label }} — initialize boot tracking"
+  ansible.builtin.set_fact:
+    _boot_succeeded: false
+
+- name: "{{ _phase_label }} — attempt boot ({{ _boot_max_attempts }} max)"
+  ansible.builtin.include_tasks: cold_boot_single_attempt.yml
+  loop: "{{ range(1, _boot_max_attempts | int + 1) | list }}"
+  loop_control:
+    loop_var: _attempt_num
+    label: "{{ _phase_label }} attempt {{ _attempt_num }}/{{ _boot_max_attempts }}"
+  when: not _boot_succeeded
+
+- name: "{{ _phase_label }} — assert boot succeeded"
+  ansible.builtin.assert:
+    that: _boot_succeeded
+    fail_msg: >-
+      {{ _phase_label }} cold boot failed after {{ _boot_max_attempts }}
+      attempt(s). Each attempt = routeros_poe cycle (off →
+      poe_cycle_delay drain → on) + wait_for TCP/22
+      ({{ _tcp_probe_timeout | default(180) }}s timeout). Either raise
+      boot_retry_attempts (if iters are hardware-flaky but eventually
+      consistent) or investigate the underlying boot stall (serial
+      trace, board hardware, PSU sufficiency).
