@@ -477,20 +477,22 @@
                 board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
                 target_board_host: "{{ inventory_hostname }}"
 
-        - name: Phase 3 — PoE cycle back to disk
-          ansible.builtin.include_role:
-            name: routeros_poe
-          vars:
-            poe_action: cycle
-
         # Phase 3 intentionally has no block-scoped vars: the Phase 2
         # verify-NFS block has exited so its NFS-root identity vars are
-        # already out of scope. reset_connection here flushes the cached
-        # SSH ControlMaster so wait_for_connection re-opens with the
-        # inventory ansible_user. Do NOT wrap Phase 3 in a vars block for
-        # symmetry with Phase 2 — that would re-introduce the override.
+        # already out of scope. reset_connection runs BEFORE the cold
+        # boot retry so that the retry's internal wait_for_connection
+        # opens a fresh SSH session with the inventory ansible_user,
+        # not the stale ControlMaster from Phase 2's NFS-root identity.
+        # Do NOT wrap Phase 3 in a vars block for symmetry with Phase 2
+        # — that would re-introduce the override.
         - name: Phase 3 — reset connection so inventory identity takes effect
           ansible.builtin.meta: reset_connection
+
+        - name: Phase 3 — PoE cycle + wait for TCP/22 (with retries)
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "Phase 3"
+            _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 3 — wait for SSH (disk-boot identity, with cycle retry)
           ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
