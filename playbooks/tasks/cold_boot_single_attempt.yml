@@ -4,8 +4,23 @@
 # loop in cold_boot_with_retry.yml advances to the next attempt
 # instead. Caller is responsible for asserting _boot_succeeded after
 # the loop completes.
+#
+# `when: not _boot_succeeded` on the block is what makes the outer
+# loop short-circuit after a successful attempt. Putting the gate on
+# the include_tasks itself doesn't work: Ansible with loop+when on
+# include_tasks unrolls *all* iterations upfront and then runs them in
+# order, so the propagated `when` is evaluated per-task inside but
+# doesn't actually skip subsequent loop iterations in the way you'd
+# expect from a normal retry. Gating the block directly here is
+# what makes "stop after first success" work — without it the loop
+# blindly runs all N attempts (each doing a fresh PoE cycle that may
+# fail), and the final board state depends on the *last* attempt
+# rather than the first successful one. Verified buggy without this
+# gate in iter 73 of #38.
 
-- block:
+- name: "{{ _phase_label }} attempt {{ _attempt_num }} block"
+  when: not (_boot_succeeded | default(false))
+  block:
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — PoE cycle"
       ansible.builtin.include_role:
         name: routeros_poe
