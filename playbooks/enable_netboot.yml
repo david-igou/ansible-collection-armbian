@@ -1,33 +1,31 @@
 ---
 # Enables network boot for one or more boards.
 #
-# Writes per-board pxelinux.cfg + /ip tftp row on rb5009, then PoE-
-# cycles each board and waits for it to come back up on NFS root.
-# Eventually-consistent against the PoE-HAT cold-boot intermittency
-# documented in #38 — set boot_retry_attempts > 0 to retry failed
-# cold boots up to N additional times.
+# Two plays: pre-flight plumbing check on the netboot router, then a
+# board-facing play that invokes the david_igou.armbian_netboot.board_boot_state
+# role with boot_state=pxe. The role internally writes the per-board
+# pxelinux.cfg + /ip tftp row on netboot_router (delegated from the
+# boards play), then PoE-cycles the board and verifies the resulting
+# NFS rootfs.
 #
-# Pre-condition: stage_netboot_assets.yml has run successfully so the
-# per-model kernel/initrd/dtb /ip tftp rows exist on rb5009. The
-# plumbing-check preflight catches missing rows with an actionable
-# error message.
+# Required inventory configuration:
+#   - netboot_router (in group_vars/boards.yml): inventory hostname of
+#     the RouterOS router that owns SBC TFTP/DHCP state.
+#   See docs/board_boot_state-role.md for the full configuration matrix.
+#
+# Eventually-consistent against PoE-HAT cold-boot intermittency (issue
+# #38) — set boot_retry_attempts > 0 to retry failed cold boots up to N
+# additional times. See docs/retry-configuration.md for recommended
+# combinations.
 #
 # Usage:
-#   # Enable NFS root mode for a specific board, default (no retries)
+#   # Enable NFS root mode for a specific board, default knobs
 #   ansible-playbook playbooks/enable_netboot.yml --limit orange-pi-5-pro-01
-#
-#   # Enable for all boards
-#   ansible-playbook playbooks/enable_netboot.yml
 #
 #   # With retries — try up to 3 cold-boot attempts before giving up
 #   ansible-playbook playbooks/enable_netboot.yml \
 #     --limit orange-pi-5-pro-01 \
-#     -e boot_retry_attempts=2
-#
-#   # Bigger per-attempt timeout (slow board)
-#   ansible-playbook playbooks/enable_netboot.yml \
-#     --limit orange-pi-5-pro-01 \
-#     -e boot_attempt_timeout=240
+#     -e boot_retry_attempts=2 -e poe_cycle_delay=60
 #
 #   # Configure rb5009 only — don't cycle the board (e.g. it's currently
 #   # off; you want it to PXE-boot whenever it gets powered later)
@@ -35,7 +33,7 @@
 #     --limit orange-pi-5-pro-01 \
 #     -e netboot_reboot=false
 
-- name: Configure SBC TFTP on rb5009 for each target board
+- name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
   hosts: routeros_routers
   gather_facts: false
   tasks:
@@ -51,60 +49,13 @@
       run_once: true
       tags: preflight
 
-    - name: Write per-board pxelinux.cfg + /ip tftp row
-      ansible.builtin.include_role:
-        name: routeros_dhcp
-        tasks_from: write_pxelinux_cfg.yml
-      vars:
-        board_mac: "{{ hostvars[item]['board_mac'] }}"
-        board_model: "{{ hostvars[item]['board_model'] }}"
-        target_board_host: "{{ item }}"
-      loop: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
-      loop_control:
-        label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
-
-- name: PoE cycle boards into NFS root and verify
+- name: Bring board(s) into PXE/NFS-root state
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
-  vars:
-    # See test_hardware_e2e.yml's vars block for full commentary on
-    # these two knobs.
-    boot_retry_attempts: 0
-    boot_attempt_timeout: 180
-    _ssh_wait_timeout: 300
   tasks:
-    - name: Cycle into NFS root and verify
-      when: netboot_reboot | default(true) | bool
-      block:
-        - name: PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
-          vars:
-            _phase_label: "enable_netboot"
-            _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
-
-        - name: Wait for SSH (inventory identity)
-          ansible.builtin.wait_for_connection:
-            delay: 5
-            timeout: "{{ _ssh_wait_timeout }}"
-
-        - name: Gather facts
-          ansible.builtin.setup:
-
-        - name: Capture root mount facts
-          ansible.builtin.set_fact:
-            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                                             | map(attribute='fstype') | first }}"
-            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
-                                             | map(attribute='device') | first }}"
-
-        - name: Assert rootfs is NFS
-          ansible.builtin.assert:
-            that:
-              - _root_fstype in ['nfs', 'nfs4']
-            fail_msg: >-
-              enable_netboot: expected NFS rootfs after PoE cycle but
-              got {{ _root_fstype }} ({{ _root_device }}). pxelinux.cfg
-              + /ip tftp row are on rb5009 (Play 1 succeeded), so the
-              board's PXE bootflow either skipped pxelinux.cfg or fell
-              through to local boot. Check rb5009's /ip tftp hit
-              counters and recent tftp,error log entries for clues.
+    - name: Apply PXE boot state
+      ansible.builtin.include_role:
+        name: board_boot_state
+      vars:
+        boot_state: pxe
+        cycle_board: "{{ netboot_reboot | default(true) }}"

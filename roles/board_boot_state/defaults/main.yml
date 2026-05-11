@@ -1,0 +1,29 @@
+---
+# Defaults for the board_boot_state role.
+#
+# See meta/argument_specs.yml for the full contract — descriptions,
+# types, and required-vs-optional. Or:
+#   ansible-doc -t role david_igou.armbian_netboot.board_boot_state
+
+# Retry / timeout knobs — see docs/retry-configuration.md for tuning
+# guidance and recommended combinations.
+boot_retry_attempts: 0
+boot_attempt_timeout: 180
+ssh_wait_timeout: 90
+# Layer-2 retry depth defaults to layer-1's so the two layers scale
+# together. Override explicitly (int) when asymmetric depths are wanted.
+ssh_wait_retry_attempts: "{{ boot_retry_attempts }}"
+post_boot_wait_timeout: 300
+poe_cycle_delay: 5
+
+# Flow control.
+cycle_board: true
+verify_state: true
+
+# boot_state intentionally has no default — caller must declare
+# pxe or disk. argument_specs enforces this.
+#
+# netboot_router intentionally has no default — caller must set it
+# in inventory (typically inventory/group_vars/boards.yml as
+# `netboot_router: rb5009`). The role's contract is that rb5009
+# ownership is an explicit deployment decision, not a magic constant.

@@ -25,11 +25,19 @@ parameters, in what order.
 | Role | Enforces / produces |
 |---|---|
 | `armbian_build` | `.img.xz` Armbian image with PXE-first U-Boot baked in, published to netboot server |
+| `board_boot_state` | Board in `boot_state: pxe \| disk` (rb5009 mutation + PoE cycle + rootfs verify); the end-to-end netboot toggle |
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
 | `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
 | `routeros_dhcp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
+
+`board_boot_state` is the top-level composer for the netboot toggle:
+internally it includes `routeros_dhcp` (rb5009 mutation, delegated)
+and `routeros_poe` (PoE cycle, delegated) and wraps both in a
+two-layer retry stack. The `enable_netboot.yml` / `disable_netboot.yml`
+playbooks are thin wrappers that invoke this role with `boot_state: pxe`
+or `disk`. See [`docs/board_boot_state-role.md`](docs/board_boot_state-role.md).
 
 ## ✅ Status: v1 = orangepi5pro netboot capability only
 
@@ -60,6 +68,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   └── boards.yml            # Per-board metadata (v1: orange-pi-5-pro only)
 ├── roles/
 │   ├── armbian_build/             # Build custom .img.xz on armbian_builders host
+│   ├── board_boot_state/          # End-to-end boot toggle (boot_state: pxe|disk); composes the roles below + retry stack
 │   ├── bootstrap_armbian/         # Provision passwordless-sudo SSH-key user
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
 │   ├── netboot_assets/               # Populate NFS exports (preflight + per-model + per-host)
@@ -81,9 +90,12 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── hosts.yml             # orange-pi-5-pro example only
 │   └── group_vars/
 │       ├── all.yml           # Global vars (image URLs, NFS paths, etc.)
+│       ├── boards.yml        # board_boot_state inputs (netboot_router, retry knobs)
 │       └── routeros.yml      # network_cli connection plumbing
 └── docs/
     ├── architecture.md
+    ├── board_boot_state-role.md  # board_boot_state role reference + usage matrix
+    ├── retry-configuration.md    # Retry/timeout knob tuning recipes
     ├── routeros-setup.md
     └── superpowers/specs/    # Design specs (this repo's history of decisions)
 ```
@@ -205,6 +217,14 @@ value must exactly match a key in `vars/boards.yml`.
 For PoE-powered boards, also set `poe_switch` (inventory hostname of the RouterOS switch
 providing power) and `poe_port` (interface name on that switch, e.g. `ether3`). These are
 required by `playbooks/poe_control.yml`.
+
+**`netboot_router`** (required by the `board_boot_state` role, consumed by
+`enable_netboot.yml` / `disable_netboot.yml` / `test_hardware_e2e.yml`) — set in
+`inventory/group_vars/boards.yml` as `netboot_router: rb5009`. Identifies the RouterOS
+host the role delegates rb5009 mutations to. The role validates this is defined via
+`meta/argument_specs.yml` and fails loudly if missing. Run
+`ansible-doc -t role david_igou.armbian_netboot.board_boot_state` for the full contract,
+or see [`docs/board_boot_state-role.md`](docs/board_boot_state-role.md).
 
 ## Architecture
 
@@ -370,6 +390,10 @@ knows its own switch and port, so delegation routes the command correctly withou
 ## Key files
 
 - `vars/boards.yml` — authoritative per-board metadata (v1: orangepi5pro)
+- `roles/board_boot_state/meta/argument_specs.yml` — board_boot_state role contract (validated at include time)
+- `roles/board_boot_state/tasks/main.yml` — board_boot_state dispatcher (configure → cycle → verify)
+- `roles/board_boot_state/tasks/cold_boot_with_retry.yml` — layer-1 retry primitive (PoE cycle + TCP/22 + ssh-ping)
+- `roles/board_boot_state/tasks/wait_for_ssh_with_cycle_retry.yml` — layer-2 retry primitive (post-boot SSH wait + cycle retry)
 - `roles/netboot_assets/tasks/preflight.yml` — image URL HEAD validation
 - `roles/netboot_assets/tasks/per_host.yml` — per-host rootfs clone + identity reset
 - `roles/netboot_assets/tasks/stage_rb5009.yml` — net_put kernel/initrd/dtb to rb5009
@@ -377,7 +401,10 @@ knows its own switch and port, so delegation routes the command correctly withou
 - `roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml` — render locally, net_put per-board pxelinux.cfg to rb5009
 - `roles/routeros_dhcp/tasks/remove_pxelinux_cfg.yml` — remove /ip tftp row + flash file
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs (edit before first run)
+- `inventory/group_vars/boards.yml` — `netboot_router` and board_boot_state retry-knob overrides
 - `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host PXE boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
 - `playbooks/build_image.yml` — custom Armbian image build pipeline
 - `galaxy.yml` — collection namespace, version, external dependencies
+- `docs/board_boot_state-role.md` — board_boot_state role reference + common configurations
+- `docs/retry-configuration.md` — retry/timeout knob recipes
