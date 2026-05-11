@@ -84,6 +84,14 @@
     # total attempts per phase) tends to drive eventually-consistent
     # green rates on flaky setups.
     boot_retry_attempts: 0
+    # boot_attempt_timeout: seconds to wait for TCP/22 within a
+    # single attempt before declaring it failed and either retrying
+    # or giving up. 180 s is the historical default and covers a
+    # ~90 s ATF + U-Boot + kernel + systemd warm boot with comfortable
+    # margin. Raise it for boards with genuinely longer cold-boot
+    # paths; raising it to mask intermittency is the wrong knob —
+    # raise boot_retry_attempts instead.
+    boot_attempt_timeout: 180
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"

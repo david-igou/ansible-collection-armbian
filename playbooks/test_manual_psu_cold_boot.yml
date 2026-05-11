@@ -51,7 +51,7 @@
     serial_baud: 1500000
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
-    _tcp_probe_timeout: 180
+    boot_attempt_timeout: 180
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
     _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
@@ -165,7 +165,7 @@
           ansible.builtin.wait_for:
             host: "{{ ansible_host | default(inventory_hostname) }}"
             port: 22
-            timeout: "{{ _tcp_probe_timeout | default(180) }}"
+            timeout: "{{ boot_attempt_timeout | default(180) }}"
             state: started
           delegate_to: localhost
 

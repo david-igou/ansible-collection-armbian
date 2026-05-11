@@ -16,7 +16,7 @@
       ansible.builtin.wait_for:
         host: "{{ ansible_host | default(inventory_hostname) }}"
         port: 22
-        timeout: "{{ _tcp_probe_timeout | default(180) }}"
+        timeout: "{{ boot_attempt_timeout | default(180) }}"
         state: started
       delegate_to: localhost
 

@@ -1,13 +1,24 @@
 ---
 # Reverts boards to disk boot by removing per-board pxelinux.cfg
-# /ip tftp row + flash file from rb5009. U-Boot's PXE bootmeth then
-# fast-404s through the fallback chain and falls through to MMC.
+# /ip tftp row + flash file from rb5009, then PoE-cycles each board
+# and waits for it to come back up on a local block device. U-Boot's
+# PXE bootmeth fast-404s through the fallback chain and falls through
+# to MMC.
+#
+# Eventually-consistent against the PoE-HAT cold-boot intermittency
+# documented in #38 — set boot_retry_attempts > 0 to retry failed
+# cold boots up to N additional times.
 #
 # Usage:
 #   ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
 #
-# To disable without rebooting:
-#   ansible-playbook playbooks/disable_netboot.yml --limit ... -e netboot_reboot=false
+#   # With retries
+#   ansible-playbook playbooks/disable_netboot.yml \
+#     --limit orange-pi-5-pro-01 -e boot_retry_attempts=2
+#
+#   # Configure rb5009 only — don't cycle the board
+#   ansible-playbook playbooks/disable_netboot.yml \
+#     --limit orange-pi-5-pro-01 -e netboot_reboot=false
 
 - name: Remove SBC TFTP entries on rb5009 for each target board
   hosts: routeros_routers
@@ -24,14 +35,51 @@
       loop_control:
         label: "{{ item }} ({{ hostvars[item]['board_model'] }})"
 
-- name: Reboot boards to revert to disk boot
+- name: PoE cycle boards back to disk boot and verify
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
+  vars:
+    # See test_hardware_e2e.yml's vars block for full commentary on
+    # these two knobs.
+    boot_retry_attempts: 0
+    boot_attempt_timeout: 180
+    _ssh_wait_timeout: 300
   tasks:
-    - name: Reboot to fall through to SD
-      ansible.builtin.command: reboot
-      async: 1
-      poll: 0
-      ignore_errors: true # noqa: ignore-errors
-      changed_when: true
+    - name: Cycle back to disk and verify
       when: netboot_reboot | default(true) | bool
+      block:
+        - name: PoE cycle + wait for TCP/22 (with retries)
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "disable_netboot"
+            _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
+
+        - name: Wait for SSH (inventory identity)
+          ansible.builtin.wait_for_connection:
+            delay: 5
+            timeout: "{{ _ssh_wait_timeout }}"
+
+        - name: Gather facts
+          ansible.builtin.setup:
+
+        - name: Capture root mount facts
+          ansible.builtin.set_fact:
+            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='fstype') | first }}"
+            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='device') | first }}"
+
+        - name: Assert rootfs is on a local block device
+          ansible.builtin.assert:
+            that:
+              - _root_fstype not in ['nfs', 'nfs4']
+              - _root_device is match('^/dev/')
+            fail_msg: >-
+              disable_netboot: expected disk rootfs (/dev/<block>) after
+              PoE cycle but got {{ _root_device }} ({{ _root_fstype }}).
+              pxelinux.cfg + /ip tftp row were removed from rb5009 (Play 1
+              succeeded), so the board's PXE bootflow should have fast-
+              404'd through to local SD. Check that no stale entries
+              remain on rb5009 (/ip tftp print where req-filename~"01-"
+              and /file find name~"pxelinux.cfg/01-") and that the
+              board's local SD bootloader is healthy.
