@@ -320,10 +320,10 @@
                     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
                     ansible_become: false
 
-            - name: Phase 1 — wait for SSH (disk-boot identity)
-              ansible.builtin.wait_for_connection:
-                delay: 30
-                timeout: "{{ _wait_timeout }}"
+            - name: Phase 1 — wait for SSH (disk-boot identity, with cycle retry)
+              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              vars:
+                _phase_label: "Phase 1"
 
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
@@ -433,10 +433,10 @@
 
         - name: Phase 2 — verify NFS-mounted boot
           block:
-            - name: Phase 2 — wait for SSH (NFS-root identity)
-              ansible.builtin.wait_for_connection:
-                delay: 30
-                timeout: "{{ _wait_timeout }}"
+            - name: Phase 2 — wait for SSH (NFS-root identity, with cycle retry)
+              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              vars:
+                _phase_label: "Phase 2"
 
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
@@ -492,10 +492,10 @@
         - name: Phase 3 — reset connection so inventory identity takes effect
           ansible.builtin.meta: reset_connection
 
-        - name: Phase 3 — wait for SSH (disk-boot identity)
-          ansible.builtin.wait_for_connection:
-            delay: 30
-            timeout: "{{ _wait_timeout }}"
+        - name: Phase 3 — wait for SSH (disk-boot identity, with cycle retry)
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          vars:
+            _phase_label: "Phase 3"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -607,10 +607,10 @@
                 ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
                 ansible_become: false
 
-        - name: Cleanup — wait for SSH after cleanup cycle
-          ansible.builtin.wait_for_connection:
-            delay: 30
-            timeout: "{{ _wait_timeout }}"
+        - name: Cleanup — wait for SSH after cleanup cycle (with cycle retry)
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          vars:
+            _phase_label: "Cleanup"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to disk boot
