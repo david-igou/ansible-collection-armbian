@@ -1,0 +1,235 @@
+---
+# Manual-PSU cold-boot test for USB-C powered RK3588(S) boards.
+#
+# Same shape as test_hardware_e2e.yml's Phase 2 (write pxelinux.cfg +
+# verify NFS-rooted boot), but the power transitions are operator-
+# driven `ansible.builtin.pause` prompts instead of a routeros_poe
+# cycle on the switch. Use this when the board is being powered via
+# its USB-C input from an external PSU rather than via PoE — typical
+# scenario: A/B-testing PSU sufficiency against a reference supply
+# (Radxa 5 V/5 A or similar) while the PoE HAT is off the board so
+# the serial UART pins are accessible.
+#
+# Pre-conditions:
+#   - PSU is DISCONNECTED (board is off) at invocation.
+#   - rb5009 is reachable.
+#   - Serial UART (USB-FTDI) is connected on serial_host's
+#     /dev/ttyUSB0 if capture_serial is true (default).
+#   - Board's Ethernet is wired (PoE port is fine even though no
+#     power is delivered — the port still passes data).
+#
+# Workflow per invocation (one cold boot per run):
+#   1. Pre-flight serial capture starts on serial_host.
+#   2. Per-board pxelinux.cfg + /ip tftp row written to rb5009.
+#   3. PAUSE: prompt operator to plug in PSU.
+#   4. wait_for TCP/22 (board cold-boots via PXE → NFS).
+#   5. wait_for_connection (inv user SSH ready).
+#   6. Gather root mount facts, assert rootfs is NFS.
+#   7. Diagnostic bundle.
+#   8. ALWAYS-block: remove pxelinux.cfg + /ip tftp row, stop serial,
+#      PAUSE: prompt operator to unplug PSU for next iter.
+#
+# Usage:
+#   ansible-playbook playbooks/test_manual_psu_cold_boot.yml \
+#     --limit opi5pro-01.igou.systems \
+#     -e armbian_default_password=1234
+#
+# Wrapper-driven (per-iter artifacts + auto-comment, same as run-iter.sh
+# but invoking this playbook):
+#   PLAYBOOK=playbooks/test_manual_psu_cold_boot.yml \
+#     playbooks/scripts/run-iter.sh <N>
+#   (run-iter.sh does not currently support PLAYBOOK override; for now
+#    invoke ansible-playbook directly.)
+
+- name: Manual-PSU cold-boot test (single cold boot per run)
+  hosts: boards
+  gather_facts: false
+  vars:
+    capture_serial: true
+    serial_host: localhost
+    serial_device: /dev/ttyUSB0
+    serial_baud: 1500000
+    _routeros_target: "{{ groups['routeros_routers'] | first }}"
+    _wait_timeout: 300
+    _tcp_probe_timeout: 180
+    _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
+
+  tasks:
+    - name: Pre-flight — assert exactly one board targeted
+      ansible.builtin.assert:
+        that: ansible_play_hosts | length == 1
+        fail_msg: >-
+          test_manual_psu_cold_boot.yml is single-board. Pass
+          --limit <hostname>. Got {{ ansible_play_hosts | length }}
+          hosts: {{ ansible_play_hosts }}
+      run_once: true
+
+    - name: Pre-flight — assert armbian_default_password is set
+      ansible.builtin.assert:
+        that:
+          - armbian_default_password is defined
+          - armbian_default_password | length > 0
+        fail_msg: >-
+          armbian_default_password must be set. Pass via
+          -e armbian_default_password=<pw> or set in inventory.
+      run_once: true
+
+    # Defensive pre-start kill of any leftover socat reading the
+    # serial device — same idea as test_hardware_e2e.yml's
+    # Serial — kill any pre-existing socat task.
+    - name: Pre-flight — start serial capture
+      when: capture_serial | bool
+      delegate_to: "{{ serial_host }}"
+      run_once: true
+      become: true
+      block:
+        - name: Serial — assert socat is available
+          ansible.builtin.command:
+            cmd: which socat
+          changed_when: false
+
+        - name: Serial — assert serial device exists
+          ansible.builtin.stat:
+            path: "{{ serial_device }}"
+          register: _serial_dev_stat
+          failed_when: not _serial_dev_stat.stat.exists
+
+        - name: Serial — kill any pre-existing socat on this device
+          ansible.builtin.shell: |
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+            rm -f {{ _serial_pid }}
+          changed_when: false
+
+        - name: Serial — truncate log file and ensure world-readable
+          ansible.builtin.copy:
+            dest: "{{ _serial_log }}"
+            content: ""
+            mode: "0644"
+
+        - name: Serial — configure tty line discipline
+          ansible.builtin.command:
+            cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
+          changed_when: true
+
+        - name: Serial — start socat capture in background
+          ansible.builtin.shell: |
+            echo $$ > {{ _serial_pid }}
+            exec socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0 OPEN:{{ _serial_log }},append
+          async: 86400
+          poll: 0
+          changed_when: true
+
+    - name: Pre-flight — clear stale known_hosts entries on controller
+      ansible.builtin.command:
+        cmd: "ssh-keygen -R {{ item }}"
+      delegate_to: localhost
+      connection: local
+      become: false
+      loop: "{{ [inventory_hostname, ansible_host | default(inventory_hostname)] | unique }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Cold-boot test (cleanup runs in always)
+      block:
+        - name: Setup — wipe + write per-board pxelinux.cfg on rb5009
+          delegate_to: "{{ _routeros_target }}"
+          block:
+            - name: Setup — wipe stale pxelinux.cfg (defensive)
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: remove_pxelinux_cfg.yml
+              vars:
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
+
+            - name: Setup — write per-board pxelinux.cfg + /ip tftp row
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: write_pxelinux_cfg.yml
+              vars:
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                board_model: "{{ hostvars[inventory_hostname].board_model }}"
+                target_board_host: "{{ inventory_hostname }}"
+
+        - name: PSU plug-in — operator action
+          ansible.builtin.pause:
+            prompt: >-
+              =================================================================
+              PLUG IN PSU NOW
+              Board should cold-boot via PXE → NFS.
+              Press Enter once connected (board boot will take ~60-90 s).
+              =================================================================
+
+        - name: Wait for board TCP/22 (identity-agnostic)
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host | default(inventory_hostname) }}"
+            port: 22
+            timeout: "{{ _tcp_probe_timeout | default(180) }}"
+            state: started
+          delegate_to: localhost
+
+        - name: Wait for SSH (inventory identity)
+          ansible.builtin.wait_for_connection:
+            delay: 10
+            timeout: "{{ _wait_timeout }}"
+
+        - name: Gather facts
+          ansible.builtin.setup:
+
+        - name: Capture root mount facts
+          ansible.builtin.set_fact:
+            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='fstype') | first }}"
+            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='device') | first }}"
+
+        - name: Diagnostic bundle
+          ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+          vars:
+            _diag_phase: "manual-psu cold boot — nfsroot verify"
+
+        - name: Assert rootfs is NFS
+          ansible.builtin.assert:
+            that:
+              - _root_fstype in ['nfs', 'nfs4']
+            fail_msg: >-
+              Cold boot completed but rootfs is {{ _root_fstype }}
+              ({{ _root_device }}) — expected NFS. Board did not
+              PXE-boot despite pxelinux.cfg + /ip tftp row being on
+              rb5009. Diagnostic bundle above has /proc/cmdline,
+              findmnt, etc.
+
+      always:
+        - name: Cleanup — remove per-board pxelinux.cfg from rb5009
+          delegate_to: "{{ _routeros_target }}"
+          block:
+            - name: Cleanup — include routeros_dhcp remove_pxelinux_cfg
+              ansible.builtin.include_role:
+                name: routeros_dhcp
+                tasks_from: remove_pxelinux_cfg.yml
+              vars:
+                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+                target_board_host: "{{ inventory_hostname }}"
+
+        - name: Cleanup — stop serial capture
+          ansible.builtin.shell: |
+            if [ -f {{ _serial_pid }} ]; then
+              kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
+              rm -f {{ _serial_pid }}
+            fi
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+          delegate_to: "{{ serial_host }}"
+          run_once: true
+          become: true
+          changed_when: false
+          when: capture_serial | bool
+
+        - name: PSU unplug — operator action (for next iter)
+          ansible.builtin.pause:
+            prompt: >-
+              =================================================================
+              UNPLUG PSU NOW
+              (Required before running the next iter.)
+              Press Enter once disconnected.
+              =================================================================
