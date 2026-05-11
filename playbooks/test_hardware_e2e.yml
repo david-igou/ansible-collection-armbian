@@ -76,24 +76,13 @@
     serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
-    # boot_retry_attempts: 0 preserves prior behavior (no retries).
-    # Each value above 0 adds another attempt at the per-phase
-    # routeros_poe cycle + wait_for TCP/22 sequence. Useful against
-    # PoE-HAT-driven cold-boot intermittency (#38) where the same
-    # hardware succeeds on retry. boot_retry_attempts: 2 (= up to 3
-    # total attempts per phase) tends to drive eventually-consistent
-    # green rates on flaky setups.
-    boot_retry_attempts: 0
-    # boot_attempt_timeout: seconds to wait for TCP/22 within a
-    # single attempt before declaring it failed and either retrying
-    # or giving up. 180 s is the historical default and covers a
-    # ~90 s ATF + U-Boot + kernel + systemd warm boot with comfortable
-    # margin. Raise it for boards with genuinely longer cold-boot
-    # paths; raising it to mask intermittency is the wrong knob —
-    # raise boot_retry_attempts instead.
-    boot_attempt_timeout: 180
-    _routeros_target: "{{ groups['routeros_routers'] | first }}"
-    _wait_timeout: 300
+    # Retry / timeout knobs are inherited from the board_boot_state
+    # role's defaults (defaults/main.yml). Override per-invocation
+    # with -e <knob>=<value>; see docs/retry-configuration.md for
+    # recommended combinations. The e2e harness invokes the role's
+    # tasks_from primitives (cold_boot_with_retry.yml,
+    # wait_for_ssh_with_cycle_retry.yml) which pick up those defaults
+    # at include time.
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
     _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
@@ -212,7 +201,7 @@
           changed_when: true
 
     - name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
-      delegate_to: "{{ _routeros_target }}"
+      delegate_to: "{{ netboot_router }}"
       run_once: true
       block:
         - name: Pre-flight — include netboot_assets plumbing_check
@@ -269,7 +258,7 @@
         # is retained as a tripwire for any other source of unexpected
         # NFS-boot.
         - name: Pre-flight — wipe any stale per-board pxelinux.cfg from rb5009
-          delegate_to: "{{ _routeros_target }}"
+          delegate_to: "{{ netboot_router }}"
           block:
             - name: Pre-flight — include routeros_dhcp remove_pxelinux_cfg
               ansible.builtin.include_role:
@@ -313,7 +302,9 @@
             # workflow — same playbook, same vars, same SSH keys baked in
             # — without duplicating the connection/var setup here.
             - name: Phase 1 — PoE cycle + wait for TCP/22 (with retries)
-              ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+              ansible.builtin.include_role:
+                name: board_boot_state
+                tasks_from: cold_boot_with_retry.yml
               vars:
                 _phase_label: "Phase 1"
                 _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
@@ -367,9 +358,12 @@
                     ansible_become: false
 
             - name: Phase 1 — wait for SSH (disk-boot identity, with cycle retry)
-              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              ansible.builtin.include_role:
+                name: board_boot_state
+                tasks_from: wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 1"
+                _wait_timeout: "{{ post_boot_wait_timeout }}"
 
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
@@ -397,7 +391,7 @@
                   Diagnostic bundle is in the prior debug task.
 
         - name: Phase 2 — write per-board pxelinux.cfg + /ip tftp row on rb5009
-          delegate_to: "{{ _routeros_target }}"
+          delegate_to: "{{ netboot_router }}"
           block:
             - name: Phase 2 — include routeros_dhcp write_pxelinux_cfg
               ansible.builtin.include_role:
@@ -439,7 +433,9 @@
         #      inline against the NFS-rootfs root account; then fall
         #      through to the regular wait below as the inv user.
         - name: Phase 2 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_role:
+            name: board_boot_state
+            tasks_from: cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 2"
             _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
@@ -480,9 +476,12 @@
         - name: Phase 2 — verify NFS-mounted boot
           block:
             - name: Phase 2 — wait for SSH (NFS-root identity, with cycle retry)
-              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              ansible.builtin.include_role:
+                name: board_boot_state
+                tasks_from: wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 2"
+                _wait_timeout: "{{ post_boot_wait_timeout }}"
 
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
@@ -513,7 +512,7 @@
                   serves armbian/<model>/{vmlinuz,initrd.img,board.dtb}.
 
         - name: Phase 3 — remove per-board pxelinux.cfg + /ip tftp row from rb5009
-          delegate_to: "{{ _routeros_target }}"
+          delegate_to: "{{ netboot_router }}"
           block:
             - name: Phase 3 — include routeros_dhcp remove_pxelinux_cfg
               ansible.builtin.include_role:
@@ -535,15 +534,20 @@
           ansible.builtin.meta: reset_connection
 
         - name: Phase 3 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_role:
+            name: board_boot_state
+            tasks_from: cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 3"
             _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 3 — wait for SSH (disk-boot identity, with cycle retry)
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_role:
+            name: board_boot_state
+            tasks_from: wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
+            _wait_timeout: "{{ post_boot_wait_timeout }}"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -572,7 +576,7 @@
               Toggle is not bidirectional — the per-board file and/or
               /ip tftp row may still exist on rb5009. To distinguish: run
               `/ip tftp print where req-filename~"pxelinux.cfg/01-{{ board_mac | lower | replace(':', '-') }}"`
-              on {{ _routeros_target }}; if non-empty, the remove didn't
+              on {{ netboot_router }}; if non-empty, the remove didn't
               take. Diagnostic bundle is in the prior debug task.
       always:
         - name: Cleanup — print exit-state notice if leave_state
@@ -586,7 +590,7 @@
           when: leave_state | bool
 
         - name: Cleanup — remove per-board pxelinux.cfg from rb5009
-          delegate_to: "{{ _routeros_target }}"
+          delegate_to: "{{ netboot_router }}"
           when: not (leave_state | bool)
           block:
             - name: Cleanup — include routeros_dhcp remove_pxelinux_cfg
@@ -613,7 +617,9 @@
         # leave_state guard preserves the existing forensic-mode
         # contract: leave_state=true means "do not mutate."
         - name: Cleanup — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_role:
+            name: board_boot_state
+            tasks_from: cold_boot_with_retry.yml
           vars:
             _phase_label: "Cleanup"
             _boot_max_attempts: "{{ boot_retry_attempts | default(0) | int + 1 }}"
@@ -656,9 +662,12 @@
                 ansible_become: false
 
         - name: Cleanup — wait for SSH after cleanup cycle (with cycle retry)
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_role:
+            name: board_boot_state
+            tasks_from: wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Cleanup"
+            _wait_timeout: "{{ post_boot_wait_timeout }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to disk boot

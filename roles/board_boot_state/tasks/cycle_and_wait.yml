@@ -1,0 +1,21 @@
+---
+# Two-layer retry around the cold boot:
+#   Layer 1 (cold_boot_with_retry.yml): PoE cycle + wait_for TCP/22 +
+#     sustained ssh-ping, retried up to boot_retry_attempts+1 times.
+#   Layer 2 (wait_for_ssh_with_cycle_retry.yml): post-boot
+#     wait_for_connection with one additional PoE-cycle-and-retry on
+#     failure.
+# See docs/retry-configuration.md "How the two retry layers interact"
+# for the failure-mode rationale.
+
+- name: "board_boot_state[{{ boot_state }}] — layer 1 (cold boot with retry)"
+  ansible.builtin.include_tasks: cold_boot_with_retry.yml
+  vars:
+    _phase_label: "board_boot_state[{{ boot_state }}]"
+    _boot_max_attempts: "{{ boot_retry_attempts | int + 1 }}"
+
+- name: "board_boot_state[{{ boot_state }}] — layer 2 (post-boot SSH wait with cycle retry)"
+  ansible.builtin.include_tasks: wait_for_ssh_with_cycle_retry.yml
+  vars:
+    _phase_label: "board_boot_state[{{ boot_state }}]"
+    _wait_timeout: "{{ post_boot_wait_timeout }}"

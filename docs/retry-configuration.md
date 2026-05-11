@@ -1,10 +1,18 @@
 # Boot-retry configuration matrix
 
-The e2e test playbook and the operational toggle playbooks
-(`enable_netboot.yml`, `disable_netboot.yml`) share a single retry
-primitive — `playbooks/tasks/cold_boot_with_retry.yml` — and a small
-set of user-facing knobs that control its behavior. This doc maps
-scenarios to recommended settings.
+The retry/timeout knobs documented here are inputs to the
+[`david_igou.armbian_netboot.board_boot_state` role](board_boot_state-role.md).
+The role is invoked end-to-end by the operational toggle playbooks
+(`enable_netboot.yml`, `disable_netboot.yml`); its individual retry
+primitives (`cold_boot_with_retry.yml`,
+`wait_for_ssh_with_cycle_retry.yml`) are reached via `tasks_from:` by
+`test_hardware_e2e.yml`. This doc maps scenarios to recommended
+settings.
+
+For the role-level contract (required vars like `netboot_router`,
+the full knob reference, internal architecture) see
+[board_boot_state-role.md](board_boot_state-role.md). Live runtime
+reference: `ansible-doc -t role david_igou.armbian_netboot.board_boot_state`.
 
 For why the retry stack exists at all, see issue [#38] and the
 discussion of PoE-HAT brown-out behavior. Short version: on flaky

@@ -1,0 +1,43 @@
+---
+# Rootfs assertion. Gathers facts, captures the / mount, and asserts:
+#   boot_state == pxe  → fstype is nfs|nfs4
+#   boot_state == disk → fstype is not nfs, device matches /dev/<block>
+
+- name: "board_boot_state[{{ boot_state }}] verify — gather facts"
+  ansible.builtin.setup:
+
+- name: "board_boot_state[{{ boot_state }}] verify — capture root mount"
+  ansible.builtin.set_fact:
+    _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='fstype') | first }}"
+    _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='device') | first }}"
+
+- name: "board_boot_state[pxe] verify — assert NFS rootfs"
+  when: boot_state == 'pxe'
+  ansible.builtin.assert:
+    that:
+      - _root_fstype in ['nfs', 'nfs4']
+    fail_msg: >-
+      board_boot_state[pxe]: expected NFS rootfs after PoE cycle but got
+      {{ _root_device }} ({{ _root_fstype }}). pxelinux.cfg + /ip tftp
+      row were written to {{ netboot_router }} (configure_pxe.yml
+      succeeded), so the board's PXE bootflow either skipped pxelinux.cfg
+      or fell through to local boot. Check {{ netboot_router }}'s /ip
+      tftp hit counters and recent tftp,error log entries for clues.
+
+- name: "board_boot_state[disk] verify — assert disk rootfs"
+  when: boot_state == 'disk'
+  ansible.builtin.assert:
+    that:
+      - _root_fstype not in ['nfs', 'nfs4']
+      - _root_device is match('^/dev/')
+    fail_msg: >-
+      board_boot_state[disk]: expected disk rootfs (/dev/<block>) after
+      PoE cycle but got {{ _root_device }} ({{ _root_fstype }}).
+      pxelinux.cfg + /ip tftp row were removed from {{ netboot_router }}
+      (configure_disk.yml succeeded), so the board's PXE bootflow
+      should have fast-404'd through to local SD. Check that no stale
+      entries remain on {{ netboot_router }} (/ip tftp print where
+      req-filename~"01-" and /file find name~"pxelinux.cfg/01-") and
+      that the board's local SD bootloader is healthy.

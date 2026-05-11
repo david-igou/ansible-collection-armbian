@@ -1,0 +1,13 @@
+---
+# Remove per-board pxelinux.cfg + /ip tftp row on the netboot router.
+# Removes /ip tftp row first, then the flash file. Symmetric counterpart
+# to configure_pxe.yml.
+
+- name: "board_boot_state[disk] — remove per-board pxelinux.cfg + /ip tftp row"
+  ansible.builtin.include_role:
+    name: routeros_dhcp
+    tasks_from: remove_pxelinux_cfg.yml
+  vars:
+    board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
+    target_board_host: "{{ inventory_hostname }}"
+  delegate_to: "{{ netboot_router }}"
