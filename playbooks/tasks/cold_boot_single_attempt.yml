@@ -48,32 +48,27 @@
         state: started
       delegate_to: localhost
 
-    # Multi-probe stability window. A single point-in-time SSH probe
-    # missed iter 82's failure pattern: board responded at probe time
-    # but became ARP-unreachable during the post-retry 300 s
-    # wait_for_connection. 3 SSH probes spaced 10 s apart covers a
-    # 30 s window — if the board flickers off-network in that window,
-    # any of the probes hits "No route to host" and we fail-out → rescue
-    # → retry. Auth failures (Permission denied) on any probe are
-    # treated as success: board is reachable, just no inv user yet
-    # (fresh-rootfs case — downstream auto-bootstrap chain handles it).
-    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — SSH reachability stability window"
-      ansible.builtin.shell: |
-        for i in 1 2 3; do
-          output=$(ssh -o BatchMode=yes -o ConnectTimeout=10 \
-                       -o StrictHostKeyChecking=no \
-                       -o UserKnownHostsFile=/dev/null \
-                       {{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }} \
-                       exit 2>&1) || true
-          if echo "$output" | grep -qE "No route to host|Network is unreachable|connect to host port"; then
-            echo "NETWORK_UNREACHABLE on probe $i: $output" >&2
-            exit 1
-          fi
-          [ $i -lt 3 ] && sleep 10
-        done
-        exit 0
-      delegate_to: localhost
-      changed_when: false
+    # Stability check via wait_for_connection. A single point-in-time
+    # probe (or even a 30 s multi-probe window — iter 82, 84) missed
+    # the "board responds briefly then falls off the network" failure
+    # mode that wait_for_connection downstream then catches at 300+ s.
+    # wait_for_connection is itself a sustained ssh-ping; if the board
+    # can't successfully ssh-ping within ssh_wait_timeout seconds,
+    # the task fails, the block's rescue catches it, and the outer
+    # loop retries the whole PoE cycle.
+    #
+    # Trade-off: this uses the inventory user, so a fresh-rootfs
+    # board (inv user doesn't exist yet) will fail wait_for_connection
+    # on every attempt → retry exhausts → assert fails. Set
+    # boot_retry_attempts=0 for fresh-rootfs flows (where the
+    # downstream auto-bootstrap chain is supposed to handle the
+    # auth gap). This is acceptable because the operational failure
+    # mode driving the retry need (PoE-HAT cold-boot intermittency,
+    # #38) only affects bootstrapped boards in practice.
+    - name: "{{ _phase_label }} attempt {{ _attempt_num }} — wait for SSH ready (stability)"
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: "{{ ssh_wait_timeout | default(90) }}"
 
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — succeeded"
       ansible.builtin.set_fact:
