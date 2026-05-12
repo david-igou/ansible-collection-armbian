@@ -70,8 +70,8 @@ being forced.
 | `armbian_board_name` | `rock-5b` | armbian/build `BOARD=rock-5b` builds |
 | `armbian_support` | `standard` | Armbian board status page |
 | `dtb` | `rockchip/rk3588-rock-5b.dtb` | Phase 2 — `find` in extracted rootfs |
-| `console` | `ttyS2,1500000n8` | Phase 3 — boot log via UART |
-| `earlycon` | `uart8250,mmio32,0xfeb50000` | Phase 3 — only consulted when `pxelinux_verbose=true` |
+| `console` | `ttyS2,1500000n8` | Phase 3 — `ssh rock-5b-01 'cat /proc/cmdline'` after PXE boot (no UART available) |
+| `earlycon` | `uart8250,mmio32,0xfeb50000` | Not verified in this work — only consulted when `pxelinux_verbose=true`, which requires UART capture to be useful |
 | `armbian_image_urls[rock-5b]` | Pattern unknown until first build | Phase 1 — read post-build filename, fill in |
 | `poe_switch` / `poe_port` | Operator-provided | Phase 2 — inventory entry |
 | `board_mac` / `ansible_host` | Operator-provided | Phase 1.5 — from rb5009 DHCP lease |
@@ -237,14 +237,29 @@ failure first.
 **E2E:**
 
 ```bash
-ansible-playbook playbooks/test_hardware_e2e.yml \
-  --limit rock-5b-01 \
-  -e capture_serial=true
+ansible-playbook playbooks/test_hardware_e2e.yml --limit rock-5b-01
 ```
 
-The operator wires a USB-UART to rock-5b's UART2 pins on the 40-pin
-header — different physical location from OPi5Pro's dedicated debug
-header. Document the rock-5b pinout in the friction notes.
+**No serial capture for rock-5b.** The operator's rig does not have a
+USB-UART wired to rock-5b's UART2 pins. The `-e capture_serial=true`
+flag is intentionally omitted; the E2E falls back to network-level
+diagnostics (SSH probes, `findmnt` assertions, kernel cmdline
+inspection via `cat /proc/cmdline`). Practical consequences:
+
+- `earlycon` is set in `vars/boards.yml` for completeness but
+  unverified in this work — its only consumer (`pxelinux_verbose=true`)
+  is moot without a UART to read the early-boot output.
+- If the E2E flakes in the pre-SSH boot window (board doesn't reach
+  sshd at all), there is no in-band visibility. Diagnosis falls back
+  to physically inspecting the board or temporarily re-flashing to a
+  known-good SD rootfs.
+
+The trade-off is acceptable because rock-5b is powered through a more
+reliable PoE HAT than the OPi5Pro setup, so PoE-cycle flakiness — the
+main failure mode that drove serial capture for OPi5Pro — is expected
+to be substantially rarer. If the E2E surfaces a pre-SSH failure mode
+that needs UART to diagnose, wiring the UART is a deferred follow-up,
+not a blocker for this work.
 
 **Tuning surface (if E2E flakes intermittently):** Override retry knobs
 in `host_vars/rock-5b-01.yml` or `group_vars/rock_5b.yml`:
@@ -260,9 +275,12 @@ that's the whole point of the third acceptance criterion.
 **Likely friction (capture in notes):**
 
 - Retry-knob defaults are OPi5Pro-tuned; rock-5b's PoE-cycle → DHCP
-  timing may differ.
-- UART pinout differs from OPi5Pro (40-pin header vs. dedicated debug
-  header).
+  timing may differ — though the more reliable HAT means defaults are
+  more likely to just work.
+- No UART means pre-SSH failure modes are opaque; diagnosis surface
+  is narrower than OPi5Pro. Worth flagging in the writeup as a
+  "what does board onboarding look like without serial" lesson —
+  most operators won't have serial wired by default.
 - rock-5b may take longer to come up from PoE-off due to eMMC
   enumeration even when unused.
 
