@@ -41,21 +41,106 @@
                 sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                     include/configs/rockchip-common.h
             }
+      # Each PXE-first userpatch handles BOTH forms that rockchip-common.h
+      # appears in across the u-boot trees armbian/build pulls for RK3588:
+      #
+      #   1. Legacy single-line form (e.g. u-boot-orangepi5pro/v2025.10):
+      #          #define BOOT_TARGETS "..."
+      #      The OPi5Pro fork ships PXE-first already; the sed below is
+      #      effectively a no-op there but documented for explicitness.
+      #
+      #   2. X-macro form (Radxa next-dev-v2024.10, the rk3588 family
+      #      default — used by rock-5b and most other rk3588 boards):
+      #          #define BOOT_TARGET_DEVICES(func) \
+      #              BOOT_TARGET_USB(func) \
+      #              BOOT_TARGET_SD(func) \
+      #              ... PXE at position 8 of 9 ...
+      #      The python heredoc below reorders this block to put PXE+DHCP
+      #      first. Match is on the exact upstream layout; a no-op (silent)
+      #      if Radxa changes the macro structure — re-run a Phase-3 smoke
+      #      after every u-boot tree refresh to catch drift.
+      #
+      # The two boards' bodies are identical except for the function name
+      # (bash function names cannot contain dashes, so rock-5b uses
+      # rock_5b_pxe_first; the suffix after __ is an arbitrary unique-id
+      # for armbian/build's extension hook system, not a board encoding).
       orangepi5pro:
         - dest: "config/boards/orangepi5pro.conf"
           content: |
             function pre_config_uboot_target__orangepi5pro_pxe_first() {
+                local cfg="include/configs/rockchip-common.h"
                 declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                    include/configs/rockchip-common.h
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" "$cfg"
+                python3 - "$cfg" <<'PYEOF'
+            import pathlib, sys
+            path = pathlib.Path(sys.argv[1])
+            src = path.read_text()
+            old_block = (
+                "#define BOOT_TARGET_DEVICES(func) \\\n"
+                "\tBOOT_TARGET_USB(func) \\\n"
+                "\tBOOT_TARGET_SD(func) \\\n"
+                "\tBOOT_TARGET_NVME(func) \\\n"
+                "\tBOOT_TARGET_SCSI(func) \\\n"
+                "\tBOOT_TARGET_EMMC(func) \\\n"
+                "\tBOOT_TARGET_MTD(func) \\\n"
+                "\tBOOT_TARGET_RKNAND(func) \\\n"
+                "\tBOOT_TARGET_PXE(func) \\\n"
+                "\tBOOT_TARGET_DHCP(func)"
+            )
+            new_block = (
+                "#define BOOT_TARGET_DEVICES(func) \\\n"
+                "\tBOOT_TARGET_PXE(func) \\\n"
+                "\tBOOT_TARGET_DHCP(func) \\\n"
+                "\tBOOT_TARGET_SD(func) \\\n"
+                "\tBOOT_TARGET_EMMC(func) \\\n"
+                "\tBOOT_TARGET_NVME(func) \\\n"
+                "\tBOOT_TARGET_SCSI(func) \\\n"
+                "\tBOOT_TARGET_USB(func) \\\n"
+                "\tBOOT_TARGET_MTD(func) \\\n"
+                "\tBOOT_TARGET_RKNAND(func)"
+            )
+            if old_block in src:
+                path.write_text(src.replace(old_block, new_block, 1))
+            PYEOF
             }
       rock-5b:
         - dest: "config/boards/rock-5b.conf"
           content: |
             function pre_config_uboot_target__rock_5b_pxe_first() {
+                local cfg="include/configs/rockchip-common.h"
                 declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                    include/configs/rockchip-common.h
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" "$cfg"
+                python3 - "$cfg" <<'PYEOF'
+            import pathlib, sys
+            path = pathlib.Path(sys.argv[1])
+            src = path.read_text()
+            old_block = (
+                "#define BOOT_TARGET_DEVICES(func) \\\n"
+                "\tBOOT_TARGET_USB(func) \\\n"
+                "\tBOOT_TARGET_SD(func) \\\n"
+                "\tBOOT_TARGET_NVME(func) \\\n"
+                "\tBOOT_TARGET_SCSI(func) \\\n"
+                "\tBOOT_TARGET_EMMC(func) \\\n"
+                "\tBOOT_TARGET_MTD(func) \\\n"
+                "\tBOOT_TARGET_RKNAND(func) \\\n"
+                "\tBOOT_TARGET_PXE(func) \\\n"
+                "\tBOOT_TARGET_DHCP(func)"
+            )
+            new_block = (
+                "#define BOOT_TARGET_DEVICES(func) \\\n"
+                "\tBOOT_TARGET_PXE(func) \\\n"
+                "\tBOOT_TARGET_DHCP(func) \\\n"
+                "\tBOOT_TARGET_SD(func) \\\n"
+                "\tBOOT_TARGET_EMMC(func) \\\n"
+                "\tBOOT_TARGET_NVME(func) \\\n"
+                "\tBOOT_TARGET_SCSI(func) \\\n"
+                "\tBOOT_TARGET_USB(func) \\\n"
+                "\tBOOT_TARGET_MTD(func) \\\n"
+                "\tBOOT_TARGET_RKNAND(func)"
+            )
+            if old_block in src:
+                path.write_text(src.replace(old_block, new_block, 1))
+            PYEOF
             }
   pre_tasks:
     - name: Load board configs for board name lookup
