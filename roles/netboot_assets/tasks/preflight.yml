@@ -7,12 +7,18 @@
 # devices and started extracting.
 
 # Prefer a local-FS check first: when the netboot server also hosts the
-# HTTP image server (e.g. a macvlan netboot.xyz container on TrueNAS),
-# the URL in armbian_image_urls is unreachable from this host. Only
-# HEAD-check models without a published local copy.
+# HTTP image server (e.g. the public nginx container on TrueNAS, on a
+# macvlan that's not host-reachable), the URL in armbian_image_urls is
+# unreachable from this host. Only HEAD-check models without a published
+# local copy.
+#
+# The local path is composed from the build-publish invariant
+# ({{ nfs_assets_export }}/images/<armbian_board_name>/<basename>) rather
+# than by parsing the URL, so it works regardless of URL prefix
+# (netbootxyz had none; public nginx adds /boot-files/).
 - name: Stat local image publish path per model
   ansible.builtin.stat:
-    path: "{{ nfs_assets_export }}/{{ armbian_image_urls[item] | regex_replace('^https?://[^/]+/', '') }}"
+    path: "{{ nfs_assets_export }}/images/{{ board_configs[item].armbian_board_name }}/{{ armbian_image_urls[item] | basename }}"
   register: _local_image_pf
   loop: "{{ _board_models }}"
   loop_control:

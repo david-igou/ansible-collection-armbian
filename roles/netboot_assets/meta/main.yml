@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: netboot_assets
   author: David Igou
-  description: Populate netboot.xyz NFS exports with Armbian rootfs, kernel, DTB, and image assets via NFS mounts on the control node
+  description: Populate netboot-server NFS exports with Armbian rootfs and rb5009 TFTP with kernel/initrd/dtb for PXE-booting Armbian SBCs
   license: GPL-3.0-or-later
   min_ansible_version: "2.15"
   platforms:

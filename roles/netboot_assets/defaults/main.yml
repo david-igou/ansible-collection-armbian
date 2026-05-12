@@ -15,10 +15,18 @@
 # reflinks where the filesystem supports them (XFS, btrfs, ZFS), so disk
 # cost stays at one rootfs per model regardless of host count.
 nfs_rootfs_path: /mnt/ssd/netboot/rootfs
-# `nfs_assets_export` must point at the HTTP server's document root. The
-# default matches the netboot.xyz container, whose nginx serves `/` from
-# `/assets/`. The role writes `images/<model>.img.xz` here.
-nfs_assets_export: /mnt/ssd/containers/netbootxyz/assets
+# `nfs_assets_export` is the netboot-owned subtree on the HTTP host —
+# the directory under which Armbian images are published as
+# `images/<armbian_board_name>/<basename-of-url>`. The role and
+# build_image.yml share this layout, so URL prefix and FS layout don't
+# need to match (the public nginx URL adds `/boot-files/`, but the FS
+# write target is still `{{ nfs_assets_export }}/images/...`).
+#
+# Default matches the homelab's public nginx container on TrueNAS —
+# host path `/mnt/ssd/public/boot-files` maps to URL prefix
+# `https://public.igou.systems/boot-files/`. (Hosting moved off the
+# retired netbootxyz container in 2026-05.)
+nfs_assets_export: /mnt/ssd/public/boot-files
 
 # Working paths on the netboot server used while extracting an Armbian
 # image. armbian_image_cache also persists between runs so re-runs can
