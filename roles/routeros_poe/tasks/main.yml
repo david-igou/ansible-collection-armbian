@@ -26,7 +26,7 @@
 
 # Retry guards on each routeros command — network_cli persistent connections
 # to RouterOS drop intermittently mid-play; one transient drop should not
-# fail a PoE cycle. See routeros_dhcp/write_pxelinux_cfg.yml for the failure
+# fail a PoE cycle. See routeros_sbc_tftp/write_pxelinux_cfg.yml for the failure
 # modes documented from hardware testing.
 - name: Power on PoE port
   community.routeros.command:

@@ -240,15 +240,18 @@ Consequences relative to the original spec:
   `armbian-nfsroot` bundle (3 RouterOS objects total)" is therefore
   void. The role's surviving surface is `main.yml`,
   `write_pxelinux_cfg.yml`, and `remove_pxelinux_cfg.yml`.
-- The `routeros_dhcp` role name is misleading post-pivot (it doesn't
-  touch DHCP). Rename to `routeros_sbc_tftp` is pending a focused PR;
-  out of scope for this amendment.
+- The `routeros_dhcp` role was renamed to `routeros_sbc_tftp` in a
+  follow-up PR (same day as this amendment), since post-pivot it does
+  not touch DHCP at all — it manages per-board pxelinux.cfg files and
+  `/ip tftp` rows on rb5009's flash. The mentions of `routeros_dhcp` in
+  the original spec body (above) refer to the pre-rename name; all
+  current code and docs use `routeros_sbc_tftp`.
 
 ### New role: `board_boot_state`
 
 PR #54 extracted the netboot toggle (write/remove rb5009 state →
 PoE-cycle → verify rootfs) into a dedicated role with a formal
-`meta/argument_specs.yml` contract. The role composes `routeros_dhcp`
+`meta/argument_specs.yml` contract. The role composes `routeros_sbc_tftp`
 and `routeros_poe` internally and is consumed by `enable_netboot.yml`,
 `disable_netboot.yml`, and `test_hardware_e2e.yml`.
 
@@ -262,10 +265,10 @@ and [`docs/retry-configuration.md`](../../retry-configuration.md).
 
 `vars/boards.yml` per-board fields gained `earlycon` (e.g.
 `uart8250,mmio32,0xfeb50000` for RK3588S). Consulted only by
-`roles/routeros_dhcp/templates/pxelinux_cfg.j2` when
+`roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2` when
 `pxelinux_verbose: true`, which drives kernel output before the
 ttyS* driver loads. Required when the verbose path is enabled; an
-assertion in `routeros_dhcp` fails loud if missing.
+assertion in `routeros_sbc_tftp` fails loud if missing.
 
 The v1 fields list in "Board metadata location" is therefore
 `armbian_dl_dir`, `armbian_board_name`, `armbian_support`, `dtb`,

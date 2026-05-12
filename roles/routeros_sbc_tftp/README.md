@@ -1,4 +1,4 @@
-# routeros_dhcp
+# routeros_sbc_tftp
 
 Manages per-board `pxelinux.cfg/01-<MAC>` files on rb5009's flash and the
 corresponding `/ip tftp` rows so U-Boot's PXE bootmeth can fetch the
@@ -59,7 +59,7 @@ Most users invoke this role indirectly via `enable_netboot.yml` and
   tasks:
     - name: Write per-board pxelinux.cfg + /ip tftp row
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.routeros_dhcp
+        name: david_igou.armbian_netboot.routeros_sbc_tftp
         tasks_from: write_pxelinux_cfg.yml
       vars:
         board_mac: "aa:bb:cc:dd:ee:11"

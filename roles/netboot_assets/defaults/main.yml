@@ -37,7 +37,7 @@ armbian_image_mount: /mnt/ssd/netboot/.loop-mount
 
 # Top-level directory on rb5009's flash for SBC TFTP content. Used in
 # /file paths and as the prefix of real-filename in /ip tftp rules.
-# Mirrored as a default in roles/routeros_dhcp/defaults/main.yml.
+# Mirrored as a default in roles/routeros_sbc_tftp/defaults/main.yml.
 sbc_tftp_flash_dir: "sbc"
 
 # Local cache on the control node where kernel/initrd/dtb get fetched

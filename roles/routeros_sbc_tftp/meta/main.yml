@@ -1,8 +1,10 @@
 ---
 galaxy_info:
-  role_name: routeros_dhcp
+  role_name: routeros_sbc_tftp
   author: David Igou
-  description: Manage MikroTik RouterOS DHCP option objects to switch boards between disk boot and PXE netboot
+  description: >-
+    Write per-board pxelinux.cfg + /ip tftp rows on MikroTik RouterOS
+    flash to switch SBCs between disk boot and PXE netboot.
   license: GPL-3.0-or-later
   min_ansible_version: "2.15"
   platforms:
@@ -18,7 +20,8 @@ galaxy_info:
     - linux
     - networking
     - infrastructure
-    - dhcp
+    - tftp
+    - pxelinux
     - routeros
     - mikrotik
 

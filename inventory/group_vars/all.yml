@@ -62,7 +62,7 @@ bootstrap_armbian_ssh_keys:
 
 # Verbose / diagnostic kernel cmdline for PXE-booted boards.
 #
-# When true, roles/routeros_dhcp/templates/pxelinux_cfg.j2 appends a
+# When true, roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2 appends a
 # diagnostic suffix to the APPEND line (earlycon, loglevel=8,
 # initcall_debug, systemd.log_target=console, …). The intent is to make
 # the kernel-init and userspace-init phases visible on serial when
@@ -78,7 +78,7 @@ bootstrap_armbian_ssh_keys:
 #     -e pxelinux_verbose=true
 #
 # Requires per-board earlycon metadata in vars/boards.yml; the
-# routeros_dhcp role asserts this at render time.
+# routeros_sbc_tftp role asserts this at render time.
 pxelinux_verbose: false
 
 # Topology variable — set at inventory scope (rather than relying on
