@@ -153,6 +153,18 @@
                 path.write_text(src.replace(old_block, new_block, 1))
             PYEOF
             }
+    # Per-board armbian/build BRANCH override. Most boards use
+    # 'current' (the role default); rock-5b uses 'edge' because the
+    # Radxa next-dev-v2024.10 u-boot fork used by current branch has
+    # no driver for the RTL8125 PCIe NIC that Rock 5B ships with,
+    # making U-Boot networking (and therefore PXE) impossible on
+    # current. The edge branch triggers the existing
+    # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
+    # hook in armbian/build's rock-5b.conf, switching to mainline
+    # u-boot which has the r8169 driver (Realtek 8169-family,
+    # supports RTL8125).
+    build_branches:
+      rock-5b: edge
   pre_tasks:
     - name: Load board configs for board name lookup
       ansible.builtin.include_vars:
@@ -194,6 +206,7 @@
       vars:
         armbian_build_board: "{{ item }}"
         armbian_build_userpatches: "{{ build_userpatches[item] }}"
+        armbian_build_branch: "{{ build_branches[item] | default('current') }}"
       loop: "{{ _build_targets }}"
 
     # rsync invoked via command (not ansible.posix.synchronize) so it
