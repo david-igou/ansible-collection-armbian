@@ -63,9 +63,28 @@
       - dest: "config/sources/families/rockchip-rk3588.conf"
         content: |
           function pre_config_uboot_target__999_pxe_first() {
+              # Legacy distro_bootcmd boot order (only takes effect on
+              # u-boot trees that haven't moved to bootstd yet, or that
+              # still expose boot_targets as a runtime knob).
               declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
               sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                   include/configs/rockchip-common.h
+
+              # Bootstd / bootflow framework finds boot devices among
+              # PCI-enumerated devices. Mainline u-boot rk3588 defconfigs
+              # commonly set CONFIG_PCI=y but NOT CONFIG_PCI_INIT_R=y,
+              # so PCIe devices (e.g. Rock 5B's RTL8125 NIC) are NOT
+              # enumerated at init_r — bootflow scan never sees the NIC
+              # → no DHCP request → silent PXE failure (HITS=0 on the
+              # TFTP server). Append CONFIG_PCI_INIT_R=y to the defconfig
+              # being built (via $BOOTCONFIG, set by armbian/build's
+              # per-board config) for any board that opts into CONFIG_PCI.
+              local defconfig="configs/${BOOTCONFIG}"
+              if [[ -f "$defconfig" ]] \
+                 && grep -q "^CONFIG_PCI=y" "$defconfig" \
+                 && ! grep -q "^CONFIG_PCI_INIT_R=y" "$defconfig"; then
+                  echo "CONFIG_PCI_INIT_R=y" >> "$defconfig"
+              fi
           }
 
     # Per-board userpatches — escape hatch keyed by armbian_board_name
