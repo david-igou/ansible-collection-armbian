@@ -108,6 +108,17 @@
           content: |
             function pre_config_uboot_target__rock_5b_pxe_first() {
                 local cfg="include/configs/rockchip-common.h"
+                local defconfig="configs/rock-5b-rk3588_defconfig"
+                # rock-5b uses an RTL8211F gigabit PHY. Radxa's
+                # next-dev-v2024.10 defconfig enables CONFIG_GMAC_ROCKCHIP
+                # (the MAC controller) but NOT CONFIG_PHY_REALTEK, so
+                # U-Boot can't talk to the PHY, link never comes up,
+                # DHCP/PXE silently fail. Linux's kernel has the driver
+                # so the board boots Armbian fine post-U-Boot, but
+                # netboot is broken until this is set. Append-if-absent.
+                if [[ -f "$defconfig" ]] && ! grep -q "^CONFIG_PHY_REALTEK=y" "$defconfig"; then
+                    echo "CONFIG_PHY_REALTEK=y" >> "$defconfig"
+                fi
                 declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
                 sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" "$cfg"
                 python3 - "$cfg" <<'PYEOF'
