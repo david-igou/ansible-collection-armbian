@@ -49,6 +49,14 @@
                 sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                     include/configs/rockchip-common.h
             }
+      rock-5b:
+        - dest: "config/boards/rock-5b.conf"
+          content: |
+            function pre_config_uboot_target__rock_5b_pxe_first() {
+                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                    include/configs/rockchip-common.h
+            }
   pre_tasks:
     - name: Load board configs for board name lookup
       ansible.builtin.include_vars:
