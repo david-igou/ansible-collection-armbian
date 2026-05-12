@@ -260,9 +260,9 @@
         - name: Pre-flight — wipe any stale per-board pxelinux.cfg from rb5009
           delegate_to: "{{ netboot_router }}"
           block:
-            - name: Pre-flight — include routeros_dhcp remove_pxelinux_cfg
+            - name: Pre-flight — include routeros_sbc_tftp remove_pxelinux_cfg
               ansible.builtin.include_role:
-                name: routeros_dhcp
+                name: routeros_sbc_tftp
                 tasks_from: remove_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
@@ -393,9 +393,9 @@
         - name: Phase 2 — write per-board pxelinux.cfg + /ip tftp row on rb5009
           delegate_to: "{{ netboot_router }}"
           block:
-            - name: Phase 2 — include routeros_dhcp write_pxelinux_cfg
+            - name: Phase 2 — include routeros_sbc_tftp write_pxelinux_cfg
               ansible.builtin.include_role:
-                name: routeros_dhcp
+                name: routeros_sbc_tftp
                 tasks_from: write_pxelinux_cfg.yml
               vars:
                 # Use hostvars[] so delegate_to: rb5009 doesn't recurse on
@@ -514,9 +514,9 @@
         - name: Phase 3 — remove per-board pxelinux.cfg + /ip tftp row from rb5009
           delegate_to: "{{ netboot_router }}"
           block:
-            - name: Phase 3 — include routeros_dhcp remove_pxelinux_cfg
+            - name: Phase 3 — include routeros_sbc_tftp remove_pxelinux_cfg
               ansible.builtin.include_role:
-                name: routeros_dhcp
+                name: routeros_sbc_tftp
                 tasks_from: remove_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
@@ -593,9 +593,9 @@
           delegate_to: "{{ netboot_router }}"
           when: not (leave_state | bool)
           block:
-            - name: Cleanup — include routeros_dhcp remove_pxelinux_cfg
+            - name: Cleanup — include routeros_sbc_tftp remove_pxelinux_cfg
               ansible.builtin.include_role:
-                name: routeros_dhcp
+                name: routeros_sbc_tftp
                 tasks_from: remove_pxelinux_cfg.yml
               vars:
                 board_mac: "{{ hostvars[inventory_hostname].board_mac }}"

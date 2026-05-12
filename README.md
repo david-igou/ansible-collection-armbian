@@ -80,7 +80,7 @@ that combines existing primitives means adding a playbook (no role changes).
 | [`bootstrap_armbian`](roles/bootstrap_armbian/) | SSH-key user with passwordless sudo on a freshly flashed Armbian board |
 | [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | RouterOS user, group, and SSH-key state over network_cli |
 | [`netboot_assets`](roles/netboot_assets/) | Per-host NFS rootfs on the netboot server + per-model kernel/initrd/dtb on rb5009 |
-| [`routeros_dhcp`](roles/routeros_dhcp/) | Per-board `pxelinux.cfg/01-<MAC>` + `/ip tftp` row on rb5009 |
+| [`routeros_sbc_tftp`](roles/routeros_sbc_tftp/) | Per-board `pxelinux.cfg/01-<MAC>` + `/ip tftp` row on rb5009 |
 | [`routeros_poe`](roles/routeros_poe/) | PoE port state (on/off) on RouterOS switch ports |
 
 ### Playbooks

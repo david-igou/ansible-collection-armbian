@@ -29,11 +29,11 @@ parameters, in what order.
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
 | `netboot_assets` | rootfs / TFTP / pxelinux content under server exports |
-| `routeros_dhcp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
+| `routeros_sbc_tftp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
 `board_boot_state` is the top-level composer for the netboot toggle:
-internally it includes `routeros_dhcp` (rb5009 mutation, delegated)
+internally it includes `routeros_sbc_tftp` (rb5009 mutation, delegated)
 and `routeros_poe` (PoE cycle, delegated) and wraps both in a
 two-layer retry stack. The `enable_netboot.yml` / `disable_netboot.yml`
 playbooks are thin wrappers that invoke this role with `boot_state: pxe`
@@ -72,7 +72,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── bootstrap_armbian/         # Provision passwordless-sudo SSH-key user
 │   ├── bootstrap_routeros_user/   # Provision RouterOS user/group/SSH keys
 │   ├── netboot_assets/               # Populate NFS exports (preflight + per-model + per-host)
-│   ├── routeros_dhcp/             # RouterOS DHCP option management (nfsroot mode)
+│   ├── routeros_sbc_tftp/        # Per-board pxelinux.cfg + /ip tftp row on RouterOS flash
 │   └── routeros_poe/              # PoE power control via RouterOS switch
 ├── playbooks/
 │   ├── bootstrap_armbian.yml        # (0) Provision SSH-key user on flashed boards
@@ -403,11 +403,11 @@ knows its own switch and port, so delegation routes the command correctly withou
 - `roles/netboot_assets/tasks/per_host.yml` — per-host rootfs clone + identity reset
 - `roles/netboot_assets/tasks/stage_rb5009.yml` — net_put kernel/initrd/dtb to rb5009
 - `roles/netboot_assets/tasks/plumbing_check.yml` — assert /ip tftp rows exist on rb5009
-- `roles/routeros_dhcp/tasks/write_pxelinux_cfg.yml` — render locally, net_put per-board pxelinux.cfg to rb5009
-- `roles/routeros_dhcp/tasks/remove_pxelinux_cfg.yml` — remove /ip tftp row + flash file
+- `roles/routeros_sbc_tftp/tasks/write_pxelinux_cfg.yml` — render locally, net_put per-board pxelinux.cfg to rb5009
+- `roles/routeros_sbc_tftp/tasks/remove_pxelinux_cfg.yml` — remove /ip tftp row + flash file
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs (edit before first run)
 - `inventory/group_vars/boards.yml` — `netboot_router` and board_boot_state retry-knob overrides
-- `roles/routeros_dhcp/templates/pxelinux_cfg.j2` — per-host PXE boot config
+- `roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2` — per-host PXE boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
 - `playbooks/build_image.yml` — custom Armbian image build pipeline
 - `galaxy.yml` — collection namespace, version, external dependencies

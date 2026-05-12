@@ -76,14 +76,15 @@ roles ship in v1.
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
 | `netboot_assets` | per-model rootfs template + per-host clones on TrueNAS NFS export; per-model kernel/initrd/dtb on rb5009 TFTP |
-| `routeros_dhcp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
+| `routeros_sbc_tftp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
-The `armbian_build`, `netboot_assets`, and `routeros_dhcp` roles each own one
+The `armbian_build`, `netboot_assets`, and `routeros_sbc_tftp` roles each own one
 piece of off-board state — the build host, the netboot server's exports,
-the RouterOS DHCP configuration. The two `bootstrap_*` roles bring a fresh
-board or a fresh RouterOS device into a state where the other roles can
-talk to them. `routeros_poe` is an optional out-of-band recovery path.
+and rb5009's SBC TFTP layout (per-board pxelinux.cfg + `/ip tftp` rows). The
+two `bootstrap_*` roles bring a fresh board or a fresh RouterOS device into
+a state where the other roles can talk to them. `routeros_poe` is an
+optional out-of-band recovery path.
 
 ## Workflow
 
