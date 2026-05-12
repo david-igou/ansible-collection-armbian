@@ -205,3 +205,88 @@ a fresh deployment top-to-bottom.
   loop is already v1-shaped)
 - `CLAUDE.md` and `docs/architecture.md` describe the v1 model only;
   `docs/board-bootloader.md` is gone
+
+## Amendments (2026-05-12)
+
+The v1 surface evolved after this spec landed. The acceptance criteria
+above are still met; the items below replace or extend specific
+sections rather than invalidating them. See git history for the
+individual PRs.
+
+### Toggle mechanism: DHCP option-sets → TFTP-only
+
+The spec's "Slimming inside `routeros_dhcp`" section assumed the role
+would continue to manage RouterOS DHCP option sets — specifically
+option 66 (TFTP), the `armbian-nfsroot-bootfile` entry, and the
+`armbian-nfsroot` option bundle attached to per-board static leases.
+That surface was removed entirely.
+
+The collection now relies solely on per-board `pxelinux.cfg/01-<MAC>`
+presence on rb5009's TFTP server to toggle a board between disk boot
+and netboot. U-Boot's PXE bootmeth uses the DHCP `siaddr`
+(set by your separate RouterOS-config repo's `next-server`) for
+`serverip`, and falls through to local SD when the per-board file
+isn't registered as an `/ip tftp` row. No DHCP option-sets and no
+lease mutations are owned by this collection.
+
+Consequences relative to the original spec:
+
+- `playbooks/setup_routeros_dhcp.yml` was never created. (Original
+  spec listed it under "Kept" playbooks; the role pivot made it
+  unnecessary.)
+- `roles/routeros_dhcp/tasks/setup_options.yml` was never created.
+  The acceptance criterion that it create "exactly the option 66
+  entry, the `armbian-nfsroot-bootfile` entry, and the
+  `armbian-nfsroot` bundle (3 RouterOS objects total)" is therefore
+  void. The role's surviving surface is `main.yml`,
+  `write_pxelinux_cfg.yml`, and `remove_pxelinux_cfg.yml`.
+- The `routeros_dhcp` role name is misleading post-pivot (it doesn't
+  touch DHCP). Rename to `routeros_sbc_tftp` is pending a focused PR;
+  out of scope for this amendment.
+
+### New role: `board_boot_state`
+
+PR #54 extracted the netboot toggle (write/remove rb5009 state →
+PoE-cycle → verify rootfs) into a dedicated role with a formal
+`meta/argument_specs.yml` contract. The role composes `routeros_dhcp`
+and `routeros_poe` internally and is consumed by `enable_netboot.yml`,
+`disable_netboot.yml`, and `test_hardware_e2e.yml`.
+
+The v1 spec's "Roles kept" list (`armbian_build`, `bootstrap_armbian`,
+`bootstrap_routeros_user`, `netboot_assets`, `routeros_dhcp`,
+`routeros_poe`) now includes `board_boot_state` as a seventh role.
+See [`docs/board_boot_state-role.md`](../../board_boot_state-role.md)
+and [`docs/retry-configuration.md`](../../retry-configuration.md).
+
+### New per-board field: `earlycon`
+
+`vars/boards.yml` per-board fields gained `earlycon` (e.g.
+`uart8250,mmio32,0xfeb50000` for RK3588S). Consulted only by
+`roles/routeros_dhcp/templates/pxelinux_cfg.j2` when
+`pxelinux_verbose: true`, which drives kernel output before the
+ttyS* driver loads. Required when the verbose path is enabled; an
+assertion in `routeros_dhcp` fails loud if missing.
+
+The v1 fields list in "Board metadata location" is therefore
+`armbian_dl_dir`, `armbian_board_name`, `armbian_support`, `dtb`,
+`console`, **`earlycon`**.
+
+### Added playbook: `test_manual_psu_cold_boot.yml`
+
+Operator-driven harness for characterizing the retry stack against a
+manually-toggled PSU (no PoE switch involvement). Not listed in the
+spec's playbook inventory; additive and independent of the v1
+contract.
+
+### Asset host migration (2026-05)
+
+The HTTP asset host moved off the retired netbootxyz container to the
+homelab's public nginx container on TrueNAS — URL prefix
+`https://public.igou.systems/boot-files/`, host path
+`/mnt/ssd/public/boot-files`. `roles/netboot_assets/tasks/per_board.yml`
+and `preflight.yml` now compose the local-FS path from the
+build-publish invariant (`{{ nfs_assets_export }}/images/<armbian_board_name>/<basename>`)
+rather than stripping the URL prefix, so URL and FS layouts can diverge.
+Inventory now sets `nfs_assets_export` at inventory scope because
+`build_image.yml`'s publish play consumes it without loading the
+`netboot_assets` role.
