@@ -188,8 +188,13 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   separate RouterOS-config repo (e.g. igou-ansible's `deploy_netboot_binaries.yml`)
   and not asserted by this collection. Without it, U-Boot can't reach rb5009's TFTP
   daemon to fetch per-board pxelinux.cfg + per-model kernel/initrd/dtb.
-- `nfs_assets_export` (overridable) — HTTP server's document root. Default
-  `/mnt/ssd/containers/netbootxyz/assets` matches netboot.xyz container's nginx root.
+- `nfs_assets_export` (overridable) — netboot-owned subtree on the HTTP
+  host. Images are published at `{{ nfs_assets_export }}/images/<armbian_board_name>/<basename>`
+  by `build_image.yml` and looked up there by the netboot_assets role; URL
+  prefix and FS layout don't need to match. Default `/mnt/ssd/public/boot-files`
+  matches the homelab public nginx container on TrueNAS (URL prefix
+  `https://public.igou.systems/boot-files/`). Replaces the retired netbootxyz
+  container as of 2026-05.
 
 `inventory/group_vars/routeros.yml` only pins the network_cli connection plumbing
 (`ansible_connection`, `ansible_network_os`); it intentionally does **not** set

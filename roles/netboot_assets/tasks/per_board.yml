@@ -11,13 +11,18 @@
     _tftp_truenas_cache: "{{ armbian_image_cache }}/sbc-tftp/{{ _model }}"
     _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
     # Local FS path on the netboot server where the image is *already*
-    # published (build_image.yml writes here, and the final task in this
-    # file copies _image_cache to the same prefix). When the netboot
-    # server hosts the HTTP server itself (e.g. macvlan netboot.xyz
-    # container on TrueNAS), the URL in armbian_image_urls is unreachable
-    # from this host — fall back to a local copy when the published file
-    # exists.
-    _local_image_path: "{{ nfs_assets_export }}/{{ armbian_image_urls[_model] | regex_replace('^https?://[^/]+/', '') }}"
+    # published (build_image.yml writes here). When the netboot server
+    # hosts the HTTP server itself (e.g. the public nginx container on
+    # TrueNAS, on a macvlan that's not host-reachable), the URL in
+    # armbian_image_urls is unreachable from this host — fall back to
+    # a local copy when the published file exists.
+    #
+    # Composed from the build-publish invariant rather than the URL:
+    # build_image.yml writes to {{ nfs_assets_export }}/images/<armbian_board_name>/<file>
+    # so the URL path structure doesn't have to be the same as the FS
+    # structure. (Under the old netbootxyz layout URL == FS by coincidence;
+    # under the public-nginx layout the URL has a /boot-files/ prefix.)
+    _local_image_path: "{{ nfs_assets_export }}/images/{{ board_configs[_model].armbian_board_name }}/{{ armbian_image_urls[_model] | basename }}"
 
 - name: Ensure per-model template and TrueNAS cache directories exist
   ansible.builtin.file:

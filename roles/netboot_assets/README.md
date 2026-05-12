@@ -34,7 +34,7 @@ Required tools on the netboot server: `losetup`, `mount`, `xz`, `rsync`,
 | Variable | Default | Description |
 |---|---|---|
 | `nfs_rootfs_path` | `/mnt/ssd/netboot/rootfs` | NFS export root for per-board rootfs trees on the netboot server. |
-| `nfs_assets_export` | `/mnt/ssd/containers/netbootxyz/assets` | HTTP server's document root. The default matches the netboot.xyz container's nginx (`root /assets;`). |
+| `nfs_assets_export` | `/mnt/ssd/public/boot-files` | Netboot-owned subtree on the HTTP host. Images are published at `{{ nfs_assets_export }}/images/<armbian_board_name>/<basename>` and looked up by the role at the same path; URL prefix and FS layout don't need to match. Default matches the homelab public nginx container on TrueNAS (URL prefix `https://public.igou.systems/boot-files/`). |
 | `armbian_image_cache` | `/mnt/ssd/netboot/cache` | Local cache for downloaded `.img.xz` files on the netboot server. |
 | `armbian_image_mount` | `/mnt/ssd/netboot/.loop-mount` | Temporary loop-mount point on the netboot server while extracting an image. |
 | `sbc_tftp_flash_dir` | `sbc` | Top-level directory on rb5009's flash for SBC TFTP content. Used as the `name=` prefix in `/file` paths and as the `real-filename` prefix in `/ip tftp` rules. Mirrored as a default in `roles/routeros_dhcp/defaults/main.yml`. |
