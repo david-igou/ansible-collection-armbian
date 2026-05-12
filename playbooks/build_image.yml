@@ -32,137 +32,57 @@
   hosts: armbian_builders
   gather_facts: false
   vars:
-    build_userpatches:
-      orangepi5:
-        - dest: "config/boards/orangepi5.conf"
-          content: |
-            function pre_config_uboot_target__orangepi5_pxe_first() {
-                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                    include/configs/rockchip-common.h
-            }
-      # Each PXE-first userpatch handles BOTH forms that rockchip-common.h
-      # appears in across the u-boot trees armbian/build pulls for RK3588:
-      #
-      #   1. Legacy single-line form (e.g. u-boot-orangepi5pro/v2025.10):
-      #          #define BOOT_TARGETS "..."
-      #      The OPi5Pro fork ships PXE-first already; the sed below is
-      #      effectively a no-op there but documented for explicitness.
-      #
-      #   2. X-macro form (Radxa next-dev-v2024.10, the rk3588 family
-      #      default — used by rock-5b and most other rk3588 boards):
-      #          #define BOOT_TARGET_DEVICES(func) \
-      #              BOOT_TARGET_USB(func) \
-      #              BOOT_TARGET_SD(func) \
-      #              ... PXE at position 8 of 9 ...
-      #      The python heredoc below reorders this block to put PXE+DHCP
-      #      first. Match is on the exact upstream layout; a no-op (silent)
-      #      if Radxa changes the macro structure — re-run a Phase-3 smoke
-      #      after every u-boot tree refresh to catch drift.
-      #
-      # The two boards' bodies are identical except for the function name
-      # (bash function names cannot contain dashes, so rock-5b uses
-      # rock_5b_pxe_first; the suffix after __ is an arbitrary unique-id
-      # for armbian/build's extension hook system, not a board encoding).
-      orangepi5pro:
-        - dest: "config/boards/orangepi5pro.conf"
-          content: |
-            function pre_config_uboot_target__orangepi5pro_pxe_first() {
-                local cfg="include/configs/rockchip-common.h"
-                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" "$cfg"
-                python3 - "$cfg" <<'PYEOF'
-            import pathlib, sys
-            path = pathlib.Path(sys.argv[1])
-            src = path.read_text()
-            old_block = (
-                "#define BOOT_TARGET_DEVICES(func) \\\n"
-                "\tBOOT_TARGET_USB(func) \\\n"
-                "\tBOOT_TARGET_SD(func) \\\n"
-                "\tBOOT_TARGET_NVME(func) \\\n"
-                "\tBOOT_TARGET_SCSI(func) \\\n"
-                "\tBOOT_TARGET_EMMC(func) \\\n"
-                "\tBOOT_TARGET_MTD(func) \\\n"
-                "\tBOOT_TARGET_RKNAND(func) \\\n"
-                "\tBOOT_TARGET_PXE(func) \\\n"
-                "\tBOOT_TARGET_DHCP(func)"
-            )
-            new_block = (
-                "#define BOOT_TARGET_DEVICES(func) \\\n"
-                "\tBOOT_TARGET_PXE(func) \\\n"
-                "\tBOOT_TARGET_DHCP(func) \\\n"
-                "\tBOOT_TARGET_SD(func) \\\n"
-                "\tBOOT_TARGET_EMMC(func) \\\n"
-                "\tBOOT_TARGET_NVME(func) \\\n"
-                "\tBOOT_TARGET_SCSI(func) \\\n"
-                "\tBOOT_TARGET_USB(func) \\\n"
-                "\tBOOT_TARGET_MTD(func) \\\n"
-                "\tBOOT_TARGET_RKNAND(func)"
-            )
-            if old_block in src:
-                path.write_text(src.replace(old_block, new_block, 1))
-            PYEOF
-            }
-      rock-5b:
-        - dest: "config/boards/rock-5b.conf"
-          content: |
-            function pre_config_uboot_target__rock_5b_pxe_first() {
-                local cfg="include/configs/rockchip-common.h"
-                local defconfig="configs/rock-5b-rk3588_defconfig"
-                # rock-5b uses an RTL8211F gigabit PHY. Radxa's
-                # next-dev-v2024.10 defconfig enables CONFIG_GMAC_ROCKCHIP
-                # (the MAC controller) but NOT CONFIG_PHY_REALTEK, so
-                # U-Boot can't talk to the PHY, link never comes up,
-                # DHCP/PXE silently fail. Linux's kernel has the driver
-                # so the board boots Armbian fine post-U-Boot, but
-                # netboot is broken until this is set. Append-if-absent.
-                if [[ -f "$defconfig" ]] && ! grep -q "^CONFIG_PHY_REALTEK=y" "$defconfig"; then
-                    echo "CONFIG_PHY_REALTEK=y" >> "$defconfig"
-                fi
-                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" "$cfg"
-                python3 - "$cfg" <<'PYEOF'
-            import pathlib, sys
-            path = pathlib.Path(sys.argv[1])
-            src = path.read_text()
-            old_block = (
-                "#define BOOT_TARGET_DEVICES(func) \\\n"
-                "\tBOOT_TARGET_USB(func) \\\n"
-                "\tBOOT_TARGET_SD(func) \\\n"
-                "\tBOOT_TARGET_NVME(func) \\\n"
-                "\tBOOT_TARGET_SCSI(func) \\\n"
-                "\tBOOT_TARGET_EMMC(func) \\\n"
-                "\tBOOT_TARGET_MTD(func) \\\n"
-                "\tBOOT_TARGET_RKNAND(func) \\\n"
-                "\tBOOT_TARGET_PXE(func) \\\n"
-                "\tBOOT_TARGET_DHCP(func)"
-            )
-            new_block = (
-                "#define BOOT_TARGET_DEVICES(func) \\\n"
-                "\tBOOT_TARGET_PXE(func) \\\n"
-                "\tBOOT_TARGET_DHCP(func) \\\n"
-                "\tBOOT_TARGET_SD(func) \\\n"
-                "\tBOOT_TARGET_EMMC(func) \\\n"
-                "\tBOOT_TARGET_NVME(func) \\\n"
-                "\tBOOT_TARGET_SCSI(func) \\\n"
-                "\tBOOT_TARGET_USB(func) \\\n"
-                "\tBOOT_TARGET_MTD(func) \\\n"
-                "\tBOOT_TARGET_RKNAND(func)"
-            )
-            if old_block in src:
-                path.write_text(src.replace(old_block, new_block, 1))
-            PYEOF
-            }
-    # Per-board armbian/build BRANCH override. Most boards use
-    # 'current' (the role default); rock-5b uses 'edge' because the
-    # Radxa next-dev-v2024.10 u-boot fork used by current branch has
-    # no driver for the RTL8125 PCIe NIC that Rock 5B ships with,
-    # making U-Boot networking (and therefore PXE) impossible on
-    # current. The edge branch triggers the existing
-    # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
-    # hook in armbian/build's rock-5b.conf, switching to mainline
-    # u-boot which has the r8169 driver (Realtek 8169-family,
-    # supports RTL8125).
+    # Shared userpatches applied to every board build. v1's only entry
+    # is the rk3588 family-level PXE-first override (see below).
+    #
+    # Path `config/sources/families/rockchip-rk3588.conf` is the
+    # idiomatic armbian/build user overlay path for per-family logic:
+    # main-config.sh's source_family_config_and_arch() sources
+    # ${SRC}/config/sources/families/<family>.conf then
+    # ${USERPATCHES_PATH}/config/sources/families/<family>.conf.
+    # Our overlay ADDS to armbian's family file (doesn't replace), and
+    # functions defined here get registered by initialize_extension_manager
+    # which runs LATER in the build flow.
+    #
+    # Hook suffix `__999_pxe_first` forces this to sort LAST among
+    # pre_config_uboot_target hooks (armbian/build's extension manager
+    # auto-prefixes hooks without a numeric ID with `500_` and sorts
+    # with LC_ALL=C --general-numeric-sort; see extensions.sh:222-238).
+    # This wins against per-board hooks like
+    # `pre_config_uboot_target__rock5b_patch_rockchip_common_boot_order`
+    # which sets a board-vendor-preferred SD-first order.
+    #
+    # The sed is a no-op on u-boot trees that don't use the legacy
+    # `#define BOOT_TARGETS "..."` form (e.g. Radxa's
+    # next-dev-v2024.10 fork uses the X-macro `BOOT_TARGET_DEVICES(func)`
+    # form instead — but that fork lacks RTL8125 PCIe driver anyway, so
+    # the collection ships affected boards on the edge branch which
+    # uses mainline u-boot v2026.01 with the legacy form. See
+    # `build_branches` below.
+    build_userpatches_common:
+      - dest: "config/sources/families/rockchip-rk3588.conf"
+        content: |
+          function pre_config_uboot_target__999_pxe_first() {
+              declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+              sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                  include/configs/rockchip-common.h
+          }
+
+    # Per-board userpatches — escape hatch keyed by armbian_board_name
+    # for genuinely board-specific source modifications. Empty in v1:
+    # both boards are fully covered by build_userpatches_common +
+    # build_branches. New boards generally won't need entries here.
+    build_userpatches: {}
+
+    # Per-board armbian/build BRANCH override. Most boards use 'current'
+    # (the armbian_build role default); rock-5b uses 'edge' because the
+    # Radxa next-dev-v2024.10 u-boot fork (current branch's default for
+    # rk3588) has no driver for the RTL8125 PCIe NIC that Rock 5B ships
+    # with — making U-Boot networking (and therefore PXE) impossible on
+    # current. Edge triggers armbian/build's existing
+    # `post_family_config_branch_edge__rock-5b_use_mainline_uboot` hook
+    # which pulls mainline u-boot v2026.01 (with the upstream Collabora
+    # PCIe + RTL8125B patches, working at 100 Mbps — enough for TFTP).
     build_branches:
       rock-5b: edge
   pre_tasks:
@@ -205,7 +125,7 @@
         name: armbian_build
       vars:
         armbian_build_board: "{{ item }}"
-        armbian_build_userpatches: "{{ build_userpatches[item] }}"
+        armbian_build_userpatches: "{{ build_userpatches_common + (build_userpatches[item] | default([])) }}"
         armbian_build_branch: "{{ build_branches[item] | default('current') }}"
       loop: "{{ _build_targets }}"
 
