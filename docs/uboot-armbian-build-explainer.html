@@ -163,6 +163,7 @@
     <li><a href="#flow">Build flow diagram</a></li>
     <li><a href="#matrix">Concrete matrix: this repo&rsquo;s two boards</a></li>
     <li><a href="#snippets">Annotated snippets</a></li>
+    <li><a href="#hooks-vs-patches">Why hooks instead of <code>.patch</code> files?</a></li>
     <li><a href="#gotchas">Gotchas</a></li>
   </ol>
 </nav>
@@ -509,7 +510,210 @@ function post_family_config_branch_vendor__orangepi5pro_use_vendor_uboot() {
 </div>
 </div>
 
-<h2 id="gotchas">7. Gotchas</h2>
+<h2 id="hooks-vs-patches">7. Why hooks instead of <code>.patch</code> files?</h2>
+
+<p>
+  armbian/build does support source patches the conventional way — drop
+  <code>userpatches/u-boot/&lt;BOOTPATCHDIR&gt;/*.patch</code> and they get
+  applied to the checkout after fetch. The
+  <a href="https://docs.armbian.com/Developer-Guide_User-Configurations/">User
+  Configurations</a> doc spells it out: <em>"Patches with the same file name
+  and path in the <code>userpatches</code> directory tree override those in the
+  <code>patch</code> directory."</em> This collection still picks the
+  hook-function path for the PXE-first and PCI-init-r changes. Three reasons
+  drive that choice.
+</p>
+
+<h3>Reason 1 — conditional logic that <code>.patch</code> cannot express</h3>
+
+<p>
+  Our <code>__999_pxe_first</code> hook checks <code>$BOOTCONFIG</code>, greps
+  the defconfig, and only appends <code>CONFIG_PCI_INIT_R=y</code> when the
+  board has <code>CONFIG_PCI=y</code> and doesn&rsquo;t already have
+  <code>CONFIG_PCI_INIT_R=y</code>. A <code>.patch</code> file is a diff
+  against one specific state — it has no <code>if</code>. Without the gate,
+  the change would either fail to apply on boards that don&rsquo;t have
+  <code>CONFIG_PCI=y</code> (no context to match) or land somewhere it
+  shouldn&rsquo;t.
+</p>
+
+<p>
+  Upstream uses the same gating pattern — note the
+  <code>[[ "${BRANCH}" != "edge" ]] &amp;&amp; return 0</code> on the first
+  line, which is impossible to express in a static diff:
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>armbian/build · <code>config/boards/rock-5b.conf</code> — defconfig changes gated by branch</span></header>
+<pre><code>function post_config_uboot_target__extra_configs_for_rock5b_mainline_environment_in_spi() {
+    [[ "${BRANCH}" != "edge" ]] && return 0   # ← conditional gate
+
+    run_host_command_logged scripts/config --enable    CONFIG_DM_PMIC_FAN53555
+    run_host_command_logged scripts/config --enable    CONFIG_CMD_MISC
+    run_host_command_logged scripts/config --set-val   CONFIG_ENV_IS_IN_SPI_FLASH "y"
+    run_host_command_logged scripts/config --set-val   CONFIG_ENV_OFFSET          "0xc00000"
+    # &hellip; ~25 more scripts/config invocations &hellip;
+}</code></pre>
+<div class="notes">
+A <code>.patch</code> against <code>configs/rock5b-rk3588_defconfig</code>
+would always apply, regardless of branch. The hook self-gates, and
+<code>scripts/config</code> — the same tool a human runs interactively
+under <code>make menuconfig</code> — is robust to line-order changes inside
+the defconfig file.
+</div>
+</div>
+
+<h3>Reason 2 — one file across multiple u-boot trees</h3>
+
+<p>
+  Patch directories are per-tree:
+  <code>BOOTPATCHDIR=legacy/u-boot-radxa-rk35xx</code> for the Radxa fork,
+  <code>v2026.01</code> for mainline rock-5b, possibly a third for some future
+  board (see the <a href="#matrix">matrix in section 5</a>). A static
+  <code>.patch</code> would need to be duplicated across every directory the
+  family touches. The hook lives once at family-overlay scope and runs with
+  whatever <code>BOOTPATCHDIR</code> the preceding hooks left in place.
+</p>
+
+<p>
+  This becomes load-bearing when upstream rebases. The next mainline tag
+  (<code>v2026.04</code>, <code>v2027.01</code>, &hellip;) almost certainly
+  shifts line numbers and context around
+  <code>include/configs/rockchip-common.h</code>. A <code>.patch</code>
+  generated against <code>v2026.01</code> will fail to apply with
+  <code>error: while searching for: &hellip;</code> at every bump until someone
+  re-baselines it. The hook targets <em>structural elements</em> (a
+  <code>#define</code> directive by regex, a <code>CONFIG_</code> line by
+  grep) and survives any refactor that preserves those elements.
+</p>
+
+<h3>Reason 3 — armbian/build itself uses this pattern for the same kind of change</h3>
+
+<p>
+  The strongest legitimacy argument is that
+  <strong>armbian/build&rsquo;s own rock-5b config already does exactly what
+  we do</strong> — a <code>sed</code> against
+  <code>include/configs/rockchip-common.h</code> from a
+  <code>pre_config_uboot_target</code> hook. We just need to win the ordering
+  fight against it:
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>armbian/build · <code>config/boards/rock-5b.conf</code> — same file, same mechanism, vendor-preferred order</span></header>
+<pre><code>function pre_config_uboot_target__rock5b_patch_rockchip_common_boot_order() {
+    declare -a rockchip_uboot_targets=("mmc1" "nvme" "mmc0" "scsi" "usb" "pxe" "dhcp" "spi")
+    display_alert "u-boot for ${BOARD}/${BRANCH}" \
+        "u-boot: adjust boot order to '${rockchip_uboot_targets[*]}'" "info"
+    sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${rockchip_uboot_targets[*]}\"/" \
+        include/configs/rockchip-common.h
+    regular_git diff -u include/configs/rockchip-common.h || true
+}</code></pre>
+<div class="notes">
+<ul>
+  <li>Identical <code>sed</code> pattern against the identical file as our
+  <code>__999_pxe_first</code>. Vendor&rsquo;s array puts <code>mmc1</code>
+  first (SD-first); ours puts <code>pxe</code> first. Whichever hook runs
+  last wins the <code>#define</code> line.</li>
+  <li>This hook has no numeric prefix, so it gets armbian/build&rsquo;s
+  implicit <code>500_</code>. Our <code>__999_</code> sorts after it and wins
+  — <em>that ordering is only available because we&rsquo;re a hook, not a
+  patch</em>. A <code>.patch</code> file applies once at fetch+patch time,
+  then this in-tree hook would <code>sed</code> right over our change at
+  <code>pre_config_uboot_target</code> time. Patches have no notion of
+  &ldquo;run after that other hook.&rdquo;</li>
+</ul>
+</div>
+</div>
+
+<h3>Workflow example: an upstream u-boot bump</h3>
+
+<p>
+  Concrete contrast. Suppose armbian/build bumps rock-5b&rsquo;s
+  <code>BOOTBRANCH</code> from <code>tag:v2026.01</code> to
+  <code>tag:v2026.07</code>, and along the way upstream adds a comment block
+  above <code>BOOT_TARGETS</code>:
+</p>
+
+<pre><code>--- a/include/configs/rockchip-common.h  (v2026.01)
++++ b/include/configs/rockchip-common.h  (v2026.07)
+@@ -22,6 +22,9 @@
+ #include &lt;env/distro/sd_mmc.h&gt;
+ #include &lt;env/distro/usb.h&gt;
+
++/* Default boot order; boards may override via pre_config_uboot_target. */
++/* See arch/arm/mach-rockchip/board.c for runtime override hooks.       */
++
+ #define BOOT_TARGETS "mmc1 mmc0 nvme scsi usb pxe dhcp spi"</code></pre>
+
+<p>
+  Our hook still works — it matches by regex on the <code>#define</code>
+  line and the new comment context is irrelevant:
+</p>
+
+<pre><code>sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+    include/configs/rockchip-common.h</code></pre>
+
+<p>
+  A hypothetical <code>.patch</code> file generated against v2026.01 — the
+  one we&rsquo;d have shipped if we&rsquo;d gone that route:
+</p>
+
+<pre><code>--- a/include/configs/rockchip-common.h
++++ b/include/configs/rockchip-common.h
+@@ -22,5 +22,5 @@
+ #include &lt;env/distro/sd_mmc.h&gt;
+ #include &lt;env/distro/usb.h&gt;
+
+-#define BOOT_TARGETS "mmc1 mmc0 nvme scsi usb pxe dhcp spi"
++#define BOOT_TARGETS "pxe dhcp mmc1 mmc0 nvme scsi usb spi"</code></pre>
+
+<p>
+  &hellip;fails with <code>error: while searching for: &hellip;</code> because
+  the context around line 22 changed. armbian/build aborts the build.
+  Re-baselining the patch is fresh work for every upstream bump, across every
+  <code>BOOTPATCHDIR</code> the family uses.
+</p>
+
+<h3>Workflow example: adding a third rk3588 board</h3>
+
+<p>
+  A future <code>nanopc-t6</code> (another rk3588 board with a PCIe NIC) joins
+  the family. Its <code>BOOTPATCHDIR</code> is whatever armbian/build picks
+  for it — almost certainly different from <code>v2026.01</code>. With the
+  hook approach, we add the board to <code>vars/boards.yml</code> and
+  <code>build_userpatches_common</code> applies as-is. With the patch
+  approach, we&rsquo;d need to copy the patch into the new
+  <code>BOOTPATCHDIR</code>, rebase against that tree&rsquo;s exact source,
+  and maintain N copies thereafter.
+</p>
+
+<h3>When <code>.patch</code> files <em>are</em> the right tool</h3>
+
+<p>
+  Hooks aren&rsquo;t a universal replacement. Use a <code>.patch</code> file
+  when:
+</p>
+
+<ul>
+  <li><strong>The change is intended to be upstreamable.</strong> An honest
+  diff against a specific upstream commit is what <code>git send-email</code>
+  produces. Issue
+  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>&rsquo;s
+  option <em>D1</em> (patch
+  <code>arch/arm/mach-rockchip/board.c</code> to honour a DT MAC over the
+  chip-hashed MAC) is a textbook example — it&rsquo;s a bug fix that
+  should go upstream, not a structural override.</li>
+  <li><strong>The change is large or touches many files.</strong> A 200-line
+  multi-file change is far more readable as a unified diff than as a
+  <code>sed</code>/<code>grep</code> incantation, and tooling (review,
+  three-way merge) understands diffs natively.</li>
+  <li><strong>The target file is stable across the trees you build.</strong>
+  If a file basically never moves between upstream versions, the
+  context-fragility argument doesn&rsquo;t apply, and a patch is simpler than
+  a hook doing the same edit.</li>
+</ul>
+
+<h2 id="gotchas">8. Gotchas</h2>
 
 <div class="gotcha">
   <strong>"current" and "edge" are not u-boot trees.</strong> They&rsquo;re Armbian&rsquo;s <em>kernel</em> branch labels that the build system also overloads as a per-board switch for u-boot dispatch. The actual u-boot tree for a given <code>(board, branch)</code> pair is whatever the last-firing hook leaves <code>BOOTSOURCE</code> set to. Always trace the hooks for a specific board before assuming.
