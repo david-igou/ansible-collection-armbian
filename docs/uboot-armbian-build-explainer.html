@@ -164,6 +164,7 @@
     <li><a href="#matrix">Concrete matrix: this repo&rsquo;s two boards</a></li>
     <li><a href="#snippets">Annotated snippets</a></li>
     <li><a href="#hooks-vs-patches">Why hooks instead of <code>.patch</code> files?</a></li>
+    <li><a href="#rock5b-fix">Two ways to fix rock-5b&rsquo;s autonomous-PXE problem</a></li>
     <li><a href="#gotchas">Gotchas</a></li>
   </ol>
 </nav>
@@ -713,7 +714,335 @@ the defconfig file.
   a hook doing the same edit.</li>
 </ul>
 
-<h2 id="gotchas">8. Gotchas</h2>
+<h2 id="rock5b-fix">8. Two ways to fix rock-5b&rsquo;s autonomous-PXE problem</h2>
+
+<p>
+  Issue
+  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>
+  documents two interacting U-Boot v2026.01 behaviours that block autonomous
+  cold-boot PXE on rock-5b:
+</p>
+
+<ol>
+  <li><code>rockchip_setup_macaddr()</code> SHA256-hashes the chip&rsquo;s
+  <code>cpuid#</code> into a locally-administered MAC (<code>0a:&hellip;</code>)
+  and writes it over the device-tree MAC at <code>misc_init_r</code> time
+  &mdash; only if <code>env_get("ethaddr")</code> returns NULL. Result: DHCP
+  asks with a MAC the static reservation on rb5009 doesn&rsquo;t recognise.</li>
+  <li><code>CONFIG_ENV_IS_IN_SPI_FLASH=y</code> means a CRC-valid SPI env
+  <em>replaces</em> the compile-time <code>default_environment[]</code> on
+  every boot. PXE-required vars (<code>pxefile_addr_r</code>,
+  <code>kernel_addr_r</code>, &hellip;) are only defined in compile-time
+  defaults, so they vanish from the runtime env on any successful
+  <code>fw_setenv</code> &mdash; U-Boot&rsquo;s PXE bootmeth then silently
+  skips the ethernet bootdev.</li>
+</ol>
+
+<p>
+  Two control surfaces are available: change the U-Boot binary that boots
+  out of SD/SPI, or change the SPI env contents that already-booted U-Boot
+  loads. Both fixes follow the same shape &mdash; <strong>Mechanism &middot;
+  Manual workflow &middot; Automation lift &middot; Trade-offs</strong> &mdash;
+  so the comparison at the end is apples-to-apples.
+</p>
+
+<h3>Approach A &mdash; Build-time fix via userpatches (<code>.patch</code> file)</h3>
+
+<p><strong>Mechanism.</strong> Drop a unified diff under
+<code>userpatches/u-boot/v2026.01/</code> that modifies
+<code>arch/arm/mach-rockchip/board.c</code> so
+<code>rockchip_setup_macaddr()</code> honours a valid DT-supplied MAC and
+returns before the chip-hash path runs. This is the
+<a href="#hooks-vs-patches">section 7</a> &ldquo;when patches <em>are</em>
+the right tool&rdquo; case &mdash; an upstreamable bug fix against a specific
+upstream commit, exactly what <code>git send-email</code> would produce.</p>
+
+<p><strong>Manual workflow.</strong> What an operator types if they
+weren&rsquo;t using this collection&rsquo;s automation:</p>
+
+<div class="snippet">
+<header><strong>Approach A &mdash; manual</strong> <span>operator-driven, against an armbian/build checkout</span></header>
+<pre><code># 1. Stage the source patch where armbian/build will pick it up
+mkdir -p userpatches/u-boot/v2026.01
+cat &gt; userpatches/u-boot/v2026.01/01-rk-honour-dt-mac.patch &lt;&lt;'PATCH'
+--- a/arch/arm/mach-rockchip/board.c
++++ b/arch/arm/mach-rockchip/board.c
+@@ -322,6 +322,12 @@
+ static void rockchip_setup_macaddr(void)
+ {
++	u8 mac[6];
++
++	/* Prefer a valid DT-supplied MAC over the chip-id hash. */
++	if (eth_env_get_enetaddr("ethaddr", mac) &amp;&amp; is_valid_ethaddr(mac))
++		return;
++
+ 	if (env_get("ethaddr"))
+ 		return;
+
+PATCH
+
+# 2. Build (Docker mode auto-delegates as non-root + docker group)
+./compile.sh BOARD=rock-5b BRANCH=edge RELEASE=bookworm \
+    BUILD_MINIMAL=yes COMPRESS_OUTPUTIMAGE=sha,xz
+
+# 3. Result lands at output/images/Armbian_*_rock-5b_*_edge_*.img.xz
+#    Flash to microSD with dd / balenaEtcher, insert into board, power on.
+dd if=output/images/Armbian_*_rock-5b_*_edge_*.img of=/dev/sdX \
+    bs=4M oflag=direct status=progress conv=fsync
+
+# 4. (Optional) sanity-check the fix landed
+strings cache/sources/u-boot-rock-5b/v2026.01/u-boot.bin \
+    | grep -F "ethaddr"   # should NOT contain the chip-hash codepath strings
+</code></pre>
+</div>
+
+<p><strong>Automation lift.</strong> Three edits in this collection; one
+playbook run does the rest:</p>
+
+<div class="snippet">
+<header><strong>Approach A &mdash; automated</strong> <span>this collection · <code>playbooks/build_image.yml</code> diff</span></header>
+<pre><code># playbooks/build_image.yml
+ build_userpatches_common:
+   - dest: "config/sources/families/rockchip-rk3588.conf"
+     content: |
+       function pre_config_uboot_target__999_pxe_first() { &hellip; }
+
++# Per-board: keyed by armbian_board_name. Empty for OPi5Pro; the rock-5b
++# entry carries the upstreamable board.c fix until it lands in mainline.
+ build_userpatches:
+-  {}
++  rock-5b:
++    - dest: "u-boot/v2026.01/01-rk-honour-dt-mac.patch"
++      content: |
++        --- a/arch/arm/mach-rockchip/board.c
++        +++ b/arch/arm/mach-rockchip/board.c
++        @@ -322,6 +322,12 @@
++         static void rockchip_setup_macaddr(void)
++         {
++        +	u8 mac[6];
++        +
++        +	if (eth_env_get_enetaddr("ethaddr", mac) &amp;&amp; is_valid_ethaddr(mac))
++        +		return;
++        +
++         	if (env_get("ethaddr"))
++         		return;</code></pre>
+<div class="notes">
+<ul>
+  <li>The <code>armbian_build</code> role drops every
+  <code>{dest, content}</code> entry into the armbian/build checkout&rsquo;s
+  <code>userpatches/</code> tree (see
+  <a href="../roles/armbian_build/tasks/apply_userpatches.yml">apply_userpatches.yml</a>),
+  which armbian/build then sources/patches at the right point in the flow.</li>
+  <li>Per-board keying means the patch is only present when building rock-5b
+  &mdash; an OPi5Pro build won&rsquo;t see a stray <code>v2026.01/</code> dir
+  whose <code>BOOTPATCHDIR</code> wouldn&rsquo;t exist.</li>
+  <li>Run <code>ansible-playbook playbooks/build_image.yml</code>; it
+  recomputes the patch hash, rebuilds rock-5b, publishes the new
+  <code>.img.xz</code> to the netboot server. Operator&rsquo;s only remaining
+  step is re-flashing the microSD.</li>
+</ul>
+</div>
+</div>
+
+<p><strong>Trade-offs.</strong></p>
+<ul>
+  <li>+ Robust against SPI env state &mdash; the C-level early-return runs
+  before <code>env_get</code> is even consulted, so a CRC-valid SPI env
+  without an <code>ethaddr</code> entry can&rsquo;t defeat it.</li>
+  <li>+ One image per <em>board model</em>, not per board &mdash; no per-MAC
+  build because the MAC comes from the device tree at runtime.</li>
+  <li>+ Upstreamable: the same diff is a candidate for
+  <code>git send-email</code> to <code>u-boot@lists.denx.de</code>; if it
+  lands upstream, this collection drops the patch on the next bump.</li>
+  <li>&minus; Patch context tied to <code>v2026.01</code>. Re-baseline on
+  upstream u-boot bumps (see <a href="#hooks-vs-patches">section 7</a>).</li>
+  <li>&minus; Image rebuild + SD re-flash per fix iteration. No runtime tweak
+  loop &mdash; iteration cycle is &sim;30&ndash;60&nbsp;min cold-cache, plus
+  the physical reflash.</li>
+  <li>&minus; Doesn&rsquo;t address the PXE-address-vars half of #59 on its
+  own; if SPI env is ever invalidated, those compile-time defaults survive,
+  but any operator who runs <code>fw_setenv</code> for any reason re-arms the
+  bug. Pair with Approach B for the address vars, or set them via
+  <code>CONFIG_EXTRA_ENV_SETTINGS</code> in the defconfig (an extra hook).</li>
+</ul>
+
+<h3>Approach B &mdash; Runtime fix via SPI <code>fw_setenv</code></h3>
+
+<p><strong>Mechanism.</strong> Boot the board once from SD into Armbian, then
+write the required vars into the SPI env directly using
+<code>fw_setenv</code> (the Linux-side counterpart to U-Boot&rsquo;s
+<code>setenv</code> + <code>saveenv</code>). The next cold boot reads the
+updated env from SPI, U-Boot now has <code>ethaddr</code> in env so
+<code>rockchip_setup_macaddr</code> short-circuits, and the PXE address vars
+are present so <code>bootflow scan</code> enumerates the ethernet bootdev.</p>
+
+<p><strong>Manual workflow.</strong> What an operator types over SSH after
+<code>bootstrap_armbian.yml</code> has run:</p>
+
+<div class="snippet">
+<header><strong>Approach B &mdash; manual</strong> <span>operator-driven, against a running rock-5b board</span></header>
+<pre><code># 1. Confirm fw_env.config matches rock-5b.conf's SPI layout
+#    (env size 0x20000 at offset 0xc00000; flash sector 0x1000)
+ssh ansible-netboot@rock-5b-01 sudo cat /etc/fw_env.config
+# Expected:
+#   /dev/mtd0    0xc00000    0x20000    0x1000
+
+# 2. Back up the current env before mutating (recovery hatch)
+ssh ansible-netboot@rock-5b-01 sudo fw_printenv &gt; /tmp/rock5b-01.env.bak
+
+# 3. Write the required vars to SPI
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv ethaddr        00:e0:4c:68:00:3b
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv pxefile_addr_r 0x00500000
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv kernel_addr_r  0x02080000
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv ramdisk_addr_r 0x06000000
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv fdt_addr_r     0x08000000
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv scriptaddr     0x00c00000
+ssh ansible-netboot@rock-5b-01 sudo fw_setenv bootmeths      "pxe extlinux script efi"
+
+# 4. Verify
+ssh ansible-netboot@rock-5b-01 sudo fw_printenv ethaddr pxefile_addr_r bootmeths
+
+# 5. Cold boot to validate (full power cycle &mdash; warm reboot may not
+#    re-read SPI env on some Rockchip boards)
+ansible-playbook playbooks/poe_control.yml \
+    --limit rock-5b-01 -e poe_action=cycle
+</code></pre>
+</div>
+
+<p><strong>Automation lift.</strong> A new playbook that wraps the same
+commands with idempotency, per-host MAC lookup from inventory, and a
+backup-before-write safety:</p>
+
+<div class="snippet">
+<header><strong>Approach B &mdash; automated</strong> <span>this collection · proposed <code>playbooks/persist_uboot_env.yml</code></span></header>
+<pre><code>---
+- name: Persist U-Boot env vars to SPI on rock-5b boards
+  hosts: rock-5b
+  gather_facts: false
+  vars:
+    uboot_env_vars:
+      ethaddr:        "{{ board_mac }}"           # inventory hostvar
+      pxefile_addr_r: "0x00500000"
+      kernel_addr_r:  "0x02080000"
+      ramdisk_addr_r: "0x06000000"
+      fdt_addr_r:     "0x08000000"
+      scriptaddr:     "0x00c00000"
+      bootmeths:      "pxe extlinux script efi"
+  tasks:
+    - name: Ensure u-boot-tools is installed
+      become: true
+      ansible.builtin.apt:
+        name: u-boot-tools
+        state: present
+
+    - name: Ensure /etc/fw_env.config matches the SPI env layout
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/fw_env.config
+        content: "/dev/mtd0    0xc00000    0x20000    0x1000\n"
+        mode: "0644"
+
+    - name: Snapshot current env before mutating
+      become: true
+      ansible.builtin.shell:
+        cmd: fw_printenv &gt; /var/backups/uboot-env-{{ ansible_date_time.iso8601_basic_short }}.bak
+        creates: "/var/backups/uboot-env-{{ ansible_date_time.iso8601_basic_short }}.bak"
+
+    - name: Read each var
+      become: true
+      ansible.builtin.command:
+        cmd: "fw_printenv -n {{ item.key }}"
+      register: _current
+      changed_when: false
+      failed_when: false
+      loop: "{{ uboot_env_vars | dict2items }}"
+      loop_control: { label: "{{ item.key }}" }
+
+    - name: Set each var only when value drifts
+      become: true
+      ansible.builtin.command:
+        argv: [fw_setenv, "{{ item.0.key }}", "{{ item.0.value }}"]
+      when: item.1.stdout | default('') != item.0.value
+      loop: "{{ uboot_env_vars | dict2items | zip(_current.results) | list }}"
+      loop_control: { label: "{{ item.0.key }}" }
+      notify: Cold-cycle the board
+
+  handlers:
+    - name: Cold-cycle the board
+      ansible.builtin.include_role:
+        name: routeros_poe
+      vars:
+        poe_action: cycle</code></pre>
+<div class="notes">
+<ul>
+  <li>Per-board <code>board_mac</code> comes from inventory &mdash; same
+  hostvar that drives <code>pxelinux.cfg/01-&lt;mac&gt;</code>, so the SPI
+  env and the rb5009 TFTP layout can&rsquo;t drift apart.</li>
+  <li>Read-then-set means re-running the playbook is cheap and idempotent;
+  only drift triggers a <code>fw_setenv</code> and the cold-cycle handler.</li>
+  <li>Snapshot file gives the operator a recovery hatch: the worst
+  <code>fw_setenv</code> botch can be undone by booting a recovery image and
+  writing the saved env back.</li>
+  <li>Cold cycle (PoE off &rarr; on) via the existing
+  <code>routeros_poe</code> role &mdash; warm <code>reboot</code> can skip
+  re-reading SPI env on some RK3588 boot ROMs.</li>
+</ul>
+</div>
+</div>
+
+<p><strong>Trade-offs.</strong></p>
+<ul>
+  <li>+ One image serves any rock-5b. No per-MAC rebuild; bootstrap once
+  with the stock <code>edge</code> image, then converge env state.</li>
+  <li>+ Fast iteration: change a value, re-run the playbook, cold-cycle.
+  Seconds, not the &sim;30&ndash;60 min build + SD-reflash of Approach A.</li>
+  <li>+ Per-board state lives in inventory, which is where every other
+  per-board fact (MAC, PoE port, DTB) already lives &mdash; no new control
+  plane.</li>
+  <li>&minus; Requires the board to boot to Linux first. If U-Boot
+  can&rsquo;t reach an init system (SD-controller flake, PSU sag, see
+  architecture.md&rsquo;s signatures #1&ndash;#3), Approach B can&rsquo;t be
+  applied. Approach A is robust to this because the fix lives in the U-Boot
+  binary itself.</li>
+  <li>&minus; SPI env can be corrupted by a botched write. Mitigated by the
+  pre-write snapshot, but recovery still requires an SD boot with a
+  matching <code>/etc/fw_env.config</code>.</li>
+  <li>&minus; State is host-local. Re-image a board and the env reverts to
+  whatever the U-Boot binary&rsquo;s defaults are &mdash; the playbook must
+  be re-run. No problem if you treat it as a convergence loop, but it
+  isn&rsquo;t a one-shot.</li>
+</ul>
+
+<h3>Comparison</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th>Approach A &mdash; <code>.patch</code></th>
+      <th>Approach B &mdash; <code>fw_setenv</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Control surface</td><td>U-Boot binary on SD/SPI</td><td>SPI env contents</td></tr>
+    <tr><td>Where state lives</td><td>The image (one per board model)</td><td>Per-board SPI</td></tr>
+    <tr><td>Iteration time</td><td>&sim;30&ndash;60&nbsp;min build + reflash</td><td>Seconds per board</td></tr>
+    <tr><td>Robust to PSU/SD flake?</td><td>Yes &mdash; fix is in the binary</td><td>No &mdash; needs Linux boot</td></tr>
+    <tr><td>Robust to SPI env reset?</td><td>Yes</td><td>No &mdash; reapply playbook</td></tr>
+    <tr><td>Upstreamable?</td><td>Yes &mdash; <code>git send-email</code> to u-boot ML</td><td>No &mdash; environmental, not a fix</td></tr>
+    <tr><td>Per-board MAC tracking</td><td>None (DT carries the MAC)</td><td>Inventory <code>board_mac</code></td></tr>
+    <tr><td>This collection ships it today?</td><td>Not yet (#59 D1)</td><td>Not yet (playbook above is the proposal)</td></tr>
+  </tbody>
+</table>
+
+<p>
+  In practice the two are complementary: ship A as the structural fix so
+  fresh boards work without human intervention, and keep B around as the
+  fast in-place tweak path for the long tail of address-var and bootmeth
+  experimentation that doesn&rsquo;t justify a full rebuild cycle.
+</p>
+
+<h2 id="gotchas">9. Gotchas</h2>
 
 <div class="gotcha">
   <strong>"current" and "edge" are not u-boot trees.</strong> They&rsquo;re Armbian&rsquo;s <em>kernel</em> branch labels that the build system also overloads as a per-board switch for u-boot dispatch. The actual u-boot tree for a given <code>(board, branch)</code> pair is whatever the last-firing hook leaves <code>BOOTSOURCE</code> set to. Always trace the hooks for a specific board before assuming.
