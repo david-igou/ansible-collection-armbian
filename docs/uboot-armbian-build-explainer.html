@@ -1217,6 +1217,437 @@ backup-before-write safety:</p>
   experimentation that doesn&rsquo;t justify a full rebuild cycle.
 </p>
 
+<h3>8.5 Where U-Boot gets a MAC &mdash; and why <code>rockchip_setup_macaddr</code> always wins</h3>
+
+<p>
+  Approach A&rsquo;s patch assumes U-Boot has somewhere <em>else</em> to source
+  a MAC from once <code>rockchip_setup_macaddr</code> steps aside. That
+  assumption is correct, but seeing why requires walking the actual U-Boot
+  resolution chain. It lives in <code>net/eth-uclass.c::eth_post_probe()</code>
+  and fires once per Ethernet device the first time it&rsquo;s probed
+  (during <code>bootflow scan</code>, <code>dhcp</code>, <code>eth list</code>,
+  &hellip;):
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>u-boot v2026.01 &middot; <code>net/eth-uclass.c</code> &mdash; <code>eth_post_probe()</code>, abridged for the priority chain</span></header>
+<pre><code>static int eth_post_probe(struct udevice *dev)
+{
+    struct eth_pdata *pdata = dev_get_plat(dev);
+    unsigned char env_enetaddr[ARP_HLEN];
+    char *source = "DT";
+
+    /* 1. Try DT: mac-address / local-mac-address property, or "mac-address"
+     *    nvmem cell (typically OTP fuses). */
+    if (!eth_dev_get_mac_address(dev, pdata-&gt;enetaddr) ||
+        !is_valid_ethaddr(pdata-&gt;enetaddr)) {
+
+        /* 2. Try the NIC's own EEPROM via the driver's read_rom_hwaddr op. */
+        if (eth_get_ops(dev)-&gt;read_rom_hwaddr) {
+            if (!eth_get_ops(dev)-&gt;read_rom_hwaddr(dev))
+                source = "ROM";
+        }
+    }
+
+    /* 3. Read the env var corresponding to this NIC's index (eth0 -&gt; ethaddr,
+     *    eth1 -&gt; eth1addr, ...). */
+    eth_env_get_enetaddr_by_index("eth", dev_seq(dev), env_enetaddr);
+    if (!is_zero_ethaddr(env_enetaddr)) {
+        if (memcmp(pdata-&gt;enetaddr, env_enetaddr, ARP_HLEN)) {
+            printf("\nWarning: %s MAC addresses don't match:\n", dev-&gt;name);
+            printf("Address in %s is\t\t%pM\n",      source, pdata-&gt;enetaddr);
+            printf("Address in environment is\t%pM\n", env_enetaddr);
+        }
+        /* env always overrides DT/ROM */
+        memcpy(pdata-&gt;enetaddr, env_enetaddr, ARP_HLEN);
+    } else if (is_valid_ethaddr(pdata-&gt;enetaddr)) {
+        /* env was empty; save the DT/ROM MAC to env so future boots see it. */
+        eth_env_set_enetaddr_by_index("eth", dev_seq(dev), pdata-&gt;enetaddr);
+    } else {
+#ifdef CONFIG_NET_RANDOM_ETHADDR
+        net_random_ethaddr(pdata-&gt;enetaddr);
+        eth_env_set_enetaddr_by_index("eth", dev_seq(dev), pdata-&gt;enetaddr);
+#else
+        return -EINVAL;
+#endif
+    }
+    eth_write_hwaddr(dev);   /* push final MAC into the NIC's hardware register */
+    return 0;
+}</code></pre>
+<div class="notes">
+<strong>Priority:</strong> <code>env &gt; (DT || ROM) &gt; random &gt; error</code>.
+If env has anything for this NIC, env wins &mdash; the warning prints
+indicate U-Boot noticed the mismatch and chose env anyway. This is the rule
+<code>rockchip_setup_macaddr</code> exploits: pre-populate env, and every
+NIC&rsquo;s DT/ROM MAC gets silently overridden.
+</div>
+</div>
+
+<p>
+  The DT step (step 1 above) is itself a multi-source chain. Both standard
+  DT properties <em>and</em> nvmem cells (OTP fuses) count as &ldquo;DT&rdquo;
+  for priority purposes:
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>u-boot v2026.01 &middot; <code>net/eth-uclass.c</code> &mdash; <code>eth_dev_get_mac_address()</code></span></header>
+<pre><code>static bool eth_dev_get_mac_address(struct udevice *dev, u8 mac[ARP_HLEN])
+{
+#if CONFIG_IS_ENABLED(OF_CONTROL)
+    const uint8_t *p;
+    struct nvmem_cell mac_cell;
+
+    /* 1a. Standard DT properties on the ethernet node. */
+    p = dev_read_u8_array_ptr(dev, "mac-address",       ARP_HLEN);
+    if (!p)
+        p = dev_read_u8_array_ptr(dev, "local-mac-address", ARP_HLEN);
+    if (p) { memcpy(mac, p, ARP_HLEN); return true; }
+
+    /* 1b. nvmem cell named "mac-address" &mdash; typically OTP fuses linked
+     *     via a nvmem-cells / nvmem-cell-names pair on the ethernet node. */
+    if (nvmem_cell_get_by_name(dev, "mac-address", &amp;mac_cell)) return false;
+    return !nvmem_cell_read(&amp;mac_cell, mac, ARP_HLEN);
+#else
+    return false;
+#endif
+}</code></pre>
+</div>
+
+<p>
+  And the env helpers compose to index-keyed env var names &mdash;
+  <code>ethaddr</code> for index 0, <code>eth1addr</code> for index 1
+  (not <code>eth0addr</code>):
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>u-boot v2026.01 &middot; <code>net/eth_common.c</code></span></header>
+<pre><code>int eth_env_get_enetaddr_by_index(const char *base_name, int index, uchar *enetaddr)
+{
+    char enetvar[32];
+    sprintf(enetvar, index ? "%s%daddr" : "%saddr", base_name, index);
+    return eth_env_get_enetaddr(enetvar, enetaddr);
+}
+
+int eth_env_set_enetaddr_by_index(const char *base_name, int index, uchar *enetaddr)
+{
+    char enetvar[32];
+    sprintf(enetvar, index ? "%s%daddr" : "%saddr", base_name, index);
+    return eth_env_set_enetaddr(enetvar, enetaddr);
+}</code></pre>
+</div>
+
+<p>
+  The Rockchip wrinkle: <code>rockchip_setup_macaddr</code> runs at
+  <code>misc_init_r</code> &mdash; which fires <em>before</em> any
+  network activity, so before any <code>eth_post_probe</code> ever runs.
+  By the time the first <code>bootflow scan</code> triggers Ethernet probing,
+  env already has the chip-hash MAC, and the &ldquo;env always wins&rdquo;
+  rule does the rest:
+</p>
+
+<div class="snippet">
+<header><strong>Upstream</strong> <span>u-boot v2026.01 &middot; <code>arch/arm/mach-rockchip/board.c</code> &mdash; full body of <code>rockchip_setup_macaddr()</code></span></header>
+<pre><code>int rockchip_setup_macaddr(void)
+{
+#if CONFIG_IS_ENABLED(HASH) &amp;&amp; CONFIG_IS_ENABLED(SHA256)
+    const char *cpuid = env_get("cpuid#");      /* SoC-unique, OTP-derived string */
+    u8 hash[SHA256_SUM_LEN];
+    int size = sizeof(hash);
+    u8 mac_addr[6];
+
+    if (env_get("ethaddr"))                      /* short-circuit if env already set */
+        return 0;
+    if (!cpuid) return -1;
+
+    hash_block("sha256", (void *)cpuid, strlen(cpuid), hash, &amp;size);
+    memcpy(mac_addr, hash, 6);
+    mac_addr[0] &amp;= 0xfe;                         /* clear multicast bit                  */
+    mac_addr[0] |= 0x02;                         /* set locally-administered bit (IEEE)  */
+
+    eth_env_set_enetaddr("ethaddr",  mac_addr);
+    mac_addr[5] ^= 0x01;                         /* derive eth1addr by xor'ing last byte */
+    eth_env_set_enetaddr("eth1addr", mac_addr);
+#endif
+    return 0;
+}</code></pre>
+<div class="notes">
+This is why Approach A&rsquo;s patch is upstream of <code>env_get</code> rather
+than below it &mdash; once <code>ethaddr</code> lands in env, every NIC on the
+board will see env override its DT or ROM MAC, with no way for
+<code>eth_post_probe</code> to know the env value was synthetic.
+</div>
+</div>
+
+<p>
+  Helper-function quick reference for anyone editing the Approach A patch:
+</p>
+
+<table>
+<thead><tr><th>Symbol</th><th>What it does</th><th>File</th></tr></thead>
+<tbody>
+  <tr><td><code>env_get("name")</code></td><td>Returns <code>const char *</code> for env var or <code>NULL</code></td><td><code>env/common.c</code></td></tr>
+  <tr><td><code>eth_env_get_enetaddr(name, buf)</code></td><td>Parses string env value into a 6-byte MAC; returns 1 if valid</td><td><code>net/eth_common.c</code></td></tr>
+  <tr><td><code>eth_env_set_enetaddr(name, mac)</code></td><td>Formats 6-byte MAC to string, calls <code>env_set</code></td><td><code>net/eth_common.c</code></td></tr>
+  <tr><td><code>is_valid_ethaddr(mac)</code></td><td>True if not zero, not broadcast, not multicast</td><td><code>include/net.h</code></td></tr>
+  <tr><td><code>is_zero_ethaddr(mac)</code></td><td>True if all six bytes are <code>0x00</code></td><td><code>include/net.h</code></td></tr>
+  <tr><td><code>eth_get_ops(dev)-&gt;read_rom_hwaddr(dev)</code></td><td>Driver op &mdash; reads MAC from NIC&rsquo;s onboard EEPROM into <code>pdata-&gt;enetaddr</code></td><td><code>net/eth-uclass.c</code></td></tr>
+  <tr><td><code>eth_write_hwaddr(dev)</code></td><td>Pushes <code>pdata-&gt;enetaddr</code> into the NIC&rsquo;s hardware MAC register</td><td><code>net/eth-uclass.c</code></td></tr>
+</tbody>
+</table>
+
+<h4>Why this looks PCIe-specific (but isn&rsquo;t)</h4>
+
+<p>
+  Both rock-5b and orangepi5pro run <code>rockchip_setup_macaddr</code>, and
+  both end up with chip-hash MACs on the wire. The asymmetry isn&rsquo;t in
+  U-Boot &mdash; it&rsquo;s in how visible the override is to the operator
+  setting up DHCP:
+</p>
+
+<table>
+<thead><tr><th></th><th>rock-5b (RTL8125 over PCIe)</th><th>OPi5Pro (GMAC on SoC)</th></tr></thead>
+<tbody>
+  <tr>
+    <td><strong>Hardware MAC source</strong></td>
+    <td>Real factory MAC programmed into the RTL8125&rsquo;s own EEPROM (Realtek <code>00:e0:4c</code> OUI, printed on the PCB sticker, surfaces via the driver&rsquo;s <code>read_rom_hwaddr</code> op)</td>
+    <td>None &mdash; the GMAC controller is a bare SoC block with no EEPROM. The chip-hash IS the only stable identity available</td>
+  </tr>
+  <tr>
+    <td><strong>What the operator expects</strong></td>
+    <td>The sticker MAC. DHCP reservation is registered against it on day one</td>
+    <td>Whatever <code>ip link show</code> reported after first boot &mdash; which is whatever <code>rockchip_setup_macaddr</code> produced. The operator never had a sticker MAC to compare against</td>
+  </tr>
+  <tr>
+    <td><strong>Effect of the chip-hash override</strong></td>
+    <td>Sticker MAC and on-the-wire MAC don&rsquo;t match &rarr; reservation never hits &rarr; DHCP gives a dynamic lease (or none) &rarr; PXE fails</td>
+    <td>Self-consistent: the chip-hash MAC was registered in DHCP from day one; nothing to mismatch. PXE works</td>
+  </tr>
+</tbody>
+</table>
+
+<p>
+  So the earlier shorthand &ldquo;GMAC boards sidestep this&rdquo; is right
+  for the PCI-enumeration half (gotcha #6 in
+  <a href="#gotchas">section 9</a>: GMAC isn&rsquo;t on the PCI bus, so
+  <code>CONFIG_PCI_INIT_R</code> doesn&rsquo;t matter for it) but
+  misleading for the MAC half. GMAC boards don&rsquo;t sidestep
+  <code>rockchip_setup_macaddr</code> &mdash; they just don&rsquo;t notice
+  it, because they had no competing identity for the chip-hash to step on.
+  The bug is symmetric; the visibility is asymmetric.
+</p>
+
+<p>
+  Net-net for Approach A: a clean upstreamable fix needs to handle both
+  cases. Honour a DT-supplied MAC if present (the
+  <code>nvmem-cells = &lt;&amp;cpu_id&gt;</code> form is the upstream-canonical
+  hook for &ldquo;board has an OTP MAC slot&rdquo;), and otherwise fall
+  through to the chip-hash so OPi5Pro-class boards (no other MAC source) keep
+  the stable identity they already had.
+</p>
+
+<h3>8.6 Layer 2 in code &mdash; <code>CFG_EXTRA_ENV_SETTINGS</code> and the SPI-replacement trap</h3>
+
+<p>
+  Approach A clears Layer 1 (MAC). Layer 2 (the missing PXE address vars
+  &mdash; <code>pxefile_addr_r</code>, <code>kernel_addr_r</code>,
+  <code>ramdisk_addr_r</code>, <code>fdt_addr_r</code>, <code>scriptaddr</code>)
+  is a separate problem. Its mechanism is
+  <code>CFG_EXTRA_ENV_SETTINGS</code> &mdash; the string baked into
+  <code>u-boot.bin</code> that becomes the runtime env when no saved env is
+  available. (Older docs and the U-Boot codebase pre-v2022.07 spell it
+  <code>CONFIG_EXTRA_ENV_SETTINGS</code>; the
+  <code>CONFIG_</code>&rarr;<code>CFG_</code> rename was a tree-wide mechanical
+  change. Both spellings still appear in third-party Kconfig help text and
+  Stack Overflow answers.) Two mechanisms produce it:
+</p>
+
+<h4>Form 1 &mdash; C preprocessor macro in the board header file</h4>
+
+<div class="snippet">
+<header><strong>Sketch</strong> <span>u-boot &middot; <code>include/configs/rock5b-rk3588.h</code> &mdash; what would need adding for Layer 2 coverage from defaults</span></header>
+<pre><code>#define CFG_EXTRA_ENV_SETTINGS                       \
+    "fdt_high=0xffffffffffffffff\0"                  \
+    "initrd_high=0xffffffffffffffff\0"               \
+    "fdtfile=rockchip/rk3588-rock-5b.dtb\0"          \
+    "kernel_addr_r=0x02080000\0"                     \
+    "fdt_addr_r=0x08000000\0"                        \
+    "ramdisk_addr_r=0x06000000\0"                    \
+    "scriptaddr=0x00c00000\0"                        \
+    "pxefile_addr_r=0x00500000\0"                    \
+    "bootmeths=pxe extlinux script efi\0"</code></pre>
+<div class="notes">
+The macro expands to a single null-separated string &mdash; the
+<code>\0</code> between entries are concatenated by the C preprocessor into
+literal NUL bytes. U-Boot&rsquo;s env subsystem walks it at boot, parses each
+<code>var=val</code> chunk, and that becomes the default env. The double-quoted
+form is mandatory; the trailing <code>\0</code> on each line is what makes the
+parser stop at each chunk boundary.
+</div>
+</div>
+
+<h4>Form 2 &mdash; Kconfig + external text file (modern)</h4>
+
+<div class="snippet">
+<header><strong>Sketch</strong> <span>u-boot &middot; defconfig + env.txt &mdash; same content, Kconfig-driven</span></header>
+<pre><code># configs/rock5b-rk3588_defconfig (additions)
+CONFIG_USE_DEFAULT_ENV_FILE=y
+CONFIG_DEFAULT_ENV_FILE="board/rockchip/rock-5b/env.txt"</code></pre>
+<pre><code># board/rockchip/rock-5b/env.txt
+fdt_high=0xffffffffffffffff
+initrd_high=0xffffffffffffffff
+fdtfile=rockchip/rk3588-rock-5b.dtb
+kernel_addr_r=0x02080000
+fdt_addr_r=0x08000000
+ramdisk_addr_r=0x06000000
+scriptaddr=0x00c00000
+pxefile_addr_r=0x00500000
+bootmeths=pxe extlinux script efi</code></pre>
+<div class="notes">
+Same effect &mdash; a string baked into <code>u-boot.bin</code>. Newline-separated
+in the text file; U-Boot converts to null-separated at build time. The text
+file form is what mainline u-boot is moving toward (introduced around v2022.07,
+widely adopted by 2024); it&rsquo;s easier to diff, easier to template, and
+doesn&rsquo;t require touching a C header.
+</div>
+</div>
+
+<h4>How this collection would set it via a build-time hook</h4>
+
+<p>
+  A new <code>pre_config_uboot_target</code> hook in the same family overlay
+  that already carries <code>__999_pxe_first</code>:
+</p>
+
+<div class="snippet">
+<header><strong>Sketch</strong> <span>this collection &middot; <code>playbooks/build_image.yml</code> &mdash; proposed Layer-2 hook</span></header>
+<pre><code>build_userpatches_common:
+  - dest: "config/sources/families/rockchip-rk3588.conf"
+    content: |
+      function pre_config_uboot_target__999_pxe_first() { ... }   # existing
+
+      # New: ensure PXE address vars are in the compile-time default env.
+      function pre_config_uboot_target__998_pxe_addrs_in_default_env() {
+          local defconfig="configs/${BOOTCONFIG}"
+          [[ -f "$defconfig" ]] || return 0
+
+          # Per-board env file under board/rockchip/<board>/
+          local env_file="board/rockchip/${BOARD}/env-armbian-netboot.txt"
+          mkdir -p "$(dirname "$env_file")"
+          cat &gt; "$env_file" &lt;&lt;EOF
+kernel_addr_r=0x02080000
+fdt_addr_r=0x08000000
+ramdisk_addr_r=0x06000000
+scriptaddr=0x00c00000
+pxefile_addr_r=0x00500000
+bootmeths=pxe extlinux script efi
+EOF
+
+          # Wire the file into the defconfig (idempotent — second build is a no-op)
+          grep -q "^CONFIG_USE_DEFAULT_ENV_FILE=y" "$defconfig" \
+              || echo "CONFIG_USE_DEFAULT_ENV_FILE=y" &gt;&gt; "$defconfig"
+          grep -q "^CONFIG_DEFAULT_ENV_FILE=" "$defconfig" \
+              || echo "CONFIG_DEFAULT_ENV_FILE=\"$env_file\"" &gt;&gt; "$defconfig"
+      }</code></pre>
+<div class="notes">
+<ul>
+  <li>Numeric prefix <code>__998_</code> sorts before <code>__999_pxe_first</code>;
+  the two hooks are independent (one touches the defconfig and an env file, the
+  other touches <code>rockchip-common.h</code>) but the ordering keeps the
+  family-overlay diff easy to read.</li>
+  <li>Idempotent <code>grep -q || echo</code> means re-running the build
+  doesn&rsquo;t accumulate duplicate defconfig lines.</li>
+  <li>This hook is generic across rk3588 boards: any board that goes through
+  the rk3588 family overlay gets the same default env. Per-board values
+  (<code>fdtfile</code>) come from rock-5b.conf&rsquo;s own
+  <code>post_family_config_branch_edge</code> hook setting
+  <code>BOOTCONFIG="rock5b-rk3588_defconfig"</code> upstream of this, so the
+  defconfig that gets edited is already board-specific.</li>
+</ul>
+</div>
+</div>
+
+<h4>Why this isn&rsquo;t sufficient on its own</h4>
+
+<p>
+  Gotcha #7 (<a href="#gotchas">section 9</a>) flags it briefly; here&rsquo;s
+  the full mechanism. A CRC-valid SPI env <em>replaces</em> the defaults
+  entirely on <code>env_load</code>. The exact failure sequence after writing
+  the hook above:
+</p>
+
+<ol>
+  <li><strong>First boot, fresh SD-flash:</strong> SPI is empty (bad CRC) &rarr;
+  <code>env_load</code> falls back to defaults &rarr; runtime env contains
+  every <code>CFG_EXTRA_ENV_SETTINGS</code> entry. PXE works.</li>
+  <li><strong>Operator runs <code>fw_setenv ethaddr 00:e0:4c:68:00:3b</code>
+  from Linux:</strong>
+    <ul>
+      <li><code>fw_setenv</code> reads <code>/dev/mtd0</code> at the offset
+      <code>/etc/fw_env.config</code> points it at &mdash; sees bad CRC
+      &mdash; starts with an <strong>empty in-memory env</strong>.
+      Crucially: <code>fw_setenv</code> has no access to
+      <code>CFG_EXTRA_ENV_SETTINGS</code>, because that string lives inside
+      <code>u-boot.bin</code>, not on disk.</li>
+      <li>It applies <code>ethaddr=…</code> to the empty env, computes a CRC,
+      writes the whole thing (just one entry plus header) back to SPI.</li>
+    </ul>
+  </li>
+  <li><strong>Next U-Boot boot:</strong> SPI env loads successfully (good CRC)
+  &rarr; runtime env = <code>{ethaddr=&hellip;}</code> only.
+  <code>pxefile_addr_r</code> and every other address var: gone.
+  <code>bootflow scan</code> silently skips the ethernet bootdev.</li>
+</ol>
+
+<p>
+  So Layer-2 defaults need a partner that gets them into SPI <em>before</em>
+  the first <code>fw_setenv</code> ever runs. Three options:
+</p>
+
+<ul>
+  <li><strong>Partner option 1 &mdash; first-boot env-save sentinel.</strong>
+  Extend the same <code>CFG_EXTRA_ENV_SETTINGS</code> with a bootcmd snippet
+  that, on first boot (detected via a sentinel var), does
+  <code>env default -a; env save</code>. Bakes the defaults into SPI as a
+  CRC-valid saved env from day one. After that, <code>fw_setenv</code> reads a
+  full env, modifies one var, writes back &mdash; the address vars survive
+  because they were in what <code>fw_setenv</code> read in step 2.
+<pre><code>/* Appended inside CFG_EXTRA_ENV_SETTINGS: */
+"first_boot=test \"${env_baked}\" = 1 || "
+            "(env default -a; env set env_baked 1; env save)\0"
+"bootcmd=run first_boot; bootflow scan -lb\0"</code></pre>
+  Clean &mdash; one extra env var &mdash; but introduces a build-time-decided
+  bootcmd that future U-Boot bumps may want to override.</li>
+
+  <li><strong>Partner option 2 &mdash; Approach B.</strong> Use the
+  <code>fw_setenv</code> automation from <a href="#rock5b-fix">Section 8.4</a>
+  to converge SPI env state to the desired set every time the playbook runs.
+  In this path the Layer-2 hook above is redundant &mdash; Approach B writes
+  the same vars directly into SPI. This is the path this collection&rsquo;s
+  current proposal favours, because per-board MAC tracking already lives in
+  inventory and a convergence playbook is the natural shape for that.</li>
+
+  <li><strong>Partner option 3 &mdash; disable SPI env entirely.</strong> Drop
+  <code>CONFIG_ENV_IS_IN_SPI_FLASH=y</code> in the same overlay that adds the
+  Layer-2 defaults; defaults from <code>u-boot.bin</code> then always apply,
+  and <code>fw_setenv</code> from Linux becomes a no-op (or errors).
+  Drastic &mdash; loses the ability to persist <em>any</em> per-board state
+  from Linux &mdash; but clean for a true netboot-only fleet where the only
+  per-board state the U-Boot env ever needed to carry was the MAC, and
+  Approach A&rsquo;s board.c patch has already moved MAC handling into the DT
+  resolution chain.</li>
+</ul>
+
+<p>
+  <strong>Practical recommendation.</strong> Approach B (Section 8.4) already
+  covers the same surface as Partner Option 2 and is more flexible (per-board
+  MAC from inventory, idempotent re-runs, snapshot before write). Adding the
+  Layer-2 hook is worth doing only if/when we want fresh boards to PXE
+  successfully <em>before</em> the Approach B playbook gets a chance to run
+  &mdash; i.e. true zero-touch from first SD-flash, with no Linux-side
+  intervention required. Without Partner Option 1&rsquo;s first-boot env-save,
+  that zero-touch is a single-boot guarantee only.
+</p>
+
 <h2 id="gotchas">9. Gotchas</h2>
 
 <div class="gotcha">
