@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>U-Boot in armbian/build — a one-pass explainer</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --bg: #fafafa;
+    --accent: #b14b00;
+    --accent2: #1c5b8a;
+    --code-bg: #f0eee9;
+    --rule: #d9d5cc;
+    --warn-bg: #fff4d6;
+    --warn-bd: #e6c200;
+  }
+  html { background: var(--bg); }
+  body {
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 820px;
+    margin: 2.5rem auto 4rem;
+    padding: 0 1.25rem;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.4rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 2.2rem 0 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 0.5rem; color: var(--accent2); }
+  p, ul, ol { margin: 0.6rem 0; }
+  p.subtitle {
+    color: var(--muted);
+    font-size: 1rem;
+    margin: 0 0 1.5rem;
+  }
+  code, pre {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+  }
+  code { background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    border-left: 3px solid var(--accent2);
+    border-radius: 2px;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  .snippet {
+    margin: 1rem 0 1.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+  }
+  .snippet header {
+    background: #efece5;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .snippet header strong { color: var(--fg); font-weight: 600; }
+  .snippet pre { margin: 0; border-left: none; border-radius: 0; background: #fcfbf8; }
+  .snippet .notes {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.92rem;
+    background: #fffefb;
+    border-top: 1px dashed var(--rule);
+  }
+  .snippet .notes ul { margin: 0.2rem 0 0 1.2rem; padding: 0; }
+  .snippet .notes li { margin: 0.25rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--rule);
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #efece5; font-weight: 600; }
+  td code { font-size: 0.84rem; }
+  .gotcha {
+    border: 1px solid var(--warn-bd);
+    background: var(--warn-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .gotcha strong { color: var(--accent); }
+  nav.toc {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 2rem;
+    font-size: 0.93rem;
+  }
+  nav.toc ol { margin: 0; padding-left: 1.3rem; }
+  nav.toc a { color: var(--accent2); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  figure { margin: 1.2rem 0; }
+  figure svg { display: block; max-width: 100%; height: auto; }
+  figcaption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+    text-align: center;
+  }
+  .pill {
+    display: inline-block;
+    background: #e7e2d3;
+    color: var(--accent);
+    padding: 0.05em 0.5em;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kvbox {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.6rem 0.9rem;
+    margin: 0.6rem 0 1rem;
+    font-size: 0.92rem;
+    border-radius: 3px;
+  }
+  .kvbox dt { font-weight: 600; margin-top: 0.4rem; }
+  .kvbox dt:first-child { margin-top: 0; }
+  .kvbox dd { margin: 0.05rem 0 0 0; padding-left: 0.25rem; }
+</style>
+</head>
+<body>
+
+<h1>U-Boot in armbian/build — a one-pass explainer</h1>
+<p class="subtitle">
+  How <code>compile.sh BOARD=… BRANCH=…</code> turns into a specific U-Boot binary
+  baked into an Armbian <code>.img.xz</code>, and why two boards on the same
+  <em>armbian branch</em> can be building from completely different
+  <em>u-boot trees</em>. Scoped to the rk3588 configuration shipped by
+  <a href="https://github.com/armbian/build/tree/v26.2.0-trunk.844">armbian/build
+  v26.2.0-trunk.844</a> (the ref this collection pins).
+</p>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#what">What armbian/build actually builds</a></li>
+    <li><a href="#vars">The seven variables that pick a u-boot tree</a></li>
+    <li><a href="#resolution">How those variables get their final values</a></li>
+    <li><a href="#flow">Build flow diagram</a></li>
+    <li><a href="#matrix">Concrete matrix: this repo&rsquo;s two boards</a></li>
+    <li><a href="#snippets">Annotated snippets</a></li>
+    <li><a href="#gotchas">Gotchas</a></li>
+  </ol>
+</nav>
+
+<h2 id="what">1. What armbian/build actually builds</h2>
+
+<p>
+  An Armbian image is three independently-sourced pieces glued together at
+  packaging time:
+</p>
+
+<dl class="kvbox">
+  <dt>U-Boot binary</dt>
+  <dd>Compiled from a git tree pointed at by <code>BOOTSOURCE</code> / <code>BOOTBRANCH</code>. This is what runs from SD/eMMC/SPI at power-on, talks to DHCP/TFTP, and hands off to the kernel.</dd>
+  <dt>Kernel + DTB</dt>
+  <dd>Compiled from <code>KERNELSOURCE</code> / <code>KERNELBRANCH</code>. Separate tree, separate version cadence.</dd>
+  <dt>Userland rootfs</dt>
+  <dd>Debian/Ubuntu via debootstrap; release pinned by <code>RELEASE=</code> (<code>bookworm</code> in this repo).</dd>
+</dl>
+
+<p>
+  This explainer is about the <strong>first</strong> piece only. The U-Boot
+  binary is the one with PXE-first <code>BOOT_TARGETS</code> that this
+  collection&rsquo;s netboot invariant depends on (see
+  <a href="architecture.md">architecture.md</a>).
+</p>
+
+<h2 id="vars">2. The seven variables that pick a u-boot tree</h2>
+
+<p>
+  By the time <code>compile.sh</code> calls <code>make</code> on U-Boot,
+  these seven shell variables have been resolved to concrete values. Together
+  they fully determine the binary you get:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Variable</th><th>What it controls</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>BOOTSOURCE</code></td><td>Git remote URL of the u-boot tree (e.g. <code>github.com/radxa/u-boot.git</code> vs <code>github.com/u-boot/u-boot.git</code>).</td></tr>
+    <tr><td><code>BOOTBRANCH</code></td><td>Ref to check out: <code>branch:&lt;name&gt;</code>, <code>tag:&lt;name&gt;</code>, or <code>commit:&lt;sha&gt;</code>.</td></tr>
+    <tr><td><code>BOOTPATCHDIR</code></td><td>Directory under <code>patch/u-boot/</code> whose <code>.patch</code> files are applied after checkout.</td></tr>
+    <tr><td><code>BOOTCONFIG</code></td><td>The <code>defconfig</code> argument to <code>make</code>, e.g. <code>rock5b-rk3588_defconfig</code>.</td></tr>
+    <tr><td><code>BOOTDIR</code></td><td>Directory name under <code>cache/sources/</code> that the checkout lives in. Useful for keeping multiple u-boot trees side-by-side.</td></tr>
+    <tr><td><code>UBOOT_TARGET_MAP</code></td><td>The <code>make</code> targets and the output artifacts to capture (<code>BL31</code>, <code>u-boot-rockchip.bin</code>, etc.).</td></tr>
+    <tr><td><code>BOOT_SCENARIO</code></td><td>Higher-level recipe (e.g. <code>tpl-blob-atf-mainline</code>) that <code>prepare_boot_configuration()</code> expands into the variables above.</td></tr>
+  </tbody>
+</table>
+
+<p>
+  The headline insight: <strong>none of these are 1:1 with the user-facing
+  <code>BRANCH=current|edge|vendor|legacy</code> flag.</strong> The
+  <code>BRANCH</code> flag is an <em>Armbian-side</em> selector that the family
+  and board configs translate into U-Boot variables in board-specific ways. Two
+  boards in the same family with <code>BRANCH=edge</code> can easily end up on
+  two different u-boot trees.
+</p>
+
+<h2 id="resolution">3. How those variables get their final values</h2>
+
+<p>
+  armbian/build runs a layered config-resolution pass before it touches a single
+  source file. Each layer can override values set by an earlier one
+  &mdash; <em>last writer wins</em>:
+</p>
+
+<ol>
+  <li><strong>Family file</strong> — <code>config/sources/families/&lt;family&gt;.conf</code> sets the family-wide defaults. For rk3588, this defaults <code>BOOTSOURCE</code> to the <a href="https://github.com/radxa/u-boot">Radxa fork</a>.</li>
+  <li><strong>Family file <code>case $BRANCH in&hellip;</code> arms</strong> — branch-specific overrides at family scope. For rk3588 only <code>legacy</code> and <code>vendor</code> have arms; <code>current</code> and <code>edge</code> inherit the defaults from step 1.</li>
+  <li><strong>Board file</strong> — <code>config/boards/&lt;board&gt;.conf</code> (or <code>.csc</code> for community-supported) sets per-board basics (<code>BOOTCONFIG</code>, <code>MODULES</code>, …) and defines hook <em>functions</em> &mdash; not run yet, just registered.</li>
+  <li><strong>Userpatches family overlay</strong> — <code>userpatches/config/sources/families/&lt;family&gt;.conf</code> is sourced right after the family file. Same scope, runs later, so it can override anything from step 1. This is where this collection lives.</li>
+  <li><strong>Hook cascade</strong> — armbian/build then fires named hooks in deterministic order. Hooks can mutate any of the seven variables. The relevant u-boot hooks:
+    <ul>
+      <li><code>post_family_config</code> &mdash; once, regardless of branch.</li>
+      <li><code>post_family_config_branch_&lt;branch&gt;</code> &mdash; only when <code>BRANCH</code> matches.</li>
+      <li><code>pre_config_uboot_target</code> &mdash; just before <code>make &lt;BOOTCONFIG&gt;</code>; the U-Boot source tree is checked out and patched, and <code>BOOTCONFIG</code>/<code>BOOTDIR</code> are finalized. Last place to edit U-Boot <em>source</em> files.</li>
+      <li><code>post_config_uboot_target</code> &mdash; after <code>make &lt;defconfig&gt;</code> but before the build. Last place to edit <code>.config</code> directly.</li>
+    </ul>
+  </li>
+</ol>
+
+<p>
+  Multiple hook functions can register against the same hook name. armbian/build
+  sorts them by an optional numeric prefix
+  (<code>function pre_config_uboot_target__500_foo()</code>); functions without
+  a prefix get an implicit <code>500_</code>. Sort order is
+  <code>LC_ALL=C --general-numeric-sort</code>, so <code>__999_</code> reliably
+  runs last and wins any conflicting in-tree edits.
+</p>
+
+<h2 id="flow">4. Build flow diagram</h2>
+
+<figure>
+<svg viewBox="0 0 760 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #1c5b8a; stroke-width: 1.2; }
+      .hook { fill: #fff4d6; stroke: #b14b00; stroke-width: 1.4; }
+      .input { fill: #efece5; stroke: #5a5a5a; stroke-width: 1; stroke-dasharray: 3 3; }
+      .stage-label { font-weight: 600; fill: #1a1a1a; }
+      .desc { fill: #5a5a5a; font-size: 10.5px; }
+      .arrow { stroke: #1c5b8a; stroke-width: 1.2; fill: none; }
+      .annot { fill: #b14b00; font-size: 10.5px; font-style: italic; }
+    </style>
+  </defs>
+
+  <!-- input -->
+  <rect x="240" y="10" width="280" height="40" rx="3" class="input"/>
+  <text x="380" y="28" text-anchor="middle" class="stage-label">compile.sh BOARD=rock-5b BRANCH=edge</text>
+  <text x="380" y="42" text-anchor="middle" class="desc">user invocation (with USERPATCHES_DIR auto-mounted by Docker)</text>
+  <line x1="380" y1="50" x2="380" y2="68" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 1 -->
+  <rect x="120" y="70" width="520" height="48" rx="3" class="box"/>
+  <text x="380" y="89" text-anchor="middle" class="stage-label">Source family config: config/sources/families/rockchip-rk3588.conf</text>
+  <text x="380" y="105" text-anchor="middle" class="desc">BOOTSOURCE=radxa/u-boot &nbsp;·&nbsp; BOOTBRANCH=next-dev-v2024.10 &nbsp;·&nbsp; BOOTPATCHDIR=legacy/u-boot-radxa-rk35xx</text>
+  <line x1="380" y1="118" x2="380" y2="136" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 2 -->
+  <rect x="120" y="138" width="520" height="48" rx="3" class="box"/>
+  <text x="380" y="157" text-anchor="middle" class="stage-label">case $BRANCH in &hellip; esac &nbsp; (family scope)</text>
+  <text x="380" y="173" text-anchor="middle" class="desc">edge ⇒ no arm matches ⇒ defaults from step 1 kept</text>
+  <line x1="380" y1="186" x2="380" y2="204" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 3 -->
+  <rect x="120" y="206" width="520" height="48" rx="3" class="box"/>
+  <text x="380" y="225" text-anchor="middle" class="stage-label">Source board config: config/boards/rock-5b.conf</text>
+  <text x="380" y="241" text-anchor="middle" class="desc">defines hook functions (e.g. post_family_config_branch_edge__rock-5b_use_mainline_uboot)</text>
+  <line x1="380" y1="254" x2="380" y2="272" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 4 -->
+  <rect x="120" y="274" width="520" height="48" rx="3" class="box"/>
+  <text x="380" y="293" text-anchor="middle" class="stage-label">Source userpatches family overlay</text>
+  <text x="380" y="309" text-anchor="middle" class="desc">userpatches/config/sources/families/rockchip-rk3588.conf — this collection&rsquo;s PXE-first hook lands here</text>
+  <line x1="380" y1="322" x2="380" y2="340" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- hook 1 -->
+  <rect x="120" y="342" width="520" height="56" rx="3" class="hook"/>
+  <text x="380" y="361" text-anchor="middle" class="stage-label">HOOK: post_family_config_branch_edge</text>
+  <text x="380" y="377" text-anchor="middle" class="desc">rock-5b&rsquo;s hook swaps BOOTSOURCE → u-boot/u-boot, BOOTBRANCH → tag:v2026.01,</text>
+  <text x="380" y="391" text-anchor="middle" class="desc">BOOTCONFIG → rock5b-rk3588_defconfig, calls prepare_boot_configuration()</text>
+  <line x1="380" y1="398" x2="380" y2="416" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 5 -->
+  <rect x="120" y="418" width="520" height="48" rx="3" class="box"/>
+  <text x="380" y="437" text-anchor="middle" class="stage-label">git fetch BOOTSOURCE → checkout BOOTBRANCH → apply BOOTPATCHDIR/*.patch</text>
+  <text x="380" y="453" text-anchor="middle" class="desc">u-boot source tree now present at cache/sources/$BOOTDIR</text>
+  <line x1="380" y1="466" x2="380" y2="484" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- hook 2 -->
+  <rect x="120" y="486" width="520" height="48" rx="3" class="hook"/>
+  <text x="380" y="505" text-anchor="middle" class="stage-label">HOOK: pre_config_uboot_target</text>
+  <text x="380" y="521" text-anchor="middle" class="desc">this collection patches include/configs/rockchip-common.h here (PXE-first BOOT_TARGETS, CONFIG_PCI_INIT_R)</text>
+  <line x1="380" y1="534" x2="380" y2="552" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 6 -->
+  <rect x="120" y="554" width="520" height="34" rx="3" class="box"/>
+  <text x="380" y="575" text-anchor="middle" class="stage-label">make $BOOTCONFIG &nbsp;→&nbsp; HOOK: post_config_uboot_target &nbsp;→&nbsp; make</text>
+  <line x1="380" y1="588" x2="380" y2="606" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- step 7 -->
+  <rect x="120" y="608" width="520" height="34" rx="3" class="box"/>
+  <text x="380" y="629" text-anchor="middle" class="stage-label">collect artifacts per UBOOT_TARGET_MAP → pack into .img.xz</text>
+  <line x1="380" y1="642" x2="380" y2="660" class="arrow" marker-end="url(#arr)"/>
+
+  <!-- output -->
+  <rect x="240" y="662" width="280" height="34" rx="3" class="input"/>
+  <text x="380" y="683" text-anchor="middle" class="stage-label">Armbian_…_rock-5b_bookworm_edge_…img.xz</text>
+</svg>
+<figcaption>Resolution + build flow for <code>BOARD=rock-5b BRANCH=edge</code>. Orange boxes are hook firing points.</figcaption>
+</figure>
+
+<h2 id="matrix">5. Concrete matrix: this repo&rsquo;s two boards</h2>
+
+<p>
+  Both boards belong to family <code>rockchip-rk3588</code>, so they share the
+  same family file. The difference comes entirely from the board file and the
+  branch we ask for:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Board</th><th>Branch</th><th>U-Boot tree</th><th>Ref</th><th>BOOTCONFIG</th><th>Has RTL8125 driver?</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="2"><code>orange-pi-5-pro</code><br><span class="pill">community</span></td>
+      <td><code>current</code></td>
+      <td>mainline u-boot</td>
+      <td><code>tag:v2025.10</code></td>
+      <td><code>orangepi_5_pro_defconfig</code></td>
+      <td>n/a (GMAC)</td>
+    </tr>
+    <tr>
+      <td><code>edge</code></td>
+      <td>mainline u-boot</td>
+      <td><code>tag:v2025.10</code></td>
+      <td><code>orangepi_5_pro_defconfig</code></td>
+      <td>n/a (GMAC)</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><code>rock-5b</code><br><span class="pill">standard</span></td>
+      <td><code>current</code></td>
+      <td>Radxa fork</td>
+      <td><code>branch:next-dev-v2024.10</code></td>
+      <td><code>rock-5b-rk3588_defconfig</code></td>
+      <td><strong>no</strong></td>
+    </tr>
+    <tr>
+      <td><code>edge</code></td>
+      <td>mainline u-boot</td>
+      <td><code>tag:v2026.01</code></td>
+      <td><code>rock5b-rk3588_defconfig</code></td>
+      <td>yes</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  The asymmetry is why this collection sets
+  <code>build_branches: {rock-5b: edge}</code> in
+  <code>playbooks/build_image.yml</code>. <code>rock-5b</code> on the family
+  default (<code>current</code> → Radxa fork) cannot do PXE because that fork
+  has no RTL8125 source files. <code>edge</code> goes through rock-5b&rsquo;s
+  branch hook and lands on mainline v2026.01 which does. OPi5Pro doesn&rsquo;t
+  care — its board file unconditionally upgrades to mainline for any
+  non-vendor branch.
+</p>
+
+<h2 id="snippets">6. Annotated snippets</h2>
+
+<p>
+  Four pieces of code that together define everything above for rk3588. Read
+  them in order.
+</p>
+
+<div class="snippet">
+<header><strong>Snippet 1 of 4</strong> <span>armbian/build · <code>config/sources/families/rockchip-rk3588.conf</code></span></header>
+<pre><code>BOOTSOURCE='https://github.com/radxa/u-boot.git'
+BOOTBRANCH='branch:next-dev-v2024.10'
+BOOTPATCHDIR="legacy/u-boot-radxa-rk35xx"
+OVERLAY_PREFIX='rockchip-rk3588'
+
+case $BRANCH in
+    legacy)
+        # &hellip; sets BOOTDIR='u-boot-rockchip64', KERNEL_MAJOR_MINOR=5.10, &hellip;
+        ;;
+    vendor)
+        # &hellip; sets BOOTDIR='u-boot-rockchip64', KERNEL_MAJOR_MINOR=6.1, &hellip;
+        ;;
+esac
+# (no arms for current / edge — defaults above stand)</code></pre>
+<div class="notes">
+<ul>
+  <li>The <code>BOOTSOURCE</code> default at the top of this file is the Radxa fork. Any rk3588 board on <code>current</code> or <code>edge</code> inherits this <em>unless a board-level hook overrides it</em>.</li>
+  <li>This file&rsquo;s <code>case</code> arms only fire for <code>legacy</code> and <code>vendor</code>. That&rsquo;s the load-bearing detail: <code>current</code>/<code>edge</code> branch behaviour for any specific board is decided in the <strong>board file</strong>, not here.</li>
+</ul>
+</div>
+</div>
+
+<div class="snippet">
+<header><strong>Snippet 2 of 4</strong> <span>armbian/build · <code>config/boards/rock-5b.conf</code></span></header>
+<pre><code>function post_family_config_branch_edge__rock-5b_use_mainline_uboot() {
+    display_alert "$BOARD" "mainline (next branch) u-boot overrides for $BOARD / $BRANCH" "info"
+
+    # Reuse ATF code path in rockchip64_common by changing BOOT_SCENARIO
+    # and re-invoking prepare_boot_configuration.
+    BOOT_SCENARIO="tpl-blob-atf-mainline"
+    prepare_boot_configuration
+
+    declare -g BOOTCONFIG="rock5b-rk3588_defconfig"
+    declare -g BOOTDELAY=1
+    declare -g BOOTSOURCE="https://github.com/u-boot/u-boot.git"
+    declare -g BOOTBRANCH="tag:v2026.01"
+    declare -g BOOTPATCHDIR="v2026.01"
+    declare -g BOOTDIR="u-boot-${BOARD}"
+    declare -g UBOOT_TARGET_MAP="BL31=bl31.elf ROCKCHIP_TPL=${RKBIN_DIR}/${DDR_BLOB};;u-boot-rockchip.bin u-boot-rockchip-spi.bin"
+    unset uboot_custom_postprocess write_uboot_platform write_uboot_platform_mtd
+    # &hellip; binman-based replacements for those functions below &hellip;
+}</code></pre>
+<div class="notes">
+<ul>
+  <li>Hook name has <strong>three load-bearing pieces</strong>: <code>post_family_config_branch_</code> (the hook-point name), <code>edge</code> (only fires when <code>BRANCH=edge</code>), and the trailing <code>__rock-5b_use_mainline_uboot</code> (just a unique id; everything after <code>__</code> is for sort-ordering and humans).</li>
+  <li>The four <code>declare -g</code> lines are the actual tree swap: Radxa fork &rarr; mainline u-boot v2026.01.</li>
+  <li>Note <code>BOOTCONFIG</code> changes name shape too: <code>rock-5b-rk3588_defconfig</code> (Radxa fork, hyphenated) &rarr; <code>rock5b-rk3588_defconfig</code> (mainline, no hyphen). Defconfig naming is per-fork — copy/pasting board names between forks doesn&rsquo;t work.</li>
+</ul>
+</div>
+</div>
+
+<div class="snippet">
+<header><strong>Snippet 3 of 4</strong> <span>armbian/build · <code>config/boards/orangepi5pro.csc</code></span></header>
+<pre><code>BOARD_NAME="Orange Pi 5 Pro"
+BOARDFAMILY="rockchip-rk3588"
+BOOT_SOC="rk3588"
+BOOTCONFIG="orangepi_5_pro_defconfig"
+
+# Note: NO `_branch_edge` in the hook name — fires for any non-vendor branch.
+function post_family_config__orangepi5pro_use_mainline_uboot() {
+    # &hellip; declare -g BOOTSOURCE / BOOTBRANCH / BOOTPATCHDIR for mainline v2025.10 &hellip;
+}
+
+function post_family_config_branch_vendor__orangepi5pro_use_vendor_uboot() {
+    # &hellip; BOOTSOURCE=orangepi-xunlong, BOOTBRANCH=v2017.09-rk3588 &hellip;
+}</code></pre>
+<div class="notes">
+<ul>
+  <li><code>.csc</code> = Community Supported Configuration. The board is buildable but Armbian doesn&rsquo;t CI-test it — failures are expected to be reported by the maintainer, not patched proactively.</li>
+  <li>The first hook is the contrast with rock-5b: <code>post_family_config__&hellip;</code> with no <code>_branch_&lt;name&gt;</code> infix &rarr; fires <strong>unconditionally</strong>. For OPi5Pro, both <code>current</code> and <code>edge</code> land on mainline u-boot v2025.10. The second hook only fires for <code>vendor</code>.</li>
+  <li>This is why two boards in the same family can end up on different u-boot trees for the same <code>BRANCH</code> value — the dispatching logic lives in per-board hook signatures, not in any central table.</li>
+</ul>
+</div>
+</div>
+
+<div class="snippet">
+<header><strong>Snippet 4 of 4</strong> <span>this collection · <code>playbooks/build_image.yml</code> (userpatches family overlay)</span></header>
+<pre><code>build_userpatches_common:
+  - dest: "config/sources/families/rockchip-rk3588.conf"
+    content: |
+      function pre_config_uboot_target__999_pxe_first() {
+          # 1. Patch the legacy `#define BOOT_TARGETS "..."` form
+          declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+          sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+              include/configs/rockchip-common.h
+
+          # 2. Force bootflow framework to enumerate PCIe at init_r time
+          local defconfig="configs/${BOOTCONFIG}"
+          if [[ -f "$defconfig" ]] \
+             && grep -q "^CONFIG_PCI=y" "$defconfig" \
+             && ! grep -q "^CONFIG_PCI_INIT_R=y" "$defconfig"; then
+              echo "CONFIG_PCI_INIT_R=y" >> "$defconfig"
+          fi
+      }</code></pre>
+<div class="notes">
+<ul>
+  <li>This file gets written to <code>userpatches/config/sources/families/rockchip-rk3588.conf</code> inside the armbian/build checkout (see <a href="../roles/armbian_build/tasks/apply_userpatches.yml">roles/armbian_build/tasks/apply_userpatches.yml</a>). armbian/build sources it right after its own family file, so this <em>adds</em> a hook function rather than replacing the family config.</li>
+  <li>The <code>__999_</code> numeric prefix forces this to sort <em>last</em> among <code>pre_config_uboot_target</code> hooks. rock-5b&rsquo;s own board file registers <code>pre_config_uboot_target__rock5b_patch_rockchip_common_boot_order</code> with a default <code>500_</code> prefix that sets a vendor-preferred SD-first order; without <code>__999_</code> our patch would be clobbered by Radxa&rsquo;s preference.</li>
+  <li>The <code>sed</code> is a deliberate no-op on trees whose <code>rockchip-common.h</code> uses the X-macro <code>BOOT_TARGET_DEVICES(func)</code> form (Radxa&rsquo;s <code>next-dev-v2024.10</code>). We only ship affected boards on <code>edge</code> (mainline), where the legacy <code>#define</code> form is still present.</li>
+  <li>The second block addresses a mainline-u-boot-specific failure: rk3588 defconfigs set <code>CONFIG_PCI=y</code> but not <code>CONFIG_PCI_INIT_R=y</code>, so PCIe NICs are not enumerated at <code>init_r</code> time and bootflow never sees them — TFTP requests are never made and PXE silently fails.</li>
+</ul>
+</div>
+</div>
+
+<h2 id="gotchas">7. Gotchas</h2>
+
+<div class="gotcha">
+  <strong>"current" and "edge" are not u-boot trees.</strong> They&rsquo;re Armbian&rsquo;s <em>kernel</em> branch labels that the build system also overloads as a per-board switch for u-boot dispatch. The actual u-boot tree for a given <code>(board, branch)</code> pair is whatever the last-firing hook leaves <code>BOOTSOURCE</code> set to. Always trace the hooks for a specific board before assuming.
+</div>
+
+<div class="gotcha">
+  <strong>Hook ordering is by string sort, not registration order.</strong> Hooks without a numeric prefix get an implicit <code>500_</code>. To guarantee yours runs last (and wins), use a high prefix like <code>__999_</code>. <code>LC_ALL=C --general-numeric-sort</code> means <code>__100_</code> sorts before <code>__500_</code>, but plain text like <code>__zzz_</code> won&rsquo;t override numerics reliably.
+</div>
+
+<div class="gotcha">
+  <strong><code>BOOTCONFIG</code> name changes across forks.</strong> The Radxa fork ships <code>rock-5b-rk3588_defconfig</code>; mainline ships <code>rock5b-rk3588_defconfig</code>. A hook that swaps the source tree must also swap the defconfig name or <code>make</code> fails with "no rule to make target".
+</div>
+
+<div class="gotcha">
+  <strong>Stock images don&rsquo;t boot PXE-first.</strong> Both the Radxa fork and mainline ship <code>BOOT_TARGETS</code> with <code>pxe</code> at position 6 (after SD/eMMC/NVMe). U-Boot&rsquo;s <code>bootflow scan</code> lands on the local rootfs&rsquo;s <code>boot.scr</code> long before it tries PXE. The PXE-first invariant requires patching <code>BOOT_TARGETS</code> at build time — runtime <code>setenv boot_targets pxe …</code> won&rsquo;t survive a power cycle.
+</div>
+
+<div class="gotcha">
+  <strong>Two <code>BOOT_TARGETS</code> source forms exist.</strong> Older trees use a single-line <code>#define BOOT_TARGETS "mmc1 mmc0 …"</code> in <code>include/configs/rockchip-common.h</code>. Newer trees use the X-macro <code>BOOT_TARGET_DEVICES(func)</code> form. A <code>sed</code> targeting the legacy form is a silent no-op on the X-macro form &mdash; the build succeeds but boot order is unchanged. Always confirm by running <code>strings u-boot.bin | grep -i boot_targets</code> on a test build.
+</div>
+
+<div class="gotcha">
+  <strong>Mainline u-boot + PCIe NIC = silent PXE failure unless <code>CONFIG_PCI_INIT_R=y</code>.</strong> The bootflow framework only iterates bootdevs that were enumerated at <code>init_r</code> time. rk3588 defconfigs default <code>CONFIG_PCI=y</code> without <code>CONFIG_PCI_INIT_R=y</code>, so PCIe NICs (Rock 5B&rsquo;s RTL8125, NanoPC-T6, etc.) are present in the device tree but never enumerated, never become a bootdev, and <code>bootflow scan</code> reports zero ethernet bootflows with no error. Boards with GMAC NICs (OPi5Pro) sidestep this entirely.
+</div>
+
+<div class="gotcha">
+  <strong>SPI env <em>replaces</em> compile-time defaults; it does not merge.</strong> If a board has <code>CONFIG_ENV_IS_IN_SPI_FLASH=y</code> and a valid env in SPI, the compile-time <code>default_environment[]</code> array is not used. Variables like <code>pxefile_addr_r</code> defined only as compile-time defaults vanish from the runtime env on the first successful <code>fw_setenv</code>. This is a U-Boot semantics issue, not an armbian/build issue, but board configs that enable SPI env without explicitly writing the PXE address vars to <code>CONFIG_EXTRA_ENV_SETTINGS</code> will produce images that work cold but break after any env write.
+</div>
+
+<div class="gotcha">
+  <strong>Userpatches files persist across rebuilds.</strong> The armbian_build role writes new userpatches but does not prune orphans. A renamed or refactored hook leaves the old file in <code>userpatches/</code> on the builder host; armbian/build will source it on every rebuild, registering dead hook functions. Usually harmless, but worth knowing when a hook seems to "still work" after you thought you deleted it.
+</div>
+
+<div class="gotcha">
+  <strong>The <code>.csc</code> / <code>.conf</code> filename matters.</strong> <code>.csc</code> = Community Supported (no CI, maintainer-reported breakage). <code>.conf</code> = Armbian-supported (CI-tested). Both are buildable through the same <code>compile.sh BOARD=</code> path — the suffix is metadata, not a load gate. But on bug reports the suffix tells you which support tier you&rsquo;re actually leaning on.
+</div>
+
+</body>
+</html>
