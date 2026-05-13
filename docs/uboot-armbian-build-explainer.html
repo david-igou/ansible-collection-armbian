@@ -164,7 +164,7 @@
     <li><a href="#matrix">Concrete matrix: this repo&rsquo;s two boards</a></li>
     <li><a href="#snippets">Annotated snippets</a></li>
     <li><a href="#hooks-vs-patches">Why hooks instead of <code>.patch</code> files?</a></li>
-    <li><a href="#rock5b-fix">Two ways to fix rock-5b&rsquo;s autonomous-PXE problem</a></li>
+    <li><a href="#rock5b-fix">Fixing rock-5b&rsquo;s autonomous-PXE problem (three layers, two approaches)</a></li>
     <li><a href="#gotchas">Gotchas</a></li>
   </ol>
 </nav>
@@ -714,36 +714,209 @@ the defconfig file.
   a hook doing the same edit.</li>
 </ul>
 
-<h2 id="rock5b-fix">8. Two ways to fix rock-5b&rsquo;s autonomous-PXE problem</h2>
+<h2 id="rock5b-fix">8. Fixing rock-5b&rsquo;s autonomous-PXE problem</h2>
 
 <p>
   Issue
   <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>
-  documents two interacting U-Boot v2026.01 behaviours that block autonomous
-  cold-boot PXE on rock-5b:
+  documents <strong>three stacked failure layers</strong> on rock-5b. Each
+  has to be cleared for autonomous cold-boot PXE to succeed &mdash; fixing
+  only some leaves you with a still-not-booting board and a misleading
+  symptom. The first one (Layer 0) is already shipped in this collection;
+  Layers 1 and 2 are what Approaches A and B (below) are about.
 </p>
 
-<ol>
-  <li><code>rockchip_setup_macaddr()</code> SHA256-hashes the chip&rsquo;s
-  <code>cpuid#</code> into a locally-administered MAC (<code>0a:&hellip;</code>)
-  and writes it over the device-tree MAC at <code>misc_init_r</code> time
-  &mdash; only if <code>env_get("ethaddr")</code> returns NULL. Result: DHCP
-  asks with a MAC the static reservation on rb5009 doesn&rsquo;t recognise.</li>
-  <li><code>CONFIG_ENV_IS_IN_SPI_FLASH=y</code> means a CRC-valid SPI env
-  <em>replaces</em> the compile-time <code>default_environment[]</code> on
-  every boot. PXE-required vars (<code>pxefile_addr_r</code>,
-  <code>kernel_addr_r</code>, &hellip;) are only defined in compile-time
-  defaults, so they vanish from the runtime env on any successful
-  <code>fw_setenv</code> &mdash; U-Boot&rsquo;s PXE bootmeth then silently
-  skips the ethernet bootdev.</li>
-</ol>
+<h3>8.1 The three failure layers</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>Symptom on the wire</th>
+      <th>Root cause</th>
+      <th>This collection ships a fix?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>0 &mdash; NIC not enumerated</strong></td>
+      <td><code>bootflow scan</code> finds zero ethernet bootflows; no
+      DHCP request leaves the board at all. <code>tcpdump</code> on the
+      switch port is silent.</td>
+      <td>Mainline rk3588 defconfigs set <code>CONFIG_PCI=y</code> but not
+      <code>CONFIG_PCI_INIT_R=y</code>. The PCI bus is enumerated lazily,
+      so at <code>bootflow scan</code> time the RTL8125 isn&rsquo;t a
+      bootdev.</td>
+      <td><strong>Yes</strong> &mdash; <code>__999_pxe_first</code> family
+      hook appends <code>CONFIG_PCI_INIT_R=y</code> to the defconfig when
+      <code>CONFIG_PCI=y</code> is set (commit <code>bd44240</code>, in
+      <code>playbooks/build_image.yml</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>1 &mdash; wrong MAC on DHCP</strong></td>
+      <td>DHCP DISCOVER goes out, but with a
+      <code>0a:1e:94:81:70:c8</code>-shaped MAC that rb5009&rsquo;s static
+      reservation doesn&rsquo;t recognise. Either no lease or a dynamic
+      lease in the wrong subnet; TFTP fetches the wrong (or no)
+      <code>pxelinux.cfg/01-&lt;MAC&gt;</code>.</td>
+      <td><code>rockchip_setup_macaddr()</code> (in
+      <code>arch/arm/mach-rockchip/board.c</code>) SHA-256-hashes the
+      chip&rsquo;s <code>cpuid#</code> into a locally-administered MAC and
+      writes it over the DT MAC at <code>misc_init_r</code> time, unless
+      <code>env_get("ethaddr")</code> already returns a value.</td>
+      <td>No &mdash; Approach A or Approach B below.</td>
+    </tr>
+    <tr>
+      <td><strong>2 &mdash; PXE addresses vanish</strong></td>
+      <td>DHCP succeeds (with the right MAC) and TFTP fetches the correct
+      pxelinux.cfg, but <code>bootflow scan</code> silently skips the
+      ethernet bootdev. No TFTP fetch of kernel / initrd / dtb follows.</td>
+      <td><code>CONFIG_ENV_IS_IN_SPI_FLASH=y</code> means a CRC-valid SPI
+      env <em>replaces</em> the compile-time
+      <code>default_environment[]</code> on every boot. PXE-required vars
+      (<code>pxefile_addr_r</code>, <code>kernel_addr_r</code>, &hellip;)
+      only exist in compile-time defaults, so they vanish from runtime env
+      on any successful <code>fw_setenv</code>.</td>
+      <td>No &mdash; Approach B clears it in one go; Approach A alone
+      doesn&rsquo;t, and needs a companion defconfig hook adding
+      <code>CONFIG_EXTRA_ENV_SETTINGS=&hellip;</code>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Layer 0 is a strict prerequisite</strong> &mdash; without it the
+  NIC isn&rsquo;t a bootdev, so neither Approach A nor Approach B is even
+  relevant. Approaches A and B are alternative ways to clear Layer 1;
+  Approach B also clears Layer 2 in the same playbook run, while Approach
+  A needs a Layer-2 companion fix to be complete on its own.
+</p>
+
+<h3>8.2 Status in u-boot v2026.04</h3>
+
+<p>
+  Mainline u-boot&rsquo;s v2026.04 release (April 2026, the successor to
+  the v2026.01 tag this collection currently pins for rock-5b) does
+  <strong>not</strong> clear any of the three layers:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>v2026.04 status</th><th>Evidence</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0 &mdash; <code>CONFIG_PCI_INIT_R</code></td>
+      <td>Not fixed</td>
+      <td><code>configs/rock5b-rk3588_defconfig</code> still does not set
+      it. In <code>drivers/pci/Kconfig</code> the symbol is only
+      <code>select</code>ed by <code>PCIE_ECAM_SYNQUACER</code> and
+      <code>imply</code>d by <code>PCIE_APPLE</code> &mdash; neither in
+      the rk3588 chain. <code>PCIE_DW_ROCKCHIP=y</code> (now explicit in
+      the v2026.04 defconfig) does not select or imply it.</td>
+    </tr>
+    <tr>
+      <td>1 &mdash; <code>rockchip_setup_macaddr</code></td>
+      <td>Not fixed</td>
+      <td>Function body in <code>arch/arm/mach-rockchip/board.c</code> is
+      byte-identical to v2026.01 &mdash; still SHA-256-hashes
+      <code>cpuid#</code> whenever <code>env_get("ethaddr")</code> returns
+      NULL, with no DT-MAC check. No commit in the v2026.01..v2026.04
+      window touches this function.</td>
+    </tr>
+    <tr>
+      <td>2 &mdash; SPI env replaces defaults</td>
+      <td>Not fixed</td>
+      <td>U-Boot env subsystem semantics unchanged (and load-bearing, not
+      a bug). Rock-5b&rsquo;s v2026.04 defconfig still lacks
+      <code>CONFIG_EXTRA_ENV_SETTINGS</code> entries for the PXE address
+      vars.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Bumping rock-5b&rsquo;s <code>BOOTBRANCH</code> from
+  <code>tag:v2026.01</code> to <code>tag:v2026.04</code> is otherwise a
+  free move &mdash; the defconfig was regenerated via
+  <code>make savedefconfig</code> (135&nbsp;&rarr;&nbsp;97 lines), and
+  <code>CONFIG_OF_LIST="rockchip/rk3588-rock-5b rockchip/rk3588-rock-5b-plus rockchip/rk3588-rock-5t"</code>
+  now lets one build serve three boards via runtime DT selection.
+  <code>BOOT_TARGETS</code> in <code>include/configs/rockchip-common.h</code>
+  is still the legacy <code>#define</code> form
+  (<code>"mmc1 mmc0 nvme scsi usb pxe dhcp spi"</code>), so our
+  <code>__999_pxe_first</code> sed still applies cleanly. But none of the
+  three workarounds can be retired.
+</p>
+
+<p>
+  <strong>Adjacent upstream pattern worth knowing.</strong> Commit
+  <code>b8ff4be</code> (rk3288 tinker, 2024-11) addresses the same MAC
+  problem on a sibling board by reading the MAC from EEPROM in
+  <code>rockchip_early_misc_init_r()</code> &mdash; which runs
+  <em>before</em> <code>rockchip_setup_macaddr()</code>. The early hook
+  stuffs <code>ethaddr</code> into env, then the chip-hash
+  function&rsquo;s <code>env_get("ethaddr") &rarr; return</code>
+  short-circuits. This is the canonical upstreamable shape for the Layer
+  1 fix: read the DT MAC in an <code>early_misc_init_r</code> hook rather
+  than patch the chip-hash function. Maintainers have already accepted
+  this pattern for tinker, so a rock-5b version is likely more reviewable
+  on the u-boot mailing list than a direct patch to
+  <code>rockchip_setup_macaddr</code>.
+</p>
+
+<h3>8.3 Upstream tracking</h3>
+
+<p>
+  None of the three layers have an open issue in any public GitHub
+  tracker. Verified via:
+</p>
+
+<ul>
+  <li><code>gh search issues</code> across all of GitHub for
+  <code>rockchip_setup_macaddr</code>, <code>"chip id hash" mac</code>,
+  <code>CONFIG_PCI_INIT_R rk3588</code>, <code>"rock-5b" bootflow</code>,
+  <code>"rock-5b" netboot</code> &mdash; zero relevant hits.</li>
+  <li><code>gh api repos/u-boot/u-boot --jq '.has_issues'</code> returns
+  <code>false</code>: the U-Boot project does not accept GitHub issues at
+  all. Upstream coordination is mailing-list-only.</li>
+  <li><a href="https://github.com/radxa/u-boot/issues">radxa/u-boot</a>
+  has issues enabled but zero hits for PXE / netboot / bootflow / ethaddr
+  topics.</li>
+  <li><a href="https://github.com/armbian/build/issues">armbian/build</a>
+  has zero hits for rk3588 PXE / rock-5b netboot / bootflow.</li>
+</ul>
+
+<p>
+  Upstream tracking for U-Boot itself lives on:
+</p>
+
+<ul>
+  <li><a href="https://lists.denx.de/listinfo/u-boot"><code>u-boot@lists.denx.de</code></a>
+  &mdash; patch submission and discussion.</li>
+  <li><a href="https://patchwork.ozlabs.org/project/uboot/">patchwork.ozlabs.org/project/uboot/</a>
+  &mdash; searchable patch index. Query for
+  <code>rockchip_setup_macaddr</code> or <code>rock5b</code> before
+  submitting to avoid duplicate work.</li>
+</ul>
+
+<p>
+  The single GitHub-side tracking issue is this collection&rsquo;s own
+  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>,
+  which carries the full diagnostic stack from bring-up and is the right
+  place to mirror status as upstream work progresses.
+</p>
+
+<h3>8.4 Two approaches to clear Layers 1 (and 2)</h3>
 
 <p>
   Two control surfaces are available: change the U-Boot binary that boots
   out of SD/SPI, or change the SPI env contents that already-booted U-Boot
   loads. Both fixes follow the same shape &mdash; <strong>Mechanism &middot;
-  Manual workflow &middot; Automation lift &middot; Trade-offs</strong> &mdash;
-  so the comparison at the end is apples-to-apples.
+  Manual workflow &middot; Automation lift &middot; Trade-offs</strong>
+  &mdash; so the comparison at the end is apples-to-apples. Both assume
+  Layer 0 (Section 8.1) is already in place &mdash; which it is in this
+  collection&rsquo;s shipped image.
 </p>
 
 <h3>Approach A &mdash; Build-time fix via userpatches (<code>.patch</code> file)</h3>
@@ -1024,6 +1197,7 @@ backup-before-write safety:</p>
     </tr>
   </thead>
   <tbody>
+    <tr><td>Clears which layers (see <a href="#rock5b-fix">8.1</a>)</td><td>Layer 1 only &mdash; needs companion fix for Layer 2 (Layer 0 prerequisite is already shipped)</td><td>Layers 1 <em>and</em> 2 in one playbook run (Layer 0 prerequisite is already shipped)</td></tr>
     <tr><td>Control surface</td><td>U-Boot binary on SD/SPI</td><td>SPI env contents</td></tr>
     <tr><td>Where state lives</td><td>The image (one per board model)</td><td>Per-board SPI</td></tr>
     <tr><td>Iteration time</td><td>&sim;30&ndash;60&nbsp;min build + reflash</td><td>Seconds per board</td></tr>
@@ -1031,6 +1205,7 @@ backup-before-write safety:</p>
     <tr><td>Robust to SPI env reset?</td><td>Yes</td><td>No &mdash; reapply playbook</td></tr>
     <tr><td>Upstreamable?</td><td>Yes &mdash; <code>git send-email</code> to u-boot ML</td><td>No &mdash; environmental, not a fix</td></tr>
     <tr><td>Per-board MAC tracking</td><td>None (DT carries the MAC)</td><td>Inventory <code>board_mac</code></td></tr>
+    <tr><td>Fixed in u-boot v2026.04?</td><td>No (see <a href="#rock5b-fix">8.2</a>)</td><td>n/a &mdash; runtime fix</td></tr>
     <tr><td>This collection ships it today?</td><td>Not yet (#59 D1)</td><td>Not yet (playbook above is the proposal)</td></tr>
   </tbody>
 </table>
