@@ -15,8 +15,8 @@ Each target board must declare:
 
 | Variable | Description |
 |---|---|
-| `poe_switch` | Inventory hostname of the RouterOS switch supplying power. |
-| `poe_port` | Switch interface name carrying PoE to the board (e.g. `ether3`). |
+| `armbian_netboot_poe_switch` | Inventory hostname of the RouterOS switch supplying power. |
+| `armbian_netboot_poe_port` | Switch interface name carrying PoE to the board (e.g. `ether3`). |
 
 These belong in inventory `host_vars/<board>.yml` — they're SKU-level
 identity, not collection-level configuration.
@@ -25,8 +25,8 @@ identity, not collection-level configuration.
 
 | Variable | Default | Description |
 |---|---|---|
-| `poe_action` | `"on"` | One of `on`, `off`, `cycle`. |
-| `poe_cycle_delay` | `5` | Seconds to pause between `off` and `on` during a power cycle. |
+| `armbian_netboot_poe_action` | `"on"` | One of `on`, `off`, `cycle`. |
+| `armbian_netboot_poe_cycle_delay` | `5` | Seconds to pause between `off` and `on` during a power cycle. |
 
 ## Example
 
@@ -37,13 +37,14 @@ identity, not collection-level configuration.
   roles:
     - role: david_igou.armbian_netboot.routeros_poe
       vars:
-        poe_action: cycle
+        armbian_netboot_poe_action: cycle
 ```
 
 The play targets boards (not the switches), and the role delegates each
-RouterOS command to the board's `poe_switch` automatically. `group_vars/
-routeros.yml` pins the `network_cli` connection plumbing so the delegated
-command picks up the switch's connection settings without extra wiring.
+RouterOS command to the board's `armbian_netboot_poe_switch` automatically.
+`group_vars/routeros.yml` pins the `network_cli` connection plumbing so the
+delegated command picks up the switch's connection settings without extra
+wiring.
 
 ## License
 

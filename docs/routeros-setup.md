@@ -104,7 +104,7 @@ U-Boot's PXE request lands on a deterministic IP:
     comment="orange-pi-5-01"
 ```
 
-The `board_mac` value in `inventory/hosts.yml` must match exactly
+The `armbian_netboot_board_mac` value in `inventory/hosts.yml` must match exactly
 (case-insensitive). For an example of the live pattern, see the existing
 `rock-5b` lease (`10.10.70.249`, MAC `00:E0:4C:68:00:3B`) in
 `05-router-dhcp-static.rsc`.
@@ -126,18 +126,22 @@ under `flash:/sbc/` and the `/ip tftp` namespace.
 
 ## What the collection writes on rb5009
 
-`stage_netboot_assets.yml` populates per-model assets (kernel/initrd/dtb)
-under `flash:/sbc/armbian/<model>/` and registers an `/ip tftp` row per file.
-`enable_netboot.yml` adds a per-board `pxelinux.cfg/01-<MAC>` plus its row;
-`disable_netboot.yml` removes both (row first). To inspect after a run:
+`stage_nfs_rootfs.yml` stages NFS rootfs templates and per-host clones on the
+netboot server (see TrueNAS paths elsewhere in this repo). `stage_tftp_assets.yml`
+populates per-model assets (kernel/initrd/dtb) under `flash:/sbc/armbian/<model>/`
+on rb5009 and registers an `/ip tftp` row per file. `converge_boot_mode.yml`
+writes each board's `pxelinux.cfg/01-<MAC>` plus its `/ip tftp` row (in v2 these
+always exist; the `default` directive selects nfs vs sd). For ad-hoc boot-mode
+overrides without editing inventory, use `set_boot_mode.yml`. To inspect after a run:
 
 ```routeros
 /file print where name~"^sbc/"
 /ip tftp print where real-filename~"^sbc/"
 ```
 
-To remove the per-board state by hand (equivalent to `disable_netboot.yml`
-for one board):
+To remove the per-board pxelinux file and TFTP row by hand (emergency cleanup;
+normally change boot mode with `set_boot_mode.yml` or inventory-driven
+`converge_boot_mode.yml` instead):
 
 ```routeros
 /ip tftp remove [find req-filename="pxelinux.cfg/01-AA-BB-CC-DD-EE-01"]

@@ -1,0 +1,1160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Armbian kernels — build-time vs apt-time</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --bg: #fafafa;
+    --accent: #b14b00;
+    --accent2: #1c5b8a;
+    --code-bg: #f0eee9;
+    --rule: #d9d5cc;
+    --warn-bg: #fff4d6;
+    --warn-bd: #e6c200;
+    --good-bg: #e8f4e2;
+    --good-bd: #6aa84f;
+  }
+  html { background: var(--bg); }
+  body {
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 820px;
+    margin: 2.5rem auto 4rem;
+    padding: 0 1.25rem;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.4rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 2.2rem 0 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 0.5rem; color: var(--accent2); }
+  p, ul, ol { margin: 0.6rem 0; }
+  p.subtitle {
+    color: var(--muted);
+    font-size: 1rem;
+    margin: 0 0 1.5rem;
+  }
+  code, pre {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+  }
+  code { background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    border-left: 3px solid var(--accent2);
+    border-radius: 2px;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  .snippet {
+    margin: 1rem 0 1.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+  }
+  .snippet header {
+    background: #efece5;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .snippet header strong { color: var(--fg); font-weight: 600; }
+  .snippet pre { margin: 0; border-left: none; border-radius: 0; background: #fcfbf8; }
+  .snippet .notes {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.92rem;
+    background: #fffefb;
+    border-top: 1px dashed var(--rule);
+  }
+  .snippet .notes ul { margin: 0.2rem 0 0 1.2rem; padding: 0; }
+  .snippet .notes li { margin: 0.25rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--rule);
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #efece5; font-weight: 600; }
+  td code { font-size: 0.84rem; }
+  .gotcha {
+    border: 1px solid var(--warn-bd);
+    background: var(--warn-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .gotcha strong { color: var(--accent); }
+  .good {
+    border: 1px solid var(--good-bd);
+    background: var(--good-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  nav.toc {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 2rem;
+    font-size: 0.93rem;
+  }
+  nav.toc ol { margin: 0; padding-left: 1.3rem; }
+  nav.toc a { color: var(--accent2); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  figure { margin: 1.2rem 0; }
+  figure svg { display: block; max-width: 100%; height: auto; }
+  figcaption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+    text-align: center;
+  }
+  .pill {
+    display: inline-block;
+    background: #e7e2d3;
+    color: var(--accent);
+    padding: 0.05em 0.5em;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kvbox {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.6rem 0.9rem;
+    margin: 0.6rem 0 1rem;
+    font-size: 0.92rem;
+    border-radius: 3px;
+  }
+  .kvbox dt { font-weight: 600; margin-top: 0.4rem; }
+  .kvbox dt:first-child { margin-top: 0; }
+  .kvbox dd { margin: 0.05rem 0 0 0; padding-left: 0.25rem; }
+</style>
+</head>
+<body>
+
+<h1>Armbian kernels — build-time vs apt-time</h1>
+<p class="subtitle">
+  When <code>compile.sh</code> runs, does it build a kernel from source or pull
+  one from an apt repository? And what does <code>apt upgrade</code> do on the
+  running board afterwards? This page answers both, then ends at a recipe for
+  keeping kernels current across multiple boards on different kernel trees.
+  Pinned to <a href="https://github.com/armbian/build/tree/v26.2.0-trunk.844">armbian/build
+  v26.2.0-trunk.844</a> (the ref this collection uses) and cross-checked against the
+  <a href="https://docs.armbian.com/Developer-Guide_Overview/">Armbian developer
+  guide</a>.
+</p>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#two-layers">Two layers of "kernel" in an Armbian board's lifecycle</a></li>
+    <li><a href="#build-time">Build time: what <code>compile.sh</code> actually does to a kernel</a></li>
+    <li><a href="#branch">The four <code>BRANCH</code> values and the kernel trees they point at</a></li>
+    <li><a href="#debs">The <code>.deb</code> packages a build produces</a></li>
+    <li><a href="#apt-time">Apt time: what happens when you run <code>apt update &amp;&amp; apt upgrade</code></a>
+      <ol style="list-style-type: lower-alpha; margin-top: 0.2rem;">
+        <li><a href="#apt-netboot-divergence">Two kernels on the network</a></li>
+        <li><a href="#apt-boot-flow">Boot-time read path on a netbooted board</a></li>
+        <li><a href="#apt-write-flow">The apt-upgrade write path, file by file</a></li>
+        <li><a href="#apt-divergence">What happens on the next reboot</a></li>
+        <li><a href="#apt-fix">How to actually pick up a new vmlinuz on a netbooted board</a></li>
+      </ol>
+    </li>
+    <li><a href="#collision">The collision question: does <code>apt upgrade</code> overwrite a locally-built kernel?</a></li>
+    <li><a href="#freeze">armbian-config's "freeze upgrades" switch</a></li>
+    <li><a href="#multi-board">Multi-board · multi-tree: keeping kernels current at scale</a></li>
+    <li><a href="#this-repo">What this collection actually does today</a></li>
+    <li><a href="#gotchas">Gotchas</a></li>
+  </ol>
+</nav>
+
+<h2 id="tldr">1. TL;DR</h2>
+
+<ul>
+  <li><strong>Build time</strong>: <code>compile.sh</code> always <em>compiles
+    the kernel from source</em>. It clones <code>KERNELSOURCE</code>, checks out
+    <code>KERNELBRANCH</code>, applies the patches under
+    <code>patch/kernel/archive/${KERNELPATCHDIR}</code>, runs <code>make</code>,
+    and emits <code>linux-image-${BRANCH}-${LINUXFAMILY}_*.deb</code> and friends
+    into <code>output/debs/</code>. It does <strong>not</strong> pull a prebuilt
+    kernel from <code>apt.armbian.com</code>.</li>
+  <li><strong>Apt time</strong>: every Armbian image ships
+    <code>/etc/apt/sources.list.d/armbian.sources</code> pointing at
+    <code>apt.armbian.com</code> (or <code>beta.armbian.com</code> on nightly
+    builds). <code>apt update &amp;&amp; apt upgrade</code> will fetch newer
+    versions of <code>linux-image-${BRANCH}-${LINUXFAMILY}</code> from there and
+    install them with standard dpkg semantics.</li>
+  <li><strong>Collision rule</strong>: your locally-built deb and the
+    <code>apt.armbian.com</code> deb have <em>the same package name</em>. If the
+    upstream version-string is higher, <code>apt upgrade</code> replaces yours
+    silently. <code>armbian-config</code> &rArr; <em>"Disable Armbian
+    kernel/firmware upgrades"</em> is the supported pin.</li>
+  <li><strong>For this collection</strong>: all of our userpatches are
+    <em>U-Boot-side</em> (PXE-first <code>BOOT_TARGETS</code>,
+    <code>CONFIG_PCI_INIT_R</code>, the rock-5b v2026.04 pin). The kernel
+    artifact is unmodified Armbian. So <em>kernel</em> apt-upgrades are safe;
+    <em>linux-u-boot-*</em> apt-upgrades would silently regress the netboot
+    invariant. See §<a href="#this-repo">9</a>.</li>
+</ul>
+
+<h2 id="two-layers">2. Two layers of "kernel" in an Armbian board's lifecycle</h2>
+
+<p>
+  The confusion this page exists to clear up is that there are <em>two</em>
+  independent moments where a kernel gets onto a board, and they use completely
+  different mechanisms:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>When</th><th>Where the kernel comes from</th><th>Driver</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="pill">Build</span></td>
+      <td>Once, on the builder host, ahead of imaging</td>
+      <td>Compiled from upstream git (Armbian's fork or mainline) inside the build container</td>
+      <td><code>./compile.sh BOARD=… BRANCH=…</code></td>
+    </tr>
+    <tr>
+      <td><span class="pill">Apt</span></td>
+      <td>Every time the user runs it on a running board (or unattended-upgrades fires)</td>
+      <td>Prebuilt <code>.deb</code> on <code>apt.armbian.com</code>, built by Armbian's CI</td>
+      <td><code>apt update &amp;&amp; apt upgrade</code> (or <code>armbian-config</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Crucially, both produce <em>packages with the same name</em>
+  (<code>linux-image-${BRANCH}-${LINUXFAMILY}</code>). dpkg only sees a version
+  number — it does not know or care that one was hand-rolled. This is the
+  source of the collision question in §<a href="#collision">7</a>.
+</p>
+
+<h2 id="build-time">3. Build time: what <code>compile.sh</code> actually does to a kernel</h2>
+
+<p>
+  The flow inside one <code>compile.sh</code> invocation is roughly:
+</p>
+
+<figure>
+<svg viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #1c5b8a; stroke-width: 1.2; }
+      .source { fill: #e8f4e2; stroke: #6aa84f; stroke-width: 1.2; }
+      .deb { fill: #fff4d6; stroke: #b14b00; stroke-width: 1.4; }
+      .input { fill: #efece5; stroke: #5a5a5a; stroke-width: 1; stroke-dasharray: 3 3; }
+      .stage-label { font-weight: 600; fill: #1a1a1a; }
+      .desc { fill: #5a5a5a; font-size: 10.5px; }
+      .arrow { stroke: #1c5b8a; stroke-width: 1.2; fill: none; }
+    </style>
+  </defs>
+
+  <rect x="240" y="10" width="280" height="40" rx="3" class="input"/>
+  <text x="380" y="28" text-anchor="middle" class="stage-label">compile.sh BOARD=rock-5b BRANCH=current</text>
+  <text x="380" y="42" text-anchor="middle" class="desc">user invocation</text>
+  <line x1="380" y1="50" x2="380" y2="68" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="70" width="520" height="56" rx="3" class="box"/>
+  <text x="380" y="89" text-anchor="middle" class="stage-label">Resolve KERNELSOURCE / KERNELBRANCH / KERNELPATCHDIR / LINUXFAMILY</text>
+  <text x="380" y="106" text-anchor="middle" class="desc">family file (config/sources/families/&lt;family&gt;.conf), then case $BRANCH in… arms,</text>
+  <text x="380" y="119" text-anchor="middle" class="desc">then board file, then any userpatches/ overlay. Last writer wins.</text>
+  <line x1="380" y1="126" x2="380" y2="144" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="146" width="520" height="48" rx="3" class="source"/>
+  <text x="380" y="165" text-anchor="middle" class="stage-label">git clone $KERNELSOURCE → cache/sources/linux-mainline/$KERNELBRANCH</text>
+  <text x="380" y="181" text-anchor="middle" class="desc">e.g. github.com/torvalds/linux.git @ tag:v6.12-rc7, or armbian/linux-rockchip @ rk-6.1-rkr5.1</text>
+  <line x1="380" y1="194" x2="380" y2="212" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="214" width="520" height="48" rx="3" class="source"/>
+  <text x="380" y="233" text-anchor="middle" class="stage-label">Apply patch/kernel/archive/$KERNELPATCHDIR/*.patch</text>
+  <text x="380" y="249" text-anchor="middle" class="desc">Armbian's curated patch series for that family. Mostly board / DT / driver fixes.</text>
+  <line x1="380" y1="262" x2="380" y2="280" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="282" width="520" height="48" rx="3" class="source"/>
+  <text x="380" y="301" text-anchor="middle" class="stage-label">make ARCH=arm64 defconfig → modify .config → make bindeb-pkg</text>
+  <text x="380" y="317" text-anchor="middle" class="desc">defconfig from config/kernel/&lt;family&gt;-&lt;branch&gt;.config; KERNEL_CONFIGURE=yes opens menuconfig</text>
+  <line x1="380" y1="330" x2="380" y2="348" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="350" width="520" height="76" rx="3" class="deb"/>
+  <text x="380" y="370" text-anchor="middle" class="stage-label">output/debs/ ← four .deb files</text>
+  <text x="380" y="388" text-anchor="middle" class="desc"><tspan font-family="ui-monospace,SF Mono,Menlo,monospace">linux-image-${BRANCH}-${LINUXFAMILY}_X.Y.Z-trunk.NNN_arm64.deb</tspan></text>
+  <text x="380" y="402" text-anchor="middle" class="desc"><tspan font-family="ui-monospace,SF Mono,Menlo,monospace">linux-dtb-${BRANCH}-${LINUXFAMILY}_…  ·  linux-headers-…  ·  linux-libc-dev-…</tspan></text>
+  <text x="380" y="418" text-anchor="middle" class="desc">Each Provides: linux-image, linux-image-armbian, armbian-${BRANCH}</text>
+  <line x1="380" y1="426" x2="380" y2="444" class="arrow" marker-end="url(#arr)"/>
+
+  <rect x="120" y="446" width="520" height="56" rx="3" class="box"/>
+  <text x="380" y="465" text-anchor="middle" class="stage-label">debootstrap rootfs + chroot dpkg -i the freshly-built debs → mkimage → xz → .img.xz</text>
+  <text x="380" y="481" text-anchor="middle" class="desc">The image's installed kernel <em>is</em> the deb you just built. /etc/apt/sources.list.d/armbian.sources</text>
+  <text x="380" y="494" text-anchor="middle" class="desc">also lands in the rootfs, pointing at apt.armbian.com — relevant to §6.</text>
+</svg>
+<figcaption>One <code>compile.sh</code> invocation, kernel side only. The
+U-Boot side runs in parallel and produces its own <code>linux-u-boot-*</code>
+deb (covered in <a href="uboot-armbian-build-explainer.html">the U-Boot
+explainer</a>).</figcaption>
+</figure>
+
+<p>
+  Every step that mutates kernel source code happens <em>before</em> the
+  <code>make</code> at step 5: the patch series, any
+  <code>pre_config_kernel</code> hooks, and the <code>KERNEL_CONFIGURE=yes</code>
+  menuconfig dialog. After step 5 the artifact is sealed: it is just a
+  versioned <code>.deb</code>.
+</p>
+
+<div class="snippet">
+  <header><strong>lib/functions/compilation/kernel-debs.sh</strong> · armbian/build (excerpted) <span>package naming</span></header>
+<pre><code># package the linux-image (image, modules, dtbs (if present))
+display_alert "Packaging linux-image" "${LINUXFAMILY} ${LINUXCONFIG}" "info"
+create_kernel_deb "linux-image-${BRANCH}-${LINUXFAMILY}" "${debs_target_dir}" kernel_package_callback_linux_image "linux-image"
+
+display_alert "Packaging linux-dtb" "${LINUXFAMILY} ${LINUXCONFIG}" "info"
+create_kernel_deb "linux-dtb-${BRANCH}-${LINUXFAMILY}"   "${debs_target_dir}" kernel_package_callback_linux_dtb   "linux-dtb"
+…
+# (in the control-file emit):
+Package: ${package_name}
+Provides: linux-image, linux-image-armbian, armbian-$BRANCH, wireguard-modules</code></pre>
+  <div class="notes">
+    <ul>
+      <li>The deb name is <em>literally</em> templated as
+        <code>linux-image-${BRANCH}-${LINUXFAMILY}</code>. For our rock-5b on
+        <code>BRANCH=edge</code> in the <code>rk35xx</code> family that resolves
+        to <code>linux-image-edge-rk35xx</code>. For an orange-pi-5-pro on
+        <code>BRANCH=current</code> (same family on this collection's pin) it
+        resolves to <code>linux-image-current-rk35xx</code>.</li>
+      <li>Note: <code>LINUXFAMILY</code> is <strong>not</strong>
+        <code>BOARD</code>. Many boards collapse onto the same family — and
+        therefore the same kernel deb. See §<a href="#multi-board">9</a>.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="branch">4. The four <code>BRANCH</code> values and the kernel trees they point at</h2>
+
+<p>
+  The Armbian developer guide describes
+  <code>BRANCH</code> as: <em>"Set kernel and U-Boot branch manually to skip
+  dialog prompt"</em>, with options <code>vendor</code>, <code>legacy</code>,
+  <code>current</code> (recommended), and <code>edge</code>
+  (<a href="https://docs.armbian.com/Developer-Guide_Build-Switches/">Build
+  Switches</a>). The flag is a single selector that maps to a different
+  upstream kernel tree per family.
+</p>
+
+<p>
+  For the <code>rk3588</code> family (the only one this collection consumes),
+  the family file <a href="https://github.com/armbian/build/blob/main/config/sources/families/rockchip-rk3588.conf"><code>config/sources/families/rockchip-rk3588.conf</code></a>
+  splits as:
+</p>
+
+<table>
+  <thead>
+    <tr><th><code>BRANCH</code></th><th><code>KERNELSOURCE</code></th><th><code>KERNELBRANCH</code></th><th>Kernel version</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>legacy</code></td><td><code>armbian/linux-rockchip</code></td><td><code>rk-5.10-rkr8</code></td><td>5.10.x</td><td>deprecated, slated for removal</td></tr>
+    <tr><td><code>vendor</code></td><td><code>armbian/linux-rockchip</code></td><td><code>rk-6.1-rkr5.1</code></td><td>6.1.x</td><td>Rockchip BSP — best peripheral coverage</td></tr>
+    <tr><td><code>current</code></td><td>inherited from <code>rockchip64_common.inc</code> — mainline LTS</td><td>tracked LTS tag</td><td>e.g. 6.12.x</td><td>recommended general-purpose</td></tr>
+    <tr><td><code>edge</code></td><td>inherited from <code>rockchip64_common.inc</code> — mainline tip</td><td>latest stable tag</td><td>e.g. 6.17.x</td><td>newest, less curation</td></tr>
+  </tbody>
+</table>
+
+<div class="gotcha">
+  <strong>Don't confuse "branch" axes.</strong> "Armbian branch" (<code>current/edge/…</code>)
+  is an Armbian-side selector. "Kernel branch" (the git ref on the kernel tree)
+  is what that selector resolves to. The collection's
+  <a href="uboot-armbian-build-explainer.html#vars">U-Boot explainer §2</a>
+  makes the same point for the U-Boot side, and the resolution mechanism
+  (family file → case-arm → board file → userpatches) is the same.
+</div>
+
+<p>
+  <code>KERNEL_CONFIGURE</code> is orthogonal to <code>BRANCH</code>. With
+  <code>KERNEL_CONFIGURE=yes</code> the build pauses at
+  <code>make menuconfig</code> for interactive edits; with
+  <code>KERNEL_CONFIGURE=no</code> (this collection's default,
+  <code>roles/armbian_build/defaults/main.yml</code>) the build uses the
+  family's checked-in <code>config/kernel/&lt;family&gt;-&lt;branch&gt;.config</code>
+  verbatim. Either way, the build still compiles from source — the switch
+  only controls whether you get a chance to tweak the <code>.config</code>.
+</p>
+
+<h2 id="debs">5. The <code>.deb</code> packages a build produces</h2>
+
+<p>
+  One successful <code>compile.sh</code> run produces (per the kernel-debs
+  packaging function quoted in §3):
+</p>
+
+<dl class="kvbox">
+  <dt><code>linux-image-${BRANCH}-${LINUXFAMILY}</code></dt>
+  <dd>The kernel image (<code>/boot/vmlinuz-*</code>), modules
+    (<code>/lib/modules/*</code>), and — for in-tree DTBs — the device tree
+    blobs under <code>/usr/lib/linux-image-…/</code>. The artifact that
+    PXE / U-Boot eventually loads.</dd>
+
+  <dt><code>linux-dtb-${BRANCH}-${LINUXFAMILY}</code></dt>
+  <dd>Device tree blobs under <code>/boot/dtb/</code> on Armbian images
+    (path is family-dependent). For ARM SBCs this is the file U-Boot fetches
+    over TFTP as <code>board.dtb</code> in the netboot flow.</dd>
+
+  <dt><code>linux-headers-${BRANCH}-${LINUXFAMILY}</code></dt>
+  <dd>Source-tree subset under <code>/usr/src/</code>, needed for DKMS,
+    out-of-tree module builds. Skipped on some older kernels (the build
+    logs say so).</dd>
+
+  <dt><code>linux-libc-dev-${BRANCH}-${LINUXFAMILY}</code></dt>
+  <dd>UAPI headers, mostly transparent for normal use.</dd>
+
+  <dt><code>linux-u-boot-${BRANCH}-${BOARD}</code> <span class="pill">aside</span></dt>
+  <dd>Built by a separate flow (see
+    <a href="uboot-armbian-build-explainer.html">U-Boot explainer</a>), but
+    relevant here because it lands in the same image. <strong>This</strong> is
+    the deb that carries this collection's custom PXE-first
+    <code>BOOT_TARGETS</code> — and the deb whose apt-upgrade would silently
+    regress the netboot invariant.</dd>
+</dl>
+
+<p>
+  All four kernel debs declare <code>Provides: linux-image,
+  linux-image-armbian, armbian-${BRANCH}</code>. The
+  <code>armbian-${BRANCH}</code> alias is what Armbian's
+  <code>armbian-bsp-cli-${BOARD}</code> meta-package pins against to keep an
+  image internally consistent (e.g. so you can't end up with
+  <code>linux-image-current-rk35xx</code> and
+  <code>linux-dtb-edge-rk35xx</code> co-installed).
+</p>
+
+<h2 id="apt-time">6. Apt time: what happens when you run <code>apt update &amp;&amp; apt upgrade</code></h2>
+
+<p>
+  The Armbian image that <code>compile.sh</code> produced has, in its rootfs:
+</p>
+
+<div class="snippet">
+  <header><strong>/etc/apt/sources.list.d/armbian.sources</strong> · shipped by armbian/build</header>
+<pre><code>Types: deb
+URIs: http://apt.armbian.com
+Suites: bookworm
+Components: main bookworm-utils bookworm-desktop
+Signed-By: /usr/share/keyrings/armbian.gpg
+</code></pre>
+  <div class="notes">
+    <ul>
+      <li>For nightly images,
+        <a href="https://github.com/armbian/build/blob/main/lib/functions/rootfs/distro-agnostic.sh"><code>distro-agnostic.sh</code></a>
+        does <code>sed -i 's/apt/beta/'</code> so the URIs become
+        <code>beta.armbian.com</code>. Stable Armbian releases keep
+        <code>apt.armbian.com</code>.</li>
+      <li>The Debian sources (<code>deb.debian.org</code>) ship in a
+        separate <code>/etc/apt/sources.list</code>. Standard userland
+        packages come from there; kernels / DTBs / U-Boot come from
+        <code>apt.armbian.com</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<p>
+  When the user runs <code>apt update &amp;&amp; apt upgrade</code>:
+</p>
+
+<ol>
+  <li>apt fetches the Armbian repo index and discovers that
+    <code>apt.armbian.com</code> has, say,
+    <code>linux-image-current-rk35xx</code> version
+    <code>26.2.0-S0001-D0001-P0000-Cf01eHfe66-HKf2c8-V73e7-Bcd0b-Rc127</code>
+    (Armbian's hash-suffixed version scheme).</li>
+  <li>apt compares against the locally-installed version (whatever
+    <code>compile.sh</code> stamped at build time — typically something like
+    <code>26.2.0-trunk.844</code>).</li>
+  <li>If upstream is newer by dpkg's lexical version comparison, apt schedules
+    an upgrade. It removes the old <code>linux-image-…</code> postinst hooks,
+    drops the new kernel into <code>/boot/</code>, runs
+    <code>update-initramfs</code>, regenerates <code>boot.scr</code>
+    (because the Armbian linux-image postinst calls
+    <code>armbian-update-initramfs</code> which calls <code>mkimage</code>).</li>
+  <li>On next boot the new kernel runs.</li>
+</ol>
+
+<p>
+  Nothing in this path is netboot-aware. The board doesn't know whether its
+  rootfs is on SD, eMMC, or NFS — the kernel deb just installs into whatever
+  rootfs it finds itself in. <strong>And that is exactly where it falls
+  apart on a netbooted board: there are two physical copies of "the kernel"
+  on the network, apt only touches one of them, and the one apt touches is
+  not the one that boots.</strong>
+</p>
+
+<h3 id="apt-netboot-divergence">6.1 Two kernels on the network — only one of them boots</h3>
+
+<p>
+  On a netbooted board in this collection, "the kernel" exists in three
+  locations, owned by three different mechanisms:
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Location</th>
+      <th>Path</th>
+      <th>Written by</th>
+      <th>Read at boot?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>rb5009 TFTP store</td>
+      <td><code>flash:/sbc/armbian/orange-pi-5-pro/{vmlinuz,initrd.img,board.dtb}</code></td>
+      <td><a href="../playbooks/stage_netboot_assets.yml"><code>stage_netboot_assets.yml</code></a> (<code>net_put</code> from controller cache)</td>
+      <td><strong>Yes</strong> — U-Boot fetches all three from rb5009 over TFTP, per the <code>KERNEL</code> / <code>INITRD</code> / <code>FDT</code> lines in <code>pxelinux.cfg/01-&lt;mac&gt;</code></td>
+    </tr>
+    <tr>
+      <td>NFS rootfs <code>/boot/</code></td>
+      <td><code>&lt;per-host-export&gt;/boot/vmlinuz-X.Y.Z-…</code></td>
+      <td><code>apt upgrade</code> (linux-image postinst)</td>
+      <td><strong>No</strong> — this directory is never consulted on a netbooted board; <code>boot.scr</code> here is for SD-boot only</td>
+    </tr>
+    <tr>
+      <td>NFS rootfs <code>/lib/modules/</code></td>
+      <td><code>&lt;per-host-export&gt;/lib/modules/X.Y.Z-…/</code></td>
+      <td><code>apt upgrade</code> (linux-image postinst)</td>
+      <td><strong>Yes</strong> — the running kernel <code>modprobe</code>s from <code>/lib/modules/$(uname -r)/</code> as a runtime path</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <code>apt upgrade</code> only writes to rows 2 and 3. Row 1 — the file
+  that actually gets <code>tftpboot</code>ed by U-Boot — is invisible to dpkg.
+  apt has no idea rb5009 exists.
+</p>
+
+<h3 id="apt-boot-flow">6.2 Boot-time read path on a netbooted board</h3>
+
+<ol>
+  <li>PoE on; SoC powers on; U-Boot runs from SPI/SD/eMMC.</li>
+  <li>U-Boot DHCPs; offer carries <code>next-server</code> pointing at rb5009.</li>
+  <li>U-Boot's PXE bootmeth fetches <code>pxelinux.cfg/01-&lt;mac&gt;</code>
+    from rb5009. That file says, literally:
+    <code>KERNEL armbian/orange-pi-5-pro/vmlinuz</code>.</li>
+  <li>U-Boot TFTPs that path <em>from rb5009</em> into RAM at
+    <code>kernel_addr_r</code>. Same for <code>INITRD</code> and
+    <code>FDT</code>. <strong>The kernel binary that runs came from rb5009,
+    not from the NFS rootfs.</strong></li>
+  <li>U-Boot <code>booti</code>s into the kernel. Kernel parses the
+    <code>APPEND</code> line, sees
+    <code>root=/dev/nfs nfsroot=&lt;ip&gt;:&lt;path&gt;</code>, mounts the NFS
+    rootfs from TrueNAS.</li>
+  <li>systemd starts; the running kernel modprobes drivers from
+    <strong><code>/lib/modules/$(uname -r)/</code> on the NFS rootfs</strong> —
+    where <code>$(uname -r)</code> is whatever version was compiled into the
+    vmlinuz from step 4.</li>
+</ol>
+
+<h3 id="apt-write-flow">6.3 The apt-upgrade write path, file by file</h3>
+
+<p>
+  Suppose the running board (<code>uname -r = 6.12.X-current-rk35xx</code>)
+  runs <code>apt update &amp;&amp; apt upgrade</code>, and the upstream
+  <code>linux-image-current-rk35xx</code> has bumped to
+  <code>6.12.Y-current-rk35xx</code>. dpkg performs:
+</p>
+
+<div class="snippet">
+  <header><strong>Effect on the per-host NFS rootfs</strong> · all paths relative to <code>&lt;nfs_rootfs_path&gt;/&lt;inventory_hostname&gt;/</code></header>
+<pre><code>--- removed (old linux-image deb) ---
+/boot/vmlinuz-6.12.X-current-rk35xx
+/boot/initrd.img-6.12.X-current-rk35xx
+/boot/config-6.12.X-current-rk35xx
+/boot/System.map-6.12.X-current-rk35xx
+/lib/modules/6.12.X-current-rk35xx/        ← gone, entire directory
+
++++ added (new linux-image deb) +++
+/boot/vmlinuz-6.12.Y-current-rk35xx
+/boot/initrd.img-6.12.Y-current-rk35xx
+/boot/config-6.12.Y-current-rk35xx
+/boot/System.map-6.12.Y-current-rk35xx
+/lib/modules/6.12.Y-current-rk35xx/        ← new
+
+postinst hooks then run inside the rootfs:
+- update-initramfs (regenerates initrd.img-6.12.Y)
+- armbian-update-uboot / mkimage (regenerates /boot/boot.scr —
+  which only matters for SD-boot, not netboot)</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Everything in this diff is <strong>inside the NFS rootfs</strong>.
+        rb5009's flash is not reached at any point.</li>
+      <li>The DTB package <code>linux-dtb-current-rk35xx</code> performs an
+        analogous swap under <code>/boot/dtb/</code> in the rootfs — also
+        invisible to rb5009.</li>
+    </ul>
+  </div>
+</div>
+
+<h3 id="apt-divergence">6.4 What happens on the next reboot</h3>
+
+<figure>
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .col { fill: #fff; stroke: #1c5b8a; stroke-width: 1.2; }
+      .stale { fill: #fff4d6; stroke: #b14b00; stroke-width: 1.4; }
+      .fresh { fill: #e8f4e2; stroke: #6aa84f; stroke-width: 1.4; }
+      .stage-label { font-weight: 600; fill: #1a1a1a; }
+      .desc { fill: #5a5a5a; font-size: 10.5px; }
+      .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10.5px; fill: #1a1a1a; }
+      .arrow { stroke: #1c5b8a; stroke-width: 1.2; fill: none; }
+      .bad { fill: #b14b00; font-weight: 600; }
+    </style>
+  </defs>
+
+  <!-- rb5009 column -->
+  <rect x="30" y="20" width="320" height="200" rx="3" class="stale"/>
+  <text x="190" y="40" text-anchor="middle" class="stage-label">rb5009 TFTP (unchanged)</text>
+  <text x="190" y="58" text-anchor="middle" class="desc">last written by stage_netboot_assets.yml</text>
+  <line x1="50" y1="68" x2="330" y2="68" class="arrow"/>
+  <text x="50" y="86" class="mono">flash:/sbc/armbian/orange-pi-5-pro/</text>
+  <text x="60" y="104" class="mono">vmlinuz       ← 6.12.X (OLD)</text>
+  <text x="60" y="122" class="mono">initrd.img    ← 6.12.X (OLD)</text>
+  <text x="60" y="140" class="mono">board.dtb     ← old DTB</text>
+  <text x="50" y="170" class="desc" style="font-style: italic;">U-Boot fetches these via TFTP.</text>
+  <text x="50" y="184" class="desc" style="font-style: italic;">apt does not know rb5009 exists.</text>
+  <text x="50" y="208" class="bad">⇒ next netboot loads the OLD kernel</text>
+
+  <!-- NFS rootfs column -->
+  <rect x="410" y="20" width="320" height="200" rx="3" class="fresh"/>
+  <text x="570" y="40" text-anchor="middle" class="stage-label">NFS rootfs (apt-upgraded)</text>
+  <text x="570" y="58" text-anchor="middle" class="desc">last written by linux-image postinst</text>
+  <line x1="430" y1="68" x2="710" y2="68" class="arrow"/>
+  <text x="430" y="86" class="mono">&lt;export&gt;/&lt;host&gt;/boot/</text>
+  <text x="440" y="104" class="mono">vmlinuz-6.12.Y  ← NEW (orphan)</text>
+  <text x="440" y="122" class="mono">initrd.img-6.12.Y ← NEW (orphan)</text>
+  <text x="430" y="146" class="mono">&lt;export&gt;/&lt;host&gt;/lib/modules/</text>
+  <text x="440" y="164" class="mono">6.12.Y-current-rk35xx/ ← NEW</text>
+  <text x="440" y="182" class="mono">(6.12.X directory: REMOVED)</text>
+  <text x="430" y="208" class="bad">⇒ running kernel can't modprobe anything</text>
+
+  <!-- arrows to outcome -->
+  <line x1="190" y1="220" x2="380" y2="270" class="arrow" marker-end="url(#arr3)"/>
+  <line x1="570" y1="220" x2="380" y2="270" class="arrow" marker-end="url(#arr3)"/>
+
+  <!-- outcome -->
+  <rect x="100" y="272" width="560" height="160" rx="3" class="col"/>
+  <text x="380" y="292" text-anchor="middle" class="stage-label">Reboot result on the netbooted board</text>
+  <line x1="120" y1="302" x2="640" y2="302" class="arrow"/>
+  <text x="120" y="320" class="mono">U-Boot loads 6.12.X vmlinuz from rb5009 (the OLD one)</text>
+  <text x="120" y="336" class="mono">Kernel boots, mounts NFS rootfs, sets uname -r = 6.12.X</text>
+  <text x="120" y="352" class="mono">Kernel looks for modules at /lib/modules/6.12.X/</text>
+  <text x="120" y="368" class="bad">  → directory does not exist (apt removed it)</text>
+  <text x="120" y="386" class="mono">Every modprobe fails:</text>
+  <text x="140" y="402" class="desc">- audio, DRM, secondary USB → broken peripherals</text>
+  <text x="140" y="416" class="desc">- in worst case (eth as module) → no network → console-only recovery</text>
+</svg>
+<figcaption>The TFTP store and the NFS rootfs walk off in opposite
+directions after <code>apt upgrade</code>. The running kernel ends up
+unable to load its own modules.</figcaption>
+</figure>
+
+<p>
+  rk3588 Armbian configs build most networking and storage drivers in-tree
+  (built into <code>vmlinuz</code>, not modules), so the typical practical
+  outcome is "board still boots, you can still ssh in, but audio/DRM/peripheral
+  modules are missing." The worst-case outcome — a driver you actually need
+  for ssh is a module — is rare on this family but not impossible (Wi-Fi,
+  some USB-NICs).
+</p>
+
+<div class="gotcha">
+  <strong>Correction to an earlier draft of this page.</strong> A previous
+  version of §6 claimed "the next netboot picks up the new <code>vmlinuz</code>
+  from the same export." That was wrong. On a netbooted board the kernel
+  binary comes from rb5009's TFTP store, not from the NFS rootfs's
+  <code>/boot/</code>. The export's <code>/boot/</code> is dead code at boot
+  time; it gets updated by <code>apt upgrade</code> and then ignored.
+</div>
+
+<h3 id="apt-fix">6.5 How to actually pick up a new vmlinuz on a netbooted board</h3>
+
+<p>
+  Because <code>apt upgrade</code> doesn't reach rb5009, you need a separate
+  step to re-stage the TFTP-served files. Two paths today, plus one that
+  could exist:
+</p>
+
+<dl class="kvbox">
+  <dt>Path 1: rebuild + restage <span class="pill">supported</span></dt>
+  <dd>
+    <pre style="margin: 0.3rem 0;"><code>ansible-playbook playbooks/build_image.yml         # compile fresh kernel from source
+ansible-playbook playbooks/stage_netboot_assets.yml  # extract /boot/* from .img.xz; net_put to rb5009</code></pre>
+    This is the only path the collection currently supports. Note that
+    <code>build_image.yml</code> compiles against the pinned
+    <code>armbian_build_ref</code> (<code>v26.2.0-trunk.844</code>), so it can
+    fall <em>behind</em> apt.armbian.com. To pull the build pin forward, bump
+    <code>armbian_build_ref</code> in
+    <a href="../roles/armbian_build/defaults/main.yml"><code>roles/armbian_build/defaults/main.yml</code></a>
+    and re-run.
+  </dd>
+
+  <dt>Path 2: don't let apt upgrade the kernel on netbooted boards <span class="pill">recommended</span></dt>
+  <dd>
+    Hold <code>linux-image-*</code>, <code>linux-dtb-*</code> (and
+    <code>linux-headers-*</code> if installed) on netbooted boards. This makes
+    kernel currency a build-pipeline concern only, eliminating the divergence
+    entirely. See the corrected Recipe A in §<a href="#multi-board">9</a>.
+  </dd>
+
+  <dt>Path 3 (doesn't exist today): "copy from rootfs to TFTP" role</dt>
+  <dd>
+    After <code>apt upgrade</code>, a role could read
+    <code>&lt;per-host-export&gt;/boot/vmlinuz-*</code> +
+    <code>initrd.img-*</code> +
+    <code>&lt;per-host-export&gt;/boot/dtb/&lt;board.dtb&gt;</code> and
+    <code>net_put</code> them to rb5009 under the per-model TFTP path,
+    overwriting the stale ones. This would be safe because the per-model
+    TFTP store is a single shared copy for that board model (kernel+initrd+DTB
+    have to be in lockstep with the rootfs's <code>/lib/modules/</code>).
+    Note the asymmetry: rb5009's TFTP is <em>per-model</em>, but the NFS
+    rootfs is <em>per-host</em> — so if you took this path, you'd need to
+    ensure all hosts in a model group apt-upgrade in lockstep, or accept that
+    "first one wins" the TFTP slot and the others are running on stale
+    modules.
+  </dd>
+</dl>
+
+<p>
+  Path 2 is the path of least surprise: the collection treats the
+  <code>.img.xz</code> as the kernel source of truth, and apt is for userland
+  packages only.
+</p>
+
+<h2 id="collision">7. The collision question: does <code>apt upgrade</code> overwrite a locally-built kernel?</h2>
+
+<p>
+  Yes. The locally-built deb and the upstream deb have the same
+  <code>Package:</code> name. dpkg only sees a version-string. If
+  <code>apt.armbian.com</code>'s version compares higher, the locally-built
+  kernel is removed and replaced.
+</p>
+
+<figure>
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #1c5b8a; stroke-width: 1.2; }
+      .local { fill: #e8f4e2; stroke: #6aa84f; stroke-width: 1.4; }
+      .remote { fill: #fff4d6; stroke: #b14b00; stroke-width: 1.4; }
+      .stage-label { font-weight: 600; fill: #1a1a1a; }
+      .desc { fill: #5a5a5a; font-size: 10.5px; }
+      .arrow { stroke: #1c5b8a; stroke-width: 1.2; fill: none; }
+    </style>
+  </defs>
+
+  <rect x="40" y="20" width="320" height="70" rx="3" class="local"/>
+  <text x="200" y="40" text-anchor="middle" class="stage-label">Locally built (compile.sh)</text>
+  <text x="200" y="58" text-anchor="middle" class="desc">Package: linux-image-current-rk35xx</text>
+  <text x="200" y="72" text-anchor="middle" class="desc">Version: 26.2.0-trunk.844</text>
+  <text x="200" y="84" text-anchor="middle" class="desc">… installed at image-build time</text>
+
+  <rect x="400" y="20" width="320" height="70" rx="3" class="remote"/>
+  <text x="560" y="40" text-anchor="middle" class="stage-label">apt.armbian.com (newer)</text>
+  <text x="560" y="58" text-anchor="middle" class="desc">Package: linux-image-current-rk35xx</text>
+  <text x="560" y="72" text-anchor="middle" class="desc">Version: 26.2.0-S0001-…-Rc127</text>
+  <text x="560" y="84" text-anchor="middle" class="desc">… picked up by apt update</text>
+
+  <line x1="360" y1="55" x2="400" y2="55" class="arrow" marker-end="url(#arr2)"/>
+  <text x="380" y="50" text-anchor="middle" class="desc">same name</text>
+
+  <rect x="200" y="130" width="360" height="50" rx="3" class="box"/>
+  <text x="380" y="148" text-anchor="middle" class="stage-label">dpkg version compare: upstream &gt; local</text>
+  <text x="380" y="164" text-anchor="middle" class="desc">no warning about provenance — both are "version strings" to apt</text>
+
+  <line x1="380" y1="90" x2="380" y2="128" class="arrow" marker-end="url(#arr2)"/>
+  <line x1="380" y1="180" x2="380" y2="208" class="arrow" marker-end="url(#arr2)"/>
+
+  <rect x="120" y="210" width="520" height="56" rx="3" class="remote"/>
+  <text x="380" y="230" text-anchor="middle" class="stage-label">apt upgrade installs the upstream deb</text>
+  <text x="380" y="246" text-anchor="middle" class="desc">local kernel is replaced. ANY userpatches applied to the kernel are gone.</text>
+  <text x="380" y="260" text-anchor="middle" class="desc">postinst runs update-initramfs and mkimage; reboot loads the upstream kernel.</text>
+
+  <line x1="380" y1="266" x2="380" y2="294" class="arrow" marker-end="url(#arr2)"/>
+
+  <rect x="120" y="296" width="520" height="50" rx="3" class="local"/>
+  <text x="380" y="316" text-anchor="middle" class="stage-label">For this collection: NO PROBLEM at the kernel layer</text>
+  <text x="380" y="332" text-anchor="middle" class="desc">all our userpatches live in U-Boot, not the kernel — see §9</text>
+</svg>
+<figcaption>The collision is real, but for this collection it's only
+dangerous at the U-Boot layer — see §<a href="#this-repo">9</a>.</figcaption>
+</figure>
+
+<div class="gotcha">
+  <strong>If you applied kernel userpatches at build time</strong> (custom
+  drivers, out-of-tree backports, CONFIG flips beyond what menuconfig saved),
+  treat <code>apt upgrade</code> as <em>destructive of those patches</em>.
+  Either hold the package (next section) or accept that the rebuild cadence
+  has to keep up with apt.armbian.com's cadence.
+</div>
+
+<h2 id="freeze">8. armbian-config's "freeze upgrades" switch</h2>
+
+<p>
+  Armbian ships a supported pin for the kernel + U-Boot + DTB packages. From
+  the <a href="https://docs.armbian.com/User-Guide_Getting-Started/">Armbian
+  user guide</a>:
+</p>
+
+<blockquote>
+  <em>"Enable Armbian kernel/firmware upgrades / Disable Armbian kernel
+  upgrades"</em>
+</blockquote>
+
+<p>
+  Internally this is just <code>apt-mark hold</code> against the relevant
+  package names — <code>linux-image-${BRANCH}-${LINUXFAMILY}</code>,
+  <code>linux-dtb-${BRANCH}-${LINUXFAMILY}</code>,
+  <code>linux-u-boot-${BRANCH}-${BOARD}</code>, and friends. You can do the
+  same thing by hand:
+</p>
+
+<div class="snippet">
+  <header><strong>Manual pin equivalent</strong> · run on the board</header>
+<pre><code># Pin everything Armbian-provided to the currently-installed version.
+sudo apt-mark hold \
+    linux-image-current-rk35xx \
+    linux-dtb-current-rk35xx \
+    linux-headers-current-rk35xx \
+    linux-u-boot-current-rock-5b \
+    armbian-bsp-cli-rock-5b
+
+# Or, only pin U-Boot (this collection's actual concern):
+sudo apt-mark hold linux-u-boot-current-rock-5b</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Holds survive reboots. They do NOT survive a rootfs reflash from
+        a freshly-built <code>.img.xz</code> — you'd be installing a new
+        rootfs, so its hold state starts empty.</li>
+      <li>Verify with <code>apt-mark showhold</code>.</li>
+      <li>Holds block <em>upgrades</em>, not security advisories. You'll see
+        the held packages listed in <code>apt list --upgradable</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="multi-board">9. Multi-board · multi-tree: keeping kernels current at scale</h2>
+
+<p>
+  Here's where it gets practically important. Three axes interact:
+</p>
+
+<ul>
+  <li><strong>Board</strong> (e.g. <code>orange-pi-5-pro</code>,
+    <code>rock-5b</code>). One <code>.img.xz</code> per board model.</li>
+  <li><strong>Branch</strong> (<code>current</code>, <code>edge</code>, …). One
+    kernel tree per branch. Two boards on different branches are on different
+    upstream cadences.</li>
+  <li><strong>Family</strong> (<code>rk35xx</code> for both rk3588 boards in
+    this collection). Two boards in the same family <em>share</em> the kernel
+    deb name (<code>linux-image-${BRANCH}-${LINUXFAMILY}</code>) — but
+    <em>not</em> the U-Boot deb (which is per-board).</li>
+</ul>
+
+<table>
+  <thead>
+    <tr><th>Board</th><th><code>BRANCH</code></th><th><code>LINUXFAMILY</code></th><th>Kernel deb</th><th>U-Boot deb</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>orange-pi-5-pro</code></td>
+      <td><code>current</code></td>
+      <td><code>rk35xx</code></td>
+      <td><code>linux-image-current-rk35xx</code></td>
+      <td><code>linux-u-boot-current-orangepi5-pro</code></td>
+    </tr>
+    <tr>
+      <td><code>rock-5b</code></td>
+      <td><code>edge</code></td>
+      <td><code>rk35xx</code></td>
+      <td><code>linux-image-edge-rk35xx</code></td>
+      <td><code>linux-u-boot-edge-rock-5b</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Each cell in that <em>kernel deb</em> column is an independent apt cadence on
+  apt.armbian.com. Maintaining "kernels current" across both boards means
+  tracking <em>both</em>:
+  <code>linux-image-current-rk35xx</code> publishes when Armbian's CI rolls
+  forward the <code>current</code> branch's LTS kernel; the
+  <code>edge</code> variant rolls more often, against mainline tip.
+</p>
+
+<h3>Three practical recipes</h3>
+
+<div class="good">
+  <strong>Recipe A: trust apt for kernels (SD-boot boards only), rebuild on schedule for the rest.</strong>
+  <p>For boards running off SD/eMMC, let <code>apt upgrade</code> handle
+  kernel/DTB packages — they have no local customisations in this collection,
+  so they're safe to track upstream. Pin <code>linux-u-boot-*</code> so U-Boot
+  stays on your custom PXE-first build. Re-run
+  <code>playbooks/build_image.yml</code> on a slower cadence (quarterly? on
+  armbian/build trunk bumps?) to refresh both the kernel <em>and</em> the
+  U-Boot binaries in the <code>.img.xz</code> baseline.</p>
+  <p><strong>Do not use this recipe on netbooted boards.</strong> §<a href="#apt-netboot-divergence">6.1</a>
+  explains why: apt only touches the NFS rootfs's <code>/boot/</code> and
+  <code>/lib/modules/</code>, but a netbooted kernel comes from rb5009's TFTP.
+  Letting apt advance the in-rootfs kernel while the TFTP-served one stays
+  pinned creates a module-version mismatch on next reboot.</p>
+</div>
+
+<div class="snippet">
+  <header><strong>Recipe A wiring — SD-boot boards</strong> · per-board, run once</header>
+<pre><code># On the running board (post-bootstrap):
+sudo apt-mark hold linux-u-boot-$(cat /etc/lsb-release | grep BOARD_BRANCH | cut -d= -f2)-$(armbian-board-name)
+# Or hardcode the names you know:
+sudo apt-mark hold linux-u-boot-current-orangepi5-pro
+sudo apt-mark hold linux-u-boot-edge-rock-5b
+
+# Then a normal apt upgrade is safe:
+sudo apt update && sudo apt upgrade -y</code></pre>
+  <div class="notes">
+    <ul>
+      <li>This recipe trades "kernel patches stay yours" (we don't apply any)
+        for "kernel currency happens automatically." Good fit when you have a
+        homelab fleet of SD/eMMC-booting boards and no per-board kernel
+        modifications.</li>
+      <li>If U-Boot changes ARE needed (security CVE in a U-Boot subsystem
+        you use), you have to rebuild from this collection's pipeline — apt
+        won't help you because the package is held.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="snippet">
+  <header><strong>Recipe A wiring — netbooted boards</strong> · per-board, run once</header>
+<pre><code># On a netbooted board, hold the kernel + DTB + headers ALSO, so apt
+# doesn't desync the in-rootfs /lib/modules/ from the TFTP-served vmlinuz:
+sudo apt-mark hold \
+    linux-image-current-rk35xx \
+    linux-dtb-current-rk35xx \
+    linux-headers-current-rk35xx \
+    linux-u-boot-current-orangepi5-pro
+
+# After this, apt upgrade is safe but only updates userland.
+# Kernel currency is driven by build_image.yml + stage_netboot_assets.yml.
+sudo apt update && sudo apt upgrade -y</code></pre>
+  <div class="notes">
+    <ul>
+      <li>The kernel/DTB packages have to be held with the same
+        <code>${BRANCH}-${LINUXFAMILY}</code> suffix the board is running. Get
+        it from <code>dpkg -l 'linux-image-*-rk35xx'</code> on the board.</li>
+      <li>This collection does not wire holds in any playbook today — it's
+        operator state, not part of <code>bootstrap_armbian.yml</code>. A small
+        role using <code>ansible.builtin.dpkg_selections</code> would be the
+        right home if/when the fleet grows.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="good">
+  <strong>Recipe B: full pin, full rebuild.</strong>
+  <p>Pin everything Armbian-supplied. Treat the <code>.img.xz</code> from
+  <code>playbooks/build_image.yml</code> as the authoritative kernel +
+  U-Boot baseline; refresh boards by reflashing (or by rebooting netbooted
+  boards onto a re-staged rootfs) on whatever cadence suits you.</p>
+  <p>Most appropriate when you've got kernel userpatches (not the case in
+  this collection today) or when you need reproducibility across the fleet
+  more than you need upstream currency.</p>
+</div>
+
+<div class="good">
+  <strong>Recipe C: bump <code>armbian_build_ref</code>.</strong>
+  <p>This collection pins <code>armbian/build</code> to a specific trunk tag
+  in <code>roles/armbian_build/defaults/main.yml</code>
+  (<code>armbian_build_ref: "v26.2.0-trunk.844"</code>). Bumping that pin and
+  re-running <code>playbooks/build_image.yml</code> picks up every kernel
+  patch and KERNELBRANCH bump that Armbian merged in the interim — for every
+  board, on every branch, in a single deliberate step. The
+  <code>armbian_build</code> role's manifest skip-build logic short-circuits
+  rebuilds when nothing relevant changed, so this is cheap on a re-run.</p>
+</div>
+
+<h2 id="this-repo">10. What this collection actually does today</h2>
+
+<p>
+  Here's the calibrated answer to "do I need to worry about apt overwriting my
+  custom kernel?" for this repo specifically, as of <code>main</code>:
+</p>
+
+<ul>
+  <li>The collection applies <em>zero</em> kernel userpatches. The
+    <code>build_userpatches_common</code> entries in
+    <a href="../playbooks/build_image.yml"><code>playbooks/build_image.yml</code></a>
+    target U-Boot only (BOOT_TARGETS ordering, CONFIG_PCI_INIT_R for rk3588 PCIe
+    init, the rock-5b v2026.04 BOOTBRANCH pin).</li>
+  <li>So at the artifact level, <em>kernel</em> deb upgrades from
+    apt.armbian.com are byte-for-byte equivalent to a fresh local rebuild
+    against the matching Armbian tag — only faster, and without burning
+    builder host time.</li>
+  <li><em>U-Boot</em> deb upgrades from apt.armbian.com would silently replace
+    our PXE-first build with Armbian's stock PXE-at-position-6 build. On boards
+    that still run U-Boot from SD (most), this only matters if you later run
+    <code>armbian-install</code> or a SPI flash update tool — apt itself doesn't
+    flash U-Boot. On boards whose U-Boot lives in SPI (rock-5b on
+    <code>edge</code>, which already had Approach B applied via
+    <code>playbooks/persist_uboot_env.yml</code>), the SPI binary isn't touched
+    by apt at all; only the SD payload could drift.</li>
+  <li><strong>On netbooted boards the artifact-equivalence above does not
+    translate into runtime safety</strong>: per §<a href="#apt-netboot-divergence">6.1</a>,
+    the kernel apt upgrades inside the NFS rootfs is not the kernel U-Boot
+    loads from rb5009. So even though the kernel deb itself is safe to track
+    upstream, advancing it on a netbooted board without re-staging TFTP
+    desyncs <code>/lib/modules/</code> from the running kernel.</li>
+  <li>The minimum hold list therefore depends on boot mode:
+    <ul>
+      <li><strong>SD-boot</strong> board: hold only
+        <code>linux-u-boot-${BRANCH}-${BOARD}</code>. Kernel/DTB packages
+        can be left to apt's normal upgrade cadence (the same files that get
+        updated in <code>/boot/</code> are the ones the next SD-boot loads).</li>
+      <li><strong>Netboot</strong> board: hold
+        <code>linux-image-${BRANCH}-${LINUXFAMILY}</code>,
+        <code>linux-dtb-${BRANCH}-${LINUXFAMILY}</code>,
+        <code>linux-headers-${BRANCH}-${LINUXFAMILY}</code>, <em>and</em>
+        <code>linux-u-boot-${BRANCH}-${BOARD}</code>. Kernel currency is then
+        driven entirely by <code>build_image.yml</code> +
+        <code>stage_netboot_assets.yml</code>.</li>
+    </ul>
+  </li>
+</ul>
+
+<p>
+  The exact hold per board, given today's
+  <code>vars/boards.yml</code> + <code>playbooks/build_image.yml</code>:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Inventory host</th><th>Boot mode</th><th>Hold command</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>orange-pi-5-pro-NN</code></td>
+      <td>SD-boot</td>
+      <td><code>apt-mark hold linux-u-boot-current-orangepi5-pro</code></td>
+    </tr>
+    <tr>
+      <td><code>orange-pi-5-pro-NN</code></td>
+      <td>Netboot</td>
+      <td><code>apt-mark hold linux-image-current-rk35xx linux-dtb-current-rk35xx linux-headers-current-rk35xx linux-u-boot-current-orangepi5-pro</code></td>
+    </tr>
+    <tr>
+      <td><code>rock-5b-NN</code></td>
+      <td>SD-boot</td>
+      <td><code>apt-mark hold linux-u-boot-edge-rock-5b</code></td>
+    </tr>
+    <tr>
+      <td><code>rock-5b-NN</code></td>
+      <td>Netboot</td>
+      <td><code>apt-mark hold linux-image-edge-rk35xx linux-dtb-edge-rk35xx linux-headers-edge-rk35xx linux-u-boot-edge-rock-5b</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  This isn't wired into any playbook in the collection today — it's a
+  documentation footnote, not a role. If/when the fleet grows past hand-rolled
+  apt operations, a small role wrapping
+  <code>ansible.builtin.dpkg_selections</code> would belong next to
+  <code>bootstrap_armbian</code>.
+</p>
+
+<h2 id="gotchas">11. Gotchas</h2>
+
+<div class="gotcha">
+  <strong>Same family ⇒ same kernel deb name ⇒ shared apt cadence.</strong>
+  Two boards in <code>rk35xx</code> on the same <code>BRANCH</code> consume
+  literally the same kernel package from apt.armbian.com. A regression in
+  Armbian's CI for one board's kernel hits every board sharing that family +
+  branch combo simultaneously. This is by design (kernels are family-wide), but
+  it means "stagger kernel rollouts" is not a property apt gives you — you'd
+  have to pin some hosts and unpin them later.
+</div>
+
+<div class="gotcha">
+  <strong><code>linux-headers-…</code> can be absent on some kernel
+  versions.</strong> The packaging code in
+  <a href="https://github.com/armbian/build/blob/main/lib/functions/compilation/kernel-debs.sh"><code>kernel-debs.sh</code></a>
+  has a "Skipping linux-headers package for ${KERNEL_MAJOR_MINOR}" branch.
+  If a build step depends on headers being present, gate on
+  <code>ls /var/lib/armbian_build/output/debs/linux-headers-* 2&gt;/dev/null</code>.
+</div>
+
+<div class="gotcha">
+  <strong>The <code>KERNEL_CONFIGURE=no</code> default skips menuconfig but
+  not the build.</strong> The role's
+  <code>armbian_build_compile_args.KERNEL_CONFIGURE: "no"</code>
+  (<a href="../roles/armbian_build/defaults/main.yml"><code>roles/armbian_build/defaults/main.yml</code></a>)
+  only suppresses the interactive prompt — it does not skip kernel
+  compilation. There is no documented switch that swaps the in-build kernel
+  for a pre-fetched <code>.deb</code> from apt.armbian.com; if you want
+  apt's version in the image, you'd have to run <code>apt upgrade</code> in a
+  <code>customize-image.sh</code> hook against the rootfs.
+</div>
+
+<div class="gotcha">
+  <strong>Nightly vs stable apt repo.</strong>
+  <code>distro-agnostic.sh</code> swaps <code>apt.armbian.com</code> →
+  <code>beta.armbian.com</code> when <code>IMAGE_TYPE=nightly</code>. The
+  v26.2.0-trunk.844 builds this collection consumes are NOT nightly
+  (<code>BETA</code> is unset), so the produced images point at stable
+  <code>apt.armbian.com</code>. If you ever flip an image to nightly, the
+  upgrade cadence becomes significantly more aggressive.
+</div>
+
+<h2>References</h2>
+
+<ul>
+  <li><a href="https://docs.armbian.com/Developer-Guide_Overview/">Armbian Developer Guide — Overview</a></li>
+  <li><a href="https://docs.armbian.com/Developer-Guide_Build-Switches/">Armbian Developer Guide — Build Switches</a></li>
+  <li><a href="https://docs.armbian.com/Developer-Guide_User-Configurations/">Armbian Developer Guide — User Configurations</a></li>
+  <li><a href="https://docs.armbian.com/User-Guide_Getting-Started/">Armbian User Guide — Getting Started</a> (covers armbian-config kernel freeze)</li>
+  <li><a href="https://github.com/armbian/build">armbian/build on GitHub</a> — repo this collection pins via <code>armbian_build_ref</code></li>
+  <li><a href="https://github.com/armbian/build/blob/main/lib/functions/compilation/kernel-debs.sh"><code>lib/functions/compilation/kernel-debs.sh</code></a> — definitive source for deb naming</li>
+  <li><a href="https://github.com/armbian/build/blob/main/config/sources/families/rockchip-rk3588.conf"><code>config/sources/families/rockchip-rk3588.conf</code></a> — KERNELSOURCE / KERNELBRANCH per-BRANCH for our family</li>
+  <li><a href="uboot-armbian-build-explainer.html">U-Boot in armbian/build — a one-pass explainer</a> (sibling document; same resolution model, different artifact)</li>
+</ul>
+
+</body>
+</html>

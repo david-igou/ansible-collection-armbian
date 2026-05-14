@@ -5,18 +5,20 @@
 The `david_igou.armbian_netboot` Ansible collection manages custom Armbian SD
 images that PXE-first boot on the `orange-pi-5-pro`. The boards are powered
 over Ethernet from a RouterOS switch, draw their DHCP from a RouterOS router
-(rb5009), and NFS-root from a separate TrueNAS server. The presence of a
-per-board `pxelinux.cfg/01-<MAC>` file on rb5009's TFTP server is the only
-mode switch between "boot from local SD" and "boot from NFS root".
-Everything else in the collection is in service of making that one toggle
-reliable and idempotent.
+(rb5009), and NFS-root from a separate TrueNAS server. **v2.0.0 (always-netboot
+model):** every onboarded board always has a per-board `pxelinux.cfg/01-<MAC>`
+on rb5009's TFTP server; the `default` directive inside that file selects
+`nfs` versus `sd` boot (`armbian_netboot_boot_mode` in inventory). Nothing is
+added or removed to flip modes — convergence rewrites the same file. Everything
+else in the collection is in service of making that toggle reliable and
+idempotent.
 
-## The v1 invariant
+## The v2 invariant
 
-A board flips between disk and netboot purely because per-board
-`pxelinux.cfg/01-<MAC>` is present (or absent) on rb5009. There is no
-on-board state to mutate, no bootloader env to rewrite, no scripts staged
-on the SBC.
+There is no on-board state to mutate for routine boot-mode selection, no
+bootloader env to rewrite for that purpose, and no scripts staged on the SBC
+for switching NFS versus SD. The pxelinux menu labels encode both paths; the
+active path is whichever label `default` names.
 
 This is achievable only because the U-Boot binary on the SD card has been
 compiled with `BOOT_TARGETS` ordered with `pxe` first. Stock Armbian
@@ -27,21 +29,22 @@ Rockchip `current` ships PXE at position 6 of `BOOT_TARGETS`, and U-Boot's
 `pre_config_uboot_target__<board>_*` hook, so the resulting `.img.xz` ships
 a U-Boot whose first boot target is `pxe`.
 
-There is no on-host bootloader flashing in v1. The U-Boot binary is part of
-the SD image, and the operator writes the SD card once with a tool like
-`dd` or balenaEtcher before the board ever joins the network. From that
-point on, the U-Boot binary is fixed. Whether the board boots from SD or
-NFS depends entirely on whether rb5009 serves per-board pxelinux.cfg:
+There is no on-host bootloader flashing for this workflow. The U-Boot binary
+is part of the SD image, and the operator writes the SD card once with a tool
+like `dd` or balenaEtcher before the board ever joins the network. From that
+point on, the U-Boot binary is fixed. Whether the board NFS-boots or uses local
+SD rootfs is determined by pxelinux content on rb5009:
 
 - Per-board `pxelinux.cfg/01-<MAC>` exists on rb5009's TFTP server
-  (registered as a `/ip tftp` row pointing at `flash:/sbc/pxelinux.cfg/01-<MAC>`)
-  → U-Boot's PXE bootmeth loads it, fetches kernel/initrd/DTB
-  via TFTP from rb5009, NFS-roots from TrueNAS at `nfs_server_ip`.
-- Per-board `pxelinux.cfg/01-<MAC>` is absent (no `/ip tftp` row) →
-  U-Boot's PXE bootmeth fast-404s through the fallback chain
-  (`01-<MAC>` → `0A0A0919` → ... → `default`, ~5–10 s total)
-  → `bootflow scan` aborts the network bootdev and proceeds to
-  mmc1's `boot.scr`, board boots local SD rootfs.
+  (registered as a `/ip tftp` row pointing at `flash:/sbc/pxelinux.cfg/01-<MAC>`).
+  U-Boot's PXE bootmeth always loads it and fetches kernel/initrd/DTB via TFTP
+  from rb5009.
+- When `default` selects the NFS label → kernel cmdline uses NFS root from
+  TrueNAS at `armbian_netboot_nfs_server_ip` (see inventory /
+  `armbian_netboot_nfs_rootfs_path`).
+- When `default` selects the SD label → pxelinux passes the SD rootfs `PARTUUID`
+  (`armbian_netboot_sd_partuuid`) so the board boots local SD rootfs after the
+  same PXE path.
 
 ## External RouterOS prerequisite
 
@@ -61,14 +64,14 @@ for the full design context.
 What this collection does write: per-model kernel/initrd/DTB and per-board
 `pxelinux.cfg/01-<MAC>` to `flash:/sbc/` on rb5009, with `/ip tftp` rules
 exposing each file. Plumbing-check preflight asserts the per-model rows exist
-before per-board enable_netboot operations run.
+before per-board `converge_boot_mode.yml` / `set_boot_mode.yml` operations run.
 
 ## Roles
 
 The collection is organised as **single-purpose, parameter-driven roles**.
 A role enforces one external system's state given parameters; playbooks
-decide which roles to invoke, with which parameters, in what order. Six
-roles ship in v1.
+decide which roles to invoke, with which parameters, in what order. Seven
+roles ship in v2.
 
 | Role | Enforces / produces |
 |---|---|
@@ -76,19 +79,21 @@ roles ship in v1.
 | `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
 | `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
 | `netboot_assets` | per-model rootfs template + per-host clones on TrueNAS NFS export; per-model kernel/initrd/dtb on rb5009 TFTP |
-| `routeros_sbc_tftp` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 |
+| `routeros_pxe_config` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 (always written; content reflects `armbian_netboot_boot_mode`) |
+| `boot_mode` | Board converged to declared `armbian_netboot_boot_mode` (`nfs` \| `sd`): pxelinux + PoE cycle + verify (`armbian_netboot_router`) |
 | `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
 
-The `armbian_build`, `netboot_assets`, and `routeros_sbc_tftp` roles each own one
+The `armbian_build`, `netboot_assets`, and `routeros_pxe_config` roles each own one
 piece of off-board state — the build host, the netboot server's exports,
 and rb5009's SBC TFTP layout (per-board pxelinux.cfg + `/ip tftp` rows). The
 two `bootstrap_*` roles bring a fresh board or a fresh RouterOS device into
-a state where the other roles can talk to them. `routeros_poe` is an
-optional out-of-band recovery path.
+a state where the other roles can talk to them. `boot_mode` composes pxelinux
+convergence (via `routeros_pxe_config`), PoE cycling (`routeros_poe`), and
+post-boot checks. `routeros_poe` is also used directly for power control.
 
 ## Workflow
 
-The v1 ordering. Each step is its own playbook, run from the collection
+The v2 ordering. Each step is its own playbook (or pair), run from the collection
 root. Steps marked "(Once)" or "(Once per board model)" are
 setup-only; the rest are run as needed:
 
@@ -97,26 +102,30 @@ setup-only; the rest are run as needed:
 1. Operator manually flashes SD card with that image    (out of band)
 2. (Once)   Bootstrap RouterOS SSH user                 → bootstrap_routeros_user.yml
 3. (Once per board) Bootstrap SD-rootfs SSH user        → bootstrap_armbian.yml
-4.          Stage netboot assets on TrueNAS + rb5009    → stage_netboot_assets.yml
-5.          Toggle board into NFS-root mode             → enable_netboot.yml
-6.          Toggle board back to SD                     → disable_netboot.yml
+4a.         Stage NFS rootfs on TrueNAS                 → stage_nfs_rootfs.yml
+4b.         Stage per-model TFTP assets on rb5009      → stage_tftp_assets.yml
+5.          Converge board(s) to inventory boot mode    → converge_boot_mode.yml
+6.          Override boot mode ad-hoc (e.g. SD)         → set_boot_mode.yml -e armbian_netboot_boot_mode=sd
 ```
 
 Step 0 produces an image whose U-Boot tries PXE first. Step 1 is the only
 manual step in the chain — the operator writes the produced `.img.xz` to
 a microSD card and inserts it into the board. Steps 2–3 are one-time
-RouterOS / board user setup. Step 4 stages NFS rootfs + rb5009 TFTP assets.
-Steps 5–6 are the actual day-to-day toggle: add or remove per-board
-pxelinux.cfg on rb5009 to send the board into NFS or back to SD.
+RouterOS / board user setup. Steps 4a–4b stage NFS rootfs on TrueNAS and
+kernel/initrd/dtb on rb5009 (`stage_nfs_rootfs.yml` + `stage_tftp_assets.yml`). Steps 5–6 are the day-to-day boot-mode operations:
+per-board `pxelinux.cfg/01-<MAC>` always remains on rb5009; convergence updates
+its `default` directive (and related lines) so `armbian_netboot_boot_mode` is
+`nfs` or `sd`.
 
 ## NFS rootfs layout
 
-`stage_netboot_assets.yml` connects to the netboot server (TrueNAS) over SSH
+`stage_nfs_rootfs.yml` connects to the netboot server (TrueNAS) over SSH
 and writes the per-model rootfs template + per-host rootfs clones. The control
-node never NFS-mounts anything.
+node never NFS-mounts anything. `stage_tftp_assets.yml` stages per-model
+kernel/initrd/dtb onto rb5009 (separate playbook).
 
 ```
-nfs_rootfs_path/
+armbian_netboot_nfs_rootfs_path/
 ├── _templates/
 │   └── orange-pi-5-pro/         per-model template (extracted from .img.xz)
 └── orange-pi-5-pro-01/          per-host rootfs (cp --reflink from template,
@@ -141,10 +150,10 @@ option-sets or lease mutations.
 ```
 flash:/sbc/
 ├── pxelinux.cfg/
-│   └── 01-<MAC>           # per-board (enable_netboot.yml writes; disable removes)
+│   └── 01-<MAC>           # per-board (always present; converge_boot_mode / set_boot_mode rewrite content)
 └── armbian/
     └── <model>/
-        ├── vmlinuz        # per-model (stage_netboot_assets.yml writes)
+        ├── vmlinuz        # per-model (stage_tftp_assets.yml writes)
         ├── initrd.img
         └── board.dtb
 ```
@@ -152,23 +161,24 @@ flash:/sbc/
 Each file has a corresponding `/ip tftp` rule with `req-filename` matching
 the path U-Boot requests (e.g. `pxelinux.cfg/01-c0-74-2b-fb-4d-fd`,
 `armbian/orange-pi-5-pro/vmlinuz`) and `real-filename` pointing at the
-flash path. Per-board state spans the file + the row; both are added by
-`enable_netboot.yml` and removed (row first) by `disable_netboot.yml`.
+flash path. Per-board pxelinux files and their `/ip tftp` rows are maintained
+continuously — boot-mode changes update the rendered pxelinux content (the
+`default` label), not TFTP row topology.
 
-Per-model assets are added once by `stage_netboot_assets.yml` and persist
-across enable/disable cycles. They are shared by every board of that
-model.
+Per-model assets are added once by `stage_tftp_assets.yml` and persist across
+boot-mode changes. They are shared by every board of that model.
 
 ## Out of v1 scope (deferred)
 
 The collection's previous incarnation supported reprovisioning (Ansible
 laying down a new image onto the board's persistent storage),
 on-host bootloader flashing (Ansible flashing U-Boot to SPI / eMMC / SD
-on a running board), and a wider catalogue of boards. v1 deliberately
-narrows to a single deliverable: `orange-pi-5-pro` flipping between SD
-and NFS-root via rb5009 pxelinux.cfg presence. Reprovisioning, on-host
-bootloader flashing, and additional boards are deferred and will be
-re-introduced post-v1 against the slimmer model.
+on a running board), and a wider catalogue of boards. Early releases
+deliberately narrowed to a single deliverable: `orange-pi-5-pro` flipping
+between SD and NFS-root via rb5009 pxelinux (v2: always-present file,
+`default` selects `nfs` vs `sd`). Reprovisioning, on-host bootloader
+flashing, and additional boards are deferred and will be re-introduced
+against the slimmer model.
 
 Spec: [`superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](superpowers/specs/2026-05-07-v1-scope-narrowing-design.md)
 
@@ -186,16 +196,16 @@ on rb5009 doesn't match the staged module tree, and so nfsv3.ko never
 gets loaded — even though it's physically present in the initramfs at
 the *other* kernel version's path.
 
-`stage_netboot_assets.yml` always force-removes the rb5009 copies of
-`vmlinuz`, `initrd.img`, and `board.dtb` before net_put, so a re-stage
-always pushes the freshly-extracted kernel and modules. (Earlier
-versions only re-uploaded if the file size differed, which silently
-skipped a re-upload when two distinct Armbian builds happened to
-produce a vmlinuz of the same byte count.)
+The TFTP staging path (`stage_tftp_assets.yml` / `netboot_assets` tasks on rb5009)
+always force-removes the rb5009 copies of `vmlinuz`, `initrd.img`, and `board.dtb`
+before net_put, so a re-stage always pushes the freshly-extracted kernel and
+modules. (Earlier versions only re-uploaded if the file size differed, which
+silently skipped a re-upload when two distinct Armbian builds happened to produce
+a vmlinuz of the same byte count.)
 
 The PXE/TFTP/DHCP plumbing in this collection is unaffected — U-Boot
 loads kernel + initrd + dtb correctly; if the symptom returns,
-re-running `stage_netboot_assets.yml` is the right first step.
+re-running `stage_nfs_rootfs.yml` and `stage_tftp_assets.yml` is the right first step.
 
 ### Hardware/firmware failure signatures observed on `orange-pi-5-pro`
 
@@ -212,11 +222,11 @@ friends, history) — this table is the fast lookup.
 
 | #  | Short name                       | Serial fingerprint (literal grep target)         | Root cause                                                                                                                                  | Mitigation                                                                                                                                                                                                                                                                |
 |----|----------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1  | SD voltage-select fail           | `Card did not respond to voltage select! : -110` | RK3588S SD-controller voltage-init flake; PSU sag during cold start.                                                                        | Increase PoE drain via `-e poe_cycle_delay=20–30` (the 5 s default is too short for this board's PSU caps). Hardware-side: known-good 802.3at PSU.                                                                                                                        |
+| 1  | SD voltage-select fail           | `Card did not respond to voltage select! : -110` | RK3588S SD-controller voltage-init flake; PSU sag during cold start.                                                                        | Increase PoE drain via `-e armbian_netboot_poe_cycle_delay=20–30` (the 5 s default is too short for this board's PSU caps). Hardware-side: known-good 802.3at PSU.                                                                                                                        |
 | 2  | Ethernet PHY DMA stuck           | `EQOS_DMA_MODE_SWR stuck` then `FAILED: -110`    | U-Boot `eth_eqos` driver fails GMAC DMA reset; PHY never transmits.                                                                         | Longer PoE drain helps. No in-band recovery while U-Boot is in BOOTP-retry; only a power cycle clears it. Symptomatically silent against the e2e — Phase 2 NFS-mount assertion catches the silent fall-through to SD boot.                                                |
 | 3  | Mid-kernel-load SoC reset        | `Starting kernel ...` immediately followed by `DDR 9fa84341ce typ` (RK3588S DDR re-init) | SoC resets at the U-Boot → kernel handoff. PSU sag during the kernel-image checksum / read.                                                 | Out of software's reach — the kernel never executes a single instruction so cmdline flags are moot. Persistent recurrence indicates marginal PSU/SoC; physical recovery path. PR #40's verbose mode does NOT help with this signature.                                    |
-| 4  | Silent post-`Starting kernel`    | `Starting kernel ...` then total serial silence  | Kernel runs but stalls before ttyS2 driver init (or after, with output suppressed). User-space init failures land here too.                 | This is the only signature `pxelinux_verbose=true` (PR #40) helps with. `earlycon` covers the pre-ttyS2 window; `initcall_debug` + `systemd.log_target=console` catch kernel-init and userspace-init stalls. Only effective on the PXE path (Phase 2), not Phase 1 SD boot. |
-| 5  | NetbootXYZ fallback              | `Filename 'netboot.xyz.kpxe'` followed by a normal `Starting kernel ...` from NetbootXYZ | Cascade: per-board `pxelinux.cfg/01-<MAC>` lookup fails → fall-through PXE attempts ALL fail → U-Boot picks rb5009's default tftp rule, which serves NetbootXYZ. Board lands in NetbootXYZ menu, no sshd. | Confirm rb5009-side via the diagnostic bundle's TFTP log slurp (PR #42). Then check that the per-board `/ip tftp` row exists with the right `req-filename` regex (`/ip tftp print where real-filename~"01-<mac>"` on rb5009). Often a downstream symptom of an earlier-stage failure (#1/#3) that just happened to trip the fallback rule. |
+| 4  | Silent post-`Starting kernel`    | `Starting kernel ...` then total serial silence  | Kernel runs but stalls before ttyS2 driver init (or after, with output suppressed). User-space init failures land here too.                 | This is the only signature `armbian_netboot_pxe_verbose=true` (PR #40) helps with. `earlycon` covers the pre-ttyS2 window; `initcall_debug` + `systemd.log_target=console` catch kernel-init and userspace-init stalls. Only effective when pxelinux selects the NFS boot label (Phase 2), not when `default` selects SD boot. |
+| 5  | NetbootXYZ fallback              | `Filename 'netboot.xyz.kpxe'` followed by a normal `Starting kernel ...` from NetbootXYZ | Cascade: TFTP cannot retrieve the expected pxelinux payload (missing `/ip tftp` row, wrong `req-filename`, or path mismatch) → fall-through PXE attempts fail → U-Boot picks rb5009's default TFTP rule, which serves NetbootXYZ. Board lands in NetbootXYZ menu, no sshd. | Confirm rb5009-side via the diagnostic bundle's TFTP log slurp (PR #42). Then check that the per-board `/ip tftp` row exists with the right `req-filename` regex (`/ip tftp print where real-filename~"01-<mac>"` on rb5009). Often a downstream symptom of an earlier-stage failure (#1/#3) that just happened to trip the fallback rule. |
 
 Software/hardware boundaries to keep in mind:
 
@@ -226,8 +236,9 @@ Software/hardware boundaries to keep in mind:
   doesn't process any cmdline; verbose mode does not help.
 - Signature **#4** is post-kernel-start. Verbose mode (`earlycon` +
   `initcall_debug` + `systemd.log_target=console`) is designed for
-  this signature — but only on the PXE path (Phase 2), since
-  pxelinux.cfg is not consulted on Phase 1 SD boot.
+  this signature — but only when pxelinux's `default` selects the NFS
+  boot label (Phase 2); when `default` selects SD boot, the NFS-oriented
+  pxelinux kernel cmdline extras do not apply.
 - Signature **#5** is a downstream symptom; the immediate fix is
   confirming rb5009's `/ip tftp` rules, but the root cause is usually
   earlier in the boot chain.

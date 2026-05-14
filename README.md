@@ -8,29 +8,25 @@
 
 Ansible collection that delivers a single capability: an `orange-pi-5-pro`
 board can be flipped between booting its on-SD Armbian rootfs and an NFS
-rootfs by adding or removing a per-board `pxelinux.cfg/01-<MAC>` file on
-the rb5009 router's TFTP server. The collection is organised as a small set
-of single-purpose **roles** (primitives) and **workflow playbooks** that
-compose them — see [Mental model](#mental-model) below.
+rootfs while keeping a per-board `pxelinux.cfg/01-<MAC>` file **always**
+present on the rb5009 router's TFTP server — the `default` directive inside
+that file selects the active boot mode (`nfs` vs `sd`). The collection is
+organised as a small set of single-purpose **roles** (primitives) and
+**workflow playbooks** that compose them — see [Mental model](#mental-model)
+below.
 
-## Status: v1 = orange-pi-5-pro netboot capability only
+## Status: v2.0.0 — always-netboot model
 
-This collection is currently scoped to a single deliverable: a custom
-Armbian SD image for `orange-pi-5-pro` whose U-Boot tries PXE first, so
-adding or removing a per-board `pxelinux.cfg/01-<MAC>` file on rb5009's
-TFTP server switches the board between an NFS rootfs and the local SD
-rootfs. v1 explicitly does not include reprovisioning, on-host bootloader
-flashing, or any board other than `orange-pi-5-pro`. Reprovisioning and
-on-host bootloader flashing have been **deleted from the repo, not
-deferred-in-place**; they will be re-introduced post-v1 against the
-slimmer model.
+Every onboarded board always has `pxelinux.cfg/01-<MAC>` on rb5009; boot mode
+is controlled by inventory (`armbian_netboot_boot_mode: nfs \| sd`) and the
+matching `default` label in the rendered pxelinux file — not by
+presence/absence of the file. A custom Armbian SD image for `orange-pi-5-pro`
+whose U-Boot tries PXE first enforces that PXE consults rb5009 on every boot.
 
-The "what runs over NFS / why" question is deferred — v1 just
-demonstrates that a board can be flipped between SD and NFS via
-per-board `pxelinux.cfg/01-<MAC>` presence on rb5009. See
+Sd boot requires `armbian_netboot_sd_partuuid` on the host. See
 `playbooks/test_hardware_e2e.yml` for the assertion harness.
 
-Spec: [`docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md)
+Spec: [`docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md`](docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md)
 
 ## Mental model
 
@@ -52,10 +48,10 @@ that combines existing primitives means adding a playbook (no role changes).
   per-host NFS rootfs to the boards. The HTTP assets root defaults match the
   homelab's public nginx container on TrueNAS — host-side path
   `/mnt/ssd/public/boot-files`, reachable at `https://public.igou.systems/boot-files/`.
-  Override `nfs_assets_export` in `group_vars/all.yml` if you serve HTTP from
+  Override `armbian_netboot_nfs_assets_export` in `group_vars/all.yml` if you serve HTTP from
   a different path.
 - A MikroTik RouterOS rb5009 with SSH access. The collection writes per-board
-  `pxelinux.cfg/01-<MAC>` and per-model kernel/initrd/dtb to `flash:/sbc/`
+  `pxelinux.cfg/01-<MAC>` (always present; boot mode via `default`) and per-model kernel/initrd/dtb under `flash:/sbc/` (override path segment via `armbian_netboot_tftp_flash_dir`, default `sbc`)
   and registers corresponding `/ip tftp` rows; no DHCP option-sets or lease
   mutations. The SBC subnet's `next-server` must already point at rb5009
   (owned externally — typically by your routeros-config repo).
@@ -77,24 +73,26 @@ that combines existing primitives means adding a playbook (no role changes).
 | Role | Enforces / produces |
 |---|---|
 | [`armbian_build`](roles/armbian_build/) | Custom Armbian `.img.xz` with PXE-first U-Boot baked in, published to the netboot server |
+| [`boot_mode`](roles/boot_mode/) | Board converged to `armbian_netboot_boot_mode` (`nfs` \| `sd`): pxelinux.cfg + PoE cycle + rootfs verify |
 | [`bootstrap_armbian`](roles/bootstrap_armbian/) | SSH-key user with passwordless sudo on a freshly flashed Armbian board |
 | [`bootstrap_routeros_user`](roles/bootstrap_routeros_user/) | RouterOS user, group, and SSH-key state over network_cli |
 | [`netboot_assets`](roles/netboot_assets/) | Per-host NFS rootfs on the netboot server + per-model kernel/initrd/dtb on rb5009 |
-| [`routeros_sbc_tftp`](roles/routeros_sbc_tftp/) | Per-board `pxelinux.cfg/01-<MAC>` + `/ip tftp` row on rb5009 |
+| [`routeros_pxe_config`](roles/routeros_pxe_config/) | Per-board `pxelinux.cfg/01-<MAC>` + `/ip tftp` row on rb5009 |
 | [`routeros_poe`](roles/routeros_poe/) | PoE port state (on/off) on RouterOS switch ports |
 
 ### Playbooks
 
 | # | Playbook | Frequency | What it does |
 |---|---|---|---|
-| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for `orange-pi-5-pro` on the `armbian_builders` host and publishes it to the netboot server's HTTP root for `stage_netboot_assets` to consume. |
-| 1 | `bootstrap_armbian.yml` | Once per board, right after flashing the custom image | Connects as root with `armbian_default_password`, creates the inventory's `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's first-login TUI prompt, disables sshd password auth. |
+| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for `orange-pi-5-pro` on the `armbian_builders` host and publishes it to the netboot server's HTTP root for `stage_nfs_rootfs.yml` / `stage_tftp_assets.yml` to consume. |
+| 1 | `bootstrap_armbian.yml` | Once per board, right after flashing the custom image | Connects as root with `armbian_netboot_default_password`, creates the inventory's `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's first-login TUI prompt, disables sshd password auth. |
 | 2 | `bootstrap_routeros_user.yml` | Once per RouterOS device | Provisions the `ansible-netboot` SSH user, group, and keys on the router (and any switches). |
-| 3 | `stage_netboot_assets.yml` | Once per environment, then on every inventory change | Populates the netboot server's NFS rootfs templates and per-host clones, then `net_put`s the per-model kernel/initrd/DTB to rb5009's `flash:/sbc/` and registers `/ip tftp` rows for each. |
-| 4 | `enable_netboot.yml` | Ad-hoc | Renders the board's `pxelinux.cfg/01-<MAC>` locally, `net_put`s it to rb5009, registers a `/ip tftp` row, and reboots the board; it comes up on the NFS rootfs. |
-| 5 | `disable_netboot.yml` | Ad-hoc | Removes the board's `/ip tftp` row and the file from rb5009, then reboots; the next boot lands on the local SD rootfs. |
-| 6 | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream RouterOS PoE switch port. |
-| — | `test_hardware_e2e.yml` | Ad-hoc | Hardware regression test: drives a single board through SD → nfsroot → SD via the rb5009 pxelinux.cfg toggle and PoE cycles, asserting `findmnt /` reports the expected source at each transition. |
+| 3 | `stage_nfs_rootfs.yml` | Once per environment, then on every inventory change | Against the netboot server: pre-flight URL checks, image extraction, per-model NFS templates and per-host rootfs clones. |
+| 4 | `stage_tftp_assets.yml` | After NFS staging or when kernel/initrd/dtb change | Against rb5009: `net_put` per-model kernel/initrd/DTB under `flash:/sbc/` (`armbian_netboot_tftp_flash_dir`, default `sbc`) and register `/ip tftp` rows. |
+| 5 | `converge_boot_mode.yml` | Ad-hoc or whenever inventory boot mode changes | Converges each targeted board to its inventory-declared `armbian_netboot_boot_mode` (pxelinux `default` + PoE cycle + verify). |
+| 6 | `set_boot_mode.yml` | Ad-hoc override (`-e armbian_netboot_boot_mode=...`) | Same convergence path without editing inventory — e.g. `-e armbian_netboot_boot_mode=sd` for SD rootfs. |
+| 7 | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream RouterOS PoE switch port. |
+| — | `test_hardware_e2e.yml` | Ad-hoc | Hardware regression test: drives a single board through SD → nfsroot → SD via pxelinux `default`/PoE cycles, asserting `findmnt /` reports the expected source at each transition. |
 
 ## Installation
 
@@ -145,23 +143,30 @@ this bootstrap run only — that user does not yet exist on the router. The
 role idempotently creates the `ansible-netboot` user, group, and SSH keys.
 From this point on every other playbook authenticates as `ansible-netboot`.
 
-#### 0.3 Stage netboot assets
+#### 0.3 Stage NFS rootfs (netboot server)
 
 ```bash
-ansible-playbook playbooks/stage_netboot_assets.yml
+ansible-playbook playbooks/stage_nfs_rootfs.yml
 ```
 
-Runs in two plays. First, against the netboot server over SSH: pre-flight
-HEAD-checks every `armbian_image_urls` entry (failing on 4xx/dead mirror)
-before any destructive work; for each unique `board_model` in inventory,
+Against the netboot server over SSH: pre-flight HEAD-checks every
+`armbian_netboot_image_urls` entry (failing on 4xx/dead mirror)
+before any destructive work; for each unique `armbian_netboot_board_model` in inventory,
 downloads the image, extracts the rootfs into
-`nfs_rootfs_path/_templates/<model>/`, and reflink-clones a per-host
-rootfs into `nfs_rootfs_path/<inventory_hostname>/` with hostname /
-machine-id / SSH host keys reset for unique identity; fetches
-kernel/initrd/DTB to a local control-node cache. Second, against rb5009
-over network_cli: `net_put`s the kernel/initrd/DTB into
-`flash:/sbc/armbian/<model>/` and registers a `/ip tftp` row per file.
-Idempotent — re-run on inventory or image changes.
+`armbian_netboot_nfs_rootfs_path/_templates/<model>/`, and reflink-clones a per-host
+rootfs into `armbian_netboot_nfs_rootfs_path/<inventory_hostname>/` with hostname /
+machine-id / SSH host keys reset for unique identity.
+
+#### 0.4 Stage TFTP assets (rb5009)
+
+```bash
+ansible-playbook playbooks/stage_tftp_assets.yml
+```
+
+Against rb5009 over network_cli: copies kernel/initrd/DTB from the control-node cache
+(`armbian_netboot_tftp_cache_dir`) into `flash:/sbc/armbian/<model>/` and registers a `/ip tftp` row per file.
+
+Re-run 0.3–0.4 on inventory or image changes; both plays are idempotent.
 
 ### Phase 1 — Adding a board
 
@@ -178,13 +183,15 @@ from here on runs over SSH.
 #### 1.2 Insert the SD card and power the board on
 
 The board obtains a DHCP lease and responds to SSH. Default credentials
-are `root` / `armbian_default_password` (1234) until first interactive
+are `root` / `armbian_netboot_default_password` (1234) until first interactive
 login replaces them.
 
 #### 1.3 Add the board to inventory
 
-Edit `inventory/hosts.yml`. Each host needs `board_mac` and `board_model`,
-where `board_model` matches a key in [`vars/boards.yml`](vars/boards.yml):
+Edit `inventory/hosts.yml`. Each host needs `armbian_netboot_board_mac`,
+`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` (`nfs` or `sd`). For
+`sd`, also set `armbian_netboot_sd_partuuid`. The board model must match a key under
+`armbian_netboot_board_configs` in [`vars/boards.yml`](vars/boards.yml):
 
 ```yaml
 boards:
@@ -193,12 +200,16 @@ boards:
       hosts:
         orange-pi-5-pro-01:
           ansible_host: 192.168.1.131
-          board_mac: "aa:bb:cc:dd:ee:11"
-          board_model: orange-pi-5-pro
+          armbian_netboot_board_mac: "aa:bb:cc:dd:ee:11"
+          armbian_netboot_board_model: orange-pi-5-pro
+          armbian_netboot_boot_mode: nfs
 ```
 
-For PoE-powered boards, also set `poe_switch` (inventory hostname of the
-RouterOS switch supplying power) and `poe_port` (interface name on that
+Group vars under `inventory/group_vars/boards.yml` must define `armbian_netboot_router`
+(the RouterOS host that owns TFTP state for these boards — typically your rb5009 inventory name).
+
+For PoE-powered boards, also set `armbian_netboot_poe_switch` (inventory hostname of the
+RouterOS switch supplying power) and `armbian_netboot_poe_port` (interface name on that
 switch, e.g. `ether3`).
 
 #### 1.4 Bootstrap the board's SSH user
@@ -207,18 +218,19 @@ switch, e.g. `ether3`).
 ansible-playbook playbooks/bootstrap_armbian.yml --limit orange-pi-5-pro-01
 ```
 
-Connects as `root` with `armbian_default_password`, creates the inventory's
+Connects as `root` with `armbian_netboot_default_password`, creates the inventory's
 `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's
 first-login TUI prompt, and disables sshd password auth. Idempotent — a
 second run is a no-op aside from authorized_keys reconciliation.
 
-Edit the SSH key list in `playbooks/bootstrap_armbian.yml` (or override
-`bootstrap_armbian_ssh_keys` via `-e`) before first run.
+Edit the SSH key list in `inventory/group_vars/all.yml` (see `armbian_netboot_bootstrap_ssh_keys`) or override
+`armbian_netboot_bootstrap_ssh_keys` via `-e`) before first run. Optional: `armbian_netboot_bootstrap_user`.
 
-#### 1.5 Re-run stage_netboot_assets.yml
+#### 1.5 Re-run staging playbooks
 
 ```bash
-ansible-playbook playbooks/stage_netboot_assets.yml
+ansible-playbook playbooks/stage_nfs_rootfs.yml
+ansible-playbook playbooks/stage_tftp_assets.yml
 ```
 
 Creates the per-host rootfs clone for the new host. Existing boards are
@@ -232,28 +244,25 @@ toggle-and-revert lifecycle below indefinitely without further setup.
 
 ## Daily operations
 
-### Boot a board into NFS root
+### Converge a board to its declared boot mode
 
 ```bash
-ansible-playbook playbooks/enable_netboot.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01
 ```
 
-Renders the board's `pxelinux.cfg/01-<MAC>` locally, `net_put`s it to
-`flash:/sbc/pxelinux.cfg/01-<MAC>` on rb5009, registers a `/ip tftp` row
-for it, and reboots the board. U-Boot DHCPs, fetches the pxelinux.cfg
-from rb5009's TFTP server, and PXE-boots into the NFS rootfs. The board
-stays on NFS until you `disable_netboot`.
+Reads each host's `armbian_netboot_boot_mode` from inventory, renders `pxelinux.cfg/01-<MAC>`
+(with `default` pointing at the nfs or sd label), `net_put`s it to rb5009, ensures the `/ip tftp`
+row exists, PoE-cycles where applicable, and verifies the board reaches SSH with the expected rootfs.
 
-### Revert a board to disk boot
+### Override boot mode without editing inventory
 
 ```bash
-ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbian_netboot_boot_mode=nfs
+ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbian_netboot_boot_mode=sd
 ```
 
-Removes the board's `/ip tftp` row and the `pxelinux.cfg/01-<MAC>` file
-from rb5009, then reboots. With no per-board pxelinux.cfg present,
-U-Boot's PXE bootmeth fast-404s through the fallback chain and
-`bootflow scan` proceeds to the SD rootfs.
+Same convergence mechanics as `converge_boot_mode.yml`, but the desired mode comes from `-e`.
+Sd mode still requires `armbian_netboot_sd_partuuid` on the host.
 
 ### Power-cycle a board via PoE
 
@@ -261,17 +270,17 @@ When a board is wedged or unreachable, cycle its upstream RouterOS PoE
 switch port instead of pulling cables:
 
 ```bash
-# Hard power-cycle (off → wait poe_cycle_delay seconds → on)
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e poe_action=cycle
+# Hard power-cycle (off → wait armbian_netboot_poe_cycle_delay seconds → on)
+ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_netboot_poe_action=cycle
 
 # Power off / on individually
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e poe_action=off
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e poe_action=on
+ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_netboot_poe_action=off
+ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_netboot_poe_action=on
 ```
 
 The play targets `boards` with `gather_facts: false` (boards may be powered
-off) and delegates the PoE command to each board's `poe_switch` via
-`delegate_to`. Use `-e poe_cycle_delay=<seconds>` to override the off→on
+off) and delegates the PoE command to each board's `armbian_netboot_poe_switch` via
+`delegate_to`. Use `-e armbian_netboot_poe_cycle_delay=<seconds>` to override the off→on
 dwell (default 5s).
 
 ### Hardware E2E test
@@ -280,8 +289,8 @@ dwell (default 5s).
 ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 ```
 
-Drives a single board through SD → nfsroot → SD via the rb5009 pxelinux.cfg
-toggle and PoE cycles, asserting `findmnt /` reports the expected source at
+Drives a single board through SD → nfsroot → SD via pxelinux boot-mode changes
+and PoE cycles, asserting `findmnt /` reports the expected source at
 each transition. Diagnostic bundle (cmdline, route, lsblk, U-Boot version,
 journal) is emitted at every checkpoint. `-e leave_state=true` preserves
 the failure state for forensic debugging. `-e capture_serial=true`
@@ -299,10 +308,11 @@ lines at every checkpoint.
 | 0 | `build_image.yml` | Per `armbian/build` ref or patch-table change |
 | 1 | `bootstrap_armbian.yml --limit <host>` | Once per board, right after flashing |
 | 2 | `bootstrap_routeros_user.yml -e ansible_user=<existing-admin>` | Once per RouterOS device |
-| 3 | `stage_netboot_assets.yml` | Once per environment + on every inventory change |
-| 4 | `enable_netboot.yml --limit <host>` | Ad-hoc — toggle into NFS root |
-| 5 | `disable_netboot.yml --limit <host>` | Ad-hoc — revert to SD rootfs |
-| 6 | `poe_control.yml --limit <host> -e poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
+| 3 | `stage_nfs_rootfs.yml` | NFS templates + per-host rootfs on netboot server |
+| 4 | `stage_tftp_assets.yml` | Kernel/initrd/dtb on rb5009 |
+| 5 | `converge_boot_mode.yml --limit <host>` | Converge to inventory `armbian_netboot_boot_mode` |
+| 6 | `set_boot_mode.yml --limit <host> -e armbian_netboot_boot_mode=nfs` (or `=sd`) | Ad-hoc boot mode override |
+| 7 | `poe_control.yml --limit <host> -e armbian_netboot_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
 | — | `test_hardware_e2e.yml --limit <host>` | Ad-hoc SD ↔ NFS hardware E2E test |
 
 ## Testing
