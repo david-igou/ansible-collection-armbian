@@ -1,0 +1,166 @@
+---
+# Role interface for david_igou.armbian_netboot.boot_mode.
+#
+# When the play loads the role, Ansible validates the role's vars
+# against this spec before any task runs. Missing required vars
+# (armbian_netboot_boot_mode, armbian_netboot_router) fail loudly here
+# rather than producing an opaque failure deep inside an included
+# sub-task.
+#
+# View this spec at any time with:
+#   ansible-doc -t role david_igou.armbian_netboot.boot_mode
+
+argument_specs:
+  main:
+    short_description: Converge a board to its declared boot mode.
+    description:
+      - >-
+        Declarative state-enforcer for an Armbian SBC's boot mode.
+        Renders the per-board pxelinux.cfg with the correct `default`
+        directive on the netboot router, PoE-cycles the board, waits
+        for it to come up, and asserts the resulting rootfs matches the
+        declared mode.
+      - >-
+        The pxelinux.cfg always exists on rb5009 — boot mode is
+        controlled by the `default` directive inside it, not by
+        file presence/absence.
+      - >-
+        Eventually-consistent against PoE-HAT cold-boot intermittency
+        (see docs/retry-configuration.md and issue #38). The two-layer
+        retry stack — layer 1 around cold boot + sustained ssh-ping,
+        layer 2 around the longer post-boot SSH wait — is bounded by
+        armbian_netboot_boot_retry_attempts and
+        armbian_netboot_ssh_wait_retry_attempts respectively.
+      - >-
+        The role is designed to be invoked from a play targeting
+        `boards`. Internally it delegates rb5009 mutations to
+        `armbian_netboot_router` (a separate inventory host with
+        network_cli connection settings) using the same delegate_to
+        pattern as the routeros_poe role.
+
+    options:
+      armbian_netboot_boot_mode:
+        type: str
+        required: true
+        choices: [nfs, sd]
+        description:
+          - Desired board boot mode.
+          - >-
+            "nfs" sets the pxelinux.cfg default label to nfs and
+            expects the board to come up on an NFS rootfs.
+          - >-
+            "sd" sets the pxelinux.cfg default label to sd and expects
+            the board to boot from local SD/eMMC. Requires
+            armbian_netboot_sd_partuuid to be set on the host.
+
+      armbian_netboot_router:
+        type: str
+        required: true
+        description:
+          - >-
+            Inventory hostname of the RouterOS router that owns SBC
+            TFTP state. The role uses this as delegate_to for all
+            rb5009 mutation tasks (writing pxelinux.cfg and /ip tftp
+            rows).
+          - >-
+            Must be a host present in your inventory with the routeros
+            network_cli connection settings (typically a member of the
+            'routeros_routers' group; see
+            inventory/group_vars/routeros.yml for the connection
+            plumbing).
+          - >-
+            **Where to set this**: typically in
+            inventory/group_vars/boards.yml as
+            `armbian_netboot_router: rb5009` so all boards share the
+            same router. Override per-host if different boards are
+            served by different routers.
+          - >-
+            No default — the role fails loudly at validation time if
+            undefined, rather than silently picking a router.
+
+      armbian_netboot_boot_retry_attempts:
+        type: int
+        default: 0
+        description:
+          - >-
+            Additional cold-boot attempts after a failed PoE cycle /
+            TCP/22 wait / sustained ssh-ping. 0 = single attempt, no
+            retry. 2 = up to 3 total attempts per phase.
+          - >-
+            See docs/retry-configuration.md for tuning intuition and
+            recommended values for healthy vs flaky PoE topologies.
+
+      armbian_netboot_boot_attempt_timeout:
+        type: int
+        default: 180
+        description:
+          - >-
+            Per-attempt TCP/22 wait timeout (seconds). Should be >=
+            the board's normal cold-boot time (~60-80s for Orange Pi
+            5 Pro). Too short = false-fails on healthy boots; too
+            long = slow failure detection on genuinely hung boards.
+
+      armbian_netboot_ssh_wait_timeout:
+        type: int
+        default: 90
+        description:
+          - >-
+            Sustained ssh-ping stability check timeout inside each
+            layer-1 retry attempt (seconds). Catches the "board
+            ACK'd SYN to port 22 then fell off the network" failure
+            mode. Lowering below ~30s starts false-failing healthy
+            boards.
+
+      armbian_netboot_ssh_wait_retry_attempts:
+        type: int
+        description:
+          - >-
+            Layer-2 retry depth for the post-boot SSH wait. Triggers
+            an additional cold-boot cycle when the board passes
+            layer-1's stability check but falls off during the
+            longer post-retry wait.
+          - >-
+            **Defaults to armbian_netboot_boot_retry_attempts**, so the
+            two layers scale together. Override only when asymmetric
+            retry depths between the layers are intentional.
+
+      armbian_netboot_post_boot_wait_timeout:
+        type: int
+        default: 300
+        description:
+          - >-
+            Post-retry wait_for_connection timeout (seconds). The
+            "long ssh wait" after layer-1 retry exits claiming
+            success. 300s is the historical default; ~60s suffices
+            once layer-1 has already established stability, but
+            trade-offs against false-fails apply.
+
+      armbian_netboot_poe_cycle_delay:
+        type: int
+        default: 5
+        description:
+          - >-
+            Seconds the PoE port stays off during a cycle action
+            (capacitor drain time). 5s is fine on healthy HATs;
+            60s tends to recover marginal HATs whose bulk caps
+            don't drain quickly. Matters more on flaky topologies.
+
+      armbian_netboot_cycle_board:
+        type: bool
+        default: true
+        description:
+          - >-
+            If false, write rb5009 state and skip the PoE cycle /
+            verify steps. Use when staging configuration for a board
+            that is currently powered off and will boot later.
+
+      armbian_netboot_verify_state:
+        type: bool
+        default: true
+        description:
+          - >-
+            If false, skip the rootfs assertion after boot. Weakens
+            the role's contract from "board in declared mode and
+            verified" to just "board reachable". Useful only when
+            you have an external reason the rootfs check would be
+            misleading (e.g. board has been re-imaged mid-cycle).

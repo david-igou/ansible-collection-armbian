@@ -1,0 +1,29 @@
+---
+# boot_mode role — dispatcher.
+#
+# Inputs validated by meta/argument_specs.yml at role-include time:
+#   armbian_netboot_boot_mode (required: nfs|sd)
+#   armbian_netboot_router (required: inventory hostname of RouterOS router)
+#   armbian_netboot_cycle_board, armbian_netboot_verify_state
+#   armbian_netboot_boot_retry_attempts, armbian_netboot_boot_attempt_timeout,
+#   armbian_netboot_ssh_wait_timeout, armbian_netboot_ssh_wait_retry_attempts,
+#   armbian_netboot_post_boot_wait_timeout, armbian_netboot_poe_cycle_delay
+#
+# Flow:
+#   1. Converge — render + upload pxelinux.cfg to rb5009.
+#   2. (when cycle_board) PoE-cycle the board and wait for it to come up,
+#      using the 2-layer retry primitives.
+#   3. (when verify_state) Assert the rootfs matches the declared mode.
+
+- name: "boot_mode[{{ armbian_netboot_boot_mode }}] — converge pxelinux.cfg on rb5009"
+  ansible.builtin.include_tasks: converge.yml
+
+- name: "boot_mode[{{ armbian_netboot_boot_mode }}] — cycle and verify"
+  when: armbian_netboot_cycle_board | bool
+  block:
+    - name: "boot_mode[{{ armbian_netboot_boot_mode }}] — power-cycle and wait for boot"
+      ansible.builtin.include_tasks: cycle_and_wait.yml
+
+    - name: "boot_mode[{{ armbian_netboot_boot_mode }}] — verify rootfs matches mode"
+      ansible.builtin.include_tasks: verify.yml
+      when: armbian_netboot_verify_state | bool
