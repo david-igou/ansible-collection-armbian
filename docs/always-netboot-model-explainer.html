@@ -1,0 +1,2067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Always-netboot model — a hypothetical design</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --bg: #fafafa;
+    --accent: #b14b00;
+    --accent2: #1c5b8a;
+    --code-bg: #f0eee9;
+    --rule: #d9d5cc;
+    --warn-bg: #fff4d6;
+    --warn-bd: #e6c200;
+    --good-bg: #ecf6e6;
+    --good-bd: #6ab04c;
+    --hyp-bg: #f3eef8;
+    --hyp-bd: #7a4ea0;
+  }
+  html { background: var(--bg); }
+  body {
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 880px;
+    margin: 2.5rem auto 4rem;
+    padding: 0 1.25rem;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.4rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 2.2rem 0 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 0.5rem; color: var(--accent2); }
+  p, ul, ol { margin: 0.6rem 0; }
+  p.subtitle {
+    color: var(--muted);
+    font-size: 1rem;
+    margin: 0 0 1.5rem;
+  }
+  code, pre {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+  }
+  code { background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    border-left: 3px solid var(--accent2);
+    border-radius: 2px;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  .snippet {
+    margin: 1rem 0 1.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+  }
+  .snippet header {
+    background: #efece5;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .snippet header strong { color: var(--fg); font-weight: 600; }
+  .snippet pre { margin: 0; border-left: none; border-radius: 0; background: #fcfbf8; }
+  .snippet .notes {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.92rem;
+    background: #fffefb;
+    border-top: 1px dashed var(--rule);
+  }
+  .snippet .notes ul { margin: 0.2rem 0 0 1.2rem; padding: 0; }
+  .snippet .notes li { margin: 0.25rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--rule);
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #efece5; font-weight: 600; }
+  td code { font-size: 0.84rem; }
+  .gotcha {
+    border: 1px solid var(--warn-bd);
+    background: var(--warn-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .gotcha strong { color: var(--accent); }
+  .qa {
+    border: 1px solid var(--good-bd);
+    background: var(--good-bg);
+    padding: 0.7rem 1rem;
+    margin: 1rem 0;
+    border-radius: 3px;
+  }
+  .qa h3 {
+    margin: 0 0 0.4rem;
+    color: #234e0d;
+    font-size: 1rem;
+  }
+  .hyp {
+    border: 1px solid var(--hyp-bd);
+    background: var(--hyp-bg);
+    padding: 0.7rem 1rem;
+    margin: 1rem 0;
+    border-radius: 3px;
+    font-size: 0.93rem;
+  }
+  .hyp strong { color: var(--hyp-bd); }
+  nav.toc {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 2rem;
+    font-size: 0.93rem;
+  }
+  nav.toc ol { margin: 0; padding-left: 1.3rem; }
+  nav.toc a { color: var(--accent2); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  figure { margin: 1.4rem 0; }
+  figure svg { display: block; max-width: 100%; height: auto; }
+  figcaption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+    text-align: center;
+  }
+  .pill {
+    display: inline-block;
+    background: #e7e2d3;
+    color: var(--accent);
+    padding: 0.05em 0.5em;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .pill.hyp {
+    background: #e6dff1;
+    color: var(--hyp-bd);
+    border-radius: 10px;
+    padding: 0.05em 0.5em;
+    border: none;
+    margin: 0;
+  }
+  .kvbox {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.6rem 0.9rem;
+    margin: 0.6rem 0 1rem;
+    font-size: 0.92rem;
+    border-radius: 3px;
+  }
+  .kvbox dt { font-weight: 600; margin-top: 0.4rem; }
+  .kvbox dt:first-child { margin-top: 0; }
+  .kvbox dd { margin: 0.05rem 0 0 0; padding-left: 0.25rem; }
+</style>
+</head>
+<body>
+
+<h1>Always-netboot model <span class="pill hyp">hypothetical</span></h1>
+<p class="subtitle">
+  A design exploration: what would change if this collection stopped using
+  <code>pxelinux.cfg</code> presence as the on/off toggle for netboot, and
+  instead always rendered a per-board <code>pxelinux.cfg</code> on rb5009
+  whose <code>DEFAULT</code> line picked which boot mode the board takes.
+  Nothing here is implemented — this is the &ldquo;if we did it this way&rdquo;
+  conversation, with concrete file shapes, role contracts, and example
+  flows so a first-time reader of the repo can judge the trade-offs.
+</p>
+
+<div class="hyp">
+  <strong>Reader note.</strong> This document is paired with
+  <a href="pxelinux-cfg-explainer.html">pxelinux-cfg-explainer.html</a>
+  (today&rsquo;s mechanism, §9 of which sketches an &ldquo;always-netboot,
+  locally-rooted&rdquo; variant) and
+  <a href="uboot-armbian-build-explainer.html">uboot-armbian-build-explainer.html</a>
+  (how the PXE-first U-Boot binary gets built). If you haven&rsquo;t read
+  those, the first three sections here recap just enough to follow along.
+</div>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#today">Where the collection sits today</a></li>
+    <li><a href="#shift">The shift: file presence → <code>DEFAULT</code> as the control surface</a></li>
+    <li><a href="#anatomy">Anatomy of an always-netboot <code>pxelinux.cfg</code></a></li>
+    <li><a href="#catalog">A menu-entry catalog</a></li>
+    <li><a href="#q1">Q1 — A menu entry that loads the kernel from a root device</a></li>
+    <li><a href="#q2">Q2 — Workflow: NFS → prepare NVMe → reboot rooted on NVMe</a></li>
+    <li><a href="#q3">Q3 — Useful menu entries and how to manage them</a></li>
+    <li><a href="#q4">Q4 — Extending the model for a last-known-good kernel</a></li>
+    <li><a href="#changes">What changes in the collection (file map)</a></li>
+    <li><a href="#gotchas">Gotchas &amp; migration notes</a></li>
+    <li><a href="#refs">References</a></li>
+  </ol>
+</nav>
+
+<h2 id="today">1. Where the collection sits today</h2>
+
+<p>
+  In v1, the collection uses one piece of state to switch a board between
+  netboot and disk boot: <strong>the per-board file
+  <code>flash:/sbc/pxelinux.cfg/01-&lt;MAC&gt;</code> on rb5009</strong>
+  (plus the matching <code>/ip tftp</code> row that exposes it). File
+  present + row present ⇒ the board PXE-boots an NFS rootfs. Either piece
+  absent ⇒ U-Boot&rsquo;s PXE bootmeth fast-404s through the entire
+  filename-fallback chain (see
+  <a href="pxelinux-cfg-explainer.html#filename">pxelinux-cfg-explainer §3</a>),
+  <code>bootflow scan</code> moves on to the next <code>BOOT_TARGETS</code>
+  entry, and the board boots from SD.
+</p>
+
+<p>
+  Concretely, the rendered file contains exactly one <code>LABEL</code>
+  and one <code>DEFAULT</code> pointing at it:
+</p>
+
+<div class="snippet">
+  <header><strong>Today — rendered <code>flash:/sbc/pxelinux.cfg/01-c0-74-2b-fb-4d-fd</strong></code> <span>NFS-only</span></header>
+  <pre><code>DEFAULT nfsroot
+
+LABEL nfsroot
+  MENU LABEL Armbian NFS Root (orange-pi-5-pro-01)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=/dev/nfs nfsroot=10.10.9.213:/mnt/ssd/netboot/rootfs/orange-pi-5-pro-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000n8 rootwait rw</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Source template: <code>roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2</code>.</li>
+      <li>Written by <code>configure_pxe.yml</code> inside the <code>board_boot_state</code> role, removed by <code>configure_disk.yml</code>.</li>
+      <li>One label, one default. The directive <code>DEFAULT</code> is technically active but operationally trivial — there&rsquo;s nothing else to default to.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>1.1 Why the binary toggle starts to creak</h3>
+
+<p>
+  The binary toggle is fine for v1&rsquo;s single goal: <em>can this board
+  be flipped between an SD rootfs and an NFS rootfs?</em> But each new
+  thing the operator wants the board to do introduces another
+  &ldquo;mode&rdquo; that has to be encoded somewhere:
+</p>
+
+<ul>
+  <li>Boot a TFTP kernel but root from a local <strong>NVMe</strong> SSD that&rsquo;s been pre-installed.</li>
+  <li>Boot a TFTP kernel but root from <strong>eMMC</strong>.</li>
+  <li>Boot a one-shot <strong>installer</strong> image that lays down a rootfs onto NVMe, then hands off.</li>
+  <li>Boot a <strong>RAM-rooted recovery</strong> shell (no rootfs mount) when something on disk is wrong.</li>
+  <li>Boot the <strong>previous-known-good kernel</strong> instead of the current one, deliberately.</li>
+  <li>Stop PXE-booting entirely and chain to whatever the SD card has — without removing per-board state from rb5009.</li>
+</ul>
+
+<p>
+  All of these are still achievable with the file-presence model, but
+  each one has to be either a different file or a flag handled inside
+  the role. The model doesn&rsquo;t generalise — it&rsquo;s a one-bit
+  channel, and we want a small-integer channel.
+</p>
+
+<h2 id="shift">2. The shift: file presence → <code>DEFAULT</code> as the control surface</h2>
+
+<p>
+  In the always-netboot model, two things change:
+</p>
+
+<ol>
+  <li>
+    <strong>The per-board <code>pxelinux.cfg/01-&lt;MAC&gt;</code> file
+    is always present on rb5009.</strong> Onboarding a board writes it
+    once; decommissioning a board removes it. Day-to-day operations
+    never touch file existence.
+  </li>
+  <li>
+    <strong>The <code>DEFAULT</code> directive inside that file is the
+    operator-controlled mode switch.</strong> The role renders one
+    <code>LABEL</code> block per supported boot mode and points
+    <code>DEFAULT</code> at whichever one inventory currently asks for.
+    U-Boot reads the file, takes the <code>DEFAULT</code> label, fetches
+    its <code>KERNEL</code>/<code>INITRD</code>/<code>FDT</code>, applies
+    its <code>APPEND</code> cmdline, and boots.
+  </li>
+</ol>
+
+<figure>
+<svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Today vs. always-netboot control surfaces">
+  <defs>
+    <marker id="arrA" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .b  { fill:#fff; stroke:#1c5b8a; stroke-width:1.2; }
+      .b2 { fill:#fff8e6; stroke:#b14b00; stroke-width:1.2; }
+      .b3 { fill:#f3eef8; stroke:#7a4ea0; stroke-width:1.2; }
+      .t  { font: 13px ui-monospace, monospace; fill:#1a1a1a; }
+      .tt { font: 12px ui-monospace, monospace; fill:#5a5a5a; }
+      .lbl{ font: 13px -apple-system, sans-serif; fill:#1a1a1a; }
+      .ln { stroke:#1c5b8a; stroke-width:1.2; fill:none; }
+      .hd { font: 13px -apple-system, sans-serif; fill:#1a1a1a; font-weight:600; }
+    </style>
+  </defs>
+
+  <text class="hd" x="20" y="22">Today (v1)</text>
+  <rect class="b"  x="20"  y="35" width="320" height="50" rx="4"/>
+  <text class="t"  x="35"  y="56">file present + /ip tftp row</text>
+  <text class="tt" x="35"  y="74">⇒ NFS root</text>
+  <rect class="b"  x="20"  y="100" width="320" height="50" rx="4"/>
+  <text class="t"  x="35"  y="121">file absent</text>
+  <text class="tt" x="35"  y="139">⇒ SD fallthrough</text>
+
+  <text class="hd" x="400" y="22">Hypothetical (always-netboot)</text>
+  <rect class="b3" x="400" y="35"  width="320" height="50" rx="4"/>
+  <text class="t"  x="415" y="56">file always present, DEFAULT nfsroot</text>
+  <text class="tt" x="415" y="74">⇒ NFS root</text>
+  <rect class="b3" x="400" y="100" width="320" height="50" rx="4"/>
+  <text class="t"  x="415" y="121">file always present, DEFAULT nvmeroot</text>
+  <text class="tt" x="415" y="139">⇒ TFTP kernel, NVMe rootfs</text>
+  <rect class="b3" x="400" y="165" width="320" height="50" rx="4"/>
+  <text class="t"  x="415" y="186">file always present, DEFAULT recovery</text>
+  <text class="tt" x="415" y="204">⇒ RAM-rooted shell</text>
+  <rect class="b3" x="400" y="230" width="320" height="50" rx="4"/>
+  <text class="t"  x="415" y="251">file always present, DEFAULT localboot</text>
+  <text class="tt" x="415" y="269">⇒ chain to SD&rsquo;s boot.scr</text>
+</svg>
+<figcaption>Today the toggle is a Boolean. The hypothetical model is an enum.</figcaption>
+</figure>
+
+<h3>2.1 What stays the same</h3>
+
+<ul>
+  <li>
+    <strong>rb5009 is still the only control surface.</strong> Same
+    <code>/file</code> + <code>/ip tftp</code> pair per board. Same
+    <code>net_put</code> machinery in <code>routeros_sbc_tftp</code>.
+  </li>
+  <li>
+    <strong>U-Boot&rsquo;s PXE-first <code>BOOT_TARGETS</code> baked into
+    the custom Armbian image</strong> still drives the bootflow that
+    reaches into rb5009 for the .cfg — see
+    <a href="uboot-armbian-build-explainer.html">uboot-armbian-build-explainer.html</a>.
+  </li>
+  <li>
+    <strong>The NFS server, per-host rootfs clones, per-model TFTP
+    staging</strong> are unchanged. Even the existing NFS-root flow
+    becomes the <code>nfsroot</code> menu entry under the new model — no
+    semantic change, just one entry in a longer list.
+  </li>
+  <li>
+    <strong>The two-resource invariant</strong> (file + row written and
+    removed as a pair) is unchanged — see
+    <a href="pxelinux-cfg-explainer.html#workflow">pxelinux-cfg §6</a>.
+  </li>
+</ul>
+
+<h3>2.2 What changes</h3>
+
+<ul>
+  <li>
+    <strong>The Jinja template grows from one <code>LABEL</code> to N
+    <code>LABEL</code> blocks</strong> plus a single <code>DEFAULT</code>
+    line driven by a per-host inventory variable
+    (<code>boot_mode: nfs|nvme|emmc|sd|recovery|installer|lkg|localboot</code>).
+  </li>
+  <li>
+    <strong>The <code>board_boot_state</code> role&rsquo;s contract
+    widens</strong> from <code>boot_state: pxe|disk</code> to something
+    closer to <code>boot_mode: &lt;label&gt;</code>. The role still
+    composes &ldquo;configure → cycle → verify&rdquo;; what
+    &ldquo;configure&rdquo; and &ldquo;verify&rdquo; do is now data-driven.
+  </li>
+  <li>
+    <strong>&ldquo;Disable netboot&rdquo; stops meaning &ldquo;remove the
+    file.&rdquo;</strong> In the always-netboot world, &ldquo;the board
+    should boot off SD&rdquo; is the <code>localboot</code> menu entry
+    being selected. The file stays. (Why this is better: §10.3.)
+  </li>
+  <li>
+    <strong>A small new lifecycle appears around per-host state.</strong>
+    The previous-known-good kernel pointer, the per-host
+    <code>rootfs_partuuid</code>, the per-host overlays — these now
+    live in inventory and have to be discovered/maintained somehow.
+    §4 and §8 cover the data shape.
+  </li>
+</ul>
+
+<h2 id="anatomy">3. Anatomy of an always-netboot <code>pxelinux.cfg</code></h2>
+
+<p>
+  A worked example for one orange-pi-5-pro with NVMe set as the current
+  default, but every other supported boot mode also rendered into the
+  file so the operator (or an automation step) can flip the DEFAULT
+  without re-running the heavy staging path:
+</p>
+
+<div class="snippet">
+  <header><strong>Hypothetical <code>flash:/sbc/pxelinux.cfg/01-c0-74-2b-fb-4d-fd</strong></code> <span>fully-populated</span></header>
+  <pre><code># pxelinux.cfg for orange-pi-5-pro-01 (orange-pi-5-pro)
+# MAC: c0:74:2b:fb:4d:fd
+# Generated by Ansible — do not edit manually.
+#
+# Active mode: nvmeroot   (rendered from inventory: boot_mode=nvme)
+# Generated:   2026-05-14T18:30:00Z
+
+DEFAULT nvmeroot
+TIMEOUT 50
+PROMPT  0
+
+LABEL nfsroot
+  MENU LABEL Armbian NFS root
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=/dev/nfs nfsroot=10.10.9.213:/mnt/ssd/netboot/rootfs/orange-pi-5-pro-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000n8 rootwait rw
+
+LABEL nvmeroot
+  MENU LABEL Armbian on NVMe
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=PARTUUID=8a7c1234-01 rootfstype=ext4 rootwait rw console=ttyS2,1500000n8
+
+LABEL sdroot
+  MENU LABEL Armbian on SD (TFTP kernel)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=PARTUUID=4d9f7811-02 rootfstype=ext4 rootwait rw console=ttyS2,1500000n8
+
+LABEL recovery
+  MENU LABEL Recovery shell (RAM root)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/recovery-initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=/dev/ram0 init=/bin/sh console=ttyS2,1500000n8
+
+LABEL installer
+  MENU LABEL Provision NVMe (one-shot)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/installer-initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=/dev/nfs nfsroot=10.10.9.213:/mnt/ssd/netboot/installer/orange-pi-5-pro-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000n8 rootwait rw
+
+LABEL lkg
+  MENU LABEL Last-known-good kernel (nvme)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz-6.6.0
+  INITRD armbian/orange-pi-5-pro/initrd.img-6.6.0
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=PARTUUID=8a7c1234-01 rootfstype=ext4 rootwait rw console=ttyS2,1500000n8
+
+LABEL localboot
+  MENU LABEL Chain to local SD bootflow
+  LOCALBOOT 0</code></pre>
+  <div class="notes">
+    <ul>
+      <li>One file, seven boot modes. The single line that determines the board&rsquo;s next boot is <code>DEFAULT nvmeroot</code>.</li>
+      <li>Every LABEL except <code>lkg</code> uses the same versionless <code>vmlinuz</code> / <code>initrd.img</code> path — they pick up new bytes when <code>stage_netboot_assets.yml</code> re-stages them. <code>lkg</code> intentionally pins a versioned kernel; §8 covers why.</li>
+      <li>The file is ~1.5 KB total. Disk on rb5009 isn&rsquo;t the constraint.</li>
+      <li><code>TIMEOUT 50 PROMPT 0</code>: U-Boot waits 5.0 s for an operator on the serial console to type a different LABEL, then commits to DEFAULT. With <code>PROMPT 0</code> the prompt is silent (no &ldquo;boot:&rdquo;); an operator hitting any key during the window still gets to override. See <a href="#gotchas">§10.5</a> for the trade-off.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>3.1 What U-Boot does with this file</h3>
+
+<p>
+  When the board powers on and U-Boot&rsquo;s PXE bootmeth TFTPs this
+  file from rb5009, the bootmeth&rsquo;s behaviour is:
+</p>
+
+<ol>
+  <li>Parse the file. Collect all <code>LABEL</code> blocks into a table.</li>
+  <li>Read <code>DEFAULT</code>. Look up the named label in the table.</li>
+  <li>If <code>TIMEOUT</code> is set, wait that many tenths of a second for keyboard input. If a key arrives and <code>PROMPT</code> is non-zero, show a <code>boot:</code> prompt. Else just keep waiting silently.</li>
+  <li>After timeout, commit to the chosen label.</li>
+  <li>TFTP the label&rsquo;s <code>KERNEL</code>, <code>INITRD</code> (if set), <code>FDT</code> (if set). Apply <code>FDTOVERLAYS</code> (if set).</li>
+  <li>Hand off via <code>bootm</code> with the <code>APPEND</code> line as the kernel cmdline.</li>
+</ol>
+
+<p>
+  If <code>DEFAULT</code> names a label that doesn&rsquo;t exist in the
+  file, U-Boot prints a parser error and falls through to the next
+  <code>BOOT_TARGETS</code> entry — same fail-safe as &ldquo;file
+  absent.&rdquo; So a typo in the role&rsquo;s rendering of
+  <code>DEFAULT</code> isn&rsquo;t catastrophic; the board lands on SD.
+</p>
+
+<h2 id="catalog">4. A menu-entry catalog</h2>
+
+<p>
+  Concrete LABEL definitions for every mode the always-netboot model
+  introduces, paired with the per-host inventory variable that
+  selects them, and notes on what state on rb5009 / the NFS server /
+  the board has to exist for the LABEL to actually boot.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th><code>boot_mode</code></th>
+      <th>What it does</th>
+      <th>External state needed</th>
+      <th>How it&rsquo;s removed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>nfs</code></td>
+      <td>TFTP kernel + NFS rootfs at <code>nfs_rootfs_path/&lt;host&gt;/</code> on TrueNAS. Identical to v1 NFS root.</td>
+      <td>Per-host NFS clone (created by <code>per_host.yml</code> in <code>netboot_assets</code>).</td>
+      <td>Set <code>boot_mode</code> to something else; re-render. No NFS-side cleanup needed unless decommissioning the host.</td>
+    </tr>
+    <tr>
+      <td><code>nvme</code></td>
+      <td>TFTP kernel + rootfs on <code>nvme0n1</code> partition identified by <code>rootfs_partuuid</code> host var.</td>
+      <td>NVMe partitioned + filesystem written + system installed. The <code>installer</code> mode below is one way to get there.</td>
+      <td>Set <code>boot_mode</code> elsewhere. NVMe contents survive untouched until something deliberately wipes them.</td>
+    </tr>
+    <tr>
+      <td><code>emmc</code></td>
+      <td>Same as <code>nvme</code> but rootfs is on an eMMC pad/module.</td>
+      <td>eMMC populated. Block-device path is per-board (<code>mmcblk0</code> on rock-5b with eMMC; not present on orange-pi-5-pro since 5-pro has no eMMC pad).</td>
+      <td>Same as <code>nvme</code>.</td>
+    </tr>
+    <tr>
+      <td><code>sd</code></td>
+      <td>TFTP kernel + rootfs on the SD card&rsquo;s data partition. Cousin of <code>nvme</code>/<code>emmc</code>.</td>
+      <td>SD card partitioned with an ext4 rootfs (true for Armbian images out of the box). PARTUUID known.</td>
+      <td>Same as <code>nvme</code>.</td>
+    </tr>
+    <tr>
+      <td><code>recovery</code></td>
+      <td>TFTP kernel + <strong>recovery initramfs</strong> (separate, busybox-style) + <code>init=/bin/sh</code>. No rootfs mount. Operator gets a serial shell.</td>
+      <td>A recovery initrd staged under <code>armbian/&lt;model&gt;/recovery-initrd.img</code> on rb5009 (today: not staged).</td>
+      <td>Flip DEFAULT once the rescue work is done. Recovery initrd stays staged — it&rsquo;s per-model, not per-host.</td>
+    </tr>
+    <tr>
+      <td><code>installer</code></td>
+      <td>Indistinguishable from <code>nfs</code> at the kernel-cmdline level — boots a minimal NFS rootfs into which an operator (or, more practically, an Ansible play over SSH from the control node) partitions a local block device and copies an installable rootfs onto it. The LABEL is just a separate NFS export so the rootfs the operator is editing isn&rsquo;t the same one the board is currently running on. <strong>There is no upstream-supported kernel-cmdline arg that steers <code>armbian-install</code> non-interactively</strong> — see <a href="#q1-installer-note">§5.4</a>; the actual provisioning is Ansible-side (§6.3).</td>
+      <td>A separate NFS export (e.g. <code>nfs_rootfs_path/_installer/&lt;model&gt;/</code>) containing an Armbian rootfs with the relevant install tooling. One-shot in spirit — the LABEL is meant to be selected, used, and flipped away from.</td>
+      <td>Automation flips <code>boot_mode</code> away from <code>installer</code> on successful completion (see §6).</td>
+    </tr>
+    <tr>
+      <td><code>lkg</code></td>
+      <td>TFTP <strong>previously-staged</strong> kernel (versioned filename) + rootfs on the board&rsquo;s existing local target. &ldquo;If the new kernel hangs, ask for this one.&rdquo;</td>
+      <td>A pinned per-model kernel kept around past the next bump — <code>vmlinuz-&lt;lkg-version&gt;</code> + matching <code>initrd.img-&lt;lkg-version&gt;</code> + matching <code>/lib/modules/&lt;lkg-version&gt;</code> path. §8 covers the lifecycle.</td>
+      <td>Operator decision — it&rsquo;s a deliberately retained fallback. Remove the staged files when a new LKG promotion happens.</td>
+    </tr>
+    <tr>
+      <td><code>localboot</code></td>
+      <td>Tells U-Boot &ldquo;don&rsquo;t boot anything from this .cfg; chain to the next BOOT_TARGETS entry.&rdquo; Equivalent to today&rsquo;s &ldquo;file absent&rdquo; semantics, but achieved without removing per-board state from rb5009.</td>
+      <td>For a clean &ldquo;happy-path&rdquo; local boot: the U-Boot env var <code>localcmd</code> must be set (e.g. <code>bootflow scan mmc1</code>). Armbian doesn&rsquo;t set this by default &mdash; see §5.1 for the validation and per-board persistence options. For the degenerate path (empty <code>localcmd</code> &rarr; <code>-ENOENT</code> &rarr; bootflow falls through to mmc1 anyway), no external state.</td>
+      <td>Flip <code>boot_mode</code> back to something else.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.1 Inventory shape</h3>
+
+<p>
+  The variables a board carries in inventory become:
+</p>
+
+<div class="snippet">
+  <header><strong>inventory/hosts.yml</strong> <span>per-board, hypothetical</span></header>
+  <pre><code>boards:
+  hosts:
+    orange-pi-5-pro-01:
+      board_mac: c0:74:2b:fb:4d:fd
+      board_model: orange-pi-5-pro
+      poe_switch: crs328-01
+      poe_port: ether3
+
+      # New under the always-netboot model:
+      boot_mode: nvme              # which LABEL becomes DEFAULT
+      rootfs_partuuid: 8a7c1234-01 # used by APPEND for boot_mode=nvme|emmc|sd
+      sd_partuuid: 4d9f7811-02     # used by APPEND for boot_mode=sd
+                                   # (kept separate so a board can have both)
+
+      # Optional — pins which versioned kernel the `lkg` LABEL uses.
+      # When unset, the LABEL renders but its KERNEL line is omitted,
+      # which makes it unselectable — fail-safe.
+      lkg_kernel_version: 6.6.0</code></pre>
+</div>
+
+<p>
+  The data shape is intentionally additive: a host with only the existing
+  v1 fields and no <code>boot_mode</code> still renders correctly under
+  the new template (defaulting to <code>nfs</code>). This keeps the
+  migration story cheap — see §10.6.
+</p>
+
+<h3>4.2 Template shape</h3>
+
+<p>
+  The Jinja template becomes a sequence of conditional <code>LABEL</code>
+  blocks, with one <code>DEFAULT</code> line interpolated from the
+  host&rsquo;s <code>boot_mode</code>:
+</p>
+
+<div class="snippet">
+  <header><strong>roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2</strong> <span>hypothetical sketch</span></header>
+  <pre><code>{# Per-host boot_mode wins; falls back to a global default for legacy hosts. #}
+{% set _mode = (hostvars[target_board_host].boot_mode
+                | default(default_boot_mode | default('nfs'))) %}
+
+# pxelinux.cfg for {{ target_board_host }} ({{ board_model }})
+# MAC: {{ board_mac }}
+# Active mode: {{ _mode }}
+# Generated by Ansible — do not edit manually.
+
+DEFAULT {{ _mode }}
+TIMEOUT 50
+PROMPT  0
+
+{# nfsroot LABEL — always rendered; its assets are per-host on TrueNAS. #}
+LABEL nfsroot
+  MENU LABEL Armbian NFS root
+  KERNEL armbian/{{ board_model }}/vmlinuz
+  INITRD armbian/{{ board_model }}/initrd.img
+  FDT    armbian/{{ board_model }}/board.dtb
+  APPEND root=/dev/nfs nfsroot={{ nfs_server_ip | default(netboot_server_ip) }}:{{ nfs_rootfs_path }}/{{ target_board_host }},nfsvers=3,rw ip=dhcp console={{ board_configs[board_model].console }} rootwait rw
+
+{# Block-device LABELs — only rendered when the host declares a PARTUUID for them. #}
+{% if hostvars[target_board_host].rootfs_partuuid is defined %}
+LABEL nvmeroot
+  MENU LABEL Armbian on NVMe
+  KERNEL armbian/{{ board_model }}/vmlinuz
+  INITRD armbian/{{ board_model }}/initrd.img
+  FDT    armbian/{{ board_model }}/board.dtb
+  APPEND root=PARTUUID={{ hostvars[target_board_host].rootfs_partuuid }} rootfstype=ext4 rootwait rw console={{ board_configs[board_model].console }}
+{% endif %}
+
+{% if hostvars[target_board_host].sd_partuuid is defined %}
+LABEL sdroot
+  MENU LABEL Armbian on SD (TFTP kernel)
+  KERNEL armbian/{{ board_model }}/vmlinuz
+  INITRD armbian/{{ board_model }}/initrd.img
+  FDT    armbian/{{ board_model }}/board.dtb
+  APPEND root=PARTUUID={{ hostvars[target_board_host].sd_partuuid }} rootfstype=ext4 rootwait rw console={{ board_configs[board_model].console }}
+{% endif %}
+
+{# recovery / installer / lkg / localboot LABELs follow the same pattern;
+   each is only rendered when its prerequisite host var(s) or staged
+   per-model assets exist. Omitting a LABEL is the easiest way to make it
+   unselectable. #}</code></pre>
+  <div class="notes">
+    <ul>
+      <li>A LABEL the host can&rsquo;t use (e.g. <code>nvmeroot</code> on a board with no NVMe HAT) is simply absent. U-Boot can&rsquo;t pick a label that isn&rsquo;t in the file.</li>
+      <li>The <code>APPEND</code> line is still one line — same Gotcha §10.1 of <a href="pxelinux-cfg-explainer.html#gotchas">pxelinux-cfg-explainer</a>.</li>
+      <li>The whole template stays declarative — no logic outside &ldquo;does this host want this LABEL.&rdquo; That keeps it easy to audit by reading the rendered file on rb5009.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="q1">5. Q1 — A menu entry that loads the kernel from a root device</h2>
+
+<p>
+  Rephrased: <em>can pxelinux.cfg name a kernel image that lives on the
+  board&rsquo;s own SD/eMMC/NVMe instead of being fetched from rb5009
+  over TFTP?</em>
+</p>
+
+<p>
+  The honest answer is &ldquo;yes, two ways, and the second is what you
+  almost certainly want.&rdquo;
+</p>
+
+<h3>5.1 Interpretation A — kernel bytes literally come from a local device</h3>
+
+<p>
+  U-Boot&rsquo;s PXE bootmeth resolves <code>KERNEL</code> /
+  <code>INITRD</code> / <code>FDT</code> paths via TFTP, against the same
+  server it fetched the .cfg from. There&rsquo;s no syntax inside
+  pxelinux.cfg that says &ldquo;<code>KERNEL mmc1:0:vmlinuz</code>&rdquo;
+  or similar. To load a kernel from a local block device the bootmeth
+  has to <em>not</em> be in control of the load step.
+</p>
+
+<p>
+  U-Boot does have a directive for handing off to a local boot path
+  inside the .cfg: <strong><code>LOCALBOOT</code></strong>. In
+  PXELINUX&rsquo;s original semantics, <code>LOCALBOOT 0</code> means
+  &ldquo;chain to the local disk&rsquo;s MBR.&rdquo; U-Boot&rsquo;s PXE
+  bootmeth honours <code>LOCALBOOT</code> but with one important caveat
+  documented in
+  <a href="https://docs.u-boot.org/en/latest/usage/pxe.html">U-Boot&rsquo;s PXE docs</a>:
+  <strong>it doesn&rsquo;t look at the argument — it just runs the
+  <code>localcmd</code> U-Boot environment variable.</strong>
+</p>
+
+<p>
+  Before committing to this design, we need to answer two questions
+  honestly: <em>is <code>localcmd</code> ever set anywhere by default?</em>
+  and <em>how do we persist a value across reboots on a board without
+  SPI flash?</em> Both have implications for whether the LOCALBOOT
+  approach is viable across this collection&rsquo;s board mix.
+</p>
+
+<h4 id="q1-localcmd-default">5.1.1 Is <code>localcmd</code> ever set by default?</h4>
+
+<p>
+  <strong>No</strong> — neither upstream U-Boot nor the Armbian build
+  framework sets <code>localcmd</code> anywhere. Verified three ways:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Source</th><th>Searched for</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://github.com/armbian/build">armbian/build</a></td>
+      <td><code>localcmd</code> (any occurrence)</td>
+      <td><strong>0 hits.</strong> Not in <code>config/bootenv/rockchip64.txt</code> (only sets <code>verbosity</code>, <code>bootlogo</code>, <code>console</code>), not in <code>config/bootscripts/boot-rockchip64.cmd</code>, not in any U-Boot family include, not in any defconfig override.</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/armbian">All armbian/* org repos</a></td>
+      <td><code>localcmd</code> (any occurrence)</td>
+      <td>34 hits, but every one is the identifier &ldquo;localcmd&rdquo; used in unrelated kernel WiFi/SDIO driver code (<code>armbian/linux</code>, <code>armbian/linux-rockchip</code>, <code>armbian/wifi-rtl8852bs</code>). <strong>Zero U-Boot env references.</strong></td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/u-boot/u-boot/blob/master/boot/pxe_utils.c"><code>u-boot/u-boot</code></a></td>
+      <td><code>label_localboot()</code> behaviour</td>
+      <td>Calls <code>from_env(&quot;localcmd&quot;)</code>; if the variable is missing, returns <code>-ENOENT</code> immediately. <strong>No compiled-in default.</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Practically, this means a stock Armbian image &mdash; including
+  custom-built ones from this collection&rsquo;s <code>armbian_build</code>
+  role &mdash; boots with <code>localcmd</code> empty. A pxelinux.cfg
+  with <code>LABEL localboot / LOCALBOOT 0</code> would fail the
+  <code>from_env</code> check, U-Boot would mark the label as failed,
+  and the bootflow framework would move on to the next
+  <code>BOOT_TARGETS</code> entry.
+</p>
+
+<div class="snippet">
+  <header><strong>boot/pxe_utils.c</strong> <span>u-boot master, label_localboot</span></header>
+  <pre><code>localcmd = from_env("localcmd");
+if (!localcmd)
+    return -ENOENT;</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Returns to the bootmeth&rsquo;s label-handling loop, which records the failure and bubbles up to <code>bootflow scan</code>.</li>
+      <li><code>bootflow scan</code> then advances to the next bootmeth in <code>BOOT_TARGETS</code> &mdash; on this collection&rsquo;s custom Armbian images, that&rsquo;s <code>mmc1</code> (SD card&rsquo;s <code>boot.scr</code>).</li>
+      <li>Net effect: a <code>LOCALBOOT 0</code> label with no <code>localcmd</code> set is functionally identical to today&rsquo;s &ldquo;remove the pxelinux.cfg file.&rdquo; The board falls through to SD. <strong>But</strong> the failure path runs through an error return inside U-Boot rather than a clean &ldquo;no .cfg found&rdquo; branch, and operator-side debuggability suffers (you have to read the bootflow log to spot the <code>-ENOENT</code>; there&rsquo;s no &ldquo;successfully chained to mmc&rdquo; line).</li>
+    </ul>
+  </div>
+</div>
+
+<h4 id="q1-localcmd-persist">5.1.2 Persisting <code>localcmd</code> on boards without SPI flash</h4>
+
+<p>
+  Setting <code>localcmd</code> at the U-Boot prompt is trivial
+  (<code>setenv localcmd '…' ; saveenv</code>). The hard part is
+  durability across reboots, which depends entirely on where U-Boot
+  saves its env. For this collection&rsquo;s two-board v1 fleet:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Board</th><th>Env storage (Armbian build defaults)</th><th>Persists across SD reflash?</th><th>How this collection writes it today</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>rock-5b</td>
+      <td>SPI flash at offset <code>0xc00000</code>, size <code>0x20000</code>. Confirmed in <code>config/boards/rock-5b.conf</code> (<code>BOOT_SUPPORT_SPI="yes"</code>, <code>BOOT_SPI_RKSPI_LOADER="yes"</code>).</td>
+      <td><strong>Yes</strong> &mdash; SPI is independent of SD.</td>
+      <td>Already done. <code>playbooks/persist_uboot_env.yml</code> (this repo) writes <code>ethaddr</code> + PXE address vars via <code>fw_setenv</code> from Linux. Adding <code>localcmd</code> is one more variable to that playbook.</td>
+    </tr>
+    <tr>
+      <td>orange-pi-5-pro</td>
+      <td>Config files declare <code>BOOT_SUPPORT_SPI="yes"</code> and generate an <code>rkspi_loader.img</code> with a <code>uboot_env</code> partition (sectors 8128&ndash;8191) &mdash; <strong>but that SPI image is only used if an operator manually writes it to SPI</strong>. Standard Armbian SD deployment (which this collection uses) leaves the SPI untouched; the running U-Boot is loaded from the SD card&rsquo;s boot area and its env partition is on the SD card.</td>
+      <td><strong>No</strong> &mdash; re-flashing the SD card destroys it.</td>
+      <td>Not done. There&rsquo;s no equivalent persist-env playbook for orange-pi-5-pro; the assumption upstream of the collection has been that orange-pi-5-pro&rsquo;s env is read-only at runtime.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Two corollaries for the no-SPI case (orange-pi-5-pro and any future
+  board that doesn&rsquo;t deploy with SPI written):
+</p>
+
+<ol>
+  <li>
+    <strong><code>fw_setenv</code> from Linux <em>can</em> work in
+    principle</strong>, but requires <code>/etc/fw_env.config</code>
+    pointing at the correct SD-card offsets, and the env survives only
+    as long as that SD card does. Two same-model boards built from the
+    same image would each need their env written once, and a recovery
+    operation that wipes/reflashes the SD card loses the value. The
+    flimsiness undermines the whole &ldquo;control surface lives on
+    rb5009&rdquo; model.
+  </li>
+  <li>
+    <strong>The robust route is a compile-time default</strong>,
+    injected via the Armbian U-Boot patch table. The
+    <code>CONFIG_EXTRA_ENV_SETTINGS</code> macro in U-Boot&rsquo;s
+    board header file is concatenated into the env at first boot &mdash;
+    if it carries <code>localcmd=bootflow scan mmc1\0</code> by default,
+    every freshly-built image has the value, no per-board write needed.
+    The <code>armbian_build</code> role already patches U-Boot at this
+    layer (the PXE-first <code>BOOT_TARGETS</code> reorder; see
+    <a href="uboot-armbian-build-explainer.html">uboot-armbian-build-explainer.html</a>),
+    so adding a one-line <code>localcmd</code> default would be a
+    structurally identical patch.
+  </li>
+</ol>
+
+<p>
+  Either route requires picking a target macro and a target file in the
+  U-Boot source tree, gating per-board, and integrating with this
+  collection&rsquo;s existing build patch mechanism (the
+  <code>armbian_build_userpatches</code> contract). §5.1.5 walks the
+  complete compile-time implementation against orange-pi-5-pro; §5.1.6
+  covers the runtime alternative for completeness and explains why it
+  isn&rsquo;t recommended.
+</p>
+
+<h4 id="q1-localcmd-label">5.1.3 The pxelinux LABEL once <code>localcmd</code> is in place</h4>
+
+<div class="snippet">
+  <header><strong>flash:/sbc/pxelinux.cfg/01-&lt;MAC&gt; — localboot LABEL</strong></header>
+  <pre><code>LABEL localboot
+  MENU LABEL Chain to local SD bootflow
+  LOCALBOOT 0</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Three lines. No kernel/initrd/dtb of its own.</li>
+      <li>Setting <code>DEFAULT localboot</code> makes the board PXE-fetch the .cfg from rb5009, parse it, take the LOCALBOOT path, run <code>${localcmd}</code>, and from there the SD&rsquo;s standard <code>boot.scr</code> takes over.</li>
+      <li>End result: <em>kernel + initrd + dtb come from the SD card&rsquo;s <code>/boot</code></em> exactly as they would if rb5009 weren&rsquo;t in the picture. The PXE-fetch step on every boot adds ~1 s of TFTP for the .cfg before the local boot starts.</li>
+      <li>The <code>0</code> argument to <code>LOCALBOOT</code> is honoured for PXELINUX-compat but ignored by U-Boot &mdash; the whole local-boot intent is in the <code>localcmd</code> env var, not in the directive&rsquo;s argument.</li>
+    </ul>
+  </div>
+</div>
+
+<h4 id="q1-localcmd-impl">5.1.5 Implementing the compile-time default on orange-pi-5-pro</h4>
+
+<p>
+  This subsection is the full how-to for adding a baked-in
+  <code>localcmd</code> to the orange-pi-5-pro U-Boot binary that
+  this collection&rsquo;s <code>armbian_build</code> role produces.
+  Every step is keyed to existing repo machinery — there&rsquo;s no
+  new role, no new build artefact, no new control-plane state. The
+  patch lands as one more entry in the same
+  <code>build_userpatches_common</code> list that already carries the
+  PXE-first <code>BOOT_TARGETS</code> rewrite.
+</p>
+
+<h5 id="q1-localcmd-impl-where">5.1.5.1 Where the env default lives in U-Boot</h5>
+
+<p>
+  Across modern rk3588 U-Boot trees the relevant macro is named
+  <strong><code>CFG_EXTRA_ENV_SETTINGS</code></strong> (it was
+  <code>CONFIG_EXTRA_ENV_SETTINGS</code> before the v2022.10 macro
+  rename — both forms exist in the wild, and the sed in §5.1.5.2
+  matches either). On U-Boot v2025.10 — the tag Armbian&rsquo;s mainline
+  branch (current / edge) pins for orange-pi-5-pro — the macro is
+  defined in:
+</p>
+
+<div class="snippet">
+  <header><strong>include/configs/rk3588_common.h</strong> <span>u-boot v2025.10, family-level</span></header>
+  <pre><code>#define CFG_EXTRA_ENV_SETTINGS                  \
+        "fdtfile=" CONFIG_DEFAULT_FDT_FILE "\0" \
+        ENV_MEM_LAYOUT_SETTINGS                 \
+        ROCKCHIP_DEVICE_SETTINGS                \
+        "boot_targets=" BOOT_TARGETS "\0"</code></pre>
+  <div class="notes">
+    <ul>
+      <li>This file is shared by every rk3588 board — patching it once seeds the env on every rk3588 board this collection builds. Per-board gating happens at the bash level inside the hook (§5.1.5.2), not in the C header.</li>
+      <li>Each segment is a null-terminated string literal; the preprocessor concatenates them into one long blob that U-Boot uses as the initial env when SPI / mmc env is empty or invalid.</li>
+      <li>The <code>"boot_targets=" BOOT_TARGETS "\0"</code> trailing segment is what U-Boot uses as the runtime <code>boot_targets</code> env — separate from the compile-time <code>BOOT_TARGETS</code> macro the existing PXE-first hook rewrites in <code>rockchip-common.h</code>. Don&rsquo;t confuse them: <code>BOOT_TARGETS</code> (the macro) feeds <code>boot_targets</code> (the env var); the PXE-first patch changes the former, this patch adds a sibling env var.</li>
+    </ul>
+  </div>
+</div>
+
+<p>
+  The Armbian vendor branch for orange-pi-5-pro uses
+  <a href="https://github.com/orangepi-xunlong/u-boot-orangepi">orangepi-xunlong/u-boot-orangepi</a>
+  at <code>v2017.09-rk3588</code>, which pre-dates the macro rename and
+  still uses <code>CONFIG_EXTRA_ENV_SETTINGS</code> (and a different
+  per-board header file layout entirely). This collection&rsquo;s
+  orange-pi-5-pro builds run on the mainline branch — Armbian&rsquo;s
+  current / edge — so this section targets v2025.10. The sed pattern
+  in the next subsection is written to match either form so a future
+  pin bump doesn&rsquo;t silently fail.
+</p>
+
+<h5 id="q1-localcmd-impl-hook">5.1.5.2 The hook function</h5>
+
+<p>
+  This collection&rsquo;s existing PXE-first patch lives in
+  <code>build_userpatches_common</code> inside
+  <code>playbooks/build_image.yml</code> as a
+  <code>{ dest, content }</code> entry where <code>dest</code> is
+  <code>config/sources/families/rockchip-rk3588.conf</code>. The
+  <code>armbian_build</code> role drops that file into
+  <code>&lt;armbian_build_cache_dir&gt;/build/userpatches/&lt;dest&gt;</code>,
+  and Armbian&rsquo;s <code>source_family_config_and_arch()</code> sources
+  both the in-tree family file <em>and</em> the userpatches overlay —
+  so anything defined in our overlay is additive, not replacement.
+</p>
+
+<p>
+  Inside the overlay we register a bash function whose name matches an
+  Armbian extension-manager hook point. The
+  <code>pre_config_uboot_target__&lt;sort&gt;_&lt;label&gt;</code> family
+  of names hooks just before U-Boot&rsquo;s defconfig is materialised,
+  with the U-Boot source already checked out — exactly the moment to
+  sed a header file. The <code>__999_</code> prefix is the same priority
+  trick the existing PXE-first hook uses (extension-manager sorts hooks
+  numerically; 999 wins over Armbian-internal hooks which auto-prefix
+  to <code>500_</code>).
+</p>
+
+<div class="snippet">
+  <header><strong>playbooks/build_image.yml</strong> <span>add to <code>build_userpatches_common</code></span></header>
+  <pre><code>build_userpatches_common:
+  - dest: "config/sources/families/rockchip-rk3588.conf"
+    content: |
+      # ... existing pre_config_uboot_target__999_pxe_first() and
+      # post_family_config_branch_edge__999_rock5b_uboot_v2026_04()
+      # hooks remain as today (omitted for brevity) ...
+
+      # Seed CFG_EXTRA_ENV_SETTINGS with a compile-time `localcmd`
+      # default so a pxelinux.cfg LABEL with `LOCALBOOT 0` chains to
+      # the SD's boot.scr instead of returning -ENOENT.
+      #
+      # Per-board gating: only boards listed below get the patch. This
+      # is opt-in — rock-5b doesn't need it (SPI env, persist_uboot_env.yml
+      # handles it at runtime) and adding boards to the list is a
+      # deliberate choice, not a default-on for the whole family.
+      function pre_config_uboot_target__999_localcmd_default() {
+          local -A boards_localcmd=(
+              [orangepi5pro]="bootflow scan mmc1"
+              # Add other no-SPI boards here as they're onboarded.
+          )
+
+          [[ -z "${boards_localcmd[${BOARD}]:-}" ]] && return 0
+
+          local cmd="${boards_localcmd[${BOARD}]}"
+          local header="include/configs/rk3588_common.h"
+
+          # Sanity check — fail loudly if the upstream macro has been
+          # renamed or moved. Pinning U-Boot versions across rebases is
+          # the operator's job; this hook's job is to refuse to silently
+          # do nothing.
+          if ! grep -qE '\b(CFG|CONFIG)_EXTRA_ENV_SETTINGS\b' "${header}"; then
+              display_alert "${BOARD}" \
+                  "CFG_EXTRA_ENV_SETTINGS not found in ${header} — patch skipped" "wrn"
+              return 0
+          fi
+
+          # Idempotency — if a previous build of the same checkout has
+          # already injected the line, don't double-inject.
+          if grep -q '"localcmd=' "${header}"; then
+              display_alert "${BOARD}" \
+                  "localcmd default already present in ${header}" "info"
+              return 0
+          fi
+
+          # Inject the line immediately after the first segment of
+          # CFG_EXTRA_ENV_SETTINGS. Works on both the v2022.10+ macro
+          # name (CFG_EXTRA_ENV_SETTINGS) and the legacy form
+          # (CONFIG_EXTRA_ENV_SETTINGS) — sed is anchored on the
+          # *_EXTRA_ENV_SETTINGS substring.
+          sed -i -E \
+              "/^#define[[:space:]]+(CFG|CONFIG)_EXTRA_ENV_SETTINGS/,/[^\\\\]$/{
+                  s|(ENV_MEM_LAYOUT_SETTINGS[[:space:]]*\\\\)|\"localcmd=${cmd}\\\\0\" \\\\\n        \\1|
+              }" "${header}"
+
+          display_alert "${BOARD}" \
+              "patched ${header}: localcmd default = '${cmd}'" "info"
+      }</code></pre>
+  <div class="notes">
+    <ul>
+      <li><strong>Per-board associative array</strong> instead of a global default — onboarding a new no-SPI board is one line. rock-5b is not in the array; the hook short-circuits for it and the SPI-env path (<code>persist_uboot_env.yml</code>) keeps owning rock-5b&rsquo;s env.</li>
+      <li><strong>Anchored on <code>ENV_MEM_LAYOUT_SETTINGS</code></strong> — the sed inserts the new line right before that token, which is line 2 of the macro definition on v2025.10. If the macro layout changes upstream the grep guard catches it; if the token moves to a different line the insertion still lands inside the macro (which is what matters — anywhere inside is fine).</li>
+      <li><strong><code>\\\\0</code> in the sed</strong> — that&rsquo;s a literal <code>\0</code> (null terminator) escaped through bash heredoc &rarr; bash sed &rarr; C preprocessor. Each layer eats a backslash. The C output must read <code>"localcmd=bootflow scan mmc1\0"</code>.</li>
+      <li><strong>Idempotency check</strong> on <code>grep -q '&quot;localcmd='</code> — same defensive pattern the existing PXE-first hook uses for its <code>CONFIG_PCI_INIT_R</code> append.</li>
+      <li><strong><code>display_alert</code></strong> is Armbian&rsquo;s build-log primitive — output shows up in the build console. Operator-visible at build time which is the right surface to spot &ldquo;the patch didn&rsquo;t land.&rdquo;</li>
+    </ul>
+  </div>
+</div>
+
+<h5 id="q1-localcmd-impl-wire">5.1.5.3 Wiring into <code>build_image.yml</code></h5>
+
+<p>
+  No new entry — the hook lives <em>inside</em> the existing
+  <code>{ dest, content }</code> for
+  <code>config/sources/families/rockchip-rk3588.conf</code>. The
+  <code>content</code> field is a heredoc that concatenates every hook
+  function this collection wants registered against the rk3588 family;
+  add the new function alongside the existing
+  <code>pre_config_uboot_target__999_pxe_first</code> and
+  <code>post_family_config_branch_edge__999_rock5b_uboot_v2026_04</code>.
+  Armbian&rsquo;s extension manager auto-discovers all
+  <code>pre_config_uboot_target__*</code> functions sourced into the
+  family file and runs them in sort order.
+</p>
+
+<p>
+  Once the function is in place, running
+  <code>ansible-playbook playbooks/build_image.yml</code> rebuilds the
+  image and the resulting <code>.img.xz</code> carries the patched
+  U-Boot. The role&rsquo;s <code>compute_inputs.yml</code> task already
+  hashes <code>armbian_build_userpatches</code> into the manifest&rsquo;s
+  <code>patch_hash</code>, so the change invalidates the &ldquo;skip
+  rebuild&rdquo; check and a new build is triggered automatically.
+  No <code>-e armbian_build_force=true</code> needed.
+</p>
+
+<h5 id="q1-localcmd-impl-mmc">5.1.5.4 Determining the right MMC index per board</h5>
+
+<p>
+  <code>bootflow scan mmc1</code> is right for orange-pi-5-pro. It is
+  <strong>not</strong> automatically right for every no-SPI rk3588
+  board. The index is whichever <code>mmc dev N</code> in the U-Boot
+  device tree corresponds to the SD slot, and that depends on which
+  other MMC controllers the U-Boot DT exposes:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Board</th><th>U-Boot DT MMC nodes</th><th>SD lands at</th><th>Source of truth</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>orange-pi-5-pro</td>
+      <td>eMMC slot + SDIO + SD</td>
+      <td><code>mmc 1</code></td>
+      <td>CLAUDE.md repo-level convention; verify with <code>mmc list</code> at the U-Boot prompt on a freshly-built image.</td>
+    </tr>
+    <tr>
+      <td>orangepi5 (non-pro)</td>
+      <td>SD only</td>
+      <td><code>mmc 0</code></td>
+      <td>Per CLAUDE.md &ldquo;SBC ecosystem reality&rdquo; — the SD-only DT lands SD at index 0.</td>
+    </tr>
+    <tr>
+      <td>(hypothetical) board with eMMC + SD, no SDIO</td>
+      <td>eMMC + SD</td>
+      <td>typically <code>mmc 1</code></td>
+      <td>Per-board — must be verified at the U-Boot prompt before pinning.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  This is why the hook takes the command string as data in the
+  per-board associative array, not a hard-coded value: the array entry
+  for a new board is the operator&rsquo;s contract that they&rsquo;ve
+  verified <code>mmc list</code> for that board. A wrong index isn&rsquo;t
+  catastrophic — <code>bootflow scan mmc5</code> on a board without an
+  mmc5 just reports &ldquo;no bootflow found&rdquo; and the bootflow
+  framework moves to the next entry in <code>BOOT_TARGETS</code> — but
+  it is wasted boot time and a confusing failure mode.
+</p>
+
+<h5 id="q1-localcmd-impl-verify">5.1.5.5 Verifying after build</h5>
+
+<p>
+  Three places to look — each catches a different class of mistake.
+</p>
+
+<div class="snippet">
+  <header><strong>Verification &mdash; in the build log</strong> <span>builder host</span></header>
+  <pre><code># Look for the display_alert from the hook in the build console:
+[ o.k. ] orangepi5pro : patched include/configs/rk3588_common.h: localcmd default = 'bootflow scan mmc1'
+
+# If you see this instead, the upstream macro layout changed and the sed didn't match:
+[ warn ] orangepi5pro : CFG_EXTRA_ENV_SETTINGS not found in include/configs/rk3588_common.h — patch skipped</code></pre>
+</div>
+
+<div class="snippet">
+  <header><strong>Verification &mdash; in the built U-Boot binary</strong> <span>before flashing</span></header>
+  <pre><code># armbian/build leaves the built u-boot binary inside the cache;
+# strings-grep it to confirm the env default is compiled in:
+strings /var/lib/armbian_build/cache/sources/u-boot-orangepi-5-pro/u-boot.bin \
+  | grep -E '^(localcmd=|boot_targets=)'
+
+# Expected output:
+#   localcmd=bootflow scan mmc1
+#   boot_targets=pxe dhcp mmc1 mmc0 nvme scsi usb spi    (from the PXE-first hook)</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Strings-grepping the binary catches &ldquo;the sed ran but produced garbage&rdquo; in a way the build console can&rsquo;t. The two grep matches together confirm both this hook and the existing PXE-first hook landed.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="snippet">
+  <header><strong>Verification &mdash; on the running board</strong> <span>after flashing the new .img.xz to SD and powering up</span></header>
+  <pre><code># From Linux on the board (fw_printenv from u-boot-tools package):
+fw_printenv localcmd
+# Expected: localcmd=bootflow scan mmc1
+
+# Or, if you can interrupt U-Boot at boot time on the serial console
+# (hit any key during the autoboot countdown):
+=> printenv localcmd
+localcmd=bootflow scan mmc1
+=> mmc list           # double-check the SD really is mmc 1
+mmc@fe2c0000: 0 (SD)            ← not in the running boot path
+mmc@fe2e0000: 1 (eMMC)          ← <-- correct, SD-controller node varies; see below
+=> exit                          # let autoboot resume</code></pre>
+  <div class="notes">
+    <ul>
+      <li><strong>The <code>mmc list</code> output above is illustrative</strong> — the actual identifier the U-Boot DT exposes for each MMC node is per-board. The thing to check is which <em>index</em> (the integer before the parenthetical) refers to the SD slot. If it&rsquo;s not 1, the per-board associative-array value needs adjusting.</li>
+      <li><code>fw_printenv</code> from Linux requires <code>/etc/fw_env.config</code> to be set up correctly. Armbian images do not ship a default <code>/etc/fw_env.config</code> for orange-pi-5-pro; the U-Boot-prompt path is the more reliable verification for the no-SPI case.</li>
+    </ul>
+  </div>
+</div>
+
+<h5 id="q1-localcmd-impl-ops">5.1.5.6 Operational notes</h5>
+
+<div class="kvbox">
+  <dt>Interaction with <code>saveenv</code></dt>
+  <dd>
+    <code>CFG_EXTRA_ENV_SETTINGS</code> seeds the env when the
+    persistent env (SPI on rock-5b, SD-card env partition or
+    <code>nowhere</code> on orange-pi-5-pro) is empty / corrupt /
+    invalid. Once a user runs <code>saveenv</code> at the U-Boot
+    prompt, the saved env wins and the compile-time default becomes
+    the fallback. On orange-pi-5-pro with no SD env partition
+    explicitly written, U-Boot has nowhere to save to — so the
+    compile-time default is effectively the only value the variable
+    ever takes, on every boot. That&rsquo;s exactly the property we
+    want for fleet automation: the value is determined by the
+    U-Boot binary in <code>.img.xz</code> and survives reflashes.
+  </dd>
+  <dt>SD reflash behaviour</dt>
+  <dd>
+    Reflashing the SD card with the same <code>.img.xz</code> replaces
+    the U-Boot bytes with the patched ones again — <code>localcmd</code>
+    is back in place. Reflashing with a <em>different</em> Armbian build
+    (e.g. a stock Armbian image, or one built without this hook)
+    removes the default and <code>LOCALBOOT 0</code> reverts to the
+    <code>-ENOENT</code> &rarr; <code>mmc1</code> fall-through. Document
+    this explicitly anywhere the fleet&rsquo;s recovery procedure says
+    &ldquo;flash the SD with a stock image to start over&rdquo; — the
+    answer might still be fine (you&rsquo;re recovering, not relying on
+    LOCALBOOT semantics), but it&rsquo;s worth knowing.
+  </dd>
+  <dt>Multi-board fleets</dt>
+  <dd>
+    The hook patches once per build, but the resulting
+    <code>.img.xz</code> is one image flashed to N boards of the same
+    model — every board has the same compile-time default. This is the
+    right granularity for the always-netboot model: per-board variation
+    lives in pxelinux.cfg on rb5009 (the runtime mode selector),
+    per-model variation lives in the built image
+    (<code>localcmd</code>, kernel cmdline defaults, BOOT_TARGETS).
+  </dd>
+  <dt>What if the operator wants per-board <code>localcmd</code>?</dt>
+  <dd>
+    Two options if it ever comes up. (1) Per-board built images —
+    expensive, fragments the build farm. (2) Inject a small first-boot
+    systemd unit into <code>build_userpatches</code> that calls
+    <code>fw_setenv</code> from Linux with a value derived from the
+    host&rsquo;s inventory entry — moves the per-board state from
+    inventory through the first-boot path. For a fleet of two boards
+    of one model, neither is justified; if the fleet expands and the
+    requirement appears, this is where to look. (3) A simpler version
+    of the requirement &ldquo;every board chooses a different SD index
+    or NVMe&rdquo; can be served by the U-Boot bootflow framework
+    itself: <code>localcmd=bootflow scan</code> (no argument) scans
+    everything in <code>BOOT_TARGETS</code> and picks the first one
+    that works — no per-board pinning needed.
+  </dd>
+  <dt>Interaction with the existing PXE-first patch</dt>
+  <dd>
+    Both hooks are <code>pre_config_uboot_target__999_*</code>. Armbian&rsquo;s
+    extension manager runs them in alphabetical order after the 999
+    sort prefix &mdash; so <code>__999_localcmd_default</code> runs after
+    <code>__999_pxe_first</code> (alphabetical &ldquo;l&rdquo; &gt;
+    &ldquo;p&rdquo; — wait, &ldquo;l&rdquo; &lt; &ldquo;p&rdquo;, so
+    actually <code>localcmd</code> sorts before <code>pxe_first</code>).
+    Order doesn&rsquo;t matter functionally here — they patch different
+    files (<code>rk3588_common.h</code> vs <code>rockchip-common.h</code>
+    + the defconfig) — but if a future patch lives in the same file as
+    an earlier one, double-check the sort order or rename to force
+    explicit ordering (<code>__999a_</code>, <code>__999b_</code>).
+  </dd>
+</div>
+
+<h4 id="q1-localcmd-runtime">5.1.6 Runtime alternative — <code>fw_setenv</code> into the SD env partition</h4>
+
+<p>
+  For completeness: the runtime path is technically achievable on
+  orange-pi-5-pro and worth documenting so an operator considering it
+  understands the trade-offs. <strong>It is not recommended for fleet
+  use under the always-netboot model.</strong>
+</p>
+
+<p>
+  Armbian&rsquo;s SD image lays out the boot region with a small
+  reserved env partition at a fixed offset (the offset comes from the
+  family&rsquo;s <code>BOOT_FAT_OFFSET_KB</code> / <code>UBOOT_ENV_*</code>
+  conventions; verify on the specific image with <code>parted -l</code>
+  on the flashed SD before relying on it). Linux can write to that
+  partition through the standard <code>fw_setenv</code> tool from
+  <code>u-boot-tools</code>, given a correct
+  <code>/etc/fw_env.config</code>:
+</p>
+
+<div class="snippet">
+  <header><strong>/etc/fw_env.config</strong> <span>orange-pi-5-pro, illustrative</span></header>
+  <pre><code># Device       Offset      Env size        Flash sector size       Number of sectors
+/dev/mmcblk1   0x3F8000    0x8000          0x200                   64</code></pre>
+  <div class="notes">
+    <ul>
+      <li><strong>The offsets above are illustrative</strong>, not authoritative. The real offsets for any given Armbian image depend on the build&rsquo;s <code>UBOOT_ENV_OFFSET</code> / <code>UBOOT_ENV_SIZE</code> at <code>compile.sh</code> time. Read them off the running U-Boot binary with <code>grep ENV_OFFSET</code> on the build artefacts, or inspect the flashed SD with a hex tool. A wrong offset turns <code>fw_setenv</code> into a corruption-on-write tool. Do not copy these numbers without verification.</li>
+      <li><code>/dev/mmcblk1</code> assumes the SD lands at mmcblk1 from Linux&rsquo;s perspective — same per-board variation that affects <code>bootflow scan mmcN</code> (§5.1.5.4) applies here. Verify with <code>lsblk</code> after flashing.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="snippet">
+  <header><strong>The runtime &ldquo;persist localcmd&rdquo; playbook (sketch)</strong></header>
+  <pre><code># playbooks/persist_uboot_env_sd.yml — analogue of persist_uboot_env.yml
+# but targeting boards whose U-Boot env lives on the SD card, not SPI.
+
+- name: Persist U-Boot localcmd via fw_setenv on no-SPI boards
+  hosts: orange_pi_5_pro    # explicit per-board gate, not a generic group
+  become: true
+  tasks:
+    - name: Ensure u-boot-tools is installed
+      ansible.builtin.apt:
+        name: u-boot-tools
+        state: present
+
+    - name: Install /etc/fw_env.config
+      ansible.builtin.template:
+        src: fw_env.config.orange-pi-5-pro.j2
+        dest: /etc/fw_env.config
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Set localcmd via fw_setenv
+      ansible.builtin.command:
+        argv:
+          - fw_setenv
+          - localcmd
+          - bootflow scan mmc1
+      register: _fw_setenv
+      changed_when: "'== ' in _fw_setenv.stdout or _fw_setenv.rc == 0"
+
+    - name: Verify localcmd is set
+      ansible.builtin.command: fw_printenv localcmd
+      register: _fw_printenv
+      changed_when: false
+      failed_when: "'localcmd=bootflow scan mmc1' not in _fw_printenv.stdout"</code></pre>
+</div>
+
+<p>
+  Why this is the wrong answer for a fleet:
+</p>
+
+<ul>
+  <li>
+    <strong>State is per-board, not per-image.</strong> Reflashing the
+    SD card with the same image wipes the value. Recovery procedures
+    that include &ldquo;flash a fresh image&rdquo; have to also re-run
+    this playbook, and there&rsquo;s no compile-time guarantee that
+    won&rsquo;t be forgotten.
+  </li>
+  <li>
+    <strong>The offset table in <code>/etc/fw_env.config</code> is
+    Armbian-build-specific.</strong> If Armbian changes its env-partition
+    layout (which has happened across releases), every board&rsquo;s
+    <code>/etc/fw_env.config</code> has to be updated in lockstep with
+    the image bump.
+  </li>
+  <li>
+    <strong>The control-plane invariant moves off rb5009.</strong> One
+    of the points of the always-netboot model is &ldquo;rb5009 is the
+    only thing that decides what mode a board boots.&rdquo; If
+    <code>localcmd</code> has to be runtime-poked per-board, the
+    control plane fragments — and a board whose env got corrupted (or
+    whose SD card was replaced) will silently fall through on the next
+    <code>LOCALBOOT 0</code> with no visible diff in rb5009&rsquo;s state.
+  </li>
+  <li>
+    <strong>It requires SSH access to a board already running.</strong>
+    For a board that&rsquo;s not yet bootstrapped (or that&rsquo;s in
+    LOCALBOOT and the SD&rsquo;s root won&rsquo;t mount), there&rsquo;s
+    no shell to write the env from. Bootstrapping circularity.
+  </li>
+</ul>
+
+<p>
+  If you do want a runtime path anyway — say, for ad-hoc experiments
+  before committing to the compile-time patch — the playbook sketch
+  above is the right shape, and the file layout mirrors
+  <code>playbooks/persist_uboot_env.yml</code>&rsquo;s rock-5b
+  equivalent. Treat it as a development convenience, not a
+  production mechanism.
+</p>
+
+<h4 id="q1-localcmd-viability">5.1.7 Viability summary</h4>
+
+<table>
+  <thead>
+    <tr><th>Board class</th><th>LOCALBOOT viable?</th><th>What it takes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SPI-env (e.g. rock-5b)</td>
+      <td><span class="pill">YES</span> with low effort.</td>
+      <td>One new variable in <code>persist_uboot_env.yml</code>. Persists across SD swaps. Survives reflash of the SD card. Best-case for this design.</td>
+    </tr>
+    <tr>
+      <td>SD-env (e.g. orange-pi-5-pro)</td>
+      <td><span class="pill">YES</span> &mdash; but compile-time only.</td>
+      <td>Add a one-line patch to <code>build_userpatches</code> that seeds <code>localcmd</code> via <code>CONFIG_EXTRA_ENV_SETTINGS</code>. Runtime <code>fw_setenv</code> is technically possible but operationally fragile (lost on SD reflash, requires per-board <code>/etc/fw_env.config</code>) and not recommended.</td>
+    </tr>
+    <tr>
+      <td>Any board, no patch effort spent</td>
+      <td><span class="pill">DEGENERATE</span></td>
+      <td><code>LOCALBOOT 0</code> still does <em>something</em> useful: <code>localcmd</code> is unset, U-Boot returns <code>-ENOENT</code> from <code>label_localboot</code>, the bootflow framework moves to <code>mmc1</code>, and the SD&rsquo;s <code>boot.scr</code> runs. So &ldquo;LOCALBOOT-with-empty-localcmd&rdquo; is the same operational outcome as today&rsquo;s &ldquo;remove the pxelinux.cfg.&rdquo; The cost is a less explicit failure mode (you have to read U-Boot&rsquo;s bootflow log to know what happened) and a few hundred milliseconds of error-path overhead.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  The honest take: <strong>Interpretation A is viable across the fleet,
+  but only on rock-5b is it cheap. For orange-pi-5-pro (and any future
+  no-SPI board), Interpretation A requires the operator to commit to a
+  compile-time patch — which is the same machinery the
+  <code>armbian_build</code> role already uses for the
+  PXE-first <code>BOOT_TARGETS</code> reorder, so the cost is small but
+  non-zero.</strong> If that&rsquo;s not appetising, the degenerate path
+  (rely on the <code>-ENOENT</code>&rarr;<code>mmc1</code> fall-through)
+  works as a no-effort backstop &mdash; treat it as &ldquo;LOCALBOOT
+  semantically marks the LABEL as &lsquo;please fall through&rsquo;&rdquo;
+  rather than &ldquo;LOCALBOOT actively boots local.&rdquo;
+</p>
+
+<h3>5.2 Interpretation B — TFTP the kernel but root from a local device</h3>
+
+<p>
+  This is the &ldquo;locally-rooted, always-netbooted&rdquo; pattern
+  sketched in
+  <a href="pxelinux-cfg-explainer.html#local-rootfs">pxelinux-cfg-explainer §9</a>.
+  The kernel + initrd + dtb come from rb5009 (1.5 KB .cfg + ~12 MB
+  vmlinuz + ~40 MB initrd + ~50 KB dtb in total over TFTP), and the
+  rootfs is on the board&rsquo;s NVMe / eMMC / SD.
+</p>
+
+<p>
+  Worth being explicit: this is the same kernel image you&rsquo;d boot
+  if it came off the SD card&rsquo;s <code>/boot/vmlinuz</code> — same
+  bytes, same kernel modules, same config. The only difference is
+  <em>where the file came from on the way into RAM</em>. Once the kernel
+  is decompressed and running, there is no distinction between &ldquo;a
+  TFTP-fetched kernel&rdquo; and &ldquo;a kernel loaded by U-Boot from
+  mmc&rdquo; — they&rsquo;re identical kernel processes.
+</p>
+
+<div class="snippet">
+  <header><strong>nvmeroot LABEL — kernel via TFTP, rootfs on NVMe</strong></header>
+  <pre><code>LABEL nvmeroot
+  MENU LABEL Armbian on NVMe (orange-pi-5-pro-01)
+  KERNEL armbian/orange-pi-5-pro/vmlinuz
+  INITRD armbian/orange-pi-5-pro/initrd.img
+  FDT    armbian/orange-pi-5-pro/board.dtb
+  APPEND root=PARTUUID=8a7c1234-01 rootfstype=ext4 rootwait rw console=ttyS2,1500000n8</code></pre>
+  <div class="notes">
+    <ul>
+      <li>No <code>ip=dhcp</code>, no <code>nfsroot=</code>, no <code>root=/dev/nfs</code>. The kernel doesn&rsquo;t need a network address to mount its own NVMe.</li>
+      <li>Identical KERNEL/INITRD/FDT paths to the <code>nfsroot</code> label — they pull the same Armbian build bytes. Only the APPEND differs.</li>
+      <li>This is the answer to &ldquo;how do I take advantage of central kernel management without locking the rootfs to NFS&rdquo;: split the channels. Kernel = network, rootfs = local. MAAS and Tinkerbell&rsquo;s production-fleet patterns are this exact split (see <a href="pxelinux-cfg-explainer.html#local-rootfs">§9.2 of the cfg explainer</a>).</li>
+    </ul>
+  </div>
+</div>
+
+<h3>5.3 Which interpretation do you want?</h3>
+
+<table>
+  <thead>
+    <tr><th>If your goal is …</th><th>Pick</th><th>Why</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A way to say &ldquo;ignore my netboot config for now, board does its own thing&rdquo; — same outcome as today&rsquo;s &ldquo;remove pxelinux.cfg&rdquo; — but without removing per-board state from rb5009.</td>
+      <td>A (LOCALBOOT)</td>
+      <td>On rock-5b: cheap &mdash; <code>localcmd=bootflow scan mmc1</code> persisted via existing <code>persist_uboot_env.yml</code> machinery. On orange-pi-5-pro: needs a compile-time <code>CFG_EXTRA_ENV_SETTINGS</code> patch in <code>build_userpatches</code> (full walkthrough in §5.1.5). Or accept the degenerate path &mdash; an empty <code>localcmd</code> still falls through to <code>mmc1</code> via U-Boot&rsquo;s bootflow framework (§5.1.7).</td>
+    </tr>
+    <tr>
+      <td>Central kernel rollouts plus persistent local rootfs (the typical bare-metal-fleet split).</td>
+      <td>B (local-rootfs APPEND)</td>
+      <td>Updates to <code>vmlinuz</code> via <code>stage_netboot_assets.yml</code> propagate to the fleet on next PoE cycle. Rootfs (apps, data, configs) survives.</td>
+    </tr>
+    <tr>
+      <td>A backup kernel an operator can ask for from the serial console when the current one hangs.</td>
+      <td>B + versioned filenames (the <code>lkg</code> LABEL — §8)</td>
+      <td>Same network-served kernel mechanism, just pinned to a prior version. The LOCALBOOT route doesn&rsquo;t help here because it can&rsquo;t target a specific older kernel — whatever <code>/boot/vmlinuz</code> on the SD card points at is what runs.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="q1-installer-note">5.4 Aside — Armbian has no &ldquo;installer cmdline&rdquo;</h3>
+
+<p>
+  A natural-looking shape for the <code>installer</code> LABEL would be
+  to put the install intent on the kernel cmdline — e.g.
+  <code>armbian.install_target=/dev/nvme0n1</code>. <strong>This is not a
+  real Armbian convention.</strong> The actual installer is
+  <code>/usr/bin/armbian-install</code>, a Bash + <code>whiptail</code>
+  script that runs interactively from a booted system; it reads
+  <code>/proc/cmdline</code> only to display the current
+  <code>root=</code> and <code>rootfstype=</code>, not to be steered.
+  Grepping <code>armbian/build</code> for <code>armbian.install_target</code>,
+  <code>armbian_install</code>, or any equivalent namespaced cmdline
+  arg returns zero hits.
+</p>
+
+<p>
+  So &ldquo;installer&rdquo; in this design isn&rsquo;t a LABEL that
+  carries the install plan in its <code>APPEND</code> — it&rsquo;s
+  just a separate NFS rootfs the board boots into so an Ansible play
+  (the <code>provision_nvme_rootfs</code> role in §6.3) can do the
+  actual partitioning + copy + PARTUUID capture over SSH. The
+  &ldquo;one-shot&rdquo; flavour comes from the playbook flipping
+  <code>boot_mode</code> away from <code>installer</code> on success,
+  not from anything the kernel does. This keeps the design honest with
+  upstream Armbian and locates the install logic in code we control
+  rather than fictional cmdline conventions.
+</p>
+
+<h2 id="q2">6. Q2 — Workflow: NFS → prepare NVMe → reboot rooted on NVMe</h2>
+
+<p>
+  The end-to-end story for taking a board from &ldquo;just flashed,
+  PXE-boots NFS root&rdquo; to &ldquo;PXE-boots a TFTP kernel, roots on
+  its own NVMe.&rdquo; This is the canonical multi-step orchestration
+  the always-netboot model unlocks — under v1, there&rsquo;s no
+  intermediate state for an Ansible play to run against.
+</p>
+
+<h3>6.1 State machine</h3>
+
+<figure>
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="NFS → NVMe state transitions">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c5b8a"/>
+    </marker>
+    <style>
+      .b  { fill:#fff; stroke:#1c5b8a; stroke-width:1.2; }
+      .b2 { fill:#fff8e6; stroke:#b14b00; stroke-width:1.2; }
+      .b3 { fill:#ecf6e6; stroke:#6ab04c; stroke-width:1.2; }
+      .t  { font: 13px ui-monospace, monospace; fill:#1a1a1a; }
+      .tt { font: 12px ui-monospace, monospace; fill:#5a5a5a; }
+      .ln { stroke:#1c5b8a; stroke-width:1.2; fill:none; }
+    </style>
+  </defs>
+
+  <rect class="b" x="20" y="20" width="320" height="55" rx="4"/>
+  <text class="t" x="35" y="42">START</text>
+  <text class="tt" x="35" y="62">boot_mode=nfs (or unset)</text>
+
+  <path class="ln" d="M180 75 L180 100" marker-end="url(#arrB)"/>
+
+  <rect class="b" x="20" y="100" width="320" height="55" rx="4"/>
+  <text class="t" x="35" y="122">1. cold-boot board, ssh in via NFS</text>
+  <text class="tt" x="35" y="142">board_boot_state[boot_mode=nfs] does this</text>
+
+  <path class="ln" d="M180 155 L180 180" marker-end="url(#arrB)"/>
+
+  <rect class="b2" x="20" y="180" width="320" height="55" rx="4"/>
+  <text class="t" x="35" y="202">2. partition + format + populate NVMe</text>
+  <text class="tt" x="35" y="222">runs on the board, writes /dev/nvme0n1</text>
+
+  <rect class="b3" x="400" y="180" width="340" height="55" rx="4"/>
+  <text class="t" x="415" y="202">capture: rootfs_partuuid</text>
+  <text class="tt" x="415" y="222">written back into inventory (or vault)</text>
+
+  <path class="ln" d="M180 235 L180 260" marker-end="url(#arrB)"/>
+
+  <rect class="b" x="20" y="260" width="320" height="55" rx="4"/>
+  <text class="t" x="35" y="282">3. flip boot_mode → nvme on rb5009</text>
+  <text class="tt" x="35" y="302">re-render pxelinux.cfg + net_put + /ip tftp re-add</text>
+
+  <path class="ln" d="M180 315 L180 340" marker-end="url(#arrB)"/>
+
+  <rect class="b3" x="20" y="340" width="320" height="15" rx="4"/>
+  <text class="t" x="35" y="354">4. PoE-cycle and verify root is NVMe</text>
+</svg>
+<figcaption>Each transition is an idempotent Ansible play — re-running step 2 on a board that&rsquo;s already on NVMe is a no-op because the partitioner detects an existing rootfs.</figcaption>
+</figure>
+
+<h3>6.2 Concrete playbook shape</h3>
+
+<p>
+  Hypothetical playbook a user would run:
+</p>
+
+<div class="snippet">
+  <header><strong>playbooks/promote_to_nvme.yml</strong> <span>hypothetical</span></header>
+  <pre><code>---
+# Take a board from NFS root to NVMe root.
+# Idempotent — a board already on NVMe lands at step 4 with no changes.
+#
+# Usage:
+#   ansible-playbook playbooks/promote_to_nvme.yml \
+#     --limit orange-pi-5-pro-01
+
+# Step 1 — guarantee the board is up via NFS root so the rest of the
+# play has somewhere to SSH to. Idempotent: a board already on NFS
+# does not get re-cycled.
+- name: Ensure board is on NFS root
+  hosts: boards
+  roles:
+    - role: board_boot_state
+      vars:
+        boot_mode: nfs
+        cycle_board: "{{ ansible_root_mount_device is not match('nfs') }}"
+
+# Step 2 — partition and populate NVMe from inside the running NFS root.
+# Captures the resulting PARTUUID as a host fact.
+- name: Provision NVMe rootfs
+  hosts: boards
+  tasks:
+    - name: Partition and format /dev/nvme0n1
+      include_role:
+        name: provision_nvme_rootfs  # new role; see below
+
+    - name: Persist rootfs_partuuid back into inventory
+      include_role:
+        name: persist_host_fact
+      vars:
+        fact_name: rootfs_partuuid
+        fact_value: "{{ _new_nvme_partuuid }}"
+
+# Step 3 — flip the DEFAULT on rb5009 to nvmeroot. PoE-cycle. Verify.
+- name: Switch board to NVMe boot mode
+  hosts: boards
+  roles:
+    - role: board_boot_state
+      vars:
+        boot_mode: nvme        # new contract; replaces boot_state: pxe|disk
+        cycle_board: true
+        verify_state: true</code></pre>
+  <div class="notes">
+    <ul>
+      <li>Three plays, one playbook. Each play is a discrete state transition; if step 2 fails, the board is still on NFS root and the operator can fix and re-run.</li>
+      <li>Step 1&rsquo;s <code>cycle_board</code> guard is the idempotency hook — re-running the playbook on a board that&rsquo;s already on NVMe doesn&rsquo;t accidentally PoE-cycle it back to NFS.</li>
+      <li>Step 3 calls the same <code>board_boot_state</code> role today&rsquo;s <code>enable_netboot.yml</code> uses — same retry stack, same verify play. The only thing that&rsquo;s new is what &ldquo;verify&rdquo; means (see §6.4).</li>
+    </ul>
+  </div>
+</div>
+
+<h3>6.3 The new role: <code>provision_nvme_rootfs</code></h3>
+
+<p>
+  This is the only piece that doesn&rsquo;t exist today. What it would do:
+</p>
+
+<ol>
+  <li>Run <code>parted /dev/nvme0n1</code> to create a GPT + a single ext4 partition. (Or a small esp + ext4 if the operator wants UEFI-style headroom; orthogonal.)</li>
+  <li><code>mkfs.ext4</code> on the new partition.</li>
+  <li>Mount the partition at a staging directory.</li>
+  <li>Use <code>rsync -aHAX</code> from <code>/</code> (the NFS rootfs) to the staging directory. Skip <code>/dev /sys /proc /run /tmp</code> and the staging dir itself.</li>
+  <li>Patch <code>/etc/fstab</code> on the staging copy to reference the new PARTUUID instead of NFS.</li>
+  <li>Unmount. Capture the new partition&rsquo;s PARTUUID from <code>blkid</code>.</li>
+  <li>Register the PARTUUID as a host fact for the next play.</li>
+</ol>
+
+<p>
+  This is a single, focused role. It has one job, takes the board as
+  input, produces a PARTUUID as output. Same style as
+  <code>bootstrap_armbian</code>: agnostic to <em>why</em> the caller
+  wants NVMe set up, just enforces the state.
+</p>
+
+<h3>6.4 Verify needs to grow up</h3>
+
+<p>
+  Today&rsquo;s <code>verify_state.yml</code> asserts <code>fstype in
+  ['nfs', 'nfs4']</code> for <code>boot_state=pxe</code> and the inverse
+  for <code>boot_state=disk</code>. Under always-netboot, the verify
+  step needs a per-mode expectation:
+</p>
+
+<div class="snippet">
+  <header><strong>roles/board_boot_state/tasks/verify_state.yml</strong> <span>hypothetical, mode-aware</span></header>
+  <pre><code>- name: Capture root mount
+  set_fact:
+    _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='fstype') | first }}"
+    _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='device') | first }}"
+
+- name: Per-mode rootfs expectations
+  set_fact:
+    _expected: "{{ boot_mode_expectations[boot_mode] }}"
+
+# boot_mode_expectations lives in vars/boot_mode_expectations.yml:
+#   nfs:        { fstype_in: [nfs, nfs4],                       device_match: '.*' }
+#   nvme:       { fstype_in: [ext4, btrfs, xfs],                device_match: '^/dev/nvme[0-9]n[0-9]p[0-9]' }
+#   emmc:       { fstype_in: [ext4, btrfs, xfs],                device_match: '^/dev/mmcblk[0-9]p[0-9]' }
+#   sd:         { fstype_in: [ext4, btrfs, xfs],                device_match: '^/dev/mmcblk[0-9]p[0-9]' }
+#   recovery:   { fstype_in: [tmpfs, rootfs, ramfs],            device_match: '.*' }
+#   installer:  { fstype_in: [nfs, nfs4],                       device_match: '.*' }
+#   lkg:        # same as the host's pre-flip mode; assert
+#              # ansible_kernel matches lkg_kernel_version
+#   localboot:  # delegate to whatever the SD bootflow lands on
+#              # — assert ansible_kernel exists and uname -m is the expected arch
+
+- name: Assert rootfs matches mode
+  assert:
+    that:
+      - _root_fstype in _expected.fstype_in
+      - _root_device is match(_expected.device_match)</code></pre>
+  <div class="notes">
+    <ul>
+      <li>The current binary assertion becomes a small table of per-mode constraints. Adding a new mode is a new row, not a new conditional branch.</li>
+      <li>Distinguishing <code>sd</code> from <code>emmc</code> at verify time can be tricky — both land on <code>mmcblk*</code> and the index ordering is board-dependent. One option is to verify against <code>PARTUUID</code> directly: <code>blkid /dev/$(findmnt -no SOURCE /) -s PARTUUID</code> must equal the inventory&rsquo;s declared PARTUUID for that mode.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="q3">7. Q3 — Useful menu entries and how to manage them</h2>
+
+<p>
+  Four design choices behind the catalog in §4:
+</p>
+
+<h3>7.1 Render everything the host could plausibly need; gate by DEFAULT</h3>
+
+<p>
+  Rather than re-render the file every time the operator wants to switch
+  modes, render every LABEL the host has the prerequisites for, and let
+  <code>DEFAULT</code> pick. The cost is small (kilobytes on rb5009&rsquo;s
+  flash, milliseconds parsing); the benefit is large (an operator on the
+  serial console during boot can pick a different LABEL without any
+  control-node interaction, and an automation step that wants to bounce
+  the board between two modes only has to re-render one line).
+</p>
+
+<h3>7.2 One inventory variable selects DEFAULT; the rest fall out of host state</h3>
+
+<p>
+  Per-host inventory carries a single <code>boot_mode</code> (free-form
+  string matching one of the role&rsquo;s known modes), plus the data
+  each mode needs as separate variables:
+</p>
+
+<div class="kvbox">
+  <dt><code>boot_mode</code></dt><dd>Names the DEFAULT label. Required.</dd>
+  <dt><code>rootfs_partuuid</code></dt><dd>Used by APPEND for the <code>nvme</code> / <code>emmc</code> modes (whichever block device the operator considers the primary).</dd>
+  <dt><code>sd_partuuid</code></dt><dd>Used by APPEND for the <code>sd</code> mode. Kept separate so a board can have NVMe primary and SD-as-recovery.</dd>
+  <dt><code>lkg_kernel_version</code></dt><dd>Names the versioned kernel filename the <code>lkg</code> LABEL TFTPs from rb5009. Optional — when unset the LABEL is suppressed.</dd>
+  <dt><code>fdt_overlays</code></dt><dd>(Bonus) List of per-host DT overlays to apply. Becomes <code>FDTOVERLAYS</code> in each label that mounts a kernel. See <a href="pxelinux-cfg-explainer.html">pxelinux-cfg-explainer §9.6</a>.</dd>
+</div>
+
+<p>
+  Variables that aren&rsquo;t set make their LABEL un-renderable. A board
+  with no <code>rootfs_partuuid</code> gets a file without
+  <code>LABEL nvmeroot</code> in it — so a typo in <code>boot_mode</code>
+  on that host (<code>boot_mode: nvme</code>) renders <code>DEFAULT
+  nvmeroot</code> pointing at a missing label, U-Boot prints
+  &ldquo;Couldn&rsquo;t find label,&rdquo; and falls through to SD via
+  <code>bootflow scan</code>. Fail-safe.
+</p>
+
+<h3>7.3 Adding a new mode</h3>
+
+<p>
+  Concrete checklist for adding (hypothetical example) a
+  <code>usbroot</code> mode that boots a TFTP kernel and roots on a USB
+  stick:
+</p>
+
+<ol>
+  <li>Append a new <code>{% if hostvars[target_board_host].usb_partuuid is defined %}LABEL usbroot ...{% endif %}</code> block in <code>pxelinux_cfg.j2</code>.</li>
+  <li>Add a row to <code>boot_mode_expectations</code> in <code>vars/boot_mode_expectations.yml</code> (e.g. <code>usb: { fstype_in: [ext4], device_match: '^/dev/sd[a-z][0-9]' }</code>).</li>
+  <li>Document the new variable (<code>usb_partuuid</code>) in <code>inventory/group_vars/boards.yml</code> &rsquo;s comment header.</li>
+  <li>That&rsquo;s it.</li>
+</ol>
+
+<p>
+  The role&rsquo;s public contract (<code>boot_mode: &lt;string&gt;</code>)
+  doesn&rsquo;t change. The state machine widens; nothing else moves.
+</p>
+
+<h3>7.4 Removing a mode</h3>
+
+<p>
+  Deleting a LABEL block from the template removes it from every
+  newly-rendered file. Hosts with that mode as their <code>boot_mode</code>
+  will render a <code>DEFAULT</code> pointing at a missing label — they
+  fall through to SD on next cycle. An operator-friendly version of the
+  removal would <code>fail</code> in the role at render time if any
+  inventory host still references the mode, so the operator catches it
+  before a PoE cycle.
+</p>
+
+<h2 id="q4">8. Q4 — Extending the model for a last-known-good kernel</h2>
+
+<p>
+  This section deliberately doesn&rsquo;t propose implementation — it
+  describes the shape of the extension and the trade-offs an operator
+  would need to weigh in to commit to it.
+</p>
+
+<h3>8.1 Kernel-staging today</h3>
+
+<p>
+  <code>stage_netboot_assets.yml</code> stages three files per model on
+  rb5009:
+</p>
+
+<div class="snippet">
+  <header><strong>flash:/sbc/armbian/&lt;model&gt;/</strong> <span>today</span></header>
+  <pre><code>vmlinuz       # latest only, force-removed and replaced on each stage
+initrd.img    # same — paired bytes with vmlinuz
+board.dtb     # rarely changes; force-removed and replaced on each stage</code></pre>
+</div>
+
+<p>
+  Pxelinux.cfg references these via the versionless filename
+  (<code>armbian/&lt;model&gt;/vmlinuz</code>). Updating the kernel is
+  one operation: <code>stage_netboot_assets.yml</code> overwrites the
+  three files; every board with that model&rsquo;s pxelinux.cfg picks
+  up the new bytes on next PoE cycle. There&rsquo;s no &ldquo;previous
+  kernel&rdquo; preserved anywhere.
+</p>
+
+<h3>8.2 Versioned-staging shape</h3>
+
+<p>
+  An &ldquo;LKG kernel&rdquo; LABEL needs the previous kernel to still
+  exist as fetchable bytes on rb5009. The minimal shape:
+</p>
+
+<div class="snippet">
+  <header><strong>flash:/sbc/armbian/&lt;model&gt;/</strong> <span>hypothetical, versioned</span></header>
+  <pre><code>vmlinuz                  # symlink-equivalent: re-uploaded on each stage
+initrd.img               # ditto
+board.dtb
+
+vmlinuz-6.10.0           # current kernel, also kept under its versioned name
+initrd.img-6.10.0
+vmlinuz-6.6.0            # previous kernel, kept around for lkg
+initrd.img-6.6.0
+
+# /lib/modules/&lt;version&gt;/ trees live on the NFS server's
+# per-host rootfs clones, plus a parallel pinned copy under
+# nfs_rootfs_path/_kernel-modules/&lt;version&gt;/ that the lkg
+# rootfs can chroot-style mount or that the NFS-rooted board
+# can keep alongside its current modules tree.</code></pre>
+  <div class="notes">
+    <ul>
+      <li>RouterOS flash is small (~16 MB free after the v1 staging). Two kernels + two initrds = ~80–100 MB. The flash budget is the dominant constraint here; it&rsquo;d need verification on your specific rb5009 before committing.</li>
+      <li>An alternative for tight flash budgets: keep only one alternate kernel under <code>flash:/sbc/armbian/&lt;model&gt;/_lkg/</code>, pruned on every promotion.</li>
+    </ul>
+  </div>
+</div>
+
+<p>
+  The <code>lkg</code> LABEL block then references the versioned
+  filenames:
+</p>
+
+<div class="snippet">
+  <header><strong>The lkg LABEL</strong> <span>hypothetical</span></header>
+  <pre><code>LABEL lkg
+  MENU LABEL Last-known-good kernel (nvme rootfs, kernel {{ lkg_kernel_version }})
+  KERNEL armbian/{{ board_model }}/vmlinuz-{{ lkg_kernel_version }}
+  INITRD armbian/{{ board_model }}/initrd.img-{{ lkg_kernel_version }}
+  FDT    armbian/{{ board_model }}/board.dtb
+  APPEND root=PARTUUID={{ hostvars[target_board_host].rootfs_partuuid }} rootfstype=ext4 rootwait rw console={{ board_configs[board_model].console }}</code></pre>
+  <div class="notes">
+    <ul>
+      <li><code>lkg_kernel_version</code> is per-host or per-model — typically per-model (every board of a model shares the LKG pin), but per-host gives finer-grained control if one board is on a bisect.</li>
+      <li>The same APPEND as <code>nvmeroot</code> — same rootfs, just an older kernel.</li>
+      <li>The DTB is left at the versionless path because Armbian DTBs change far less often than kernels. If you need a versioned DTB for a regression bisect, switch this LABEL&rsquo;s FDT line to <code>board.dtb-{{ lkg_kernel_version }}</code> and stage that file alongside.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>8.3 Lifecycle: who decides what &ldquo;last-known-good&rdquo; is</h3>
+
+<p>
+  The LKG promotion lifecycle is the part with real design content. Two
+  models suit different operational styles:
+</p>
+
+<div class="kvbox">
+  <dt>Manual promotion</dt>
+  <dd>
+    Operator runs <code>playbooks/stage_netboot_assets.yml</code> with
+    <code>-e promote_current_to_lkg=true</code> before staging a new
+    kernel. The stage step renames the existing
+    <code>vmlinuz-&lt;current&gt;</code> +
+    <code>initrd.img-&lt;current&gt;</code> to be the new LKG, drops the
+    previous LKG, and updates the inventory&rsquo;s
+    <code>lkg_kernel_version</code>. Predictable; no surprises.
+  </dd>
+  <dt>Auto-promotion on health check</dt>
+  <dd>
+    A cluster-side observer (cron, watchdog, K8s readiness probe, etc.)
+    decides &ldquo;all boards have been on the current kernel for at
+    least N hours and are healthy&rdquo; and writes the promotion via
+    Ansible inventory mutation. More moving parts; closer to the
+    Sidero/Tinkerbell production pattern.
+  </dd>
+</div>
+
+<h3>8.4 What in the collection would need to extend</h3>
+
+<table>
+  <thead>
+    <tr><th>Piece</th><th>Today</th><th>Under the LKG extension</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>roles/netboot_assets/tasks/stage_rb5009.yml</code></td>
+      <td>Force-removes <code>vmlinuz</code>/<code>initrd.img</code> on rb5009, then <code>net_put</code>s the latest.</td>
+      <td>Same, plus: keep one copy under the versioned filename (<code>vmlinuz-&lt;version&gt;</code>). Optional: promote the previous versioned copy to LKG slot before staging the new one.</td>
+    </tr>
+    <tr>
+      <td><code>roles/netboot_assets/tasks/preflight.yml</code></td>
+      <td>HEAD-checks every board&rsquo;s <code>armbian_image_urls</code> entry.</td>
+      <td>Add: assert the LKG versioned files exist on rb5009 for every host whose <code>boot_mode</code> is <code>lkg</code> or whose pxelinux.cfg renders an <code>lkg</code> LABEL. Caught at stage time rather than at boot time.</td>
+    </tr>
+    <tr>
+      <td><code>roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2</code></td>
+      <td>Single LABEL.</td>
+      <td>Conditional <code>lkg</code> LABEL block, gated on <code>lkg_kernel_version</code> being defined.</td>
+    </tr>
+    <tr>
+      <td><code>roles/board_boot_state</code></td>
+      <td>Verify checks fstype against pxe/disk.</td>
+      <td>When <code>boot_mode=lkg</code>, also assert <code>ansible_kernel</code> matches <code>lkg_kernel_version</code> after the cycle. Otherwise it&rsquo;s easy for the LKG LABEL to render and reference a missing kernel without anyone noticing.</td>
+    </tr>
+    <tr>
+      <td>NFS rootfs modules</td>
+      <td>One <code>/lib/modules/&lt;version&gt;</code> tree per per-host clone, matching the current kernel.</td>
+      <td>Either pin the same NFS clone&rsquo;s <code>/lib/modules</code> to whichever kernel is being booted (multiple module trees side-by-side), or skip NFS root entirely under LKG (LKG only meaningful for local-rooted modes — depending on what got the cluster into trouble in the first place).</td>
+    </tr>
+    <tr>
+      <td>Inventory schema</td>
+      <td>No LKG fields.</td>
+      <td>Per-model <code>lkg_kernel_version</code> in <code>vars/boards.yml</code>; optionally a per-host override; new playbook arg <code>promote_current_to_lkg</code>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>8.5 Why this is an extension, not a rewrite</h3>
+
+<p>
+  Notice: every change is additive. None of the existing roles change
+  behaviour for hosts that don&rsquo;t opt into LKG. The template gets a
+  new conditional block; the stage role keeps a few extra files; verify
+  gets a new branch. <code>board_boot_state</code>&rsquo;s public
+  contract grows by one optional input. A board with no
+  <code>lkg_kernel_version</code> doesn&rsquo;t render the LABEL, the
+  template falls through unchanged, the verify play takes the existing
+  branches. The extension lands cleanly because the always-netboot
+  model already gave us the structural piece — multi-LABEL files driven
+  by inventory — without baking LKG into the core.
+</p>
+
+<h2 id="changes">9. What changes in the collection (file map)</h2>
+
+<table>
+  <thead>
+    <tr><th>File / Role</th><th>v1 today</th><th>Under always-netboot</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2</code></td>
+      <td>One LABEL + DEFAULT pointing at it. 50 lines.</td>
+      <td>N conditional LABEL blocks + a Jinja-interpolated DEFAULT. ~120 lines.</td>
+    </tr>
+    <tr>
+      <td><code>roles/routeros_sbc_tftp/tasks/write_pxelinux_cfg.yml</code></td>
+      <td>Renders, net_puts, registers /ip tftp.</td>
+      <td>Unchanged in shape — just renders a different template.</td>
+    </tr>
+    <tr>
+      <td><code>roles/routeros_sbc_tftp/tasks/remove_pxelinux_cfg.yml</code></td>
+      <td>Removes file + row on disable.</td>
+      <td>Used only for full host decommission. The day-to-day &ldquo;flip to local boot&rdquo; case is now <code>boot_mode=localboot</code> — same file, different DEFAULT.</td>
+    </tr>
+    <tr>
+      <td><code>roles/board_boot_state/meta/argument_specs.yml</code></td>
+      <td><code>boot_state: pxe \| disk</code>.</td>
+      <td><code>boot_mode: nfs \| nvme \| emmc \| sd \| recovery \| installer \| lkg \| localboot</code>.</td>
+    </tr>
+    <tr>
+      <td><code>roles/board_boot_state/tasks/configure_pxe.yml</code> + <code>configure_disk.yml</code></td>
+      <td>Two configure files. <code>pxe</code> writes; <code>disk</code> removes.</td>
+      <td>Collapse to one <code>configure.yml</code> that always writes (the file is always present). The pxe/disk distinction stops carrying meaning.</td>
+    </tr>
+    <tr>
+      <td><code>roles/board_boot_state/tasks/verify_state.yml</code></td>
+      <td>Branches on pxe/disk; asserts NFS or block.</td>
+      <td>Branches via a per-mode expectation table (see §6.4).</td>
+    </tr>
+    <tr>
+      <td><code>playbooks/enable_netboot.yml</code> + <code>disable_netboot.yml</code></td>
+      <td>Thin wrappers around <code>board_boot_state</code> with <code>boot_state=pxe</code> or <code>disk</code>.</td>
+      <td>Either deprecate in favour of a single <code>set_boot_mode.yml</code> (<code>-e boot_mode=…</code>), or keep them as backwards-compatible aliases that pass <code>boot_mode=nfs</code> and <code>boot_mode=localboot</code> respectively.</td>
+    </tr>
+    <tr>
+      <td><code>playbooks/promote_to_nvme.yml</code></td>
+      <td>(doesn&rsquo;t exist)</td>
+      <td>New. See §6.</td>
+    </tr>
+    <tr>
+      <td><code>roles/provision_nvme_rootfs</code></td>
+      <td>(doesn&rsquo;t exist)</td>
+      <td>New. Partition + format + rsync from NFS root. §6.3.</td>
+    </tr>
+    <tr>
+      <td><code>vars/boot_mode_expectations.yml</code></td>
+      <td>(doesn&rsquo;t exist)</td>
+      <td>New. One row per mode, used by verify_state. §6.4.</td>
+    </tr>
+    <tr>
+      <td><code>inventory/hosts.yml</code></td>
+      <td>Per-host <code>board_mac</code>, <code>board_model</code>, <code>poe_*</code>.</td>
+      <td>Add <code>boot_mode</code> (required), <code>rootfs_partuuid</code> (mode-dependent), <code>sd_partuuid</code>, <code>lkg_kernel_version</code> (all optional).</td>
+    </tr>
+    <tr>
+      <td><code>docs/board_boot_state-role.md</code></td>
+      <td>Today&rsquo;s contract.</td>
+      <td>Rewrite around <code>boot_mode</code> + per-mode prerequisite tables.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="gotchas">10. Gotchas &amp; migration notes</h2>
+
+<div class="gotcha">
+  <strong>10.1 Don&rsquo;t change <code>req-filename</code> regex shape.</strong>
+  The <code>/ip tftp</code> row still uses <code>req-filename=".*01-&lt;MAC&gt;"</code>
+  — see Gotcha §10.5 of
+  <a href="pxelinux-cfg-explainer.html#g-95">pxelinux-cfg-explainer</a>.
+  The file the row points at has more content under the always-netboot
+  model, but the on-the-wire request from U-Boot is unchanged.
+</div>
+
+<div class="gotcha">
+  <strong>10.2 APPEND must still be exactly one line per LABEL.</strong>
+  Every LABEL block carries its own APPEND. The single-line constraint
+  is per-APPEND — see
+  <a href="pxelinux-cfg-explainer.html#g-91">pxelinux-cfg §10.1</a>.
+  If you find yourself wanting two lines, you almost certainly want a
+  separate LABEL.
+</div>
+
+<div class="gotcha">
+  <strong>10.3 &ldquo;Disable netboot&rdquo; isn&rsquo;t deletion any more.</strong>
+  Under v1, the absence of the pxelinux.cfg file <em>is</em> the
+  disabled state. Under always-netboot, an absent file would be a
+  decommissioned host. Day-to-day disable becomes <code>boot_mode=localboot</code>.
+  The collection should keep <code>disable_netboot.yml</code> as a
+  compatibility alias for at least one minor version; otherwise an
+  operator&rsquo;s muscle memory tears down their host&rsquo;s pxelinux.cfg
+  during the migration window.
+</div>
+
+<div class="gotcha">
+  <strong>10.4 PARTUUID stability matters more than today.</strong>
+  Today&rsquo;s NFS-root flow doesn&rsquo;t reference PARTUUID anywhere.
+  Under always-netboot, the <code>nvme</code>/<code>emmc</code>/<code>sd</code>
+  modes embed PARTUUID into APPEND, which means a board that gets its
+  local rootfs reformatted needs its inventory PARTUUID re-captured
+  before the next render. Prefer PARTUUID (lives in the partition table,
+  survives <code>mkfs</code>) over UUID (in the filesystem superblock,
+  changes on <code>mkfs</code>). The <code>provision_nvme_rootfs</code>
+  role&rsquo;s last step would be to set this fact for the operator.
+</div>
+
+<div class="gotcha">
+  <strong>10.5 <code>TIMEOUT</code> means every boot waits.</strong>
+  Setting <code>TIMEOUT 50</code> (5.0 s) means the board pauses for 5
+  seconds during PXE every time it powers on. That&rsquo;s acceptable for
+  a small fleet but multiplies across the per-board TFTP-fallback latency
+  (~5–10 s, <a href="pxelinux-cfg-explainer.html#filename">cfg §3</a>).
+  Setting <code>TIMEOUT 1</code> (0.1 s) is the right trade-off for most
+  fleets — fast enough that boot times aren&rsquo;t affected, slow enough
+  that an alert operator on the serial console can interrupt. Set
+  <code>TIMEOUT 0</code> if you never want operator override (saves the
+  fractional second; trades it for less in-band recovery surface).
+</div>
+
+<div class="gotcha">
+  <strong>10.6 Migration: don&rsquo;t flip mid-cycle.</strong> The cleanest
+  rollout path is: keep v1 in place; ship the new template gated on a
+  collection-level feature flag (<code>always_netboot_model: true</code>);
+  let operators try it on one board at a time. The same per-board
+  pxelinux.cfg file gets overwritten with the multi-LABEL shape on next
+  <code>enable_netboot.yml</code> run, but the file&rsquo;s wire-level
+  filename + path doesn&rsquo;t change, so U-Boot doesn&rsquo;t care.
+  Operators who don&rsquo;t flip the flag keep the v1 behaviour
+  unchanged. After a release of confident dual-mode operation, drop
+  the flag and the old template.
+</div>
+
+<div class="gotcha">
+  <strong>10.7 PSU-margin hardware failures don&rsquo;t change.</strong>
+  Same caveat as the locally-rooted variant in
+  <a href="pxelinux-cfg-explainer.html#local-rootfs">cfg §9.5</a>. The
+  five hardware failure signatures in <code>docs/architecture.md</code>
+  &ldquo;Known issues&rdquo; are PSU/SoC-level and orthogonal to where the
+  rootfs lives. Verbose APPEND (see today&rsquo;s <code>pxelinux_verbose</code>
+  flag) still works as a diagnostic — it just becomes a per-LABEL choice
+  rather than a global toggle.
+</div>
+
+<h2 id="refs">11. References</h2>
+
+<h3>11.1 In-repo</h3>
+<ul>
+  <li><a href="pxelinux-cfg-explainer.html">pxelinux-cfg-explainer.html</a> — today&rsquo;s mechanism; §9 sketches the &ldquo;always-netboot, locally-rooted&rdquo; variant this design generalises.</li>
+  <li><a href="uboot-armbian-build-explainer.html">uboot-armbian-build-explainer.html</a> — why the U-Boot binary has to be built PXE-first for any of this to work. §8 covers the rock-5b SPI env quirks that affect <code>localcmd</code> persistence.</li>
+  <li><a href="armbian-kernel-explainer.html">armbian-kernel-explainer.html</a> — how the kernel + modules + DTB get into a built Armbian image. Relevant to LKG staging (§8 here) because LKG needs paired kernel + modules trees.</li>
+  <li><a href="architecture.md">architecture.md</a> — the v1 invariant, the rb5009 SBC TFTP layout, the hardware failure signatures.</li>
+  <li><a href="board_boot_state-role.md">board_boot_state-role.md</a> — the composer role that wraps configure → cycle → verify.</li>
+  <li><a href="superpowers/specs/2026-05-07-v1-scope-narrowing-design.md">2026-05-07 v1-scope-narrowing-design.md</a> — the spec that locked v1 to the binary toggle. Useful context for why &ldquo;more modes&rdquo; was deferred.</li>
+  <li><a href="superpowers/specs/2026-05-08-rb5009-sbc-tftp-design.md">2026-05-08 rb5009-sbc-tftp-design.md</a> — the design that put per-board pxelinux.cfg on rb5009&rsquo;s flash. The always-netboot model rides on top of that infrastructure.</li>
+</ul>
+
+<h3>11.2 Upstream</h3>
+<ul>
+  <li><a href="https://docs.u-boot.org/en/latest/usage/pxe.html">U-Boot — PXE Boot and extlinux.conf</a> — authoritative directive list: <code>KERNEL</code>, <code>LINUX</code>, <code>INITRD</code>, <code>FDT</code>, <code>FDTDIR</code>, <code>FDTOVERLAYS</code>, <code>APPEND</code>, <code>LABEL</code>, <code>DEFAULT</code>, <code>FALLBACK</code>, <code>TIMEOUT</code>, <code>PROMPT</code>, <code>MENU INCLUDE</code>, <code>LOCALBOOT</code>. The <code>LOCALBOOT</code> notes in §5.1 are sourced from here.</li>
+  <li><a href="https://github.com/u-boot/u-boot/blob/master/boot/pxe_utils.c"><code>u-boot/boot/pxe_utils.c</code> — <code>label_localboot()</code></a> — the source of the &ldquo;no <code>localcmd</code> &rArr; <code>-ENOENT</code>&rdquo; behaviour cited in §5.1.1.</li>
+  <li><a href="https://github.com/armbian/build/blob/main/config/boards/orangepi5pro.csc"><code>armbian/build</code> — orangepi5pro.csc</a> and <a href="https://github.com/armbian/build/blob/main/config/boards/rock-5b.conf"><code>rock-5b.conf</code></a> — board-level U-Boot pinning and SPI-deployment flags. Source for the per-board env-storage table in §5.1.2.</li>
+  <li><a href="https://wiki.syslinux.org/wiki/index.php?title=Config">SYSLINUX Config syntax</a> — original format spec U-Boot&rsquo;s bootmeth borrows from. Useful for understanding directives U-Boot doesn&rsquo;t implement (full menu UI, SERIAL, FONT).</li>
+  <li><a href="https://www.talos.dev/v1.6/learn-more/architecture/">Talos / Sidero — fleet architecture</a> and <a href="https://maas.io/docs">Canonical MAAS docs</a> — production-fleet projects that ship the same &ldquo;TFTP kernel, locally-rooted thereafter&rdquo; pattern this design points at.</li>
+  <li><a href="https://docs.kernel.org/admin-guide/kernel-parameters.html">kernel-parameters.txt</a> — authoritative list of <code>root=</code>, <code>rootfstype=</code>, <code>rootwait</code>, <code>console=</code>, <code>ip=</code> behaviour. Drift from this doc&rsquo;s APPEND descriptions belongs in the kernel changelog, not here.</li>
+</ul>
+
+</body>
+</html>

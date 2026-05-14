@@ -8,14 +8,14 @@
 # See docs/retry-configuration.md "How the two retry layers interact"
 # for the failure-mode rationale.
 
-- name: "board_boot_state[{{ boot_state }}] — layer 1 (cold boot with retry)"
+- name: "boot_mode[{{ armbian_netboot_boot_mode }}] — layer 1 (cold boot with retry)"
   ansible.builtin.include_tasks: cold_boot_with_retry.yml
   vars:
-    _phase_label: "board_boot_state[{{ boot_state }}]"
-    _boot_max_attempts: "{{ boot_retry_attempts | int + 1 }}"
+    _phase_label: "boot_mode[{{ armbian_netboot_boot_mode }}]"
+    _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
 
-- name: "board_boot_state[{{ boot_state }}] — layer 2 (post-boot SSH wait with cycle retry)"
+- name: "boot_mode[{{ armbian_netboot_boot_mode }}] — layer 2 (post-boot SSH wait with cycle retry)"
   ansible.builtin.include_tasks: wait_for_ssh_with_cycle_retry.yml
   vars:
-    _phase_label: "board_boot_state[{{ boot_state }}]"
-    _wait_timeout: "{{ post_boot_wait_timeout }}"
+    _phase_label: "boot_mode[{{ armbian_netboot_boot_mode }}]"
+    _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"

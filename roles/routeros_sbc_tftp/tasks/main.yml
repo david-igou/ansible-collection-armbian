@@ -1,4 +1,0 @@
----
-# This role is invoked exclusively via tasks_from: include_role calls
-# (write_pxelinux_cfg.yml, remove_pxelinux_cfg.yml). main.yml is
-# intentionally empty; including the role with no tasks_from is a no-op.

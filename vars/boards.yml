@@ -1,8 +1,8 @@
 ---
-# Per-board metadata for boards in v1 scope. Keyed by board_model
-# (matches inventory host_vars and pxelinux paths).
+# Per-board metadata. Keyed by armbian_netboot_board_model (matches
+# inventory host_vars and pxelinux/TFTP paths).
 #
-# v1 fields:
+# Fields:
 #   armbian_dl_dir       dl.armbian.com subdirectory (documentation
 #                        pointer; not used by code post-slim)
 #   armbian_board_name   armbian/build BOARD= target. Used by
@@ -13,15 +13,15 @@
 #   dtb                  Device tree path under /boot/dtb/. Used by
 #                        roles/netboot_assets/tasks/per_board.yml.
 #   console              Kernel console parameter. Used by
-#                        roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2.
+#                        roles/routeros_pxe_config/templates/pxelinux_cfg.j2.
 #   earlycon             earlycon= argument that drives kernel output
 #                        before the ttyS* driver loads. Format is
 #                        "<driver>,<bus>,<mmio_addr>" — for RK3588S the
 #                        UART2 base is 0xfeb50000. Required when
-#                        pxelinux_verbose=true; consulted only by the
-#                        verbose path in pxelinux_cfg.j2.
+#                        armbian_netboot_pxe_verbose=true; consulted
+#                        only by the verbose path in pxelinux_cfg.j2.
 
-board_configs:
+armbian_netboot_board_configs:
   orange-pi-5-pro:
     armbian_dl_dir: orangepi5pro
     armbian_board_name: orangepi5pro

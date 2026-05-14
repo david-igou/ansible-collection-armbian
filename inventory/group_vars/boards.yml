@@ -8,33 +8,33 @@
 # group_vars/boards.yml (the same file path in your .inventory/ or
 # whatever directory ANSIBLE_INVENTORY points at) before first run.
 
-# ── david_igou.armbian_netboot.board_boot_state ─────────────────────
-# Required: identifies the RouterOS router that owns SBC TFTP/DHCP
-# state for boards in this group. The board_boot_state role uses this
-# as delegate_to for all rb5009 mutation tasks (writing/removing the
-# per-board pxelinux.cfg + /ip tftp row).
+# ── david_igou.armbian_netboot.boot_mode ─────────────────────────────
+# Required: identifies the RouterOS router that owns SBC TFTP state
+# for boards in this group. The boot_mode role uses this as delegate_to
+# for all rb5009 mutation tasks (writing the per-board pxelinux.cfg +
+# /ip tftp row).
 #
 # Must be an inventory host with the routeros network_cli connection
 # settings — typically a member of the `routeros_routers` group.
 # Override per-host (host_vars/<board>.yml) if a specific board is
 # served by a different router.
-netboot_router: rb5009
+armbian_netboot_router: rb5009
 
-# Optional: override the board_boot_state role's retry/timeout
-# defaults for all boards in this group. Defaults below match what
-# the role ships with (see roles/board_boot_state/defaults/main.yml).
+# Optional: override the boot_mode role's retry/timeout defaults for
+# all boards in this group. Defaults below match what the role ships
+# with (see roles/boot_mode/defaults/main.yml).
 # See docs/retry-configuration.md for tuning intuition and recommended
 # combinations (healthy / flaky-PoE / max-consistency / fast-iter /
 # fresh-rootfs). View the full role contract with:
-#   ansible-doc -t role david_igou.armbian_netboot.board_boot_state
+#   ansible-doc -t role david_igou.armbian_netboot.boot_mode
 #
-# boot_retry_attempts: 0
-# boot_attempt_timeout: 180
-# ssh_wait_timeout: 90
-# ssh_wait_retry_attempts: "{{ boot_retry_attempts }}"
-# post_boot_wait_timeout: 300
-# poe_cycle_delay: 5
+# armbian_netboot_boot_retry_attempts: 0
+# armbian_netboot_boot_attempt_timeout: 180
+# armbian_netboot_ssh_wait_timeout: 90
+# armbian_netboot_ssh_wait_retry_attempts: "{{ armbian_netboot_boot_retry_attempts }}"
+# armbian_netboot_post_boot_wait_timeout: 300
+# armbian_netboot_poe_cycle_delay: 5
 #
 # Example: production flaky-HAT setup — retries with 60 s cap drain.
-# boot_retry_attempts: 2
-# poe_cycle_delay: 60
+# armbian_netboot_boot_retry_attempts: 2
+# armbian_netboot_poe_cycle_delay: 60

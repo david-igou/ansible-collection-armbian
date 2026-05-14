@@ -29,7 +29,7 @@
 # State lives in per-board SPI, not the U-Boot binary. Re-image a board
 # and the env reverts to whatever the U-Boot binary's defaults are; re-
 # run this playbook to converge. Per-board MAC comes from the same
-# `board_mac` hostvar that drives pxelinux.cfg/01-<mac>, so the SPI env
+# `armbian_netboot_board_mac` hostvar that drives pxelinux.cfg/01-<mac>, so the SPI env
 # and rb5009 TFTP layout can't drift apart.
 #
 # Prerequisites:
@@ -37,8 +37,8 @@
 #     that won't reach an init system — use Approach A for that case).
 #   - playbooks/bootstrap_armbian.yml must have run so this play can
 #     SSH in as the inventory user with passwordless sudo.
-#   - inventory hostvars: `board_mac` (mandatory); `poe_switch` +
-#     `poe_port` (mandatory; consumed by the cold-cycle handler).
+#   - inventory hostvars: `armbian_netboot_board_mac` (mandatory); `armbian_netboot_poe_switch` +
+#     `armbian_netboot_poe_port` (mandatory; consumed by the cold-cycle handler).
 #
 # Usage:
 #   # Converge SPI env on all rock-5b boards
@@ -66,12 +66,12 @@
     # Vars to converge in SPI. Values come from upstream u-boot's
     # default_environment[] for rk3588 (include/configs/rockchip-common.h
     # + arch/arm/include/asm/arch-rockchip/boot_mode.h), preserved here
-    # so a CRC-valid SPI env doesn't silently drop them. board_mac is
+    # so a CRC-valid SPI env doesn't silently drop them. armbian_netboot_board_mac is
     # lowercased: U-Boot's eth_env_get_enetaddr_by_index() parses hex
     # case-insensitively, but fw_printenv returns the stored string
     # verbatim — keeping case consistent avoids spurious drift each run.
     uboot_env_vars:
-      ethaddr: "{{ board_mac | lower }}"
+      ethaddr: "{{ armbian_netboot_board_mac | lower }}"
       pxefile_addr_r: "0x00500000"
       kernel_addr_r: "0x02080000"
       ramdisk_addr_r: "0x06000000"
@@ -90,16 +90,16 @@
           - "!min"
           - date_time
 
-    - name: Assert per-host board_mac is defined
+    - name: Assert per-host armbian_netboot_board_mac is defined
       ansible.builtin.assert:
         that:
-          - board_mac is defined
-          - board_mac | length > 0
-          - board_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
+          - armbian_netboot_board_mac is defined
+          - armbian_netboot_board_mac | length > 0
+          - armbian_netboot_board_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
         fail_msg: >-
-          board_mac must be set on {{ inventory_hostname }} as a
+          armbian_netboot_board_mac must be set on {{ inventory_hostname }} as a
           colon-separated hex MAC (xx:xx:xx:xx:xx:xx). Got:
-          '{{ board_mac | default("<undefined>") }}'.
+          '{{ armbian_netboot_board_mac | default("<undefined>") }}'.
 
   tasks:
     - name: Ensure u-boot-tools is installed
@@ -184,13 +184,13 @@
       changed_when: true
 
     # Warm `reboot` may skip re-reading SPI env on some RK3588 boot
-    # ROMs, so we PoE-cycle. Per-task delegation to `poe_switch` is
+    # ROMs, so we PoE-cycle. Per-task delegation to `armbian_netboot_poe_switch` is
     # baked into the routeros_poe role, so include_role here runs in
     # the board's context but each underlying command hits the switch.
     - name: Cold-cycle the board when any env var drifted
       ansible.builtin.include_role:
         name: routeros_poe
       vars:
-        poe_action: cycle
+        armbian_netboot_poe_action: cycle
       when: _set_results.results | selectattr('changed') | list | length > 0
       tags: cold_cycle

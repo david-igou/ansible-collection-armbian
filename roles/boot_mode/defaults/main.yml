@@ -1,0 +1,26 @@
+---
+# Defaults for the boot_mode role.
+#
+# See meta/argument_specs.yml for the full contract — descriptions,
+# types, and required-vs-optional. Or:
+#   ansible-doc -t role david_igou.armbian_netboot.boot_mode
+
+# Retry / timeout knobs — see docs/retry-configuration.md for tuning
+# guidance and recommended combinations.
+armbian_netboot_boot_retry_attempts: 0
+armbian_netboot_boot_attempt_timeout: 180
+armbian_netboot_ssh_wait_timeout: 90
+armbian_netboot_ssh_wait_retry_attempts: "{{ armbian_netboot_boot_retry_attempts }}"
+armbian_netboot_post_boot_wait_timeout: 300
+armbian_netboot_poe_cycle_delay: 5
+
+# Flow control.
+armbian_netboot_cycle_board: true
+armbian_netboot_verify_state: true
+
+# armbian_netboot_boot_mode intentionally has no default — caller must
+# declare nfs or sd. argument_specs enforces this.
+#
+# armbian_netboot_router intentionally has no default — caller must set
+# it in inventory (typically inventory/group_vars/boards.yml as
+# `armbian_netboot_router: rb5009`).

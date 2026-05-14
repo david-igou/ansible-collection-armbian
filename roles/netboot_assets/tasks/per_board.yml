@@ -6,23 +6,23 @@
 
 - name: Set per-model facts for {{ _model }}
   ansible.builtin.set_fact:
-    _bc: "{{ board_configs[_model] }}"
-    _template_dir: "{{ nfs_rootfs_path }}/_templates/{{ _model }}"
-    _tftp_truenas_cache: "{{ armbian_image_cache }}/sbc-tftp/{{ _model }}"
-    _image_cache: "{{ armbian_image_cache }}/{{ _model }}.img.xz"
+    _bc: "{{ armbian_netboot_board_configs[_model] }}"
+    _template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ _model }}"
+    _tftp_truenas_cache: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ _model }}"
+    _image_cache: "{{ armbian_netboot_image_cache }}/{{ _model }}.img.xz"
     # Local FS path on the netboot server where the image is *already*
     # published (build_image.yml writes here). When the netboot server
     # hosts the HTTP server itself (e.g. the public nginx container on
     # TrueNAS, on a macvlan that's not host-reachable), the URL in
-    # armbian_image_urls is unreachable from this host — fall back to
+    # armbian_netboot_image_urls is unreachable from this host — fall back to
     # a local copy when the published file exists.
     #
     # Composed from the build-publish invariant rather than the URL:
-    # build_image.yml writes to {{ nfs_assets_export }}/images/<armbian_board_name>/<file>
+    # build_image.yml writes to {{ armbian_netboot_nfs_assets_export }}/images/<armbian_board_name>/<file>
     # so the URL path structure doesn't have to be the same as the FS
     # structure. (Under the old netbootxyz layout URL == FS by coincidence;
     # under the public-nginx layout the URL has a /boot-files/ prefix.)
-    _local_image_path: "{{ nfs_assets_export }}/images/{{ board_configs[_model].armbian_board_name }}/{{ armbian_image_urls[_model] | basename }}"
+    _local_image_path: "{{ armbian_netboot_nfs_assets_export }}/images/{{ armbian_netboot_board_configs[_model].armbian_board_name }}/{{ armbian_netboot_image_urls[_model] | basename }}"
 
 - name: Ensure per-model template and TrueNAS cache directories exist
   ansible.builtin.file:
@@ -61,7 +61,7 @@
 
     - name: Download Armbian image for {{ _model }}
       ansible.builtin.get_url:
-        url: "{{ armbian_image_urls[_model] }}"
+        url: "{{ armbian_netboot_image_urls[_model] }}"
         dest: "{{ _image_cache }}"
         mode: "0644"
         timeout: 600
@@ -71,12 +71,12 @@
       ansible.builtin.shell: |
         xz -dk "{{ _image_cache }}"
       args:
-        creates: "{{ armbian_image_cache }}/{{ _model }}.img"
+        creates: "{{ armbian_netboot_image_cache }}/{{ _model }}.img"
 
     - name: Set up loop device
       ansible.builtin.shell: |
         losetup --find --show --partscan \
-          "{{ armbian_image_cache }}/{{ _model }}.img"
+          "{{ armbian_netboot_image_cache }}/{{ _model }}.img"
       register: _loop_dev
       changed_when: true
 
@@ -84,7 +84,7 @@
       ansible.builtin.shell: |
         set -o pipefail
         PART=$(lsblk -ln -o NAME {{ _loop_dev.stdout }} | tail -1)
-        mount /dev/${PART} "{{ armbian_image_mount }}"
+        mount /dev/${PART} "{{ armbian_netboot_image_mount }}"
       args:
         executable: /bin/bash
       changed_when: true
@@ -93,13 +93,13 @@
       ansible.builtin.shell: |
         rsync -aHAX --exclude '/proc/*' --exclude '/sys/*' \
           --exclude '/dev/*' --exclude '/run/*' \
-          "{{ armbian_image_mount }}/" "{{ _template_dir }}/"
+          "{{ armbian_netboot_image_mount }}/" "{{ _template_dir }}/"
       changed_when: true
 
     - name: Copy kernel and initrd to TrueNAS cache
       ansible.builtin.shell: |
-        cp "{{ armbian_image_mount }}"/boot/vmlinuz-* "{{ _tftp_truenas_cache }}/vmlinuz"
-        cp "{{ armbian_image_mount }}"/boot/initrd.img-* "{{ _tftp_truenas_cache }}/initrd.img"
+        cp "{{ armbian_netboot_image_mount }}"/boot/vmlinuz-* "{{ _tftp_truenas_cache }}/vmlinuz"
+        cp "{{ armbian_netboot_image_mount }}"/boot/initrd.img-* "{{ _tftp_truenas_cache }}/initrd.img"
       changed_when: true
 
     # Armbian images can place DTBs at several locations depending on the
@@ -110,7 +110,7 @@
     - name: Copy board DTB to TFTP tree
       ansible.builtin.shell: |
         set -e
-        ROOT="{{ armbian_image_mount }}"
+        ROOT="{{ armbian_netboot_image_mount }}"
         DTB="{{ _bc.dtb }}"
         for CANDIDATE in \
             "${ROOT}/boot/dtb/${DTB}" \
@@ -131,7 +131,7 @@
 
     - name: Unmount Armbian image and detach loop device
       ansible.builtin.shell: |
-        umount "{{ armbian_image_mount }}" || true
+        umount "{{ armbian_netboot_image_mount }}" || true
         losetup -d "{{ _loop_dev.stdout }}" || true
       changed_when: true
 
@@ -143,7 +143,7 @@
 
 - name: Ensure control-node SBC TFTP cache directory exists for model {{ _model }}
   ansible.builtin.file:
-    path: "{{ sbc_tftp_cache_dir }}/{{ _model }}"
+    path: "{{ armbian_netboot_tftp_cache_dir }}/{{ _model }}"
     state: directory
     mode: "0755"
   delegate_to: localhost
@@ -152,7 +152,7 @@
 - name: Fetch SBC TFTP assets from TrueNAS to control-node cache
   ansible.builtin.fetch:
     src: "{{ _tftp_truenas_cache }}/{{ item }}"
-    dest: "{{ sbc_tftp_cache_dir }}/{{ _model }}/{{ item }}"
+    dest: "{{ armbian_netboot_tftp_cache_dir }}/{{ _model }}/{{ item }}"
     flat: true
   loop:
     - vmlinuz

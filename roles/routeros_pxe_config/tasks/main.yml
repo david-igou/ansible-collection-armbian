@@ -1,0 +1,180 @@
+---
+# Writes the per-board pxelinux.cfg file to
+# flash:/{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/01-<MAC>
+# on rb5009, registers a /ip tftp row for it.
+#
+# Always writes — never removes. The pxelinux.cfg always exists; the
+# `default` directive inside selects the active boot mode.
+#
+# Required caller-set variable:
+#   _target_host  inventory hostname of the board being configured
+
+- name: Load board configs
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../../vars/boards.yml"
+  tags: pxelinux
+
+- name: Compute pxelinux.cfg filename for {{ _target_host }}
+  ansible.builtin.set_fact:
+    _pxe_filename: "01-{{ hostvars[_target_host].armbian_netboot_board_mac | lower | replace(':', '-') }}"
+  tags: pxelinux
+
+- name: Resolve effective verbose flag for {{ _target_host }}
+  ansible.builtin.set_fact:
+    _pxe_verbose: >-
+      {{ (hostvars[_target_host].armbian_netboot_pxe_verbose
+          | default(armbian_netboot_pxe_verbose | default(false)))
+         | bool }}
+  tags: pxelinux
+
+- name: Assert per-board earlycon is defined when verbose is true
+  ansible.builtin.assert:
+    that:
+      - armbian_netboot_board_configs[hostvars[_target_host].armbian_netboot_board_model].earlycon is defined
+      - armbian_netboot_board_configs[hostvars[_target_host].armbian_netboot_board_model].earlycon | length > 0
+    fail_msg: >-
+      armbian_netboot_pxe_verbose=true was requested for {{ _target_host }}
+      ({{ hostvars[_target_host].armbian_netboot_board_model }}) but
+      armbian_netboot_board_configs.{{ hostvars[_target_host].armbian_netboot_board_model }}.earlycon
+      is not set in vars/boards.yml. Add it (format: <driver>,<bus>,<mmio_addr>,
+      e.g. uart8250,mmio32,0xfeb50000 for RK3588S UART2) or unset
+      armbian_netboot_pxe_verbose for this board.
+  when: _pxe_verbose | bool
+  tags: pxelinux
+
+- name: Validate armbian_netboot_boot_mode matches a renderable label
+  ansible.builtin.assert:
+    that:
+      - armbian_netboot_boot_mode in _renderable_labels
+    fail_msg: >-
+      armbian_netboot_boot_mode={{ armbian_netboot_boot_mode }}
+      for {{ _target_host }} but only these labels will be rendered:
+      {{ _renderable_labels | join(', ') }}.
+      For 'sd', set armbian_netboot_sd_partuuid on the host.
+  vars:
+    _renderable_labels: >-
+      {{ ['nfs']
+         + (['sd'] if hostvars[_target_host].armbian_netboot_sd_partuuid is defined else []) }}
+  tags: pxelinux
+
+- name: Ensure local pxelinux.cfg cache directory exists on control node
+  ansible.builtin.file:
+    path: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  tags: pxelinux
+
+- name: Render pxelinux.cfg locally for {{ _target_host }}
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/pxelinux_cfg.j2"
+    dest: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  tags: pxelinux
+
+- name: Stat rendered pxelinux.cfg locally
+  ansible.builtin.stat:
+    path: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  delegate_to: localhost
+  become: false
+  register: _pxe_local_stat
+  tags: pxelinux
+
+# Each routeros-targeted task is preceded by `meta: reset_connection`,
+# forcing a fresh persistent-connection daemon for every command. This
+# eliminates the inherited-dead-daemon failure class (paramiko
+# disconnect, RouterOS-side idle eviction, OOM) at the cost of ~1 s
+# per reset x 5 tasks = ~5 s additional latency per write.
+- name: Reset persistent connection before pxelinux dir ensure
+  ansible.builtin.meta: reset_connection
+
+- name: Ensure pxelinux.cfg directory exists on rb5009 under flash:/{{ armbian_netboot_tftp_flash_dir }}
+  community.routeros.command:
+    commands:
+      - >-
+        :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg" type=directory] = "")
+        do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg" type=directory}
+  register: _pxe_dir_ensure
+  retries: 3
+  delay: 5
+  until: _pxe_dir_ensure is succeeded
+  changed_when: false
+  tags: pxelinux
+
+- name: Reset persistent connection before pxelinux size check
+  ansible.builtin.meta: reset_connection
+
+- name: Count router-side pxelinux.cfg matching local size
+  community.routeros.command:
+    commands:
+      - >-
+        /file print count-only where
+        name="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        and size={{ _pxe_local_stat.stat.size }}
+  register: _pxe_size_match
+  retries: 3
+  delay: 5
+  until: _pxe_size_match is succeeded
+  changed_when: false
+  tags: pxelinux
+
+- name: Reset persistent connection before pxelinux net_put
+  ansible.builtin.meta: reset_connection
+  when: (_pxe_size_match.stdout[0] | trim | int) == 0
+
+- name: Upload pxelinux.cfg to rb5009 if size differs
+  ansible.netcommon.net_put:
+    src: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+    dest: "{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  vars:
+    ansible_command_timeout: 60
+  register: _pxe_net_put
+  retries: 3
+  delay: 5
+  until: _pxe_net_put is succeeded
+  when: (_pxe_size_match.stdout[0] | trim | int) == 0
+  tags: pxelinux
+
+# req-filename uses a permissive regex (".*<filename>") instead of the
+# literal path. RouterOS /ip tftp matches req-filename as a regex and
+# U-Boot's PXE bootmeth sends a path that doesn't string-match the
+# literal even though that's what U-Boot prints to the console.
+- name: Reset persistent connection before /ip tftp count
+  ansible.builtin.meta: reset_connection
+
+- name: Count /ip tftp rows for {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp print count-only where
+        req-filename=".*{{ _pxe_filename }}"
+        and real-filename="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+  register: _pxe_tftp_count
+  retries: 3
+  delay: 5
+  until: _pxe_tftp_count is succeeded
+  changed_when: false
+  tags: pxelinux
+
+- name: Reset persistent connection before /ip tftp add
+  ansible.builtin.meta: reset_connection
+  when: (_pxe_tftp_count.stdout[0] | trim | int) == 0
+
+- name: Add /ip tftp row (if absent) for board {{ _pxe_filename }}
+  community.routeros.command:
+    commands:
+      - >-
+        /ip tftp add
+        req-filename=".*{{ _pxe_filename }}"
+        real-filename="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        allow=yes read-only=yes
+  register: _pxe_tftp_add
+  retries: 3
+  delay: 5
+  until: _pxe_tftp_add is succeeded
+  when: (_pxe_tftp_count.stdout[0] | trim | int) == 0
+  changed_when: true
+  tags: pxelinux

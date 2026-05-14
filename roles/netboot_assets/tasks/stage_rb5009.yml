@@ -2,23 +2,23 @@
 # Stages per-model SBC TFTP assets (kernel, initrd, dtb) on rb5009.
 #
 # Run from a play with hosts: routeros_routers, gather_facts: false.
-# Iterates over the unique board_models in inventory; for each model,
-# creates flash:/{{ sbc_tftp_flash_dir }}/armbian/<model>/, net_puts the
+# Iterates over the unique armbian_netboot_board_model values in inventory; for each model,
+# creates flash:/{{ armbian_netboot_tftp_flash_dir }}/armbian/<model>/, net_puts the
 # three files (size-gated for idempotency), and registers a /ip tftp row
 # per file.
 #
 # Pre-condition: roles/netboot_assets/tasks/per_board.yml has fetched
-# the assets to {{ sbc_tftp_cache_dir }}/<model>/{vmlinuz,initrd.img,board.dtb}
+# the assets to {{ armbian_netboot_tftp_cache_dir }}/<model>/{vmlinuz,initrd.img,board.dtb}
 # on the control node.
 #
 # Required facts (set via vars in the calling play):
-#   _models: list of unique board_model strings present in inventory
+#   _models: list of unique armbian_netboot_board_model strings present in inventory
 
 - name: Resolve unique board models from inventory
   ansible.builtin.set_fact:
     _models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'board_model')
+         | map('extract', hostvars, 'armbian_netboot_board_model')
          | list | unique }}
 
 # All RouterOS-targeted tasks below carry retries: 3 / delay: 5 /
@@ -29,32 +29,32 @@
   community.routeros.command:
     commands:
       - >-
-        :if ([/file find name="{{ sbc_tftp_flash_dir }}" type=directory] = "")
-        do={/file add name="{{ sbc_tftp_flash_dir }}" type=directory}
+        :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}" type=directory] = "")
+        do={/file add name="{{ armbian_netboot_tftp_flash_dir }}" type=directory}
   register: _stage_top_dir
   retries: 3
   delay: 5
   until: _stage_top_dir is succeeded
   changed_when: false
 
-- name: Ensure armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
+- name: Ensure armbian subdirectory exists under flash:/{{ armbian_netboot_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
-        :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian" type=directory] = "")
-        do={/file add name="{{ sbc_tftp_flash_dir }}/armbian" type=directory}
+        :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory] = "")
+        do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory}
   register: _stage_armbian_dir
   retries: 3
   delay: 5
   until: _stage_armbian_dir is succeeded
   changed_when: false
 
-- name: Ensure per-model armbian subdirectory exists under flash:/{{ sbc_tftp_flash_dir }}
+- name: Ensure per-model armbian subdirectory exists under flash:/{{ armbian_netboot_tftp_flash_dir }}
   community.routeros.command:
     commands:
       - >-
-        :if ([/file find name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
-        do={/file add name="{{ sbc_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
+        :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
+        do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
   register: _stage_model_dir
   retries: 3
   delay: 5
@@ -64,7 +64,7 @@
 
 - name: Stat each local SBC TFTP asset
   ansible.builtin.stat:
-    path: "{{ sbc_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+    path: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
   delegate_to: localhost
   become: false
   loop: "{{ _models | product(['vmlinuz', 'initrd.img', 'board.dtb']) | list }}"
@@ -77,8 +77,8 @@
     that:
       - item.stat.exists
     fail_msg: >-
-      {{ sbc_tftp_cache_dir }}/{{ item.item.0 }}/{{ item.item.1 }} is
-      missing on the control node. Run stage_netboot_assets.yml's
+      {{ armbian_netboot_tftp_cache_dir }}/{{ item.item.0 }}/{{ item.item.1 }} is
+      missing on the control node. Run stage_nfs_rootfs.yml's
       first play (TrueNAS extraction + fetch) before staging on rb5009.
   loop: "{{ _local_asset_stat.results }}"
   loop_control:
@@ -98,7 +98,7 @@
     commands:
       - >-
         /file remove
-        [find name="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
+        [find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
   register: _stage_pre_remove
   retries: 3
   delay: 5
@@ -110,8 +110,8 @@
 
 - name: Upload SBC TFTP asset to rb5009
   ansible.netcommon.net_put:
-    src: "{{ sbc_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
-    dest: "{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+    src: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+    dest: "{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
   vars:
     ansible_command_timeout: 300
   register: _stage_net_put
@@ -138,7 +138,7 @@
       - >-
         /ip tftp print count-only where
         req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
-        and real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        and real-filename="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
   register: _tftp_row_count
   retries: 3
   delay: 5
@@ -154,7 +154,7 @@
       - >-
         /ip tftp add
         req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
-        real-filename="{{ sbc_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        real-filename="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
         allow=yes read-only=yes
   register: _stage_tftp_add
   retries: 3

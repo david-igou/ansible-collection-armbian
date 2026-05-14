@@ -1,47 +1,12 @@
 ---
-# Paths on the netboot server. The role runs ON the netboot server (e.g.
-# a TrueNAS host) and operates on these export paths directly — no NFS
-# client mount on the Ansible control node is involved.
-#
-# These paths must already exist on the netboot server and be exported
-# read/write to the boards that will boot from them; the role only writes
-# content into them.
-#
-# Inside nfs_rootfs_path the role creates two kinds of subdirectories:
-#   _templates/<board_model>/   per-model rootfs (extracted Armbian image)
-#   <inventory_hostname>/       per-host rootfs (cp --reflink from template,
-#                               with hostname/machine-id/SSH keys customised)
-# Boards mount their per-host directory as nfsroot. Per-host clones use
-# reflinks where the filesystem supports them (XFS, btrfs, ZFS), so disk
-# cost stays at one rootfs per model regardless of host count.
-nfs_rootfs_path: /mnt/ssd/netboot/rootfs
-# `nfs_assets_export` is the netboot-owned subtree on the HTTP host —
-# the directory under which Armbian images are published as
-# `images/<armbian_board_name>/<basename-of-url>`. The role and
-# build_image.yml share this layout, so URL prefix and FS layout don't
-# need to match (the public nginx URL adds `/boot-files/`, but the FS
-# write target is still `{{ nfs_assets_export }}/images/...`).
-#
-# Default matches the homelab's public nginx container on TrueNAS —
-# host path `/mnt/ssd/public/boot-files` maps to URL prefix
-# `https://public.igou.systems/boot-files/`. (Hosting moved off the
-# retired netbootxyz container in 2026-05.)
-nfs_assets_export: /mnt/ssd/public/boot-files
-
 # Working paths on the netboot server used while extracting an Armbian
-# image. armbian_image_cache also persists between runs so re-runs can
+# image. armbian_netboot_image_cache also persists between runs so re-runs can
 # skip the download. On TrueNAS, override both to a path on a data pool —
 # the boot pool is small and not appropriate for caching multi-GB images.
-armbian_image_cache: /mnt/ssd/netboot/cache
-armbian_image_mount: /mnt/ssd/netboot/.loop-mount
-
-# Top-level directory on rb5009's flash for SBC TFTP content. Used in
-# /file paths and as the prefix of real-filename in /ip tftp rules.
-# Mirrored as a default in roles/routeros_sbc_tftp/defaults/main.yml.
-sbc_tftp_flash_dir: "sbc"
-
-# Local cache on the control node where kernel/initrd/dtb get fetched
-# from TrueNAS before being net_put to rb5009. Resolved relative to the
-# playbook directory; lands at <repo-root>/.cache/sbc-tftp/<model>/.
-# Gitignored.
-sbc_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"
+#
+# Cross-role variables this role reads (NFS rootfs path, HTTP assets export,
+# TFTP flash dir on rb5009, control-node TFTP cache dir, image URL map, board
+# model host vars, etc.) live in inventory group_vars/all.yml (or host scope)
+# as armbian_netboot_* names — they are not duplicated in role defaults.
+armbian_netboot_image_cache: /mnt/ssd/netboot/cache
+armbian_netboot_image_mount: /mnt/ssd/netboot/.loop-mount

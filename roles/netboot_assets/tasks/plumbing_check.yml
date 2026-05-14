@@ -1,19 +1,19 @@
 ---
 # Asserts rb5009 has /ip tftp rows registered for the per-model SBC TFTP
-# assets. Catches "operator forgot to run stage_netboot_assets.yml"
-# before per-board enable_netboot operations would fail mysteriously.
+# assets. Catches "operator forgot to run stage_tftp_assets.yml"
+# before per-board converge_boot_mode operations would fail mysteriously.
 #
 # Run from a play with hosts: routeros_routers, gather_facts: false.
 #
 # Required facts (set via vars in the calling play):
-#   _check_models: list of board_model strings to verify
+#   _check_models: list of armbian_netboot_board_model strings to verify
 
 - name: Resolve models to verify
   ansible.builtin.set_fact:
     _check_models: >-
       {{ _check_models | default(
            groups['boards']
-           | map('extract', hostvars, 'board_model')
+           | map('extract', hostvars, 'armbian_netboot_board_model')
            | list | unique
          ) }}
 
@@ -40,8 +40,8 @@
       - (item.stdout[0] | trim | int) >= 1
     fail_msg: >-
       rb5009 has no /ip tftp row for armbian/{{ item.item.0 }}/{{ item.item.1 }}.
-      Run playbooks/stage_netboot_assets.yml to populate per-model SBC
-      TFTP assets before invoking enable_netboot.
+      Run playbooks/stage_tftp_assets.yml to populate per-model SBC
+      TFTP assets before invoking converge_boot_mode.
   loop: "{{ _plumbing_row_count.results }}"
   loop_control:
     label: "{{ item.item.0 }}/{{ item.item.1 }}"
