@@ -29,3 +29,11 @@ board_configs:
     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+
+  rock-5b:
+    armbian_dl_dir: rock-5b
+    armbian_board_name: rock-5b
+    armbian_support: standard
+    dtb: rockchip/rk3588-rock-5b.dtb
+    console: ttyS2,1500000n8
+    earlycon: uart8250,mmio32,0xfeb50000

@@ -41,6 +41,7 @@ nfs_server_ip: "10.10.9.213"
 # newer one.
 armbian_image_urls:
   orange-pi-5-pro: "https://public.igou.systems/boot-files/images/orangepi5pro/Armbian-unofficial_<version>_Orangepi5pro_<dist>_current_<kver>_minimal.img.xz"
+  rock-5b: "https://public.igou.systems/boot-files/images/rock-5b/Armbian-unofficial_26.05.0-trunk_Rock-5b_bookworm_edge_7.0.6_minimal.img.xz"
 
 # U-Boot branch — informational; the canonical branch source is each
 # board_configs.<model>.uboot_apt_package field in the collection.

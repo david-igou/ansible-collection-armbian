@@ -293,3 +293,145 @@ rather than stripping the URL prefix, so URL and FS layouts can diverge.
 Inventory now sets `nfs_assets_export` at inventory scope because
 `build_image.yml`'s publish play consumes it without loading the
 `netboot_assets` role.
+
+### rock-5b expansion (2026-05-14)
+
+Closes `docs/superpowers/specs/2026-05-12-rock5b-expansion-design.md`.
+v1 supports two boards: `orange-pi-5-pro` (the original) and `rock-5b`.
+The expansion exercised the 4–5 touchpoints a new ARM SBC hits when
+joining the collection and surfaced the friction below.
+
+#### v1 board scope: two boards
+
+The original spec's "vars/boards.yml contains exactly one entry
+(orangepi5pro)" criterion is voided. Replacement: `vars/boards.yml`
+contains entries for `orange-pi-5-pro` and `rock-5b`. The "out of
+scope: all boards other than orangepi5pro" line is replaced by "all
+boards other than `orange-pi-5-pro` and `rock-5b`". The next board
+onboarding goes against the runbook in the `adding-armbian-board`
+skill, not this spec.
+
+#### Per-phase friction — Phase 1 (image build)
+
+- **Per-board u-boot branch override** required when the family
+  default's u-boot tree lacks driver support. Rock-5b on the
+  Rockchip-RK3588 family default (`current` branch → Radxa's
+  `next-dev-v2024.10` u-boot fork) has **no RTL8125 PCIe driver
+  source files at all**, so PXE is impossible there. The `edge`
+  branch triggers armbian/build's existing
+  `post_family_config_branch_edge__rock-5b_use_mainline_uboot` hook
+  pulling mainline u-boot (currently v2026.04 via our `__999_` override).
+  Side-effect: rock-5b's kernel goes to edge (7.0.x) while
+  orange-pi-5-pro stays on current (6.18.x). Landing:
+  `playbooks/build_image.yml` `build_branches:` dict — the mechanism
+  is now in the v1 surface, not just a per-board patch (commit
+  9779139).
+
+- **PXE-first userpatch was a no-op for some u-boot forks.** Original
+  sed targeted `#define BOOT_TARGETS` (legacy form); Radxa's
+  `next-dev-v2024.10` (rk3588 family default for `current`) uses the
+  X-macro `BOOT_TARGET_DEVICES(func)` form. Orange-pi-5-pro worked by
+  accident — its `u-boot-orangepi5pro/v2025.10` fork also uses legacy
+  form. Fixed with a dual-form patch, then refactored into a single
+  family-level overlay at
+  `userpatches/config/sources/families/rockchip-rk3588.conf` (commits
+  22a5971, 9ce4a1e). Scales to N rk3588 boards without per-board
+  duplication.
+
+- **`CONFIG_PCI_INIT_R` must be enabled for rk3588 defconfigs with
+  `CONFIG_PCI=y`** (commit bd44240). Without it, PCIe is not
+  initialized before `bootflow scan` and PCIe-attached NICs (RTL8125)
+  don't appear as bootdevs. Mainline u-boot defconfigs vary on this;
+  the family overlay now writes it unconditionally when CONFIG_PCI=y.
+
+#### Per-phase friction — Phase 2 (staging)
+
+Largely uneventful. Generic preflight + per-host clone worked first
+time. Confirms the model: when a new board's metadata is correct,
+Phase 2 is mechanical and free of board-specific surprises.
+
+#### Per-phase friction — Phase 3 (hardware E2E)
+
+- **Three-layer PXE failure model** for rock-5b (documented in
+  `docs/uboot-armbian-build-explainer.html` §8): NIC enumeration
+  (layer 0), MAC override by `rockchip_setup_macaddr` (layer 1), PXE
+  address vars vanishing under `CONFIG_ENV_IS_IN_SPI_FLASH` semantics
+  (layer 2). Each layer needs distinct treatment; the new
+  `playbooks/persist_uboot_env.yml` (Approach B) clears layers 1+2 at
+  runtime, the family build hooks clear layer 0.
+
+- **`CONFIG_ENV_IS_IN_SPI_FLASH=y` semantics** are
+  REPLACE-not-merge: a valid-CRC SPI env replaces compile-time
+  defaults; it does not merge with them. First successful `fw_setenv`
+  freezes whatever subset of vars happened to be in runtime env, and
+  any default not explicitly carried forward is dropped. This is the
+  failure mode that bites operators experimenting with `fw_setenv`.
+  Recovery is codified out-of-tree in the `recovering-uboot-spi-state`
+  operator skill (UART path; Linux path via `persist_uboot_env.yml`).
+
+- **Without UART, U-Boot network bring-up is nearly opaque.** The
+  original v1 spec's "more reliable HAT means no UART needed" holds
+  for PoE-cycle scenarios but breaks during onboarding when network
+  init itself is unreliable. Lesson for the `adding-armbian-board`
+  skill: temporary UART wiring is essential during onboarding even if
+  the production PoE-HAT plan obviates it.
+
+- **L1 link verification before software diagnosis.** Several hours
+  were lost debugging u-boot config while the rock-5b's ethernet
+  wasn't connected (the PoE HAT was off the board to access UART,
+  severing the network path the HAT was providing). Without
+  `Link is Up Speed 1Gbps` in the UART log, absence-of-evidence looks
+  identical to a driver bug. Verify L1 at the switch before debugging
+  anything software.
+
+- **DHCP `boot-file-name` option fights u-boot's bootflow.** rb5009's
+  vlan9 had a legacy `boot-file-name="netboot.xyz.kpxe"` set globally
+  (residue from a long-removed netbootxyz container). U-Boot's `efi`
+  bootmeth (order 3, before `pxe` at order 4) tries to PE-execute it
+  before `pxe` runs and the fetch "succeeds" enough that
+  `bootflow scan` accepts it as a bootflow. Workaround:
+  `bootmeths=pxe extlinux script efi` in SPI env, which
+  `persist_uboot_env.yml` writes. Long-term consideration: per-host
+  option-67 override or removal of the global option, in the external
+  RouterOS-config repo.
+
+- **Ansible 2.20 regression**: `delegate_to` is no longer valid on
+  `include_role` (deprecated since 2.14, error since 2.20). Affected
+  `roles/board_boot_state/tasks/configure_pxe.yml` and
+  `configure_disk.yml`; without the fix every
+  `enable_netboot.yml`/`disable_netboot.yml`/`test_hardware_e2e.yml`
+  run would fail on Ansible 2.20+. Fixed by wrapping each
+  `include_role` in a `block:` with `delegate_to:` (commit f485401).
+
+- **Vestigial reprovision task removed**:
+  `roles/netboot_assets/tasks/per_board.yml:162-167` copied each
+  `.img.xz` to `nfs_assets_export/images/<board_model>.img.xz` —
+  leftover from the deleted reprovision workflow, no current consumer.
+  Removed in commit 2089029.
+
+#### Added v1 surface
+
+- `playbooks/persist_uboot_env.yml` — Approach B for rock-5b
+  autonomous PXE; idempotent `fw_setenv` of `ethaddr` + PXE address
+  vars + `bootmeths` into SPI, cold-cycles on drift. Required for
+  any board with `CONFIG_ENV_IS_IN_SPI_FLASH=y`; harmless on others
+  (the playbook is targeted at the `rock_5b` group).
+
+- `playbooks/build_image.yml` `build_branches:` dict — per-board
+  u-boot branch override.
+
+- `userpatches/config/sources/families/rockchip-rk3588.conf` family
+  overlay — `__999_pxe_first` hook (dual-form sed), v2026.04 u-boot
+  pin override for rock-5b, generic `CONFIG_PCI_INIT_R=y` enable for
+  CONFIG_PCI=y defconfigs.
+
+#### Deferred refactors
+
+| Refactor | Landing | Why deferred |
+|---|---|---|
+| Approach A (source patch to `arch/arm/mach-rockchip/board.c::rockchip_setup_macaddr` to skip when DT MAC is valid) | `userpatches/u-boot/v<version>/skip-chip-hash-macaddr.patch` | Upstream-friendly alternative to Approach B; not needed for v1 — Approach B works and is operator-driven |
+| `armbian_build` role doesn't prune orphan userpatches files | `roles/armbian_build/tasks/main.yml`, new pre-write task | Functionally harmless (the `__999_` overlay wins); cosmetic builder hygiene |
+| Stuck-at-u-boot-prompt recovery as a playbook | New `playbooks/recover_uboot_env.yml`, OR extend `persist_uboot_env.yml` with a detect-and-recover pre-task | Currently lives in the out-of-tree `recovering-uboot-spi-state` skill; a playbook would make the runbook ansible-driven end to end |
+| `run-iter.sh` wrapping non-e2e plays (`persist_uboot_env.yml`, `enable_netboot.yml`, etc.) | `playbooks/scripts/run-iter.sh` extension or new wrapper | The operator skill `testing-armbian-board-hardware` Phase 2C documents the manual pattern; could be scripted |
+| `update-docs` pre-commit pass via `collection_prep` | `make update-docs` target + CI gate | Not run on this branch's CLAUDE.md/docs updates; consider before tagging v1 to keep generated docs aligned with hand-authored ones |
+| Deprecation cleanup pass for `ansible_date_time` → `ansible_facts.date_time` across roles/playbooks | Repository-wide grep + edit | Today's `persist_uboot_env.yml` fix handles the one new instance; older code may have other instances |

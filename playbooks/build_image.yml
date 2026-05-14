@@ -32,23 +32,106 @@
   hosts: armbian_builders
   gather_facts: false
   vars:
-    build_userpatches:
-      orangepi5:
-        - dest: "config/boards/orangepi5.conf"
-          content: |
-            function pre_config_uboot_target__orangepi5_pxe_first() {
-                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                    include/configs/rockchip-common.h
-            }
-      orangepi5pro:
-        - dest: "config/boards/orangepi5pro.conf"
-          content: |
-            function pre_config_uboot_target__orangepi5pro_pxe_first() {
-                declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-                sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                    include/configs/rockchip-common.h
-            }
+    # Shared userpatches applied to every board build. v1's only entry
+    # is the rk3588 family-level PXE-first override (see below).
+    #
+    # Path `config/sources/families/rockchip-rk3588.conf` is the
+    # idiomatic armbian/build user overlay path for per-family logic:
+    # main-config.sh's source_family_config_and_arch() sources
+    # ${SRC}/config/sources/families/<family>.conf then
+    # ${USERPATCHES_PATH}/config/sources/families/<family>.conf.
+    # Our overlay ADDS to armbian's family file (doesn't replace), and
+    # functions defined here get registered by initialize_extension_manager
+    # which runs LATER in the build flow.
+    #
+    # Hook suffix `__999_pxe_first` forces this to sort LAST among
+    # pre_config_uboot_target hooks (armbian/build's extension manager
+    # auto-prefixes hooks without a numeric ID with `500_` and sorts
+    # with LC_ALL=C --general-numeric-sort; see extensions.sh:222-238).
+    # This wins against per-board hooks like
+    # `pre_config_uboot_target__rock5b_patch_rockchip_common_boot_order`
+    # which sets a board-vendor-preferred SD-first order.
+    #
+    # The sed is a no-op on u-boot trees that don't use the legacy
+    # `#define BOOT_TARGETS "..."` form (e.g. Radxa's
+    # next-dev-v2024.10 fork uses the X-macro `BOOT_TARGET_DEVICES(func)`
+    # form instead — but that fork lacks RTL8125 PCIe driver anyway, so
+    # the collection ships affected boards on the edge branch which
+    # uses mainline u-boot v2026.04 with the legacy form (the
+    # `__999_rock5b_uboot_v2026_04` hook below overrides armbian/build's
+    # v2026.01 pin on the rock-5b board config). See `build_branches`.
+    build_userpatches_common:
+      - dest: "config/sources/families/rockchip-rk3588.conf"
+        content: |
+          function pre_config_uboot_target__999_pxe_first() {
+              # Legacy distro_bootcmd boot order (only takes effect on
+              # u-boot trees that haven't moved to bootstd yet, or that
+              # still expose boot_targets as a runtime knob).
+              declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+              sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                  include/configs/rockchip-common.h
+
+              # Bootstd / bootflow framework finds boot devices among
+              # PCI-enumerated devices. Mainline u-boot rk3588 defconfigs
+              # commonly set CONFIG_PCI=y but NOT CONFIG_PCI_INIT_R=y,
+              # so PCIe devices (e.g. Rock 5B's RTL8125 NIC) are NOT
+              # enumerated at init_r — bootflow scan never sees the NIC
+              # → no DHCP request → silent PXE failure (HITS=0 on the
+              # TFTP server). Append CONFIG_PCI_INIT_R=y to the defconfig
+              # being built (via $BOOTCONFIG, set by armbian/build's
+              # per-board config) for any board that opts into CONFIG_PCI.
+              local defconfig="configs/${BOOTCONFIG}"
+              if [[ -f "$defconfig" ]] \
+                 && grep -q "^CONFIG_PCI=y" "$defconfig" \
+                 && ! grep -q "^CONFIG_PCI_INIT_R=y" "$defconfig"; then
+                  echo "CONFIG_PCI_INIT_R=y" >> "$defconfig"
+              fi
+          }
+
+          # Bumps rock-5b's mainline u-boot pin from armbian/build's
+          # v2026.01 default to v2026.04. armbian/build registers
+          # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
+          # (in config/boards/rock-5b.conf) which sets BOOTBRANCH +
+          # BOOTPATCHDIR to v2026.01; that hook is auto-prefixed to
+          # `500_` by initialize_extension_manager, so our `__999_*`
+          # variant sorts after it and wins on the BOOTBRANCH /
+          # BOOTPATCHDIR re-declaration. armbian/build ships a
+          # `patch/u-boot/v2026.04/` directory, so BOOTPATCHDIR points
+          # at a real patch set (not at v2026.01 patches applied to a
+          # v2026.04 tree, which would risk rejects).
+          #
+          # Per the explainer (docs/uboot-armbian-build-explainer.html
+          # §8.2), v2026.04 does NOT clear any of rock-5b's three PXE
+          # failure layers on its own — Approach B
+          # (playbooks/persist_uboot_env.yml) still has to run to
+          # populate SPI env. The bump is just to track upstream.
+          function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
+              [[ "${BOARD}" != "rock-5b" ]] && return 0
+              [[ "${BRANCH}" != "edge" ]] && return 0
+              display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
+              declare -g BOOTBRANCH="tag:v2026.04"
+              declare -g BOOTPATCHDIR="v2026.04"
+          }
+
+    # Per-board userpatches — escape hatch keyed by armbian_board_name
+    # for genuinely board-specific source modifications. Empty in v1:
+    # both boards are fully covered by build_userpatches_common +
+    # build_branches. New boards generally won't need entries here.
+    build_userpatches: {}
+
+    # Per-board armbian/build BRANCH override. Most boards use 'current'
+    # (the armbian_build role default); rock-5b uses 'edge' because the
+    # Radxa next-dev-v2024.10 u-boot fork (current branch's default for
+    # rk3588) has no driver for the RTL8125 PCIe NIC that Rock 5B ships
+    # with — making U-Boot networking (and therefore PXE) impossible on
+    # current. Edge triggers armbian/build's existing
+    # `post_family_config_branch_edge__rock-5b_use_mainline_uboot` hook
+    # which pulls mainline u-boot (with the upstream Collabora PCIe +
+    # RTL8125B patches, working at 100 Mbps — enough for TFTP). The
+    # `__999_rock5b_uboot_v2026_04` hook in build_userpatches_common
+    # bumps the upstream-hook's v2026.01 default to v2026.04.
+    build_branches:
+      rock-5b: edge
   pre_tasks:
     - name: Load board configs for board name lookup
       ansible.builtin.include_vars:
@@ -89,7 +172,8 @@
         name: armbian_build
       vars:
         armbian_build_board: "{{ item }}"
-        armbian_build_userpatches: "{{ build_userpatches[item] }}"
+        armbian_build_userpatches: "{{ build_userpatches_common + (build_userpatches[item] | default([])) }}"
+        armbian_build_branch: "{{ build_branches[item] | default('current') }}"
       loop: "{{ _build_targets }}"
 
     # rsync invoked via command (not ansible.posix.synchronize) so it
