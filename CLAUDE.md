@@ -82,6 +82,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── enable_netboot.yml           # Toggle board into NFS-root mode
 │   ├── disable_netboot.yml          # Revert to disk boot
 │   ├── poe_control.yml              # PoE power on/off/cycle via switch
+│   ├── persist_uboot_env.yml        # Approach B: write rock-5b SPI env vars (ethaddr + PXE addrs) via fw_setenv
 │   ├── test_hardware_e2e.yml        # SD → NFS → SD assertion harness
 │   └── tasks/
 │       └── diagnostic_bundle.yml
@@ -133,6 +134,12 @@ ansible-playbook playbooks/disable_netboot.yml --limit orange-pi-5-pro-01
 
 # Power cycle a board via its upstream RouterOS switch.
 ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e poe_action=cycle
+
+# Persist the U-Boot env vars rock-5b needs for autonomous PXE (Approach B,
+# docs/uboot-armbian-build-explainer.html §8). Writes ethaddr + PXE address
+# vars + bootmeths into SPI via fw_setenv from Linux, then cold-cycles the
+# board on drift. Idempotent — re-running on a converged board is a no-op.
+ansible-playbook playbooks/persist_uboot_env.yml --limit rock-5b-01
 
 # Hardware E2E test: toggle a board through SD → nfsroot → SD and assert
 # each transition. Single board via --limit. Optional serial capture
@@ -290,6 +297,7 @@ rb5009 is the entire control surface for boot-mode toggles.
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `enable_netboot.yml` / `disable_netboot.yml` | **rb5009** (per-board pxelinux.cfg + `/ip tftp` row) + **boards** (reboot trigger) |
 | `poe_control.yml` | **boards** (delegated to `routeros_switches` via `poe_switch` hostvar) |
+| `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
 | `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 
 ## SBC ecosystem reality: variation is the rule
@@ -332,21 +340,33 @@ The dimensions that vary in practice:
   that hard-codes `mmc dev N` (manual U-Boot scripts, recovery aids,
   future per-board hooks) must consult `mmc list` on the actual board.
 
-## Adding a new board (post-v1)
+## Adding a new board
 
-Boards beyond `orange-pi-5-pro` are out of v1 scope. When the next
-board comes online:
+For the full runbook, use the `adding-armbian-board` skill — it walks
+pre-flight decisions, inventory placeholders, `vars/boards.yml` fields
+(including `earlycon`), U-Boot branch selection (`current` vs `edge`
+via `build_branches`), post-build defconfig audits (CONFIG_PCI_INIT_R,
+PHY drivers, NIC driver presence), and ends at
+`stage_netboot_assets.yml`. It also encodes the decision rule for
+running Approach B (`persist_uboot_env.yml`) based on whether the
+board's U-Boot defconfig sets `CONFIG_ENV_IS_IN_SPI_FLASH=y`.
 
-1. Add a `pre_config_uboot_target__<board>_pxe_first` entry to the
-   `build_userpatches` block in `playbooks/build_image.yml`.
-2. Add an entry to `vars/boards.yml` with `armbian_dl_dir`,
-   `armbian_board_name`, `armbian_support`, `dtb`, `console`.
-3. Add the host(s) under a new per-model subgroup of `boards` in
-   `inventory/hosts.yml` with `board_mac` and `board_model`.
-4. Add an `armbian_image_urls[<board_model>]` entry pointing at the
-   locally-published custom build.
-5. Run `playbooks/build_image.yml` to produce the image, then
-   `stage_netboot_assets.yml` and the rest of the v1 sequence.
+Minimum touched files for a new board:
+
+1. `inventory/hosts.yml` (doc-only example) + your real inventory:
+   add the host(s) under a new per-model subgroup of `boards` with
+   `board_mac`, `board_model`, `poe_switch`, `poe_port`.
+2. `vars/boards.yml`: entry keyed by `board_model` with
+   `armbian_dl_dir`, `armbian_board_name`, `armbian_support`, `dtb`,
+   `console`, `earlycon`.
+3. `inventory/group_vars/all.yml`: add an `armbian_image_urls[<model>]`
+   entry pointing at the locally-published custom build.
+4. `playbooks/build_image.yml` `build_branches:` if the board's
+   family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
+   boards need `edge` for mainline U-Boot).
+5. (Rare) `playbooks/build_image.yml` `build_userpatches:` if the
+   board needs source patches beyond what `build_userpatches_common`
+   already covers — most new boards won't.
 
 ## rb5009 SBC TFTP layout
 
@@ -410,6 +430,8 @@ knows its own switch and port, so delegation routes the command correctly withou
 - `roles/routeros_sbc_tftp/templates/pxelinux_cfg.j2` — per-host PXE boot config
 - `roles/routeros_poe/tasks/main.yml` — PoE power control (delegates to switch)
 - `playbooks/build_image.yml` — custom Armbian image build pipeline
+- `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE: idempotent `fw_setenv` of `ethaddr` + PXE address vars into SPI, cold-cycle on drift
 - `galaxy.yml` — collection namespace, version, external dependencies
 - `docs/board_boot_state-role.md` — board_boot_state role reference + common configurations
 - `docs/retry-configuration.md` — retry/timeout knob recipes
+- `docs/uboot-armbian-build-explainer.html` — §8 "Fixing rock-5b's autonomous-PXE problem" (three layers, two approaches; the source for `persist_uboot_env.yml`)
