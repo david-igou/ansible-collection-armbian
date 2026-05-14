@@ -57,8 +57,9 @@
     # next-dev-v2024.10 fork uses the X-macro `BOOT_TARGET_DEVICES(func)`
     # form instead — but that fork lacks RTL8125 PCIe driver anyway, so
     # the collection ships affected boards on the edge branch which
-    # uses mainline u-boot v2026.01 with the legacy form. See
-    # `build_branches` below.
+    # uses mainline u-boot v2026.04 with the legacy form (the
+    # `__999_rock5b_uboot_v2026_04` hook below overrides armbian/build's
+    # v2026.01 pin on the rock-5b board config). See `build_branches`.
     build_userpatches_common:
       - dest: "config/sources/families/rockchip-rk3588.conf"
         content: |
@@ -87,6 +88,31 @@
               fi
           }
 
+          # Bumps rock-5b's mainline u-boot pin from armbian/build's
+          # v2026.01 default to v2026.04. armbian/build registers
+          # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
+          # (in config/boards/rock-5b.conf) which sets BOOTBRANCH +
+          # BOOTPATCHDIR to v2026.01; that hook is auto-prefixed to
+          # `500_` by initialize_extension_manager, so our `__999_*`
+          # variant sorts after it and wins on the BOOTBRANCH /
+          # BOOTPATCHDIR re-declaration. armbian/build ships a
+          # `patch/u-boot/v2026.04/` directory, so BOOTPATCHDIR points
+          # at a real patch set (not at v2026.01 patches applied to a
+          # v2026.04 tree, which would risk rejects).
+          #
+          # Per the explainer (docs/uboot-armbian-build-explainer.html
+          # §8.2), v2026.04 does NOT clear any of rock-5b's three PXE
+          # failure layers on its own — Approach B
+          # (playbooks/persist_uboot_env.yml) still has to run to
+          # populate SPI env. The bump is just to track upstream.
+          function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
+              [[ "${BOARD}" != "rock-5b" ]] && return 0
+              [[ "${BRANCH}" != "edge" ]] && return 0
+              display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
+              declare -g BOOTBRANCH="tag:v2026.04"
+              declare -g BOOTPATCHDIR="v2026.04"
+          }
+
     # Per-board userpatches — escape hatch keyed by armbian_board_name
     # for genuinely board-specific source modifications. Empty in v1:
     # both boards are fully covered by build_userpatches_common +
@@ -100,8 +126,10 @@
     # with — making U-Boot networking (and therefore PXE) impossible on
     # current. Edge triggers armbian/build's existing
     # `post_family_config_branch_edge__rock-5b_use_mainline_uboot` hook
-    # which pulls mainline u-boot v2026.01 (with the upstream Collabora
-    # PCIe + RTL8125B patches, working at 100 Mbps — enough for TFTP).
+    # which pulls mainline u-boot (with the upstream Collabora PCIe +
+    # RTL8125B patches, working at 100 Mbps — enough for TFTP). The
+    # `__999_rock5b_uboot_v2026_04` hook in build_userpatches_common
+    # bumps the upstream-hook's v2026.01 default to v2026.04.
     build_branches:
       rock-5b: edge
   pre_tasks:
