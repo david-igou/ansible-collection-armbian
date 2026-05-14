@@ -1,6 +1,6 @@
 ---
 # Action to perform: on, off, or cycle (off → pause → on)
-poe_action: "on"
+armbian_netboot_poe_action: "on"
 
 # Seconds to wait between off and on during a power cycle
-poe_cycle_delay: 5
+armbian_netboot_poe_cycle_delay: 5

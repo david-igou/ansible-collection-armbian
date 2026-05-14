@@ -18,7 +18,7 @@
   ansible.builtin.set_fact:
     _board_models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'board_model')
+         | map('extract', hostvars, 'armbian_netboot_board_model')
          | list | unique }}
 
 # ── Preflight ─────────────────────────────────────────────────────────
@@ -34,13 +34,13 @@
     state: directory
     mode: "0755"
   loop:
-    - "{{ armbian_image_cache }}"
-    - "{{ armbian_image_mount }}"
-    - "{{ nfs_rootfs_path }}/_templates"
+    - "{{ armbian_netboot_image_cache }}"
+    - "{{ armbian_netboot_image_mount }}"
+    - "{{ armbian_netboot_nfs_rootfs_path }}/_templates"
 
 - name: Ensure assets images directory exists
   ansible.builtin.file:
-    path: "{{ nfs_assets_export }}/images"
+    path: "{{ armbian_netboot_nfs_assets_export }}/images"
     state: directory
     mode: "0755"
 
@@ -53,7 +53,7 @@
 
 # ── Pass 2: per-host rootfs clones ────────────────────────────────────
 # Each host of every model gets its own NFS export under
-# nfs_rootfs_path/<hostname>, reflink-copied from the model template
+# armbian_netboot_nfs_rootfs_path/<hostname>, reflink-copied from the model template
 # and customised so identities (hostname, machine-id, SSH host keys)
 # are unique on the wire. Hosts of the same model share storage on
 # reflink-capable filesystems.
@@ -62,4 +62,4 @@
   loop: "{{ groups['boards'] }}"
   loop_control:
     loop_var: _host
-    label: "{{ _host }} ({{ hostvars[_host]['board_model'] }})"
+    label: "{{ _host }} ({{ hostvars[_host]['armbian_netboot_board_model'] }})"

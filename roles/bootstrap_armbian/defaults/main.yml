@@ -1,3 +1,3 @@
 ---
-bootstrap_armbian_user: "igou"
-bootstrap_armbian_ssh_keys: []
+armbian_netboot_bootstrap_user: "igou"
+armbian_netboot_bootstrap_ssh_keys: []

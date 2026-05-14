@@ -2,32 +2,32 @@
 # Pre-flight validation for stage_netboot_assets.yml.
 #
 # Catches one class of misconfiguration that would otherwise surface
-# late: armbian_image_urls[<model>] is unreachable (404, dead mirror,
+# late: armbian_netboot_image_urls[<model>] is unreachable (404, dead mirror,
 # typo). Without this check, failure shows up after we've created loop
 # devices and started extracting.
 
 # Prefer a local-FS check first: when the netboot server also hosts the
 # HTTP image server (e.g. the public nginx container on TrueNAS, on a
-# macvlan that's not host-reachable), the URL in armbian_image_urls is
+# macvlan that's not host-reachable), the URL in armbian_netboot_image_urls is
 # unreachable from this host. Only HEAD-check models without a published
 # local copy.
 #
 # The local path is composed from the build-publish invariant
-# ({{ nfs_assets_export }}/images/<armbian_board_name>/<basename>) rather
+# ({{ armbian_netboot_nfs_assets_export }}/images/<armbian_board_name>/<basename>) rather
 # than by parsing the URL, so it works regardless of URL prefix
 # (netbootxyz had none; public nginx adds /boot-files/).
 - name: Stat local image publish path per model
   ansible.builtin.stat:
-    path: "{{ nfs_assets_export }}/images/{{ board_configs[item].armbian_board_name }}/{{ armbian_image_urls[item] | basename }}"
+    path: "{{ armbian_netboot_nfs_assets_export }}/images/{{ armbian_netboot_board_configs[item].armbian_board_name }}/{{ armbian_netboot_image_urls[item] | basename }}"
   register: _local_image_pf
   loop: "{{ _board_models }}"
   loop_control:
     label: "{{ item }}"
-  when: armbian_image_urls[item] is defined
+  when: armbian_netboot_image_urls[item] is defined
 
 - name: Validate each board's image URL is reachable (skipped when local copy exists)
   ansible.builtin.uri:
-    url: "{{ armbian_image_urls[item.item] }}"
+    url: "{{ armbian_netboot_image_urls[item.item] }}"
     method: HEAD
     status_code: [200, 302]
     follow_redirects: all
@@ -36,17 +36,17 @@
   failed_when: _image_url_check.status not in [200, 302]
   loop: "{{ _local_image_pf.results }}"
   loop_control:
-    label: "{{ item.item }} → {{ armbian_image_urls[item.item] | default('(unset)') }}"
+    label: "{{ item.item }} → {{ armbian_netboot_image_urls[item.item] | default('(unset)') }}"
   when:
-    - armbian_image_urls[item.item] is defined
+    - armbian_netboot_image_urls[item.item] is defined
     - not (item.stat.exists | default(false))
 
 - name: Fail if any board lacks an image URL
   ansible.builtin.fail:
     msg: |
-      armbian_image_urls['{{ item }}'] is not set in
+      armbian_netboot_image_urls['{{ item }}'] is not set in
       inventory/group_vars/all.yml. Add the full .img.xz URL.
-  when: armbian_image_urls[item] is not defined
+  when: armbian_netboot_image_urls[item] is not defined
   loop: "{{ _board_models }}"
 
 - name: Preflight passed

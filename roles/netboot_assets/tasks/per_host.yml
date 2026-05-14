@@ -8,9 +8,9 @@
 
 - name: Set per-host facts for {{ _host }}
   ansible.builtin.set_fact:
-    _host_model: "{{ hostvars[_host].board_model }}"
-    _host_template_dir: "{{ nfs_rootfs_path }}/_templates/{{ hostvars[_host].board_model }}"
-    _host_rootfs_dir: "{{ nfs_rootfs_path }}/{{ _host }}"
+    _host_model: "{{ hostvars[_host].armbian_netboot_board_model }}"
+    _host_template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[_host].armbian_netboot_board_model }}"
+    _host_rootfs_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ _host }}"
 
 - name: Verify model template exists for {{ _host }}
   ansible.builtin.stat:
