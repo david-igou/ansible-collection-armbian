@@ -100,7 +100,7 @@ fi
 ansible-playbook playbooks/test_hardware_e2e.yml \
   --limit "${HOST_LIMIT}" \
   "${SERIAL_VARS[@]}" \
-  -e armbian_default_password=1234 \
+  -e armbian_netboot_default_password=1234 \
   "${ARGS[@]}" \
   >> "${E2E_LOG}" 2>&1
 RC=$?
