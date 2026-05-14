@@ -45,9 +45,9 @@
 - name: Validate armbian_netboot_boot_mode matches a renderable label
   ansible.builtin.assert:
     that:
-      - hostvars[_target_host].armbian_netboot_boot_mode in _renderable_labels
+      - armbian_netboot_boot_mode in _renderable_labels
     fail_msg: >-
-      armbian_netboot_boot_mode={{ hostvars[_target_host].armbian_netboot_boot_mode }}
+      armbian_netboot_boot_mode={{ armbian_netboot_boot_mode }}
       for {{ _target_host }} but only these labels will be rendered:
       {{ _renderable_labels | join(', ') }}.
       For 'sd', set armbian_netboot_sd_partuuid on the host.
