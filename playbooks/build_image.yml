@@ -132,6 +132,7 @@
     # bumps the upstream-hook's v2026.01 default to v2026.04.
     build_branches:
       rock-5b: edge
+      orangepi5-max: edge
   pre_tasks:
     - name: Load board configs for board name lookup
       ansible.builtin.include_vars:
