@@ -1,14 +1,11 @@
 ---
 # Manual-PSU cold-boot test for USB-C powered RK3588(S) boards.
 #
-# Same shape as test_hardware_e2e.yml's Phase 2 (write pxelinux.cfg +
-# verify NFS-rooted boot), but the power transitions are operator-
-# driven `ansible.builtin.pause` prompts instead of a routeros_poe
-# cycle on the switch. Use this when the board is being powered via
-# its USB-C input from an external PSU rather than via PoE — typical
-# scenario: A/B-testing PSU sufficiency against a reference supply
-# (Radxa 5 V/5 A or similar) while the PoE HAT is off the board so
-# the serial UART pins are accessible.
+# Same shape as test_hardware_e2e.yml's Phase 2 (converge pxelinux.cfg
+# to nfs + verify NFS-rooted boot), but the power transitions are
+# operator-driven `ansible.builtin.pause` prompts instead of a
+# routeros_poe cycle on the switch. Use this when the board is being
+# powered via its USB-C input from an external PSU rather than via PoE.
 #
 # Pre-conditions:
 #   - PSU is DISCONNECTED (board is off) at invocation.
@@ -20,26 +17,19 @@
 #
 # Workflow per invocation (one cold boot per run):
 #   1. Pre-flight serial capture starts on serial_host.
-#   2. Per-board pxelinux.cfg + /ip tftp row written to rb5009.
+#   2. Per-board pxelinux.cfg converged to nfs mode on rb5009.
 #   3. PAUSE: prompt operator to plug in PSU.
 #   4. wait_for TCP/22 (board cold-boots via PXE → NFS).
 #   5. wait_for_connection (inv user SSH ready).
 #   6. Gather root mount facts, assert rootfs is NFS.
 #   7. Diagnostic bundle.
-#   8. ALWAYS-block: remove pxelinux.cfg + /ip tftp row, stop serial,
+#   8. ALWAYS-block: converge pxelinux.cfg to sd mode, stop serial,
 #      PAUSE: prompt operator to unplug PSU for next iter.
 #
 # Usage:
 #   ansible-playbook playbooks/test_manual_psu_cold_boot.yml \
 #     --limit opi5pro-01.igou.systems \
-#     -e armbian_default_password=1234
-#
-# Wrapper-driven (per-iter artifacts + auto-comment, same as run-iter.sh
-# but invoking this playbook):
-#   PLAYBOOK=playbooks/test_manual_psu_cold_boot.yml \
-#     playbooks/scripts/run-iter.sh <N>
-#   (run-iter.sh does not currently support PLAYBOOK override; for now
-#    invoke ansible-playbook directly.)
+#     -e armbian_netboot_default_password=1234
 
 - name: Manual-PSU cold-boot test (single cold boot per run)
   hosts: boards
@@ -51,7 +41,7 @@
     serial_baud: 1500000
     _routeros_target: "{{ groups['routeros_routers'] | first }}"
     _wait_timeout: 300
-    boot_attempt_timeout: 180
+    armbian_netboot_boot_attempt_timeout: 180
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
     _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
@@ -65,19 +55,16 @@
           hosts: {{ ansible_play_hosts }}
       run_once: true
 
-    - name: Pre-flight — assert armbian_default_password is set
+    - name: Pre-flight — assert armbian_netboot_default_password is set
       ansible.builtin.assert:
         that:
-          - armbian_default_password is defined
-          - armbian_default_password | length > 0
+          - armbian_netboot_default_password is defined
+          - armbian_netboot_default_password | length > 0
         fail_msg: >-
-          armbian_default_password must be set. Pass via
-          -e armbian_default_password=<pw> or set in inventory.
+          armbian_netboot_default_password must be set. Pass via
+          -e armbian_netboot_default_password=<pw> or set in inventory.
       run_once: true
 
-    # Defensive pre-start kill of any leftover socat reading the
-    # serial device — same idea as test_hardware_e2e.yml's
-    # Serial — kill any pre-existing socat task.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
       delegate_to: "{{ serial_host }}"
@@ -132,25 +119,15 @@
 
     - name: Cold-boot test (cleanup runs in always)
       block:
-        - name: Setup — wipe + write per-board pxelinux.cfg on rb5009
+        - name: Setup — converge pxelinux.cfg to nfs mode on rb5009
           delegate_to: "{{ _routeros_target }}"
           block:
-            - name: Setup — wipe stale pxelinux.cfg (defensive)
+            - name: Setup — render pxelinux.cfg with default=nfs
               ansible.builtin.include_role:
-                name: routeros_sbc_tftp
-                tasks_from: remove_pxelinux_cfg.yml
+                name: routeros_pxe_config
               vars:
-                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
-                target_board_host: "{{ inventory_hostname }}"
-
-            - name: Setup — write per-board pxelinux.cfg + /ip tftp row
-              ansible.builtin.include_role:
-                name: routeros_sbc_tftp
-                tasks_from: write_pxelinux_cfg.yml
-              vars:
-                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
-                board_model: "{{ hostvars[inventory_hostname].board_model }}"
-                target_board_host: "{{ inventory_hostname }}"
+                _target_host: "{{ inventory_hostname }}"
+                armbian_netboot_boot_mode: nfs
 
         - name: PSU plug-in — operator action
           ansible.builtin.pause:
@@ -165,7 +142,7 @@
           ansible.builtin.wait_for:
             host: "{{ ansible_host | default(inventory_hostname) }}"
             port: 22
-            timeout: "{{ boot_attempt_timeout | default(180) }}"
+            timeout: "{{ armbian_netboot_boot_attempt_timeout | default(180) }}"
             state: started
           delegate_to: localhost
 
@@ -196,21 +173,21 @@
             fail_msg: >-
               Cold boot completed but rootfs is {{ _root_fstype }}
               ({{ _root_device }}) — expected NFS. Board did not
-              PXE-boot despite pxelinux.cfg + /ip tftp row being on
+              PXE-boot despite pxelinux.cfg with default=nfs being on
               rb5009. Diagnostic bundle above has /proc/cmdline,
               findmnt, etc.
 
       always:
-        - name: Cleanup — remove per-board pxelinux.cfg from rb5009
+        - name: Cleanup — converge pxelinux.cfg to sd mode on rb5009
           delegate_to: "{{ _routeros_target }}"
           block:
-            - name: Cleanup — include routeros_sbc_tftp remove_pxelinux_cfg
+            - name: Cleanup — render pxelinux.cfg with default=sd
               ansible.builtin.include_role:
-                name: routeros_sbc_tftp
-                tasks_from: remove_pxelinux_cfg.yml
+                name: routeros_pxe_config
               vars:
-                board_mac: "{{ hostvars[inventory_hostname].board_mac }}"
-                target_board_host: "{{ inventory_hostname }}"
+                _target_host: "{{ inventory_hostname }}"
+                armbian_netboot_boot_mode: sd
+          when: hostvars[inventory_hostname].armbian_netboot_sd_partuuid is defined
 
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |

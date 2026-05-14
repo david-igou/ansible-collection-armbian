@@ -1,14 +1,14 @@
 ---
-# Builds custom Armbian images for every unique board_model in
+# Builds custom Armbian images for every unique armbian_netboot_board_model in
 # groups['boards'], then publishes the resulting artifact directories to
 # the netboot server's HTTP export.
 #
 # Two plays:
 #   1. hosts: armbian_builders — invoke the armbian_build role per
-#      unique board_model, then stage each <board>/ directory on the
+#      unique armbian_netboot_board_model, then stage each <board>/ directory on the
 #      controller at /tmp/armbian_publish/<board>/.
 #   2. hosts: netboot_server — push each staged <board>/ directory from
-#      the controller into nfs_assets_export/images/<board>/.
+#      the controller into armbian_netboot_nfs_assets_export/images/<board>/.
 #
 # The controller mediates the transfer so the only SSH trust required is
 # controller→builder and controller→netboot_server (already needed for
@@ -22,7 +22,7 @@
 # The PXE-first userpatches table is playbook data, not role data —
 # the armbian_build role itself is intent-agnostic. Add a new board by
 # extending build_userpatches with another entry and adding the host(s)
-# under groups['boards'] in inventory with a board_model that exists in
+# under groups['boards'] in inventory with an armbian_netboot_board_model that exists in
 # vars/boards.yml.
 #
 # Usage:
@@ -137,29 +137,29 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../vars/boards.yml"
 
-    - name: Resolve unique board_models from groups['boards']
+    - name: Resolve unique armbian_netboot_board_model values from groups['boards']
       ansible.builtin.set_fact:
         _board_models: >-
           {{ groups['boards']
-             | map('extract', hostvars, 'board_model')
+             | map('extract', hostvars, 'armbian_netboot_board_model')
              | unique
              | list }}
 
-    - name: Assert every board_model has a board_configs entry
+    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
       ansible.builtin.assert:
         that:
-          - item in board_configs
+          - item in armbian_netboot_board_configs
         fail_msg: >-
-          board_model '{{ item }}' (from groups['boards']) has no entry in
+          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
           vars/boards.yml. Add it there or remove the host from the
           boards group.
       loop: "{{ _board_models }}"
 
-    - name: Resolve build targets from board_configs
+    - name: Resolve build targets from armbian_netboot_board_configs
       ansible.builtin.set_fact:
         _build_targets: >-
           {{ _board_models
-             | map('extract', board_configs, 'armbian_board_name')
+             | map('extract', armbian_netboot_board_configs, 'armbian_board_name')
              | list }}
 
     - name: Report build targets
@@ -209,7 +209,7 @@
     - name: Push staged image + manifest to netboot server (sudo on receive)
       ansible.posix.synchronize:
         src: "/tmp/armbian_publish/{{ item }}/"
-        dest: "{{ nfs_assets_export }}/images/{{ item }}/"
+        dest: "{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
         delete: false
         rsync_path: "sudo rsync"
         rsync_opts:
