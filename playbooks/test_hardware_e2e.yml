@@ -253,7 +253,6 @@
             tasks_from: converge.yml
           vars:
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
 
         # Phase 1 (SD baseline) is opt-out via skip_baseline=true.
         # Use case: the board's SD-side boot is broken but PXE/NFS still
@@ -293,8 +292,7 @@
                 _phase_label: "Phase 1"
                 _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
                 armbian_netboot_boot_mode: sd
-                armbian_netboot_router: "{{ armbian_netboot_router }}"
-
+    
             # ignore_errors: true (no failed_when override) so the
             # registered _inv_probe.failed reflects the real outcome
             # of the wait_for_connection. Both `failed_when: false`
@@ -351,8 +349,7 @@
                 _phase_label: "Phase 1"
                 _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
                 armbian_netboot_boot_mode: sd
-                armbian_netboot_router: "{{ armbian_netboot_router }}"
-
+    
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
 
@@ -367,8 +364,7 @@
               ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 1 — SD baseline"
-                armbian_netboot_router: "{{ armbian_netboot_router }}"
-
+    
             - name: Phase 1 — assert rootfs is on a local block device
               ansible.builtin.assert:
                 that:
@@ -427,7 +423,6 @@
             _phase_label: "Phase 2"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
             armbian_netboot_boot_mode: nfs
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
 
         - name: Phase 2 — reset connection so new identity takes effect
           ansible.builtin.meta: reset_connection
@@ -472,8 +467,7 @@
                 _phase_label: "Phase 2"
                 _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
                 armbian_netboot_boot_mode: nfs
-                armbian_netboot_router: "{{ armbian_netboot_router }}"
-
+    
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
 
@@ -488,8 +482,7 @@
               ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 2 — nfsroot"
-                armbian_netboot_router: "{{ armbian_netboot_router }}"
-
+    
             - name: Phase 2 — assert rootfs is NFS
               ansible.builtin.assert:
                 that:
@@ -535,7 +528,6 @@
             _phase_label: "Phase 3"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
 
         - name: Phase 3 — wait for SSH (SD-root identity, with cycle retry)
           ansible.builtin.include_role:
@@ -545,7 +537,6 @@
             _phase_label: "Phase 3"
             _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -561,7 +552,6 @@
           ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
           vars:
             _diag_phase: "phase 3 — back to SD"
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
 
         - name: Phase 3 — assert rootfs returned to local block device
           ansible.builtin.assert:
@@ -598,7 +588,6 @@
             tasks_from: converge.yml
           vars:
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — reset connection to inventory identity
@@ -624,7 +613,6 @@
             _phase_label: "Cleanup"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
           when: not (leave_state | bool)
 
         # See the matching comment on the Phase 1 probe — the same
@@ -669,7 +657,6 @@
             _phase_label: "Cleanup"
             _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
             armbian_netboot_boot_mode: sd
-            armbian_netboot_router: "{{ armbian_netboot_router }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to SD boot
