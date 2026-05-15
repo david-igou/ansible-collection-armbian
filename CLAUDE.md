@@ -323,6 +323,25 @@ The dimensions that vary in practice:
   path.
 - **MMC controller index in U-Boot**: which `mmc dev N` enumerates the
   SD card slot is per-board, depending on what the U-Boot DTB declares.
+- **Ethernet controller / PHY chip**: per-SKU *and* per-revision. The
+  same board name from the same vendor can ship with different ethernet
+  silicon across production runs — e.g. early Orange Pi 5 batches used
+  RTL8211F, later batches use Motorcomm YT8531C, and Orange Pi 5 Pro
+  switched to a Motorcomm YT6801 PCIe NIC entirely (with `&gmac1
+  { status = "disabled"; }` in the upstream u-boot DT). Vendor product
+  pages routinely lag the actual BOM. Implications: U-Boot needs the
+  Kconfig PHY driver matching the *actual* OUI the PHY reports — a
+  mismatch silently looks like "PXE doesn't work" with no log to point
+  at it. **Always confirm the live chip via Linux** before patching
+  U-Boot configs:
+  ```bash
+  ethtool -i end0                 # bus + driver name
+  dmesg | grep -iE 'phy|gmac|stmmac|mdio'  # PHY OUI bind line
+  lspci -nn | grep -i ethernet    # for PCIe-NIC boards
+  ```
+  The kernel's MDIO probe reads PHY ID registers and binds the right
+  driver regardless of what U-Boot has — so kernel output is the
+  ground truth for what's actually on the board.
 
 ## Adding a new board
 

@@ -24,6 +24,17 @@
     # under the public-nginx layout the URL has a /boot-files/ prefix.)
     _local_image_path: "{{ armbian_netboot_nfs_assets_export }}/images/{{ armbian_netboot_board_configs[_model].armbian_board_name }}/{{ armbian_netboot_image_urls[_model] | basename }}"
 
+- name: Force-refresh — remove stale per-model state when requested
+  when: armbian_netboot_force_refresh | bool
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ _template_dir }}"
+    - "{{ _tftp_truenas_cache }}"
+    - "{{ _image_cache }}"
+    - "{{ armbian_netboot_image_cache }}/{{ _model }}.img"
+
 - name: Ensure per-model template and TrueNAS cache directories exist
   ansible.builtin.file:
     path: "{{ item }}"
