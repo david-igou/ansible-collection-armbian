@@ -50,8 +50,13 @@ argument_specs:
             expects the board to come up on an NFS rootfs.
           - >-
             "sd" sets the pxelinux.cfg default label to sd and expects
-            the board to boot from local SD/eMMC. Requires
-            armbian_netboot_sd_partuuid to be set on the host.
+            the board to boot from a local block device. The rendered
+            kernel cmdline is `root=LABEL=armbi_root` by default; for
+            boards with multiple rootfs candidates (e.g. eMMC + SD both
+            labelled armbi_root) set `armbian_netboot_sd_root` on the
+            host to a more specific identifier such as
+            `PARTLABEL=rootfs`, `UUID=<fs-uuid>`, or
+            `PARTUUID=<part-uuid>` to disambiguate.
 
       armbian_netboot_router:
         type: str

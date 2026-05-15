@@ -42,9 +42,14 @@ SD rootfs is determined by pxelinux content on rb5009:
 - When `default` selects the NFS label → kernel cmdline uses NFS root from
   TrueNAS at `armbian_netboot_nfs_server_ip` (see inventory /
   `armbian_netboot_nfs_rootfs_path`).
-- When `default` selects the SD label → pxelinux passes the SD rootfs `PARTUUID`
-  (`armbian_netboot_sd_partuuid`) so the board boots local SD rootfs after the
-  same PXE path.
+- When `default` selects the SD label → pxelinux passes a local rootfs
+  identifier so the board boots from local block storage after the same PXE
+  path. The cmdline is `root=LABEL=armbi_root` by default — every Armbian
+  image stamps that label on the root filesystem. Boards with multiple
+  drives carrying `LABEL=armbi_root` (e.g. eMMC + SD both flashed from the
+  same image) set `armbian_netboot_sd_root` on the host to a more specific
+  identifier such as `PARTLABEL=rootfs`, `UUID=<fs-uuid>`, or
+  `PARTUUID=<part-uuid>` to disambiguate.
 
 ## External RouterOS prerequisite
 

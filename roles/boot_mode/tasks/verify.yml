@@ -37,5 +37,8 @@
       after PoE cycle but got {{ _root_device }} ({{ _root_fstype }}).
       pxelinux.cfg was written to {{ armbian_netboot_router }} with
       default=sd (converge.yml succeeded), so the board should have
-      booted the sd label. Check that armbian_netboot_sd_partuuid is
-      correct and the SD card is healthy.
+      booted the sd label. Check that armbian_netboot_sd_root (if set
+      as a host-level override) resolves to a partition the board can
+      mount, and that the SD card is healthy. Default cmdline is
+      root=LABEL=armbi_root; if multiple drives carry that label the
+      kernel may pick the wrong one.

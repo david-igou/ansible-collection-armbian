@@ -22,11 +22,9 @@ label nfs
   fdt    armbian/{{ _model }}/board.dtb
   append root=/dev/nfs nfsroot={{ armbian_netboot_nfs_server_ip | default(armbian_netboot_server_ip) }}:{{ armbian_netboot_nfs_rootfs_path }}/{{ _target_host }},nfsvers=3,rw ip=dhcp console={{ _board.console }} rootwait rw{{ _verbose_suffix }}
 
-{% if hostvars[_target_host].armbian_netboot_sd_partuuid is defined %}
 label sd
   menu label Armbian on SD ({{ _target_host }})
   kernel armbian/{{ _model }}/vmlinuz
   initrd armbian/{{ _model }}/initrd.img
   fdt    armbian/{{ _model }}/board.dtb
-  append root=PARTUUID={{ hostvars[_target_host].armbian_netboot_sd_partuuid }} rootfstype=ext4 rootwait rw console={{ _board.console }}{{ _verbose_suffix }}
-{% endif %}
+  append root={{ hostvars[_target_host].armbian_netboot_sd_root | default('LABEL=armbi_root') }} rootfstype=ext4 rootwait rw console={{ _board.console }}{{ _verbose_suffix }}

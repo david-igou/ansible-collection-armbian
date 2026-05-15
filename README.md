@@ -23,7 +23,11 @@ matching `default` label in the rendered pxelinux file — not by
 presence/absence of the file. A custom Armbian SD image for `orange-pi-5-pro`
 whose U-Boot tries PXE first enforces that PXE consults rb5009 on every boot.
 
-Sd boot requires `armbian_netboot_sd_partuuid` on the host. See
+The sd label renders `root=LABEL=armbi_root` by default — works on every
+single-rootfs board. For boards with multiple drives carrying that label
+(e.g. eMMC + SD both flashed from the same image), set
+`armbian_netboot_sd_root` on the host to a specific identifier such as
+`PARTLABEL=rootfs`, `UUID=<fs-uuid>`, or `PARTUUID=<part-uuid>`. See
 `playbooks/test_hardware_e2e.yml` for the assertion harness.
 
 Spec: [`docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md`](docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md)
@@ -189,9 +193,12 @@ login replaces them.
 #### 1.3 Add the board to inventory
 
 Edit `inventory/hosts.yml`. Each host needs `armbian_netboot_board_mac`,
-`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` (`nfs` or `sd`). For
-`sd`, also set `armbian_netboot_sd_partuuid`. The board model must match a key under
-`armbian_netboot_board_configs` in [`vars/boards.yml`](vars/boards.yml):
+`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` (`nfs` or `sd`).
+For `sd` mode the rendered kernel cmdline defaults to `root=LABEL=armbi_root`;
+override with `armbian_netboot_sd_root` only when a board has multiple drives
+carrying that label and the default would be ambiguous. The board model must
+match a key under `armbian_netboot_board_configs` in
+[`vars/boards.yml`](vars/boards.yml):
 
 ```yaml
 boards:
@@ -262,7 +269,6 @@ ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbi
 ```
 
 Same convergence mechanics as `converge_boot_mode.yml`, but the desired mode comes from `-e`.
-Sd mode still requires `armbian_netboot_sd_partuuid` on the host.
 
 ### Power-cycle a board via PoE
 

@@ -187,7 +187,6 @@
               vars:
                 _target_host: "{{ inventory_hostname }}"
                 armbian_netboot_boot_mode: sd
-          when: hostvars[inventory_hostname].armbian_netboot_sd_partuuid is defined
 
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |

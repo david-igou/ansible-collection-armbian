@@ -12,8 +12,10 @@
 #      local rootfs again
 #
 # Pre-condition: the board runs a custom-built Armbian image with PXE-first
-# U-Boot, `armbian_netboot_sd_partuuid` is set (required so the sd label in
-# pxelinux.cfg can render), and PoE wiring matches inventory.
+# U-Boot and PoE wiring matches inventory. The sd label in pxelinux.cfg
+# renders unconditionally — `root=LABEL=armbi_root` by default, or
+# `armbian_netboot_sd_root` host override if the board has multiple drives
+# carrying `LABEL=armbi_root`.
 #
 # Diagnostic bundle (playbooks/tasks/diagnostic_bundle.yml) runs at every
 # verify checkpoint to surface findmnt, kernel cmdline, routes, resolv.conf,
@@ -90,16 +92,6 @@
           {{ inventory_hostname }} needs armbian_netboot_poe_switch and
           armbian_netboot_poe_port hostvars set.
           Add them to inventory/host_vars/{{ inventory_hostname }}.yml.
-
-    - name: Pre-flight — assert armbian_netboot_sd_partuuid is set
-      ansible.builtin.assert:
-        that:
-          - armbian_netboot_sd_partuuid is defined
-          - armbian_netboot_sd_partuuid | length > 0
-        fail_msg: >-
-          test_hardware_e2e.yml requires armbian_netboot_sd_partuuid on the
-          board host so pxelinux.cfg can render the sd boot label (phases 1/3
-          and cleanup converge default sd).
 
     - name: Pre-flight — assert armbian_netboot_default_password is set
       ansible.builtin.assert:

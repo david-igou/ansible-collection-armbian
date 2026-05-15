@@ -45,7 +45,9 @@ inventory; `set_boot_mode.yml` accepts it via `-e` for ad-hoc overrides. See
 Breaking change from v1. Every onboarded board always has a pxelinux.cfg on
 rb5009 — boot mode is controlled by the `default` directive inside it, not by
 file presence/absence. All variables use the `armbian_netboot_` prefix. The
-`sd` boot mode requires `armbian_netboot_sd_partuuid` on the host.
+`sd` label renders `root=LABEL=armbi_root` by default; per-host override via
+`armbian_netboot_sd_root` (e.g. `PARTLABEL=rootfs`, `UUID=…`, `PARTUUID=…`)
+handles boards with multiple drives carrying `LABEL=armbi_root`.
 
 Spec: [`docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md`](docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md)
 
