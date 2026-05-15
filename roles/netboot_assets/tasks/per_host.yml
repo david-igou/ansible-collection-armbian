@@ -12,6 +12,12 @@
     _host_template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[_host].armbian_netboot_board_model }}"
     _host_rootfs_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ _host }}"
 
+- name: Force-refresh — remove stale per-host rootfs when requested
+  when: armbian_netboot_force_refresh | bool
+  ansible.builtin.file:
+    path: "{{ _host_rootfs_dir }}"
+    state: absent
+
 - name: Verify model template exists for {{ _host }}
   ansible.builtin.stat:
     path: "{{ _host_template_dir }}/bin/bash"

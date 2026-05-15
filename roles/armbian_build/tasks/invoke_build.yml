@@ -29,6 +29,7 @@
   loop_control:
     label: "{{ item.key }}"
 
+# e.g. ./compile.sh BOARD=orangepi5pro BRANCH=edge RELEASE=bookworm KERNEL_CONFIGURE=no BUILD_DESKTOP=no BUILD_MINIMAL=yes COMPRESS_OUTPUTIMAGE=sha,xz EXPERT=yes
 - name: Build Armbian image with userpatches applied
   ansible.builtin.command:
     cmd: >-

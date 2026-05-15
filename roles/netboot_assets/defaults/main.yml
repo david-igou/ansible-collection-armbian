@@ -10,3 +10,13 @@
 # as armbian_netboot_* names — they are not duplicated in role defaults.
 armbian_netboot_image_cache: /mnt/ssd/netboot/cache
 armbian_netboot_image_mount: /mnt/ssd/netboot/.loop-mount
+
+# Opt-in toggle to force re-extraction of the per-model rootfs templates,
+# the TrueNAS-side TFTP asset cache, and per-host rootfs clones. With the
+# default (false) the role's existence-check gates skip those steps when
+# the target directories already look populated — fast on re-runs but
+# silently retains stale assets after a rebuild of the source .img.xz.
+# Set to true (typically via `-e armbian_netboot_force_refresh=true`) to
+# nuke and rebuild every per-model template, TFTP cache, cached image
+# blob, and per-host rootfs clone for every model/host in inventory.
+armbian_netboot_force_refresh: false
