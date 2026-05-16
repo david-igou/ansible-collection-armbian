@@ -92,12 +92,10 @@ detailed [Lifecycle](#lifecycle) below.
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
 through a small set of playbooks. Phase 0 sets up the control plane once
 per environment; Phase 1 onboards each board, ending in either an
-SD-rooted or NFS-rooted boot.
-
-The `.img.xz` produced by `build_image` is the artefact consumed by both
-the manual SD-card flash and the `stage_netboot_assets` rootfs extraction.
-After adding a host to inventory, re-run Phase 0's `stage_netboot_assets`
-to provision the per-host rootfs clone before the first `converge_boot_mode`.
+SD-rooted or NFS-rooted boot. The diagram annotates each playbook with
+the artefact it produces and the host that artefact lands on. After
+adding a host to inventory, re-run Phase 0's `stage_netboot_assets` to
+provision the per-host rootfs clone before the first `converge_boot_mode`.
 
 Phase 1 branches on the inventory's declared `armbian_netboot_boot_mode`.
 The SD rootfs and the per-host NFS rootfs are **separate filesystems**,
@@ -113,12 +111,17 @@ flowchart LR
     subgraph P0["Phase 0 — control plane (once per environment)"]
         direction LR
         BI["build_image<br/><i>armbian_builders</i>"]
+        IMG[("&lt;board&gt;.img.xz<br/><i>on netboot_server</i><br/><i>via 2-hop rsync:<br/>builder → controller →<br/>netboot_server</i>")]
         BU["routeros/<br/>bootstrap_user"]
-        SN0["stage_netboot_<br/>assets"]
+        USR[("ansible-netboot<br/>user + SSH key<br/><i>on RouterOS</i>")]
+        SN0["stage_netboot_<br/>assets<br/><i>netboot_server</i>"]
+        NFS[("rootfs templates +<br/>per-host clones +<br/>TFTP cache<br/><i>local on netboot_server<br/>(no copy needed)</i>")]
         SR0["stage_router"]
-        BI --> SN0
-        SN0 --> SR0
-        BU --> SR0
+        RTR[("flash:/sbc/armbian/&lt;model&gt;/<br/>+ /ip tftp rows<br/><i>on router</i><br/><i>via fetch → net_put</i>")]
+        BI --> IMG --> SN0
+        SN0 --> NFS --> SR0
+        BU --> USR --> SR0
+        SR0 --> RTR
     end
 
     subgraph P1["Phase 1 — onboard a board (per board)"]
@@ -134,8 +137,8 @@ flowchart LR
         CB1 -- "boot_mode=nfs" --> BA_NFS --> OUT_NFS
     end
 
-    SR0 --> FL
-    BI -.->|".img.xz"| FL
+    RTR --> FL
+    IMG -.->|".img.xz"| FL
 ```
 
 Once a board is in either outcome state, daily operations toggle between
