@@ -73,6 +73,12 @@ armbian_netboot_pxe_verbose: false
 # publish play consumes it without loading the netboot_assets role.
 armbian_netboot_nfs_assets_export: /mnt/ssd/public/boot-files
 
+# Root password on a freshly flashed Armbian image. Used by
+# playbooks/bootstrap_armbian.yml to connect as root via password
+# auth before the SSH-key user is provisioned. "1234" is the
+# Armbian default — encrypt with ansible-vault in any real inventory.
+armbian_netboot_default_password: "1234"
+
 # ── Cross-role path defaults ────────────────────────────────────────────────
 # These live at group_vars/all scope (rather than role defaults) because
 # multiple roles consume them and duplicating across role defaults is a
