@@ -1,0 +1,21 @@
+---
+argument_specs:
+  main:
+    short_description: "Wait for a board to come up over TCP/22 + SSH."
+    description:
+      - >-
+        Single-host role. Waits for the inventory host to accept TCP/22
+        connections, then performs a wait_for_connection probe. No
+        notion of how the board was powered — the caller cycles PoE
+        (or the operator presses a button) before invoking this role.
+      - >-
+        Retry knobs match the v2 boot_mode role's names so inventory
+        overrides keep working.
+
+    options:
+      armbian_netboot_boot_attempt_timeout:
+        type: int
+        default: 180
+      armbian_netboot_post_boot_wait_timeout:
+        type: int
+        default: 300
