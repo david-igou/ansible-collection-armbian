@@ -89,111 +89,50 @@ detailed [Lifecycle](#lifecycle) below.
 
 ## How it works
 
-User-facing playbooks compose roles, transport-agnostic reference playbooks
-under `playbooks/routeros/`, and shared task helpers under `playbooks/tasks/`.
-**Solid edges** are role includes or playbook imports; **dashed edges** are
-task-file includes (`ansible.builtin.include_tasks`).
+A board ships from "fresh SD card" to "boots NFS on demand" in two passes
+through a small set of playbooks. The first three are run once per
+environment; the next three are run once per board; daily operations are
+ad-hoc.
 
 ```mermaid
-flowchart TB
-    subgraph T1["Tier 1 — User-facing playbooks"]
+flowchart LR
+    subgraph P0["Phase 0 — control plane (once per environment)"]
         direction LR
-        BI["build_image.yml"]
-        BA["bootstrap_armbian.yml"]
-        BRU["routeros/bootstrap_user.yml"]
-        SN["stage_netboot_assets.yml"]
-        SR["stage_router.yml"]
-        CB["converge_boot_mode.yml"]
-        SBM["set_boot_mode.yml"]
-        PC["poe_control.yml"]
-        PUE["persist_uboot_env.yml"]
-        TE["test_hardware_e2e.yml"]
-        TMP["test_manual_psu_cold_boot.yml"]
+        BU["routeros/<br/>bootstrap_user"]
+        SN0["stage_netboot_<br/>assets"]
+        SR0["stage_router"]
+        BU --> SN0 --> SR0
     end
 
-    subgraph T2L["Tier 2a — Roles"]
+    subgraph P1["Phase 1 — onboard a board (per board)"]
         direction LR
-        R_IB["image_build"]
-        R_IE["image_extract"]
-        R_RC["rootfs_clone"]
-        R_PR["pxelinux_render"]
-        R_BA["bootstrap_armbian"]
-        R_BBW["board_boot_wait"]
-        R_BBV["board_boot_verify"]
+        FL["flash SD<br/>(manual)"]
+        BA["bootstrap_<br/>armbian"]
+        SN1["stage_netboot_<br/>assets"]
+        CB1["converge_<br/>boot_mode"]
+        FL --> BA --> SN1 --> CB1
     end
 
-    subgraph T2R["Tier 2b — routeros/ reference playbooks (swappable)"]
+    subgraph DO["Daily ops (any time)"]
         direction LR
-        RR_UP["upload_pxelinux_cfg.yml"]
-        RR_UT["upload_tftp_assets.yml"]
-        RR_PCK["plumbing_check.yml"]
-        RR_POE["poe_control.yml"]
+        CB["converge_<br/>boot_mode"]
+        SBM["set_<br/>boot_mode"]
+        PC["poe_control"]
     end
 
-    subgraph T3L["Tier 3a — playbooks/tasks/ helpers"]
-        direction LR
-        H_CBR["cold_boot_with_retry.yml"]
-        H_CBS["cold_boot_single_attempt.yml"]
-        H_WFS["wait_for_ssh_with_cycle_retry.yml"]
-        H_ABN["auto_bootstrap_if_needed.yml"]
-        H_RUP["render_and_upload_pxelinux.yml"]
-        H_DB["diagnostic_bundle.yml"]
-    end
-
-    subgraph T3R["Tier 3b — routeros/tasks/ primitives"]
-        direction LR
-        T_UF["upload_file.yml"]
-        T_POE["poe_cycle.yml"]
-        T_UPO["upload_pxelinux_one.yml"]
-    end
-
-    %% Tier 1 → Tier 2
-    BI --> R_IB
-    BA --> R_BA
-    SN --> R_IE
-    SN --> R_RC
-    SR --> RR_UT
-    SR --> RR_PCK
-    CB --> RR_PCK
-    CB --> R_PR
-    CB --> RR_UP
-    CB --> R_BBW
-    CB --> R_BBV
-    SBM --> CB
-    PC --> RR_POE
-
-    %% Tier 1 → Tier 3 (task includes)
-    CB -.-> H_CBR
-    CB -.-> H_WFS
-    PUE -.-> T_POE
-    TE -.-> H_RUP
-    TE -.-> H_CBR
-    TE -.-> H_ABN
-    TE -.-> H_WFS
-    TE -.-> H_DB
-    TMP -.-> H_RUP
-    TMP -.-> H_DB
-
-    %% Tier 2 → Tier 3 (task includes from reference playbooks)
-    RR_UP -.-> T_UF
-    RR_UT -.-> T_UF
-    RR_POE -.-> T_POE
-
-    %% Tier 3 internal composition
-    H_CBR -.-> H_CBS
-    H_CBS -.-> T_POE
-    H_WFS -.-> H_CBR
-    H_ABN --> R_BA
-    H_RUP --> R_PR
-    H_RUP -.-> T_UPO
-    T_UPO -.-> T_UF
+    SR0 --> FL
+    CB1 --> CB
 ```
 
-### Swim-lane table
+Build playbooks (`build_image.yml`) and diagnostics
+(`test_hardware_e2e.yml`, `persist_uboot_env.yml`,
+`test_manual_psu_cold_boot.yml`) sit outside the standard lifecycle and run
+on demand — see the [Playbooks table](#playbooks) for frequency.
 
-Which host each user-facing playbook targets, and what it composes. The graph
-above is the source of truth for helper-task edges; this table summarises
-Tier 1 → Tier 2 only.
+### Dependency reference: which playbook composes what
+
+The lifecycle above is the order; this table is the dependency graph.
+Every user-facing playbook is one row.
 
 | Playbook | `hosts:` | Composes (roles) | Imports (reference playbooks) |
 |---|---|---|---|
