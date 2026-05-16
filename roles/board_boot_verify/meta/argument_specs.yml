@@ -1,0 +1,15 @@
+---
+argument_specs:
+  main:
+    short_description: "Assert a board's rootfs matches the declared boot mode."
+    description:
+      - >-
+        Single-host role. Gathers facts, inspects ansible_mounts['/'],
+        and asserts that the rootfs fstype matches the declared
+        boot_mode (nfs|nfs4 for nfs; not nfs for sd).
+
+    options:
+      boot_mode:
+        type: str
+        required: true
+        choices: [nfs, sd]
