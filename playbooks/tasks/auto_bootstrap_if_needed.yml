@@ -1,0 +1,36 @@
+---
+# Short SSH probe as the inventory user; if it fails, run
+# bootstrap_armbian inline against the Armbian default root account.
+# Used by test_hardware_e2e.yml at three points where a freshly-flashed
+# board or fresh per-host NFS rootfs may not yet have the inventory user.
+#
+# Required vars:
+#   _phase_label
+#   armbian_netboot_default_password
+
+- name: "{{ _phase_label }} — short SSH probe as inventory user"
+  ansible.builtin.wait_for_connection:
+    timeout: 30
+    sleep: 5
+    delay: 0
+  register: _inv_probe
+  ignore_errors: true # noqa: ignore-errors
+
+- name: "{{ _phase_label }} — auto-bootstrap when inv user can't authenticate"
+  when: _inv_probe is failed
+  block:
+    - ansible.builtin.debug:
+        msg: >-
+          {{ _phase_label }}: inventory user can't authenticate to
+          {{ inventory_hostname }} but the board is reachable —
+          running bootstrap_armbian inline.
+
+    - ansible.builtin.include_role:
+        name: bootstrap_armbian
+      vars:
+        ansible_user: root
+        ansible_password: "{{ armbian_netboot_default_password }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        ansible_become: false
+
+    - ansible.builtin.meta: reset_connection
