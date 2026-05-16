@@ -184,13 +184,9 @@
       changed_when: true
 
     # Warm `reboot` may skip re-reading SPI env on some RK3588 boot
-    # ROMs, so we PoE-cycle. Per-task delegation to `armbian_netboot_poe_switch` is
-    # baked into the routeros_poe role, so include_role here runs in
-    # the board's context but each underlying command hits the switch.
+    # ROMs, so we PoE-cycle. The cycle tasks file delegates to the
+    # board's armbian_netboot_poe_switch internally.
     - name: Cold-cycle the board when any env var drifted
-      ansible.builtin.include_role:
-        name: routeros_poe
-      vars:
-        armbian_netboot_poe_action: cycle
+      ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file | default('routeros/tasks/poe_cycle.yml') }}"
       when: _set_results.results | selectattr('changed') | list | length > 0
       tags: cold_cycle

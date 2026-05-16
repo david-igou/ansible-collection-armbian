@@ -4,15 +4,18 @@
 
 namespace: "david_igou"
 name: "armbian_netboot"
-version: 2.0.0
+version: 3.0.0
 readme: README.md
 authors:
   - david-igou
 
 description: >-
-  Ansible collection for PXE-netbooting and reprovisioning Armbian-based
-  ARM SBCs (Rockchip RK3588/RK3588S, Allwinner H618/sunxi) via RouterOS
-  DHCP option management and NFS-based root filesystems.
+  Ansible collection for end-to-end management of Armbian-based ARM SBCs:
+  custom image build, per-host rootfs provisioning, netboot/SD boot-mode
+  convergence, and PoE-driven hardware lifecycle. v3 decomposes roles
+  into single-purpose, single-host, transport-agnostic units; networking-
+  gear-specific code (e.g. RouterOS) lives in swappable reference
+  playbooks under playbooks/<transport>/.
 
 license_file: LICENSE
 

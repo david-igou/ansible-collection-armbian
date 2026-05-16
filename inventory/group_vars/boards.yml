@@ -8,25 +8,25 @@
 # group_vars/boards.yml (the same file path in your .inventory/ or
 # whatever directory ANSIBLE_INVENTORY points at) before first run.
 
-# ── david_igou.armbian_netboot.boot_mode ─────────────────────────────
-# Required: identifies the RouterOS router that owns SBC TFTP state
-# for boards in this group. The boot_mode role uses this as delegate_to
-# for all rb5009 mutation tasks (writing the per-board pxelinux.cfg +
-# /ip tftp row).
+# ── netboot router selection ─────────────────────────────────────────
+# Required: inventory hostname of the router that owns SBC TFTP state
+# for boards in this group. Top-level playbooks (converge_boot_mode,
+# test_hardware_e2e, persist_uboot_env) use this as delegate_to for
+# router mutation tasks (per-board pxelinux.cfg upload, /ip tftp rows).
 #
-# Must be an inventory host with the routeros network_cli connection
+# Must be an inventory host with the matching network_cli connection
 # settings — typically a member of the `routeros_routers` group.
 # Override per-host (host_vars/<board>.yml) if a specific board is
 # served by a different router.
 armbian_netboot_router: rb5009
 
-# Optional: override the boot_mode role's retry/timeout defaults for
-# all boards in this group. Defaults below match what the role ships
-# with (see roles/boot_mode/defaults/main.yml).
-# See docs/retry-configuration.md for tuning intuition and recommended
+# ── boot-mode retry/timeout knobs (optional overrides) ───────────────
+# Defaults live in roles/board_boot_wait/defaults/main.yml and are
+# consumed by playbooks/tasks/cold_boot_with_retry.yml and
+# playbooks/tasks/wait_for_ssh_with_cycle_retry.yml. See
+# docs/retry-configuration.md for tuning intuition and recommended
 # combinations (healthy / flaky-PoE / max-consistency / fast-iter /
-# fresh-rootfs). View the full role contract with:
-#   ansible-doc -t role david_igou.armbian_netboot.boot_mode
+# fresh-rootfs).
 #
 # armbian_netboot_boot_retry_attempts: 0
 # armbian_netboot_boot_attempt_timeout: 180

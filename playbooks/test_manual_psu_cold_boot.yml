@@ -120,14 +120,9 @@
     - name: Cold-boot test (cleanup runs in always)
       block:
         - name: Setup — converge pxelinux.cfg to nfs mode on rb5009
-          delegate_to: "{{ _routeros_target }}"
-          block:
-            - name: Setup — render pxelinux.cfg with default=nfs
-              ansible.builtin.include_role:
-                name: routeros_pxe_config
-              vars:
-                _target_host: "{{ inventory_hostname }}"
-                armbian_netboot_boot_mode: nfs
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          vars:
+            armbian_netboot_boot_mode: nfs
 
         - name: PSU plug-in — operator action
           ansible.builtin.pause:
@@ -179,14 +174,9 @@
 
       always:
         - name: Cleanup — converge pxelinux.cfg to sd mode on rb5009
-          delegate_to: "{{ _routeros_target }}"
-          block:
-            - name: Cleanup — render pxelinux.cfg with default=sd
-              ansible.builtin.include_role:
-                name: routeros_pxe_config
-              vars:
-                _target_host: "{{ inventory_hostname }}"
-                armbian_netboot_boot_mode: sd
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          vars:
+            armbian_netboot_boot_mode: sd
 
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |
