@@ -92,10 +92,12 @@ detailed [Lifecycle](#lifecycle) below.
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
 through a small set of playbooks. Phase 0 sets up the control plane once
 per environment; Phase 1 onboards each board, ending in either an
-SD-rooted or NFS-rooted boot. The diagram annotates each playbook with
-the artefact it produces and the host that artefact lands on. After
-adding a host to inventory, re-run Phase 0's `stage_netboot_assets` to
-provision the per-host rootfs clone before the first `converge_boot_mode`.
+SD-rooted or NFS-rooted boot. Each node lists its target hosts, the
+playbook that drives it, the roles it invokes, and the output it produces.
+**Human actions use the hexagon shape** (only `flash SD card` in this
+lifecycle); automation nodes are rectangles; terminal states are stadiums.
+After adding a host to inventory, re-run Phase 0's `stage_netboot_assets`
+to provision the per-host rootfs clone before the first `converge_boot_mode`.
 
 Phase 1 branches on the inventory's declared `armbian_netboot_boot_mode`.
 The SD rootfs and the per-host NFS rootfs are **separate filesystems**,
@@ -107,29 +109,24 @@ bootstrap run; boards declared `boot_mode: nfs` need a second
 same user.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph P0["Phase 0 — control plane (once per environment)"]
-        direction LR
-        BI["build_image<br/><i>armbian_builders</i>"]
-        IMG[("&lt;board&gt;.img.xz<br/><i>on netboot_server</i><br/><i>via 2-hop rsync:<br/>builder → controller →<br/>netboot_server</i>")]
-        BU["routeros/<br/>bootstrap_user"]
-        USR[("ansible-netboot<br/>user + SSH key<br/><i>on RouterOS</i>")]
-        SN0["stage_netboot_<br/>assets<br/><i>netboot_server</i>"]
-        NFS[("rootfs templates +<br/>per-host clones +<br/>TFTP cache<br/><i>local on netboot_server<br/>(no copy needed)</i>")]
-        SR0["stage_router"]
-        RTR[("flash:/sbc/armbian/&lt;model&gt;/<br/>+ /ip tftp rows<br/><i>on router</i><br/><i>via fetch → net_put</i>")]
-        BI --> IMG --> SN0
-        SN0 --> NFS --> SR0
-        BU --> USR --> SR0
-        SR0 --> RTR
+        direction TB
+        BI["<b>build_image</b><br/>hosts: armbian_builders<br/>playbook: build_image.yml<br/>roles invoked: image_build<br/>output: &lt;board&gt;.img.xz on netboot_server<br/>(2-hop rsync: builder → controller → nfs)"]
+        BU["<b>routeros/bootstrap_user</b><br/>hosts: routeros_netboot<br/>playbook: routeros/bootstrap_user.yml<br/>roles invoked: —<br/>output: ansible-netboot user + SSH key on RouterOS"]
+        SN0["<b>stage_netboot_assets</b><br/>hosts: netboot_server<br/>playbook: stage_netboot_assets.yml<br/>roles invoked: image_extract, rootfs_clone<br/>output: rootfs templates + per-host clones<br/>+ TFTP cache (local on netboot_server)"]
+        SR0["<b>stage_router</b><br/>hosts: netboot_server (fetch) + router (push)<br/>playbook: stage_router.yml<br/>roles invoked: — (imports upload_tftp_assets + plumbing_check)<br/>output: kernel/initrd/dtb in flash:/sbc/armbian/&lt;model&gt;/<br/>+ /ip tftp rows on router"]
+        BI --> SN0
+        SN0 --> SR0
+        BU --> SR0
     end
 
     subgraph P1["Phase 1 — onboard a board (per board)"]
-        direction LR
-        FL["flash SD<br/>(manual)"]
-        BA_SD["bootstrap_<br/>armbian<br/><i>(SD rootfs)</i>"]
-        CB1["converge_<br/>boot_mode"]
-        BA_NFS["bootstrap_<br/>armbian<br/><i>(NFS rootfs)</i>"]
+        direction TB
+        FL{{"<b>flash SD card</b> — <i>HUMAN ACTION</i><br/>hosts: — (operator at workstation)<br/>playbook: — (manual)<br/>roles invoked: —<br/>output: bootable SD card with &lt;board&gt;.img.xz<br/>(xzcat | dd, etcher, Armbian installer, ...)"}}
+        BA_SD["<b>bootstrap_armbian (SD rootfs)</b><br/>hosts: boards (as root, default password)<br/>playbook: bootstrap_armbian.yml<br/>roles invoked: bootstrap_armbian<br/>output: SSH-key user + passwordless sudo<br/>on the SD rootfs"]
+        CB1["<b>converge_boot_mode</b><br/>hosts: router (plumbing/upload) + boards (cycle/wait/verify)<br/>playbook: converge_boot_mode.yml<br/>roles invoked: pxelinux_render, board_boot_wait, board_boot_verify<br/>output: pxelinux.cfg/01-&lt;MAC&gt; on router;<br/>board cold-booted into declared mode"]
+        BA_NFS["<b>bootstrap_armbian (NFS rootfs)</b><br/>hosts: boards (as root, default password, while NFS-booted)<br/>playbook: bootstrap_armbian.yml<br/>roles invoked: bootstrap_armbian<br/>output: SSH-key user + passwordless sudo<br/>on the per-host NFS rootfs"]
         OUT_SD(["Booted from SD"])
         OUT_NFS(["Booted from NFS"])
         FL --> BA_SD --> CB1
@@ -137,8 +134,8 @@ flowchart LR
         CB1 -- "boot_mode=nfs" --> BA_NFS --> OUT_NFS
     end
 
-    RTR --> FL
-    IMG -.->|".img.xz"| FL
+    BI -.->|".img.xz"| FL
+    SR0 -.->|"router ready"| CB1
 ```
 
 Once a board is in either outcome state, daily operations toggle between
