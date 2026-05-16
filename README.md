@@ -92,10 +92,20 @@ detailed [Lifecycle](#lifecycle) below.
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
 through a small set of playbooks. Phase 0 sets up the control plane once
 per environment; Phase 1 onboards each board; daily operations are ad-hoc.
+
 The `.img.xz` produced by `build_image` is the artefact consumed by both
 the manual SD-card flash and the `stage_netboot_assets` rootfs extraction.
 After adding a host to inventory, re-run Phase 0's `stage_netboot_assets`
 to provision the per-host rootfs clone before the first `converge_boot_mode`.
+
+Phase 1 branches on the inventory's declared `armbian_netboot_boot_mode`.
+The SD rootfs and the per-host NFS rootfs are **separate filesystems**,
+each cloned from the upstream Armbian image — neither has the inventory's
+`ansible_user` until `bootstrap_armbian` runs against the board while it's
+booted into that rootfs. Boards declared `boot_mode: sd` need one
+bootstrap run; boards declared `boot_mode: nfs` need a second
+`bootstrap_armbian` after the first NFS boot so the NFS rootfs gets the
+same user.
 
 ```mermaid
 flowchart LR
@@ -113,9 +123,11 @@ flowchart LR
     subgraph P1["Phase 1 — onboard a board (per board)"]
         direction LR
         FL["flash SD<br/>(manual)"]
-        BA["bootstrap_<br/>armbian"]
+        BA_SD["bootstrap_<br/>armbian<br/><i>(SD rootfs)</i>"]
         CB1["converge_<br/>boot_mode"]
-        FL --> BA --> CB1
+        BA_NFS["bootstrap_<br/>armbian<br/><i>(NFS rootfs)</i>"]
+        FL --> BA_SD --> CB1
+        CB1 -- "boot_mode=nfs" --> BA_NFS
     end
 
     subgraph DO["Daily ops (any time)"]
@@ -127,8 +139,9 @@ flowchart LR
 
     SR0 --> FL
     BI -.->|".img.xz"| FL
-    BA -.->|"re-run<br/>per host"| SN0
-    CB1 --> CB
+    BA_SD -.->|"re-run<br/>per host"| SN0
+    CB1 -- "boot_mode=sd" --> CB
+    BA_NFS --> CB
 ```
 
 Diagnostic playbooks (`test_hardware_e2e.yml`, `persist_uboot_env.yml`,
