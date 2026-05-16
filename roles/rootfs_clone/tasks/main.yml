@@ -1,0 +1,42 @@
+---
+- name: Verify template exists
+  ansible.builtin.stat:
+    path: "{{ template_dir }}/bin/bash"
+  register: _template_stat
+
+- name: Fail if template is not populated
+  ansible.builtin.fail:
+    msg: >-
+      template_dir {{ template_dir }} is not populated (missing bin/bash).
+      Run image_extract for this model before invoking rootfs_clone.
+  when: not _template_stat.stat.exists
+
+- name: Force-refresh — remove existing target_dir when requested
+  ansible.builtin.file:
+    path: "{{ target_dir }}"
+    state: absent
+  when: force_refresh | bool
+
+- name: Check whether target_dir is already populated
+  ansible.builtin.stat:
+    path: "{{ target_dir }}/bin/bash"
+  register: _target_stat
+
+- name: Ensure target_dir exists
+  ansible.builtin.file:
+    path: "{{ target_dir }}"
+    state: directory
+    mode: "0755"
+  when: not _target_stat.stat.exists
+
+- name: Reflink-clone template into target_dir
+  ansible.builtin.shell: |
+    set -o pipefail
+    cp -a --reflink=auto "{{ template_dir }}/." "{{ target_dir }}/"
+  args:
+    executable: /bin/bash
+  when: not _target_stat.stat.exists
+  changed_when: true
+
+- name: Reset per-host identity (always — idempotent across re-runs)
+  ansible.builtin.include_tasks: _identity_reset.yml
