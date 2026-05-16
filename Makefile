@@ -3,7 +3,7 @@ COLLECTION_NAME      := armbian_netboot
 COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 
-MOLECULE_SCENARIOS := default armbian_build
+MOLECULE_SCENARIOS := default rootfs_clone pxelinux_render image_build
 PROVISIONER ?= podman
 
 .PHONY: help install lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
@@ -29,8 +29,8 @@ ansible-lint: install ## Run ansible-lint on roles/ and playbooks/
 molecule: ## Run molecule test (SCENARIO=default PROVISIONER=podman)
 	PROVISIONER=$(PROVISIONER) molecule test -s $(or $(SCENARIO),default)
 
-molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=armbian_build)
-	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),armbian_build)
+molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
+	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)
 
 test: lint molecule ## Run lint then molecule
 
