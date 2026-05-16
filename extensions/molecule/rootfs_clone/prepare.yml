@@ -1,0 +1,42 @@
+---
+- name: Prepare — build a synthetic rootfs template in the container
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Ensure sudo is installed (so the role works as non-root if needed)
+      ansible.builtin.package:
+        name: sudo
+        state: present
+
+    - name: Create synthetic template directory tree
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /tmp/fixture/template/bin
+        - /tmp/fixture/template/etc
+        - /tmp/fixture/template/etc/ssh
+        - /tmp/fixture/template/root
+        - /tmp/fixture/template/var/lib/dbus
+
+    - name: Drop a placeholder for /bin/bash (rootfs_clone uses this as the "template populated" sentinel)
+      ansible.builtin.copy:
+        dest: /tmp/fixture/template/bin/bash
+        content: "#!/bin/sh\nexit 0\n"
+        mode: "0755"
+
+    - name: Pre-populate the identity files that rootfs_clone resets
+      ansible.builtin.copy:
+        dest: "{{ item.path }}"
+        content: "{{ item.content }}"
+        mode: "0644"
+      loop:
+        - { path: /tmp/fixture/template/etc/hostname, content: "fixture-original\n" }
+        - { path: /tmp/fixture/template/etc/hosts, content: "127.0.0.1\tlocalhost\n127.0.1.1\tfixture-original\n" }
+        - { path: /tmp/fixture/template/etc/machine-id, content: "0123456789abcdef0123456789abcdef\n" }
+        - { path: /tmp/fixture/template/var/lib/dbus/machine-id, content: "0123456789abcdef0123456789abcdef\n" }
+        - { path: /tmp/fixture/template/etc/ssh/ssh_host_rsa_key, content: "STALE-KEY-FIXTURE\n" }
+        - { path: /tmp/fixture/template/etc/ssh/ssh_host_ed25519_key, content: "STALE-KEY-FIXTURE\n" }

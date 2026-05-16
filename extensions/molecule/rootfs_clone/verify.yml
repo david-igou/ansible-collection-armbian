@@ -1,0 +1,69 @@
+---
+- name: Verify — assert clone state and identity reset
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Stat target tree members that must exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _must_exist
+      loop:
+        - /tmp/fixture/clone/bin/bash
+        - /tmp/fixture/clone/etc/hostname
+        - /tmp/fixture/clone/root/.no_armbian_first_login
+
+    - name: Assert each must-exist path is present
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "{{ item.item }} should exist after clone but does not"
+      loop: "{{ _must_exist.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read cloned /etc/hostname
+      ansible.builtin.slurp:
+        src: /tmp/fixture/clone/etc/hostname
+      register: _clone_hostname
+
+    - name: Assert /etc/hostname matches the requested hostname
+      ansible.builtin.assert:
+        that:
+          - (_clone_hostname.content | b64decode | trim) == 'smoke-host'
+        fail_msg: >-
+          /etc/hostname is {{ (_clone_hostname.content | b64decode | trim) }};
+          expected smoke-host.
+
+    - name: Stat identity files that must be ABSENT after reset
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _must_absent
+      loop:
+        - /tmp/fixture/clone/etc/machine-id
+        - /tmp/fixture/clone/var/lib/dbus/machine-id
+        - /tmp/fixture/clone/etc/ssh/ssh_host_rsa_key
+        - /tmp/fixture/clone/etc/ssh/ssh_host_ed25519_key
+
+    - name: Assert identity files are gone
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} still exists; identity reset failed"
+      loop: "{{ _must_absent.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read /etc/hosts to confirm 127.0.1.1 line was updated
+      ansible.builtin.slurp:
+        src: /tmp/fixture/clone/etc/hosts
+      register: _clone_hosts
+
+    - name: Assert /etc/hosts contains the new hostname on 127.0.1.1
+      ansible.builtin.assert:
+        that:
+          - "'127.0.1.1\tsmoke-host' in (_clone_hosts.content | b64decode)"
+        fail_msg: >-
+          /etc/hosts 127.0.1.1 line is not "smoke-host". Got:
+          {{ _clone_hosts.content | b64decode }}
