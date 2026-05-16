@@ -1,0 +1,77 @@
+---
+# Upload kernel / initrd / dtb per model to flash:/<dir>/armbian/<model>/
+# and register /ip tftp rows.
+#
+# Required vars:
+#   armbian_netboot_tftp_upload_models: list of model strings
+#   armbian_netboot_tftp_cache_dir:     controller cache holding per-model files
+#   armbian_netboot_tftp_flash_dir:     top-level dir on rb5009 flash
+
+- name: Upload SBC TFTP assets to RouterOS
+  hosts: routeros_routers
+  gather_facts: false
+  vars:
+    _assets: [vmlinuz, initrd.img, board.dtb]
+  tasks:
+    - name: Ensure base armbian dir exists on router flash
+      community.routeros.command:
+        commands:
+          - >-
+            :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory] = "")
+            do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory}
+      register: _basedir
+      retries: 3
+      delay: 5
+      until: _basedir is succeeded
+      changed_when: false
+      run_once: true
+
+    - name: Ensure per-model dirs exist
+      community.routeros.command:
+        commands:
+          - >-
+            :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
+            do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
+      register: _modeldir
+      retries: 3
+      delay: 5
+      until: _modeldir is succeeded
+      changed_when: false
+      loop: "{{ armbian_netboot_tftp_upload_models }}"
+      run_once: true
+
+    # Force-remove router-side files so net_put always pushes fresh
+    # content — silently skipping by size has caused stale vmlinuz/
+    # rootfs-modules mismatches (rb5009 served old kernel; initramfs
+    # modprobe failed inside the new rootfs). Always-stage is ~6s/file
+    # and removes the silent-mismatch class entirely.
+    - name: Force-remove router-side asset
+      community.routeros.command:
+        commands:
+          - >-
+            /file remove
+            [find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
+      register: _preremove
+      retries: 3
+      delay: 5
+      until: _preremove is succeeded
+      changed_when: false
+      loop: "{{ armbian_netboot_tftp_upload_models | product(_assets) | list }}"
+      loop_control:
+        label: "{{ item.0 }}/{{ item.1 }}"
+      run_once: true
+
+    - name: Upload each (model, asset) pair via shared primitive
+      ansible.builtin.include_tasks: tasks/upload_file.yml
+      vars:
+        _upload_local_src: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+        _upload_remote_path: "{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        _upload_req_filename: "armbian/{{ item.0 }}/{{ item.1 }}"
+        _upload_req_filename_is_regex: false
+      loop: "{{ armbian_netboot_tftp_upload_models | product(_assets) | list }}"
+      loop_control:
+        label: "{{ item.0 }}/{{ item.1 }}"
+      run_once: true
+
+    - name: Reset network_cli connection after upload burst
+      ansible.builtin.meta: reset_connection

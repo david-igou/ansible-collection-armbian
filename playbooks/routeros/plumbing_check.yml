@@ -1,0 +1,42 @@
+---
+# Assert /ip tftp rows exist on RouterOS for each (model, asset) pair.
+#
+# Required var:
+#   armbian_netboot_tftp_check_models: list of models to verify
+#   armbian_netboot_tftp_flash_dir:    top-level dir on router flash
+
+- name: Assert /ip tftp rows exist on RouterOS
+  hosts: routeros_routers
+  gather_facts: false
+  vars:
+    _assets: [vmlinuz, initrd.img, board.dtb]
+  tasks:
+    - name: Count /ip tftp rows per (model, asset) pair
+      community.routeros.command:
+        commands:
+          - >-
+            /ip tftp print count-only where
+            req-filename="armbian/{{ item.0 }}/{{ item.1 }}"
+      register: _row_count
+      retries: 3
+      delay: 5
+      until: _row_count is succeeded
+      changed_when: false
+      loop: "{{ armbian_netboot_tftp_check_models | product(_assets) | list }}"
+      loop_control:
+        label: "{{ item.0 }}/{{ item.1 }}"
+      run_once: true
+
+    - name: Assert each pair has at least one row
+      ansible.builtin.assert:
+        that:
+          - (item.stdout[0] | trim | int) >= 1
+        fail_msg: >-
+          RouterOS has no /ip tftp row for
+          armbian/{{ item.item.0 }}/{{ item.item.1 }}.
+          Run playbooks/stage_router.yml to populate TFTP assets
+          before invoking converge_boot_mode.
+      loop: "{{ _row_count.results }}"
+      loop_control:
+        label: "{{ item.item.0 }}/{{ item.item.1 }}"
+      run_once: true

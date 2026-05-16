@@ -1,0 +1,137 @@
+---
+# Provision the ansible-netboot user / group / SSH key on RouterOS hosts.
+# Replaces the v2 bootstrap_routeros_user role + top-level wrapper.
+#
+# Connection identity: ansible_user / ansible_host / ansible_port come
+# from inventory. Override on the command line for the first run as an
+# existing admin:
+#   ansible-playbook playbooks/routeros/bootstrap_user.yml \
+#     -e ansible_user=<existing-admin> -e ansible_port=<port>
+#
+# Variables (override with -e or in inventory):
+#   routeros_user_name             default: ansible-netboot
+#   routeros_user_group_name       default: same as user
+#   routeros_user_address_scope    default: 10.10.0.0/16
+#   routeros_user_comment          default: "ansible armbian_netboot collection"
+#   routeros_user_policy           default: read,write,ssh + denylist
+#   routeros_user_ssh_keys         required: list of public-key strings
+#   routeros_user_initial_password default: random throwaway (key auth only)
+#   routeros_disable_password_ssh  default: false
+
+- name: Bootstrap RouterOS user with key-based SSH access
+  hosts: routeros_netboot
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+
+  vars:
+    ansible_network_os: community.routeros.routeros
+
+    routeros_user_name: "ansible-netboot"
+    routeros_user_group_name: "{{ routeros_user_name }}"
+    routeros_user_address_scope: "10.10.0.0/16"
+    routeros_user_comment: "ansible armbian_netboot collection"
+    routeros_user_policy: "read,write,ssh,!local,!telnet,!ftp,!reboot,!policy,!test,!winbox,!password,!web,!sniff,!sensitive,!romon,!rest-api,!api"
+    routeros_user_initial_password: >-
+      {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+    routeros_disable_password_ssh: false
+
+    routeros_user_ssh_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWgNfV1zdod84sj28d+z7YBLkaD5ZImElWt8zHw+u7/"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINHO7UsiIgAepf5+s2z+1CbPQf2eqJo8aNK/vT9Oaf4B"
+
+  tasks:
+    - name: Validate that at least one SSH key was provided
+      ansible.builtin.assert:
+        that: routeros_user_ssh_keys | length > 0
+        fail_msg: >-
+          routeros_user_ssh_keys is empty. Pass at least one public key.
+
+    - name: Validate that the policy string contains no whitespace
+      ansible.builtin.assert:
+        that: routeros_user_policy is not search('\s')
+        fail_msg: >-
+          routeros_user_policy must be a comma-separated string with no
+          whitespace. Got: {{ routeros_user_policy }}
+
+    # Compound :if/do/else one-liners get long enough that the RouterOS
+    # CLI wraps them across many redraws, and network_cli's prompt match
+    # never resolves. Split into presence check + add/set.
+
+    - name: Check whether the user group already exists
+      community.routeros.command:
+        commands:
+          - ':put [:len [/user group find name="{{ routeros_user_group_name }}"]]'
+      register: _routeros_group_check
+      changed_when: false
+
+    - name: Create the user group with the requested policy
+      community.routeros.command:
+        commands:
+          - '/user group add name="{{ routeros_user_group_name }}" policy="{{ routeros_user_policy }}"'
+      when: _routeros_group_check.stdout[0] | int == 0
+
+    - name: Update the user group policy
+      community.routeros.command:
+        commands:
+          - '/user group set [find name="{{ routeros_user_group_name }}"] policy="{{ routeros_user_policy }}"'
+      when: _routeros_group_check.stdout[0] | int > 0
+
+    - name: Check whether the user already exists
+      community.routeros.command:
+        commands:
+          - ':put [:len [/user find name="{{ routeros_user_name }}"]]'
+      register: _routeros_user_check
+      changed_when: false
+
+    - name: Create the user with the requested group / scope / comment
+      community.routeros.command:
+        commands:
+          - >-
+            /user add name="{{ routeros_user_name }}"
+            group="{{ routeros_user_group_name }}"
+            address="{{ routeros_user_address_scope }}"
+            comment="{{ routeros_user_comment }}"
+            password="{{ routeros_user_initial_password }}"
+      when: _routeros_user_check.stdout[0] | int == 0
+      no_log: true
+
+    - name: Update the user's group / scope / comment
+      community.routeros.command:
+        commands:
+          - >-
+            /user set [find name="{{ routeros_user_name }}"]
+            group="{{ routeros_user_group_name }}"
+            address="{{ routeros_user_address_scope }}"
+            comment="{{ routeros_user_comment }}"
+      when: _routeros_user_check.stdout[0] | int > 0
+
+    # RouterOS marks users created without a password as EXPIRED (E flag).
+    # Re-asserting the password every run clears that for users created
+    # by hand or by a previous run.
+    - name: Refresh the user's password to clear any EXPIRED state
+      community.routeros.command:
+        commands:
+          - >-
+            /user set [find name="{{ routeros_user_name }}"]
+            password="{{ routeros_user_initial_password }}"
+      changed_when: false
+      no_log: true
+
+    - name: Reset existing SSH keys for the user (full re-sync from inventory)
+      community.routeros.command:
+        commands:
+          - '/user ssh-keys remove [find user="{{ routeros_user_name }}"]'
+
+    - name: Register each SSH public key for the user
+      community.routeros.command:
+        commands:
+          - '/user ssh-keys add user="{{ routeros_user_name }}" key="{{ item }}"'
+      loop: "{{ routeros_user_ssh_keys }}"
+      loop_control:
+        label: "{{ item.split() | last | default('(no comment)') }}"
+
+    - name: Disable password-based SSH globally (opt-in)
+      community.routeros.command:
+        commands:
+          - "/ip ssh set always-allow-password-login=no"
+      when: routeros_disable_password_ssh | bool
