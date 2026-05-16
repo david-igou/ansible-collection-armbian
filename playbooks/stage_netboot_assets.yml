@@ -1,0 +1,44 @@
+---
+# Stage netboot assets on the netboot server:
+#   1. Extract one rootfs template + TFTP artifact set per unique board model
+#   2. Reflink-clone the per-host rootfs for every board in inventory
+#
+# All artifacts land at known paths on the netboot server. The follow-up
+# stage_router.yml playbook fetches the TFTP artifacts to the controller
+# and pushes them to the router.
+
+- name: Stage netboot assets on netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  vars:
+    _unique_models: >-
+      {{ groups['boards']
+         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | list | unique }}
+  tasks:
+    - name: Load board configs from collection vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+
+    - name: Extract per-model templates + TFTP artifacts
+      ansible.builtin.include_role:
+        name: image_extract
+      vars:
+        armbian_image_src: "{{ armbian_netboot_image_urls[item] }}"
+        model_name: "{{ item }}"
+        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ item }}"
+        tftp_dir: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ item }}"
+        board_dtb: "{{ armbian_netboot_board_configs[item].dtb }}"
+        force_refresh: "{{ armbian_netboot_force_refresh | default(false) }}"
+      loop: "{{ _unique_models }}"
+
+    - name: Clone per-host rootfs for every board in inventory
+      ansible.builtin.include_role:
+        name: rootfs_clone
+      vars:
+        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[item].armbian_netboot_board_model }}"
+        target_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ item }}"
+        hostname: "{{ item }}"
+        force_refresh: "{{ armbian_netboot_force_refresh | default(false) }}"
+      loop: "{{ groups['boards'] }}"

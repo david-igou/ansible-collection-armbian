@@ -1,17 +1,13 @@
 ---
-# Controls PoE power state for one or more boards via their upstream
-# RouterOS switch. Each board must have armbian_netboot_poe_switch and armbian_netboot_poe_port set in
-# inventory.
+# Top-level wrapper around the routeros reference playbook for PoE
+# control. Users with non-RouterOS transport replace this with a
+# wrapper pointing at their own poe_control reference.
 #
 # Usage:
-#   # Power cycle a specific board
-#   ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 -e armbian_netboot_poe_action=cycle
-#
-#   # Power off all boards
-#   ansible-playbook playbooks/poe_control.yml --limit boards -e armbian_netboot_poe_action=off
-#
-#   # Power on a specific board (default action)
-#   ansible-playbook playbooks/poe_control.yml --limit rock-5b-01
+#   ansible-playbook playbooks/poe_control.yml --limit rock-5b-01 \
+#     -e armbian_netboot_poe_action=cycle
+#   ansible-playbook playbooks/poe_control.yml --limit boards \
+#     -e armbian_netboot_poe_action=off
 #
 # Options:
 #   -e armbian_netboot_poe_action=on       enable PoE (default)
@@ -19,8 +15,4 @@
 #   -e armbian_netboot_poe_action=cycle    off → wait → on
 #   -e armbian_netboot_poe_cycle_delay=5   seconds between off and on (default 5)
 
-- name: Control PoE power state
-  hosts: boards
-  gather_facts: false
-  roles:
-    - role: routeros_poe
+- import_playbook: "{{ armbian_netboot_poe_control_playbook | default('routeros/poe_control.yml') }}"
