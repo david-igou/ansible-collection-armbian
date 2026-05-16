@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: armbian_build
+  role_name: image_build
   author: David Igou
   description: Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)
   license: GPL-3.0-or-later
