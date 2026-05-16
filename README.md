@@ -89,6 +89,53 @@ detailed [Lifecycle](#lifecycle) below.
 
 ## How it works
 
+The collection exposes seven roles. Each one runs on a specific host class,
+takes a small input set, and produces one output. Most roles are
+independent — they consume inventory metadata or live-board state, not
+artefacts from other roles. The only direct role-to-role chain is **image
+production**: `image_build` produces a `.img.xz` that `image_extract`
+consumes, and `image_extract`'s rootfs template is the input to
+`rootfs_clone`. Everything else either feeds external systems (TFTP / NFS
+servers, written by orchestration playbooks like `stage_router.yml`) or
+acts on a running board.
+
+```mermaid
+flowchart TB
+    subgraph H1["Roles run on armbian_builders"]
+        R_IB["<b>image_build</b><br/>input: board, branch, userpatches<br/>output: &lt;board&gt;.img.xz"]
+    end
+
+    subgraph H2["Roles run on the netboot server"]
+        direction TB
+        R_IE["<b>image_extract</b><br/>input: .img.xz (URL or local path)<br/>output: rootfs template directory<br/>+ vmlinuz/initrd/dtb (TFTP artefacts)"]
+        R_RC["<b>rootfs_clone</b><br/>input: rootfs template directory<br/>output: per-host rootfs clone<br/>(reflink + hostname/machine-id/<br/>SSH host keys reset)"]
+    end
+
+    subgraph H3["Roles run on the controller (localhost)"]
+        R_PR["<b>pxelinux_render</b><br/>input: MAC, model, boot_mode,<br/>NFS server + path, kernel cmdline knobs<br/>output: per-board pxelinux.cfg/01-&lt;MAC&gt; file"]
+    end
+
+    subgraph H4["Roles run on a board"]
+        direction TB
+        R_BA["<b>bootstrap_armbian</b><br/>input: ansible_user, SSH key list<br/>(connects as root + default password)<br/>output: SSH-key user + passwordless sudo<br/>on the running rootfs"]
+        R_BBW["<b>board_boot_wait</b><br/>input: TCP/22 + SSH probe timeout<br/>output: assertion the board is reachable"]
+        R_BBV["<b>board_boot_verify</b><br/>input: declared boot_mode<br/>output: assertion ansible_mounts['/']<br/>matches mode (NFS vs block device)"]
+    end
+
+    R_IB -- ".img.xz" --> R_IE
+    R_IE -- "rootfs template" --> R_RC
+```
+
+`image_extract`'s TFTP artefacts and `pxelinux_render`'s pxelinux.cfg
+both leave the role boundary via orchestration playbooks
+(`stage_router.yml`, `routeros/upload_pxelinux_cfg.yml`) that `net_put`
+them to rb5009. `rootfs_clone`'s output is read directly by the netboot
+server's NFS export — no further copy. The three board-side roles are
+parameterised by inventory and the live board's state; they don't
+participate in the dependency chain.
+
+## Example bootstrapping workflow
+
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
 through a small set of playbooks. Phase 0 sets up the control plane once
 per environment; Phase 1 onboards each board, ending in either an
