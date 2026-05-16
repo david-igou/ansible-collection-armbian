@@ -230,7 +230,7 @@
               ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 1"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
 
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
@@ -289,7 +289,7 @@
               ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 2"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
 
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
@@ -340,7 +340,7 @@
           ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -405,7 +405,7 @@
           ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Cleanup"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to SD boot
