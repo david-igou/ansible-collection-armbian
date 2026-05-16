@@ -90,18 +90,22 @@ detailed [Lifecycle](#lifecycle) below.
 ## How it works
 
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
-through a small set of playbooks. The first three are run once per
-environment; the next three are run once per board; daily operations are
-ad-hoc.
+through a small set of playbooks. Phase 0 sets up the control plane once
+per environment; Phase 1 onboards each board; daily operations are ad-hoc.
+The `.img.xz` produced by `build_image` is the artefact consumed by both
+the manual SD-card flash and the `stage_netboot_assets` rootfs extraction.
 
 ```mermaid
 flowchart LR
     subgraph P0["Phase 0 — control plane (once per environment)"]
         direction LR
+        BI["build_image<br/><i>armbian_builders</i>"]
         BU["routeros/<br/>bootstrap_user"]
         SN0["stage_netboot_<br/>assets"]
         SR0["stage_router"]
-        BU --> SN0 --> SR0
+        BI --> SN0
+        SN0 --> SR0
+        BU --> SR0
     end
 
     subgraph P1["Phase 1 — onboard a board (per board)"]
@@ -121,13 +125,13 @@ flowchart LR
     end
 
     SR0 --> FL
+    BI -.->|".img.xz"| FL
     CB1 --> CB
 ```
 
-Build playbooks (`build_image.yml`) and diagnostics
-(`test_hardware_e2e.yml`, `persist_uboot_env.yml`,
-`test_manual_psu_cold_boot.yml`) sit outside the standard lifecycle and run
-on demand — see the [Playbooks table](#playbooks) for frequency.
+Diagnostic playbooks (`test_hardware_e2e.yml`, `persist_uboot_env.yml`,
+`test_manual_psu_cold_boot.yml`) sit outside the standard lifecycle and
+run on demand — see the [Playbooks table](#playbooks) for frequency.
 
 ### Dependency reference: which playbook composes what
 
