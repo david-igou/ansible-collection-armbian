@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: image_extract
+  author: david-igou
+  description: "Extract one Armbian .img.xz into a template rootfs and TFTP artifacts."
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Generic
+      versions: [all]
+dependencies: []

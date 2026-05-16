@@ -1,0 +1,17 @@
+---
+# image_extract role defaults.
+# Inputs are documented in meta/argument_specs.yml — defaults here
+# are only for optional knobs.
+
+# When true, remove the template_dir, tftp_dir contents, and any
+# cached .img/.img.xz before re-extracting. Default false so re-runs
+# are idempotent no-ops when the template is already populated.
+force_refresh: false
+
+# Scratch directory on the target host for downloads and the
+# decompressed .img file. The role creates it if missing.
+image_cache_dir: "/var/lib/armbian_netboot/cache"
+
+# Mount point used during extraction. The role creates and tears
+# this down per-invocation.
+image_mount_dir: "/var/lib/armbian_netboot/mnt"

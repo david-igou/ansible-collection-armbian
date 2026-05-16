@@ -1,0 +1,11 @@
+---
+- name: Unmount image
+  ansible.builtin.shell: umount "{{ image_mount_dir }}"
+  changed_when: true
+  failed_when: false
+
+- name: Detach loop device
+  ansible.builtin.shell: losetup -d "{{ _loop_dev.stdout }}"
+  when: _loop_dev is defined and _loop_dev.stdout is defined
+  changed_when: true
+  failed_when: false
