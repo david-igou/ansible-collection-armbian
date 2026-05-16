@@ -4,7 +4,8 @@
 #
 # Pre-condition: stage_netboot_assets.yml has been run so the
 # kernel/initrd/dtb are populated under
-# {{ armbian_netboot_image_cache }}/sbc-tftp/<model>/ on netboot_server.
+# {{ armbian_netboot_image_cache }}/sbc-tftp/<model>/ on netboot_server
+# (defaults to /var/lib/armbian_netboot/cache/sbc-tftp/<model>/).
 
 - name: Fetch TFTP artifacts from netboot server to controller cache
   hosts: netboot_server
@@ -28,7 +29,7 @@
 
     - name: Fetch each (model, asset) from netboot server
       ansible.builtin.fetch:
-        src: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
+        src: "{{ armbian_netboot_image_cache | default('/var/lib/armbian_netboot/cache') }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
         dest: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
         flat: true
       loop: "{{ _unique_models | product(_assets) | list }}"

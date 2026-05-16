@@ -28,7 +28,7 @@
         armbian_image_src: "{{ armbian_netboot_image_urls[item] }}"
         model_name: "{{ item }}"
         template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ item }}"
-        tftp_dir: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ item }}"
+        tftp_dir: "{{ armbian_netboot_image_cache | default('/var/lib/armbian_netboot/cache') }}/sbc-tftp/{{ item }}"
         board_dtb: "{{ armbian_netboot_board_configs[item].dtb }}"
         force_refresh: "{{ armbian_netboot_force_refresh | default(false) }}"
       loop: "{{ _unique_models }}"

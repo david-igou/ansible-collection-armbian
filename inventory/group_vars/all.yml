@@ -80,3 +80,8 @@ armbian_netboot_nfs_assets_export: /mnt/ssd/public/boot-files
 armbian_netboot_nfs_rootfs_path: /mnt/ssd/netboot/rootfs
 armbian_netboot_tftp_flash_dir: sbc
 armbian_netboot_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"
+# Scratch dir on the netboot_server where image_extract caches .img.xz / .img
+# downloads and writes per-model TFTP artefacts (sbc-tftp/<model>/vmlinuz, ...).
+# Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
+# value below if this is not set in your real inventory.
+armbian_netboot_image_cache: /var/lib/armbian_netboot/cache
