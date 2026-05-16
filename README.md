@@ -94,6 +94,8 @@ through a small set of playbooks. Phase 0 sets up the control plane once
 per environment; Phase 1 onboards each board; daily operations are ad-hoc.
 The `.img.xz` produced by `build_image` is the artefact consumed by both
 the manual SD-card flash and the `stage_netboot_assets` rootfs extraction.
+After adding a host to inventory, re-run Phase 0's `stage_netboot_assets`
+to provision the per-host rootfs clone before the first `converge_boot_mode`.
 
 ```mermaid
 flowchart LR
@@ -112,9 +114,8 @@ flowchart LR
         direction LR
         FL["flash SD<br/>(manual)"]
         BA["bootstrap_<br/>armbian"]
-        SN1["stage_netboot_<br/>assets"]
         CB1["converge_<br/>boot_mode"]
-        FL --> BA --> SN1 --> CB1
+        FL --> BA --> CB1
     end
 
     subgraph DO["Daily ops (any time)"]
@@ -126,6 +127,7 @@ flowchart LR
 
     SR0 --> FL
     BI -.->|".img.xz"| FL
+    BA -.->|"re-run<br/>per host"| SN0
     CB1 --> CB
 ```
 
