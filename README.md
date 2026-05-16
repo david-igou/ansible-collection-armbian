@@ -91,7 +91,8 @@ detailed [Lifecycle](#lifecycle) below.
 
 A board ships from "fresh SD card" to "boots NFS on demand" in two passes
 through a small set of playbooks. Phase 0 sets up the control plane once
-per environment; Phase 1 onboards each board; daily operations are ad-hoc.
+per environment; Phase 1 onboards each board, ending in either an
+SD-rooted or NFS-rooted boot.
 
 The `.img.xz` produced by `build_image` is the artefact consumed by both
 the manual SD-card flash and the `stage_netboot_assets` rootfs extraction.
@@ -126,22 +127,20 @@ flowchart LR
         BA_SD["bootstrap_<br/>armbian<br/><i>(SD rootfs)</i>"]
         CB1["converge_<br/>boot_mode"]
         BA_NFS["bootstrap_<br/>armbian<br/><i>(NFS rootfs)</i>"]
+        OUT_SD(["Booted from SD"])
+        OUT_NFS(["Booted from NFS"])
         FL --> BA_SD --> CB1
-        CB1 -- "boot_mode=nfs" --> BA_NFS
-    end
-
-    subgraph DO["Daily ops (any time)"]
-        direction LR
-        CB["converge_<br/>boot_mode"]
-        SBM["set_<br/>boot_mode"]
-        PC["poe_control"]
+        CB1 -- "boot_mode=sd" --> OUT_SD
+        CB1 -- "boot_mode=nfs" --> BA_NFS --> OUT_NFS
     end
 
     SR0 --> FL
     BI -.->|".img.xz"| FL
-    CB1 -- "boot_mode=sd" --> CB
-    BA_NFS --> CB
 ```
+
+Once a board is in either outcome state, daily operations toggle between
+them or recover from wedged boards — each playbook gets a detailed
+diagram under [Daily operations](#daily-operations) below.
 
 Diagnostic playbooks (`test_hardware_e2e.yml`, `persist_uboot_env.yml`,
 `test_manual_psu_cold_boot.yml`) sit outside the standard lifecycle and
@@ -428,6 +427,20 @@ Reads each host's `armbian_netboot_boot_mode` from inventory, renders
 uploads it to rb5009, ensures the `/ip tftp` row exists, PoE-cycles where
 applicable, and verifies the board reaches SSH with the expected rootfs.
 
+```mermaid
+flowchart TB
+    START(["converge_boot_mode.yml<br/>--limit &lt;host&gt;"])
+    PCK["routeros/plumbing_check.yml<br/><i>assert /ip tftp rows exist<br/>for board's model</i>"]
+    PR["role: pxelinux_render<br/><i>delegate_to: localhost</i><br/><i>render pxelinux.cfg<br/>with default = boot_mode</i>"]
+    UPL["routeros/upload_pxelinux_cfg.yml<br/><i>net_put to flash:/sbc/<br/>pxelinux.cfg/01-&lt;MAC&gt;</i>"]
+    CBR["tasks/cold_boot_with_retry.yml<br/><i>PoE cycle + wait_for TCP/22<br/>+ retry on failure</i>"]
+    WSS["tasks/wait_for_ssh_with_cycle_retry.yml<br/><i>SSH probe; PoE-cycle on fail</i>"]
+    BBV["role: board_boot_verify<br/><i>assert ansible_mounts['/']<br/>matches declared boot_mode</i>"]
+    END(["board on declared mode"])
+
+    START --> PCK --> PR --> UPL --> CBR --> WSS --> BBV --> END
+```
+
 ### Override boot mode without editing inventory
 
 ```bash
@@ -438,6 +451,16 @@ ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbi
 Same convergence mechanics as `converge_boot_mode.yml`, but the desired
 mode comes from `-e`. See [`docs/boot-mode-override.md`](docs/boot-mode-override.md)
 for the three override methods (inventory, `-e`, U-Boot env).
+
+```mermaid
+flowchart LR
+    START(["set_boot_mode.yml<br/>--limit &lt;host&gt;<br/>-e armbian_netboot_boot_mode=&lt;mode&gt;"])
+    OVR["override applied<br/><i>-e value supersedes<br/>inventory boot_mode</i>"]
+    CBM(["converge_boot_mode.yml<br/>(import_playbook)"])
+    END(["board on override mode"])
+
+    START --> OVR --> CBM --> END
+```
 
 ### Power-cycle a board via PoE
 
@@ -458,6 +481,24 @@ off) and delegates the PoE command to each board's
 `armbian_netboot_poe_switch` via `delegate_to`. Use
 `-e armbian_netboot_poe_cycle_delay=<seconds>` to override the off→on dwell
 (default 5s).
+
+```mermaid
+flowchart TB
+    START(["poe_control.yml<br/>--limit &lt;host&gt;<br/>-e armbian_netboot_poe_action=&lt;action&gt;"])
+    HOOK["routeros/poe_control.yml<br/><i>delegate_to:<br/>armbian_netboot_poe_switch</i>"]
+    CYCLE["routeros/tasks/poe_cycle.yml<br/><i>off → wait poe_cycle_delay → on</i>"]
+    SETON["community.routeros.command<br/><i>/interface ethernet poe set<br/>poe-out=auto</i>"]
+    SETOFF["community.routeros.command<br/><i>/interface ethernet poe set<br/>poe-out=off</i>"]
+    END(["PoE state applied<br/>to &lt;switch&gt;:&lt;port&gt;"])
+
+    START --> HOOK
+    HOOK -- "action=cycle" --> CYCLE
+    HOOK -- "action=on" --> SETON
+    HOOK -- "action=off" --> SETOFF
+    CYCLE --> END
+    SETON --> END
+    SETOFF --> END
+```
 
 ### Hardware E2E test
 
