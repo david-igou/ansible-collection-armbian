@@ -139,7 +139,6 @@ flowchart LR
 
     SR0 --> FL
     BI -.->|".img.xz"| FL
-    BA_SD -.->|"re-run<br/>per host"| SN0
     CB1 -- "boot_mode=sd" --> CB
     BA_NFS --> CB
 ```
