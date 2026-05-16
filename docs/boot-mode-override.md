@@ -21,7 +21,7 @@ armbian_netboot_boot_mode: sd
 ```
 
 ```bash
-ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
 ```
 
 The rendered pxelinux.cfg on rb5009 is updated to `default sd`. Every
@@ -35,7 +35,7 @@ armbian_netboot_boot_mode: nfs
 ```
 
 ```bash
-ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
 ```
 
 ## Method 2: Ansible `-e` override (ad-hoc)

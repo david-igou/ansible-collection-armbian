@@ -24,7 +24,7 @@ This is achievable only because the U-Boot binary on the SD card has been
 compiled with `BOOT_TARGETS` ordered with `pxe` first. Stock Armbian
 Rockchip `current` ships PXE at position 6 of `BOOT_TARGETS`, and U-Boot's
 `bootflow scan` lands on mmc1's `boot.scr` long before it tries PXE. The
-`armbian_build` role in this collection exists to fix that: it patches
+`image_build` role in this collection exists to fix that: it patches
 `include/configs/rockchip-common.h` via `armbian/build`'s
 `pre_config_uboot_target__<board>_*` hook, so the resulting `.img.xz` ships
 a U-Boot whose first boot target is `pxe`.
@@ -76,39 +76,38 @@ before per-board `converge_boot_mode.yml` / `set_boot_mode.yml` operations run.
 The collection is organised as **single-purpose, parameter-driven roles**.
 A role enforces one external system's state given parameters; playbooks
 decide which roles to invoke, with which parameters, in what order. Seven
-roles ship in v2.
+roles ship in v3.
 
-| Role | Enforces / produces |
-|---|---|
-| `armbian_build` | `.img.xz` Armbian image with PXE-first U-Boot baked in, published to netboot server |
-| `bootstrap_armbian` | SSH-key user with passwordless sudo on a freshly flashed board |
-| `bootstrap_routeros_user` | RouterOS user / group / SSH-key state |
-| `netboot_assets` | per-model rootfs template + per-host clones on TrueNAS NFS export; per-model kernel/initrd/dtb on rb5009 TFTP |
-| `routeros_pxe_config` | Per-board pxelinux.cfg + `/ip tftp` row on rb5009 (always written; content reflects `armbian_netboot_boot_mode`) |
-| `boot_mode` | Board converged to declared `armbian_netboot_boot_mode` (`nfs` \| `sd`): pxelinux + PoE cycle + verify (`armbian_netboot_router`) |
-| `routeros_poe` | PoE port state (on/off) on RouterOS switch ports |
+| Role | Runs on | Enforces / produces |
+|---|---|---|
+| `image_build` | `armbian_builders` | `.img.xz` Armbian image with PXE-first U-Boot baked in; optional SCP publish via `armbian_netboot_publish_target` |
+| `image_extract` | netboot server | One rootfs template + per-model TFTP artefacts (vmlinuz / initrd / board.dtb) from a `.img.xz` (URL or local path) |
+| `rootfs_clone` | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset (hostname, machine-id, pre-generated SSH host keys) |
+| `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
+| `bootstrap_armbian` | a board | SSH-key user with passwordless sudo on a freshly flashed board |
+| `board_boot_wait` | a board | `wait_for` TCP/22 + `wait_for_connection` SSH (no power knowledge) |
+| `board_boot_verify` | a board | Asserts `ansible_mounts['/']` matches declared boot mode |
 
-The `armbian_build`, `netboot_assets`, and `routeros_pxe_config` roles each own one
-piece of off-board state — the build host, the netboot server's exports,
-and rb5009's SBC TFTP layout (per-board pxelinux.cfg + `/ip tftp` rows). The
-two `bootstrap_*` roles bring a fresh board or a fresh RouterOS device into
-a state where the other roles can talk to them. `boot_mode` composes pxelinux
-convergence (via `routeros_pxe_config`), PoE cycling (`routeros_poe`), and
-post-boot checks. `routeros_poe` is also used directly for power control.
+The roles are **transport-agnostic** — no RouterOS knowledge in any role. All
+RouterOS-specific behaviour (TFTP / pxelinux uploads, PoE control, user bootstrap)
+lives in swappable reference playbooks under `playbooks/routeros/`, selected via
+`armbian_netboot_*_playbook` hooks. The image production chain (`image_build` →
+`image_extract` → `rootfs_clone`) is the only role-to-role artefact flow; the
+other roles consume inventory data or live-board state.
 
 ## Workflow
 
-The v2 ordering. Each step is its own playbook (or pair), run from the collection
+The v3 ordering. Each step is its own playbook (or pair), run from the collection
 root. Steps marked "(Once)" or "(Once per board model)" are
 setup-only; the rest are run as needed:
 
 ```
 0. (Once per board model) Build custom Armbian image    → build_image.yml
 1. Operator manually flashes SD card with that image    (out of band)
-2. (Once)   Bootstrap RouterOS SSH user                 → bootstrap_routeros_user.yml
-3. (Once per board) Bootstrap SD-rootfs SSH user        → bootstrap_armbian.yml
-4a.         Stage NFS rootfs on TrueNAS                 → stage_nfs_rootfs.yml
-4b.         Stage per-model TFTP assets on rb5009      → stage_tftp_assets.yml
+2. (Once)   Bootstrap RouterOS SSH user                 → routeros/bootstrap_user.yml
+3. (Once per board) Bootstrap board SSH user            → bootstrap_armbian.yml
+4a.         Stage NFS rootfs on netboot server          → stage_netboot_assets.yml
+4b.         Stage per-model TFTP assets on rb5009       → stage_router.yml
 5.          Converge board(s) to inventory boot mode    → converge_boot_mode.yml
 6.          Override boot mode ad-hoc (e.g. SD)         → set_boot_mode.yml -e armbian_netboot_boot_mode=sd
 ```
@@ -116,17 +115,18 @@ setup-only; the rest are run as needed:
 Step 0 produces an image whose U-Boot tries PXE first. Step 1 is the only
 manual step in the chain — the operator writes the produced `.img.xz` to
 a microSD card and inserts it into the board. Steps 2–3 are one-time
-RouterOS / board user setup. Steps 4a–4b stage NFS rootfs on TrueNAS and
-kernel/initrd/dtb on rb5009 (`stage_nfs_rootfs.yml` + `stage_tftp_assets.yml`). Steps 5–6 are the day-to-day boot-mode operations:
+RouterOS / board user setup. Steps 4a–4b stage NFS rootfs on the netboot server
+(`stage_netboot_assets.yml`) and kernel/initrd/dtb on rb5009 (`stage_router.yml`).
+Steps 5–6 are the day-to-day boot-mode operations:
 per-board `pxelinux.cfg/01-<MAC>` always remains on rb5009; convergence updates
 its `default` directive (and related lines) so `armbian_netboot_boot_mode` is
 `nfs` or `sd`.
 
 ## NFS rootfs layout
 
-`stage_nfs_rootfs.yml` connects to the netboot server (TrueNAS) over SSH
+`stage_netboot_assets.yml` connects to the netboot server (TrueNAS) over SSH
 and writes the per-model rootfs template + per-host rootfs clones. The control
-node never NFS-mounts anything. `stage_tftp_assets.yml` stages per-model
+node never NFS-mounts anything. `stage_router.yml` stages per-model
 kernel/initrd/dtb onto rb5009 (separate playbook).
 
 ```
@@ -158,7 +158,7 @@ flash:/sbc/
 │   └── 01-<MAC>           # per-board (always present; converge_boot_mode / set_boot_mode rewrite content)
 └── armbian/
     └── <model>/
-        ├── vmlinuz        # per-model (stage_tftp_assets.yml writes)
+        ├── vmlinuz        # per-model (stage_router.yml writes)
         ├── initrd.img
         └── board.dtb
 ```
@@ -170,7 +170,7 @@ flash path. Per-board pxelinux files and their `/ip tftp` rows are maintained
 continuously — boot-mode changes update the rendered pxelinux content (the
 `default` label), not TFTP row topology.
 
-Per-model assets are added once by `stage_tftp_assets.yml` and persist across
+Per-model assets are added once by `stage_router.yml` and persist across
 boot-mode changes. They are shared by every board of that model.
 
 ## Out of v1 scope (deferred)
@@ -201,7 +201,7 @@ on rb5009 doesn't match the staged module tree, and so nfsv3.ko never
 gets loaded — even though it's physically present in the initramfs at
 the *other* kernel version's path.
 
-The TFTP staging path (`stage_tftp_assets.yml` / `netboot_assets` tasks on rb5009)
+The TFTP staging path (`stage_router.yml` → `routeros/upload_tftp_assets.yml`)
 always force-removes the rb5009 copies of `vmlinuz`, `initrd.img`, and `board.dtb`
 before net_put, so a re-stage always pushes the freshly-extracted kernel and
 modules. (Earlier versions only re-uploaded if the file size differed, which
@@ -210,7 +210,7 @@ a vmlinuz of the same byte count.)
 
 The PXE/TFTP/DHCP plumbing in this collection is unaffected — U-Boot
 loads kernel + initrd + dtb correctly; if the symptom returns,
-re-running `stage_nfs_rootfs.yml` and `stage_tftp_assets.yml` is the right first step.
+re-running `stage_netboot_assets.yml` and `stage_router.yml` is the right first step.
 
 ### Hardware/firmware failure signatures observed on `orange-pi-5-pro`
 

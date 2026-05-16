@@ -146,7 +146,7 @@ ansible-playbook playbooks/stage_netboot_assets.yml
 ansible-playbook playbooks/stage_router.yml
 
 # Converge board(s) to their inventory-declared boot mode.
-ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
 
 # Ad-hoc boot mode override (no inventory edit).
 ansible-playbook playbooks/set_boot_mode.yml \
