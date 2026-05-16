@@ -80,7 +80,7 @@ ansible-playbook playbooks/bootstrap_armbian.yml --limit orange-pi-5-pro-01     
 
 # 3. Stage per-host rootfs clone + converge the board to its declared boot mode
 ansible-playbook playbooks/stage_netboot_assets.yml                                       # → §1.5
-ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01              # → Daily ops
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01      # → Daily ops
 ```
 
 After convergence the board participates in the SD ↔ NFS toggle lifecycle
@@ -466,7 +466,7 @@ toggle-and-revert lifecycle below indefinitely without further setup.
 ### Converge a board to its declared boot mode
 
 ```bash
-ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
 ```
 
 Reads each host's `armbian_netboot_boot_mode` from inventory, renders
@@ -476,7 +476,7 @@ applicable, and verifies the board reaches SSH with the expected rootfs.
 
 ```mermaid
 flowchart TB
-    START(["converge_boot_mode.yml<br/>--limit &lt;host&gt;"])
+    START(["converge_boot_mode.yml<br/>-e target_hosts=&lt;host&gt;"])
     PCK["routeros/plumbing_check.yml<br/><i>assert /ip tftp rows exist<br/>for board's model</i>"]
     PR["role: pxelinux_render<br/><i>delegate_to: localhost</i><br/><i>render pxelinux.cfg<br/>with default = boot_mode</i>"]
     UPL["routeros/upload_pxelinux_cfg.yml<br/><i>net_put to flash:/sbc/<br/>pxelinux.cfg/01-&lt;MAC&gt;</i>"]
@@ -491,8 +491,8 @@ flowchart TB
 ### Override boot mode without editing inventory
 
 ```bash
-ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbian_netboot_boot_mode=nfs
-ansible-playbook playbooks/set_boot_mode.yml --limit orange-pi-5-pro-01 -e armbian_netboot_boot_mode=sd
+ansible-playbook playbooks/set_boot_mode.yml -e target_hosts=orange-pi-5-pro-01 -e armbian_netboot_boot_mode=nfs
+ansible-playbook playbooks/set_boot_mode.yml -e target_hosts=orange-pi-5-pro-01 -e armbian_netboot_boot_mode=sd
 ```
 
 Same convergence mechanics as `converge_boot_mode.yml`, but the desired
@@ -501,7 +501,7 @@ for the three override methods (inventory, `-e`, U-Boot env).
 
 ```mermaid
 flowchart LR
-    START(["set_boot_mode.yml<br/>--limit &lt;host&gt;<br/>-e armbian_netboot_boot_mode=&lt;mode&gt;"])
+    START(["set_boot_mode.yml<br/>-e target_hosts=&lt;host&gt;<br/>-e armbian_netboot_boot_mode=&lt;mode&gt;"])
     OVR["override applied<br/><i>-e value supersedes<br/>inventory boot_mode</i>"]
     CBM(["converge_boot_mode.yml<br/>(import_playbook)"])
     END(["board on override mode"])
@@ -574,8 +574,8 @@ lines at every checkpoint.
 | 2 | `routeros/bootstrap_user.yml -e ansible_user=<existing-admin>` | Once per RouterOS device |
 | 3 | `stage_netboot_assets.yml` | NFS templates + per-host rootfs on netboot server |
 | 4 | `stage_router.yml` | Kernel/initrd/dtb + plumbing check on rb5009 |
-| 5 | `converge_boot_mode.yml --limit <host>` | Converge to inventory `armbian_netboot_boot_mode` |
-| 6 | `set_boot_mode.yml --limit <host> -e armbian_netboot_boot_mode=nfs` (or `=sd`) | Ad-hoc boot mode override |
+| 5 | `converge_boot_mode.yml -e target_hosts=<host>` | Converge to inventory `armbian_netboot_boot_mode` |
+| 6 | `set_boot_mode.yml -e target_hosts=<host> -e armbian_netboot_boot_mode=nfs` (or `=sd`) | Ad-hoc boot mode override |
 | 7 | `poe_control.yml --limit <host> -e armbian_netboot_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
 | 8 | `persist_uboot_env.yml --limit rock-5b-01` | Once per rock-5b for autonomous PXE |
 | — | `test_hardware_e2e.yml --limit <host>` | Ad-hoc SD ↔ NFS hardware E2E test |
