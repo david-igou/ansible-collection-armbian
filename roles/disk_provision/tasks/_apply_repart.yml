@@ -1,4 +1,80 @@
 ---
-- name: "TODO: implemented in Task 5"
+# Invoke systemd-repart against the device. Handles two modes:
+#   - No preserves: --empty=force wipes the partition table from
+#     scratch; all partitions are created per the .repart.d configs.
+#   - Some preserves: --empty=allow leaves the existing partition
+#     table alone; only the non-preserved slots in the definitions
+#     dir are written.
+
+- name: "Apply repart: assert systemd-repart is available"
+  ansible.builtin.command: "systemd-repart --version"
+  register: _dp_repart_version
+  changed_when: false
+  failed_when: _dp_repart_version.rc != 0
+
+- name: "Apply repart: build filtered definitions dir (excludes preserved ids)"
+  ansible.builtin.file:
+    path: "{{ _dp_repart_dir }}.filtered"
+    state: directory
+    mode: "0755"
+  become: true
+  when: _dp_preserve_ids | length > 0
+
+- name: "Apply repart: symlink non-preserved configs into filtered dir"
+  ansible.builtin.file:
+    src: "{{ _dp_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
+    dest: "{{ _dp_repart_dir }}.filtered/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
+    state: link
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    loop_var: partition
+    label: "{{ partition.id }}"
+    index_var: idx
+  when:
+    - _dp_preserve_ids | length > 0
+    - partition.id not in _dp_preserve_ids
+  become: true
+
+- name: "Apply repart: determine effective definitions dir and empty mode"
+  ansible.builtin.set_fact:
+    _dp_repart_defs: >-
+      {{ _dp_repart_dir + '.filtered' if _dp_preserve_ids | length > 0 else _dp_repart_dir }}
+    _dp_repart_empty: >-
+      {{ 'allow' if _dp_preserve_ids | length > 0 else 'force' }}
+
+- name: "Apply repart: run systemd-repart"
+  ansible.builtin.command:
+    cmd: >-
+      systemd-repart
+      --definitions={{ _dp_repart_defs }}
+      --empty={{ _dp_repart_empty }}
+      --dry-run=no
+      --discard=yes
+      {{ disk_binding.device }}
+  become: true
+  register: _dp_repart_run
+  changed_when: true
+
+- name: "Apply repart: report what repart did"
   ansible.builtin.debug:
-    msg: "_apply_repart.yml not yet implemented"
+    msg: "{{ _dp_repart_run.stdout_lines }}"
+
+- name: "Apply repart: force partition-table re-read"
+  ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: "Apply repart: wait for all expected partitions to appear by label"
+  ansible.builtin.command: "blkid -L {{ partition.label }}"
+  register: _dp_blkid
+  retries: 5
+  delay: 1
+  until: _dp_blkid.rc == 0
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    loop_var: partition
+    label: "{{ partition.id }}"
+  when: partition.label is defined
+  changed_when: false
+  become: true
