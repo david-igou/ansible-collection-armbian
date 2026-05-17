@@ -1,0 +1,17 @@
+---
+# board_boot_wait — runs on a board; waits for TCP/22 then SSH.
+# Does NOT cycle power; the caller is responsible for that.
+
+- name: Wait for TCP/22 to accept connections
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: 22
+    timeout: "{{ armbian_netboot_boot_attempt_timeout }}"
+    state: started
+  delegate_to: localhost
+  become: false
+
+- name: Wait for SSH to authenticate
+  ansible.builtin.wait_for_connection:
+    timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+    sleep: 5

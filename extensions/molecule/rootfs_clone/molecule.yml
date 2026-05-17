@@ -1,0 +1,49 @@
+---
+# Scenario: exercise rootfs_clone against a synthetic template directory.
+# Verifies reflink-clone behaviour and per-host identity reset (hostname,
+# machine-id, ssh host keys, /root/.no_armbian_first_login).
+
+dependency:
+  name: galaxy
+  options:
+    requirements-file: extensions/molecule/provisioners/${PROVISIONER:-podman}/requirements.yml
+    force: true
+
+driver:
+  name: default
+  options:
+    managed: true
+    ansible_connection_options:
+      connection: local
+
+platforms:
+  - name: rootfs-clone-target
+    podman:
+      image: docker.io/geerlingguy/docker-ubuntu2404-ansible:latest
+      command: sleep 1d
+
+provisioner:
+  name: ansible
+  playbooks:
+    converge: converge.yml
+    create: ../provisioners/${PROVISIONER:-podman}/create.yml
+    destroy: ../provisioners/${PROVISIONER:-podman}/destroy.yml
+    prepare: prepare.yml
+    verify: verify.yml
+  inventory:
+    links:
+      group_vars: ../provisioners/${PROVISIONER:-podman}/group_vars/
+
+verifier:
+  name: ansible
+
+scenario:
+  name: rootfs_clone
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: board_boot_wait
+  author: david-igou
+  description: "Wait for a board to come up over TCP/22 + SSH."
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Generic
+      versions: [all]
+dependencies: []

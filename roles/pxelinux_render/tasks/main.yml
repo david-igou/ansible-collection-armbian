@@ -1,0 +1,27 @@
+---
+- name: Validate earlycon is set when pxe_verbose is true
+  ansible.builtin.assert:
+    that:
+      - earlycon | length > 0
+    fail_msg: >-
+      pxe_verbose=true was requested but earlycon was not supplied.
+      Set earlycon to <driver>,<bus>,<mmio_addr> (e.g.
+      uart8250,mmio32,0xfeb50000 for RK3588S UART2) or unset
+      pxe_verbose.
+  when: pxe_verbose | bool
+
+- name: Compute pxelinux filename
+  ansible.builtin.set_fact:
+    _pxe_filename: "01-{{ board_mac | lower | replace(':', '-') }}"
+
+- name: Ensure output_dir exists
+  ansible.builtin.file:
+    path: "{{ output_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Render pxelinux.cfg for {{ hostname }}
+  ansible.builtin.template:
+    src: pxelinux_cfg.j2
+    dest: "{{ output_dir }}/{{ _pxe_filename }}"
+    mode: "0644"

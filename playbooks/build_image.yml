@@ -279,7 +279,7 @@
   tasks:
     - name: Build image per inventory board
       ansible.builtin.include_role:
-        name: armbian_build
+        name: image_build
       vars:
         armbian_build_board: "{{ item }}"
         armbian_build_userpatches: "{{ build_userpatches_common + (build_userpatches[item] | default([])) }}"

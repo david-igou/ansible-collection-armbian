@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: image_build
+  author: David Igou
+  description: Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+  galaxy_tags:
+    - armbian
+    - build
+    - image
+
+dependencies: []

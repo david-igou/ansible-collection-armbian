@@ -1,0 +1,50 @@
+---
+- name: Converge — render pxelinux.cfg in both modes
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    _output_base: /tmp/fixture/pxelinux.cfg
+
+  tasks:
+    - name: Render in nfs mode
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.pxelinux_render
+      vars:
+        board_mac: "AA:BB:CC:DD:EE:FF"
+        board_console: "ttyS2,1500000"
+        model_name: orange-pi-5-pro
+        nfs_server_ip: "10.0.0.10"
+        nfs_root_path: /mnt/ssd/netboot/rootfs
+        hostname: smoke-host
+        boot_mode: nfs
+        output_dir: "{{ _output_base }}_nfs"
+
+    - name: Render in sd mode
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.pxelinux_render
+      vars:
+        board_mac: "AA:BB:CC:DD:EE:FF"
+        board_console: "ttyS2,1500000"
+        model_name: orange-pi-5-pro
+        nfs_server_ip: "10.0.0.10"
+        nfs_root_path: /mnt/ssd/netboot/rootfs
+        hostname: smoke-host
+        boot_mode: sd
+        output_dir: "{{ _output_base }}_sd"
+
+    - name: Render in nfs verbose mode (requires earlycon)
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.pxelinux_render
+      vars:
+        board_mac: "AA:BB:CC:DD:EE:FF"
+        board_console: "ttyS2,1500000"
+        model_name: orange-pi-5-pro
+        nfs_server_ip: "10.0.0.10"
+        nfs_root_path: /mnt/ssd/netboot/rootfs
+        hostname: smoke-host
+        boot_mode: nfs
+        output_dir: "{{ _output_base }}_verbose"
+        pxe_verbose: true
+        earlycon: "uart8250,mmio32,0xfeb50000"

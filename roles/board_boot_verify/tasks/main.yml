@@ -1,0 +1,33 @@
+---
+- name: Gather facts
+  ansible.builtin.setup:
+
+- name: Capture root mount
+  ansible.builtin.set_fact:
+    _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='fstype') | first }}"
+    _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                     | map(attribute='device') | first }}"
+
+- name: Assert NFS rootfs when boot_mode=nfs
+  ansible.builtin.assert:
+    that:
+      - _root_fstype in ['nfs', 'nfs4']
+    fail_msg: >-
+      boot_mode[nfs]: expected NFS rootfs but got
+      {{ _root_device }} ({{ _root_fstype }}). The pxelinux.cfg upload
+      step succeeded, so the board either skipped pxelinux.cfg or fell
+      through to local boot. Check the TFTP server's request log.
+  when: boot_mode == 'nfs'
+
+- name: Assert local block-device rootfs when boot_mode=sd
+  ansible.builtin.assert:
+    that:
+      - _root_fstype not in ['nfs', 'nfs4']
+      - _root_device is match('^/dev/')
+    fail_msg: >-
+      boot_mode[sd]: expected local block device rootfs but got
+      {{ _root_device }} ({{ _root_fstype }}). Default kernel cmdline
+      is root=LABEL=armbi_root; override per-host with sd_root if the
+      board has multiple drives carrying LABEL=armbi_root.
+  when: boot_mode == 'sd'

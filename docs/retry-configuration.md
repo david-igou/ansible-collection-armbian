@@ -50,7 +50,7 @@ Plus the existing flow-control knobs:
 Defaults — no retries needed, all timeouts at full budget.
 
 ```
-ansible-playbook playbooks/converge_boot_mode.yml --limit <board>
+ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=<board>
 ```
 
 Behavior: single attempt at PoE cycle + boot wait. Fails fast if the

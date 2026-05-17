@@ -1,0 +1,56 @@
+---
+- name: Verify — pxelinux.cfg output for both modes
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    _nfs_file: /tmp/fixture/pxelinux.cfg_nfs/01-aa-bb-cc-dd-ee-ff
+    _sd_file: /tmp/fixture/pxelinux.cfg_sd/01-aa-bb-cc-dd-ee-ff
+    _verbose_file: /tmp/fixture/pxelinux.cfg_verbose/01-aa-bb-cc-dd-ee-ff
+
+  tasks:
+    - name: Slurp all three rendered files
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: _renders
+      loop:
+        - "{{ _nfs_file }}"
+        - "{{ _sd_file }}"
+        - "{{ _verbose_file }}"
+
+    - name: Decode contents
+      ansible.builtin.set_fact:
+        _nfs_content: "{{ _renders.results[0].content | b64decode }}"
+        _sd_content: "{{ _renders.results[1].content | b64decode }}"
+        _verbose_content: "{{ _renders.results[2].content | b64decode }}"
+
+    - name: Assert nfs-mode file has default=nfs and both labels
+      ansible.builtin.assert:
+        that:
+          - "'default nfs' in _nfs_content"
+          - "'label nfs' in _nfs_content"
+          - "'label sd' in _nfs_content"
+          - "'nfsroot=10.0.0.10:/mnt/ssd/netboot/rootfs/smoke-host' in _nfs_content"
+          - "'kernel armbian/orange-pi-5-pro/vmlinuz' in _nfs_content"
+          - "'fdt    armbian/orange-pi-5-pro/board.dtb' in _nfs_content"
+          - "'console=ttyS2,1500000' in _nfs_content"
+          - "'root=LABEL=armbi_root' in _nfs_content"
+        fail_msg: "nfs render is wrong:\n{{ _nfs_content }}"
+
+    - name: Assert sd-mode file flips only default; keeps both label bodies
+      ansible.builtin.assert:
+        that:
+          - "'default sd' in _sd_content"
+          - "'label nfs' in _sd_content"
+          - "'label sd' in _sd_content"
+          - "'default nfs' not in _sd_content"
+        fail_msg: "sd render is wrong:\n{{ _sd_content }}"
+
+    - name: Assert verbose render contains the earlycon suffix on both labels
+      ansible.builtin.assert:
+        that:
+          - "'earlycon=uart8250,mmio32,0xfeb50000' in _verbose_content"
+          - "'loglevel=8' in _verbose_content"
+          - _verbose_content.split('earlycon=uart8250,mmio32,0xfeb50000') | length == 3  # 2 occurrences = 3 splits
+        fail_msg: "verbose render is wrong:\n{{ _verbose_content }}"

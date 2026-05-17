@@ -64,9 +64,9 @@ routeros:
       ansible_port: 3480
 ```
 
-### Provisioning the user with `bootstrap_routeros_user.yml`
+### Provisioning the user with `routeros/bootstrap_user.yml`
 
-`playbooks/bootstrap_routeros_user.yml` automates the user / group / SSH key
+`playbooks/routeros/bootstrap_user.yml` automates the user / group / SSH key
 setup on **both** the rb5009 and crs328 in one parameterized run. It connects
 as an existing admin user (default: `igou`) over SSH key auth, so it sidesteps
 the chicken/egg of needing `ansible-netboot` before `ansible-netboot` exists.
@@ -76,7 +76,7 @@ single invocation against the `routeros_netboot` parent group (the playbook's
 default `hosts:` target) covers both:
 
 ```bash
-ansible-playbook playbooks/bootstrap_routeros_user.yml \
+ansible-playbook playbooks/routeros/bootstrap_user.yml \
   -e ansible_user=igou+cet1024w \
   -e ansible_port=3480 \
   -e routeros_user_ssh_keys='["ssh-ed25519 AAAA... ansible-netboot@control"]'
@@ -126,8 +126,8 @@ under `flash:/sbc/` and the `/ip tftp` namespace.
 
 ## What the collection writes on rb5009
 
-`stage_nfs_rootfs.yml` stages NFS rootfs templates and per-host clones on the
-netboot server (see TrueNAS paths elsewhere in this repo). `stage_tftp_assets.yml`
+`stage_netboot_assets.yml` stages NFS rootfs templates and per-host clones on the
+netboot server (see TrueNAS paths elsewhere in this repo). `stage_router.yml`
 populates per-model assets (kernel/initrd/dtb) under `flash:/sbc/armbian/<model>/`
 on rb5009 and registers an `/ip tftp` row per file. `converge_boot_mode.yml`
 writes each board's `pxelinux.cfg/01-<MAC>` plus its `/ip tftp` row (in v2 these

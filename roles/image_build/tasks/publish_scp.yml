@@ -1,0 +1,24 @@
+---
+# Optional publish step: SCP the built .img.xz from the builder host
+# directly to a remote SSH target. Gated by armbian_netboot_publish_target.
+# Runs on the builder; uses the builder's ssh client to reach the target.
+#
+# armbian_netboot_publish_target format: "<ssh-host>:<absolute-path>"
+# Example: netboot-server.lan:/mnt/ssd/public/boot-files/images/orangepi5pro/
+
+- name: Parse publish target
+  ansible.builtin.set_fact:
+    _publish_host: "{{ armbian_netboot_publish_target.split(':', 1)[0] }}"
+    _publish_path: "{{ armbian_netboot_publish_target.split(':', 1)[1] }}"
+
+- name: Ensure remote publish directory exists
+  ansible.builtin.shell: |
+    ssh "{{ _publish_host }}" \
+      "mkdir -p '{{ _publish_path }}' && chmod 755 '{{ _publish_path }}'"
+  changed_when: true
+
+- name: SCP the built .img.xz to the publish target
+  ansible.builtin.shell: |
+    scp "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/"*.img.xz \
+        "{{ armbian_netboot_publish_target }}/"
+  changed_when: true

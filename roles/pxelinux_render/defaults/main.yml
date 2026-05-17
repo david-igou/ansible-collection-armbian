@@ -1,0 +1,19 @@
+---
+# Render-time knobs. All inputs that have inventory-level analogues
+# default to undefined here and are validated as required in argspec.
+
+# Per-board kernel command-line knob: which device specifier the
+# kernel uses to find the root filesystem when booting from local SD.
+# Default LABEL=armbi_root works for stock Armbian; per-host overrides
+# (PARTUUID=, UUID=, PARTLABEL=) handle multi-drive boards.
+sd_root: "LABEL=armbi_root"
+
+# When true, append earlycon + verbose kernel params to both labels.
+pxe_verbose: false
+
+# TFTP-relative paths written verbatim into pxelinux.cfg. These are
+# strings the netboot client passes to the TFTP server — not local FS
+# paths on the rendering host. Defaults assume armbian/<model>/<file>.
+tftp_kernel: "armbian/{{ model_name }}/vmlinuz"
+tftp_initrd: "armbian/{{ model_name }}/initrd.img"
+tftp_dtb:    "armbian/{{ model_name }}/board.dtb"

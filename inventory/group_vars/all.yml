@@ -73,10 +73,32 @@ armbian_netboot_pxe_verbose: false
 # publish play consumes it without loading the netboot_assets role.
 armbian_netboot_nfs_assets_export: /mnt/ssd/public/boot-files
 
+# Root password on a freshly flashed Armbian image. Used by
+# playbooks/bootstrap_armbian.yml to connect as root via password
+# auth before the SSH-key user is provisioned. "1234" is the
+# Armbian default — encrypt with ansible-vault in any real inventory.
+armbian_netboot_default_password: "1234"
+
 # ── Cross-role path defaults ────────────────────────────────────────────────
 # These live at group_vars/all scope (rather than role defaults) because
 # multiple roles consume them and duplicating across role defaults is a
 # drift vector.
 armbian_netboot_nfs_rootfs_path: /mnt/ssd/netboot/rootfs
 armbian_netboot_tftp_flash_dir: sbc
-armbian_netboot_tftp_cache_dir: "{{ playbook_dir }}/../.cache/sbc-tftp"
+# Anchor on inventory_dir, not playbook_dir — playbook_dir resolves
+# to different directories in stage_router.yml (playbooks/) vs the
+# imported routeros/upload_tftp_assets.yml (playbooks/routeros/),
+# which caused the fetch to land in one path and the upload to look
+# in another. inventory_dir is the same in both contexts.
+#
+# IMPORTANT: if your inventory dir is a symlink (e.g. .inventory →
+# ../some-other-repo), don't use this relative form — set an absolute
+# path instead. fetch resolves dest lexically while stat/file resolve
+# via POSIX symlink-follow, so the two tasks land on different
+# physical paths when `..` crosses a symlink.
+armbian_netboot_tftp_cache_dir: "{{ inventory_dir }}/../.cache/sbc-tftp"
+# Scratch dir on the netboot_server where image_extract caches .img.xz / .img
+# downloads and writes per-model TFTP artefacts (sbc-tftp/<model>/vmlinuz, ...).
+# Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
+# value below if this is not set in your real inventory.
+armbian_netboot_image_cache: /var/lib/armbian_netboot/cache

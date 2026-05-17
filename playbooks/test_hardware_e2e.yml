@@ -1,53 +1,44 @@
 ---
-# Hardware end-to-end test for the always-netboot (v2) boot-mode model.
+# Hardware end-to-end test for the always-netboot boot-mode model.
 #
-# Per-board pxelinux.cfg on rb5009 always exists; U-Boot PXE-loads it every
-# boot and the `default` directive selects nfsroot vs local SD. This playbook
-# drives the target board through three phases:
-#   1. SD baseline — converge pxelinux `default sd`, PoE cycle, assert root
-#      on a local block device
-#   2. nfsroot — set `default nfs`, render pxelinux on rb5009, PoE cycle,
-#      assert NFS rootfs
-#   3. Back to SD — set `default sd`, render pxelinux, PoE cycle, assert
-#      local rootfs again
+# Per-board pxelinux.cfg on the router always exists; U-Boot PXE-loads
+# it every boot and the `default` directive selects nfsroot vs local
+# SD. This playbook drives the target board through three phases:
+#   1. SD baseline — converge pxelinux `default sd`, PoE cycle, assert
+#      root on a local block device
+#   2. nfsroot — set `default nfs`, render pxelinux, PoE cycle, assert
+#      NFS rootfs
+#   3. Back to SD — set `default sd`, render pxelinux, PoE cycle,
+#      assert local rootfs again
 #
-# Pre-condition: the board runs a custom-built Armbian image with PXE-first
-# U-Boot and PoE wiring matches inventory. The sd label in pxelinux.cfg
-# renders unconditionally — `root=LABEL=armbi_root` by default, or
-# `armbian_netboot_sd_root` host override if the board has multiple drives
-# carrying `LABEL=armbi_root`.
+# Pre-condition: the board runs a custom-built Armbian image with
+# PXE-first U-Boot and PoE wiring matches inventory.
 #
-# Diagnostic bundle (playbooks/tasks/diagnostic_bundle.yml) runs at every
-# verify checkpoint to surface findmnt, kernel cmdline, routes, resolv.conf,
-# lsblk, U-Boot deb version, and the last 100 journal lines so a failure is
-# actionable without re-SSHing.
+# Diagnostic bundle (playbooks/tasks/diagnostic_bundle.yml) runs at
+# every verify checkpoint to surface findmnt, kernel cmdline, routes,
+# resolv.conf, lsblk, U-Boot deb version, and the last 100 journal
+# lines so a failure is actionable without re-SSHing.
 #
-# Failure cleanup: by default, the always-block converges pxelinux back to
-# `default sd` on rb5009 and PoE-cycles the board regardless of pass/fail.
-# Pass `-e leave_state=true` to preserve the failure state for forensics.
+# Failure cleanup: by default, the always-block converges pxelinux
+# back to `default sd` on the router and PoE-cycles the board
+# regardless of pass/fail. Pass `-e leave_state=true` to preserve the
+# failure state for forensics.
 #
-# Skip-baseline mode: pass `-e skip_baseline=true` to bypass Phase 1 (SD-side
-# baseline). Useful when local SD boot is broken but NFS path is healthy —
-# Phase 2 still validates nfsroot; Phase 3 still asserts return-to-SD (which
-# may fail if SD is broken). Phase 2 diagnostics are usually what matter.
+# Skip-baseline mode: pass `-e skip_baseline=true` to bypass Phase 1
+# (SD-side baseline). Useful when local SD boot is broken but NFS path
+# is healthy — Phase 2 still validates nfsroot; Phase 3 still asserts
+# return-to-SD. Phase 2 diagnostics are usually what matter.
 #
-# Optional serial capture: pass `-e capture_serial=true` to spawn socat on the
-# serial host (default `localhost`; override with `-e serial_host=`).
-#
-# Prerequisites on the serial host: `socat` on PATH; passwordless sudo for
-# stty/socat against the UART device.
-#
-# Defaults to /dev/ttyUSB0 at 1500000 baud (Rockchip). Override with
-# `-e serial_device= -e serial_baud=`. Logs land at /tmp/serial-<host>.log.
+# Optional serial capture: pass `-e capture_serial=true` to spawn
+# socat on the serial host (default `localhost`; override with
+# `-e serial_host=<host>`). socat must be on PATH; passwordless sudo
+# for stty/socat against the UART device.
 #
 # Usage:
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 #   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
-#
-# Staging and converge helpers (see converge_boot_mode.yml):
-#   playbooks/stage_nfs_rootfs.yml / playbooks/stage_tftp_assets.yml — server assets
 #
 # For iteration runs with per-iter serial artifacts, prefer
 # `playbooks/scripts/run-iter.sh <iter-number> -- <ansible-playbook extras>`.
@@ -62,13 +53,6 @@
     serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
-    # Retry / timeout knobs are inherited from the boot_mode role's
-    # defaults (roles/boot_mode/defaults/main.yml). Override per-invocation
-    # with -e <knob>=<value>; see docs/retry-configuration.md for
-    # recommended combinations. The e2e harness invokes tasks_from
-    # primitives (cold_boot_with_retry.yml,
-    # wait_for_ssh_with_cycle_retry.yml) which pick up those defaults
-    # at include time.
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
     _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
@@ -91,7 +75,6 @@
         fail_msg: >-
           {{ inventory_hostname }} needs armbian_netboot_poe_switch and
           armbian_netboot_poe_port hostvars set.
-          Add them to inventory/host_vars/{{ inventory_hostname }}.yml.
 
     - name: Pre-flight — assert armbian_netboot_default_password is set
       ansible.builtin.assert:
@@ -99,29 +82,23 @@
           - armbian_netboot_default_password is defined
           - armbian_netboot_default_password | length > 0
         fail_msg: >-
-          armbian_netboot_default_password must be set in group_vars (vault recommended).
-          Phase 2 SSH to the NFS-mounted board uses these credentials.
+          armbian_netboot_default_password must be set (vault recommended).
+          Phase 2's SSH to the NFS-mounted board uses these credentials.
       run_once: true
 
-    # Background serial capture on the serial host (the machine with
-    # the USB-UART attached). Defaults to localhost; can be overridden
-    # with -e serial_host=<inventory-host> for split-machine setups.
-    # Pre-create the log file as root with mode 0644 so socat (also
-    # root, since the FTDI dongle is typically root:dialout/games)
-    # appends to a world-readable file — that lets the diagnostic_bundle
-    # slurp run without become later. socat is started with async/poll=0
-    # (Ansible's fire-and-forget pattern) wrapped in a shell that
-    # records the post-exec PID to {{ _serial_pid }}; the always-block
-    # reads that pidfile and kills the recorded PID. Pidfile-based
-    # cleanup is portable to minimal serial hosts (UBI, alpine,
-    # distroless) that ship without pkill/pgrep.
-    #
-    # Ordered before the rb5009 plumbing-check below so that any
-    # plumbing-check failure (RouterOS unreachable, controller SSH
-    # agent dead, etc.) still leaves a serial trace from whatever
-    # boot activity happened during the run. iters 17-26 of #38
-    # produced empty serial logs because plumbing-check aborted the
-    # play before socat ever started.
+    - name: Pre-flight — load board configs
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+
+    # Background serial capture on the serial host. Pre-create the log
+    # file as root with mode 0644 so socat (also root, since the FTDI
+    # dongle is typically root:dialout/games) appends to a world-readable
+    # file. socat starts with async/poll=0; the pre-exec PID gets written
+    # to {{ _serial_pid }}, then `exec` replaces the shell with socat, so
+    # the pidfile contains socat's PID. Cleanup kills via the pidfile.
+    # Ordered before the router plumbing-check so any plumbing-check
+    # failure still leaves a serial trace from whatever boot activity
+    # happened during the run.
     - name: Pre-flight — start serial capture
       when: capture_serial | bool
       delegate_to: "{{ serial_host }}"
@@ -133,27 +110,10 @@
             cmd: which socat
           changed_when: false
 
-        # Defensive pre-start: kill any socat already reading
-        # {{ serial_device }} from a leaked prior run. Without this,
-        # multiple socats race for bytes from the kernel's serial
-        # read queue and the *current* run's log gets only a fraction
-        # of the output (typically zero — older socats in the queue
-        # win). #38 comment-4415733253 captured 7 leaked socats on
-        # the host across iters 17/32/33/38/39, all draining
-        # /dev/ttyUSB0 simultaneously and producing iter 39's empty
-        # serial-iter-39.log.
-        #
+        # Defensive pre-start: kill any leaked socat from a prior run.
         # `[s]ocat` regex avoids self-match: pkill -f matches against
-        # full cmdline, so a literal pattern `socat -u <dev>` would
-        # also match the shell that's running `pkill -f "socat -u
-        # <dev>"` and kill the parent shell mid-task (iter 40 of #38:
-        # rc=-15 SIGTERM). The regex `[s]ocat` matches the literal
-        # string "socat" but the cmdline `pkill -f "[s]ocat ..."`
-        # contains the bracket characters and is not matched.
-        # Stale pidfile is also removed here — the existing kill task
-        # in Cleanup tolerates a missing pidfile, but starting a new
-        # run with the wrong PID recorded (from a prior socat killed
-        # externally) would confuse cleanup later.
+        # the full cmdline, so a literal `socat -u <dev>` would also
+        # match the shell running pkill itself.
         - name: Serial — kill any pre-existing socat on this device
           ansible.builtin.shell: |
             pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
@@ -177,8 +137,6 @@
             cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
           changed_when: true
 
-        # `echo $$` records the shell's own PID, which `exec` then
-        # replaces with socat — so the pidfile contains socat's PID.
         - name: Serial — start socat capture in background (pidfile-tracked)
           ansible.builtin.shell: |
             echo $$ > {{ _serial_pid }}
@@ -187,39 +145,41 @@
           poll: 0
           changed_when: true
 
-    - name: Pre-flight — assert per-model /ip tftp rows exist on rb5009
+    - name: Pre-flight — assert per-model /ip tftp rows exist on the router
       delegate_to: "{{ armbian_netboot_router }}"
       run_once: true
       block:
-        - name: Pre-flight — include netboot_assets plumbing_check
-          ansible.builtin.include_role:
-            name: netboot_assets
-            tasks_from: plumbing_check.yml
-          vars:
-            _check_models:
-              - "{{ armbian_netboot_board_model }}"
+        - name: Pre-flight — count /ip tftp rows per asset for this model
+          community.routeros.command:
+            commands:
+              - >-
+                /ip tftp print count-only where
+                req-filename="armbian/{{ armbian_netboot_board_model }}/{{ item }}"
+          register: _plumbing_row_count
+          retries: 3
+          delay: 5
+          until: _plumbing_row_count is succeeded
+          changed_when: false
+          loop: [vmlinuz, initrd.img, board.dtb]
 
-    # Stale known_hosts entries on the controller (typically left by
-    # a prior boot, a reflash, or a per_host NFS rootfs identity reset)
-    # don't *prevent* connections (host_key_checking=False handles the
-    # auth side) but ssh's "REMOTE HOST IDENTIFICATION HAS CHANGED"
-    # warning still pollutes any failure-mode error message that wraps
-    # the underlying ssh stderr — making real failures (kernel hang,
-    # missing inventory user) hard to read in the e2e output. Drop any
-    # entries for this board up-front so subsequent ssh probes start
-    # from a clean state and any errors that surface later carry only
-    # the actionable signal.
-    # `connection: local` forces in-process execution on the actual
-    # controller. Without it, inventory's explicit `localhost` entry
-    # under armbian_builders (ansible_host=localhost ansible_user=igou,
-    # default ssh connection) routes `delegate_to: localhost` through
-    # SSH to igou@localhost — which in this devcontainer hits the
-    # *host* machine, not the container. (In this specific environment
-    # /home/igou/.ssh is bind-mounted host→container so the file edited
-    # is the same one either way, but the SSH-out path needs the agent
-    # alive: when the agent flakes, this otherwise-trivial cleanup task
-    # would also fail. Going local removes the dependency entirely.)
-    # Pattern matches build_image.yml:114-115's local-rsync invocation.
+        - name: Pre-flight — assert each row exists
+          ansible.builtin.assert:
+            that:
+              - (item.stdout[0] | trim | int) >= 1
+            fail_msg: >-
+              Router has no /ip tftp row for
+              armbian/{{ armbian_netboot_board_model }}/{{ item.item }}.
+              Run playbooks/stage_router.yml first.
+          loop: "{{ _plumbing_row_count.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+    # Stale known_hosts on the controller don't *prevent* connections
+    # (host_key_checking=False handles auth) but ssh's "REMOTE HOST
+    # IDENTIFICATION HAS CHANGED" warning pollutes failure-mode error
+    # messages, making real failures hard to read. Drop entries up-front.
+    # `connection: local` avoids the SSH-to-localhost class of failure
+    # in containerised dev environments where the agent can flake.
     - name: Pre-flight — clear stale known_hosts entries on controller
       ansible.builtin.command:
         cmd: "ssh-keygen -R {{ item }}"
@@ -228,120 +188,50 @@
       become: false
       loop: "{{ [inventory_hostname, ansible_host | default(inventory_hostname)] | unique }}"
       changed_when: false
-      failed_when: false  # exits 1 when no entries — that's fine
+      failed_when: false
 
     - name: Test phases (cleanup runs in always)
       block:
-        # Before Phase 1's opening PoE cycle, converge pxelinux.cfg so the
-        # `default` label is sd. Under v2 the pxelinux.cfg file always
-        # exists on rb5009; boot mode is selected by `default`, not by
-        # removing the file. A prior aborted run or an out-of-band
-        # converge_boot_mode.yml might have left default=nfs and would
-        # trip Phase 1's local-rootfs assertion (same failure class as
-        # iter 27 of #38 under v1).
-        - name: Pre-flight — converge pxelinux default to sd on rb5009
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: converge.yml
+        # Before Phase 1's opening PoE cycle, converge pxelinux.cfg so
+        # the `default` label is sd. The pxelinux.cfg file always exists
+        # on the router; boot mode is selected by `default`, not by file
+        # presence. A prior aborted run might have left default=nfs and
+        # would trip Phase 1's local-rootfs assertion.
+        - name: Pre-flight — converge pxelinux default to sd on router
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_netboot_boot_mode: sd
 
-        # Phase 1 (SD baseline) is opt-out via skip_baseline=true.
-        # Use case: the board's SD-side boot is broken but PXE/NFS still
-        # works. Skipping Phase 1 lets Phase 2 still validate nfsroot
-        # without depending on a clean local boot first. Phase 3 still
-        # asserts return-to-SD; on a board with broken SD that assertion
-        # may fail — Phase 2 diagnostics are typically what matter.
         - name: Phase 1 — SD baseline (skippable via skip_baseline=true)
           when: not (skip_baseline | bool)
           block:
-            # Auto-bootstrap detection. After a fresh SD-card reflash the
-            # board boots cleanly but the inventory user (ansible_user)
-            # doesn't exist yet — only the Armbian default root user does.
-            # The original Phase 1 wait_for_connection then sits for
-            # _wait_timeout seconds with `Permission denied (publickey,
-            # password)` and ultimately reports an opaque "timed out" that
-            # looks identical to a hardware boot hang. The detection below
-            # distinguishes those:
-            #   1. wait_for TCP/22 (inside cold_boot_with_retry, with
-            #      optional retry on cold-boot intermittency) —
-            #      identity-agnostic; a real boot failure still times
-            #      out across all attempts.
+            # Auto-bootstrap detection: after a fresh SD reflash the
+            # board boots cleanly but the inventory user doesn't exist
+            # yet — only the Armbian default root user does.
+            #   1. wait_for TCP/22 (inside cold_boot_with_retry) —
+            #      identity-agnostic; a real boot failure times out
+            #      across all attempts.
             #   2. one short wait_for_connection probe as the inventory
             #      user — succeeds quickly if bootstrap already ran.
-            #   3. if (1) succeeds and (2) fails, the board is freshly
-            #      reflashed; shell out to bootstrap_armbian.yml inline,
-            #      then fall through to the regular Phase 1 wait below.
-            # Sub-playbook invocation (rather than include_role) keeps the
-            # auto-bootstrap path fully aligned with the operator's manual
-            # workflow — same playbook, same vars, same SSH keys baked in
-            # — without duplicating the connection/var setup here.
+            #   3. if (1) succeeds and (2) fails, run bootstrap_armbian
+            #      inline against the root account.
             - name: Phase 1 — PoE cycle + wait for TCP/22 (with retries)
-              ansible.builtin.include_role:
-                name: boot_mode
-                tasks_from: cold_boot_with_retry.yml
+              ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
               vars:
                 _phase_label: "Phase 1"
                 _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-                armbian_netboot_boot_mode: sd
-    
-            # ignore_errors: true (no failed_when override) so the
-            # registered _inv_probe.failed reflects the real outcome
-            # of the wait_for_connection. Both `failed_when: false`
-            # and `ignore_errors: true` was the wrong combination —
-            # `failed_when: false` forces _inv_probe.failed = false
-            # regardless of underlying outcome, so the auto-bootstrap
-            # block's `when: _inv_probe is failed` always evaluated
-            # false and the auto-bootstrap path never fired (iter 6,
-            # #38 comment 4414184226).
-            - name: Phase 1 — short SSH probe as inventory user
-              ansible.builtin.wait_for_connection:
-                timeout: 30
-                sleep: 5
-                delay: 0
-              register: _inv_probe
-              ignore_errors: true # noqa: ignore-errors
 
-            # Iter 7 (#38) showed the prior `command: ansible-playbook
-            # …` sub-playbook invocation pattern fails because
-            # `delegate_to: localhost` resolves through inventory to an
-            # SSH connection back to the host (cursor's SSH_AUTH_SOCK is
-            # forwarded), and `ansible-playbook` is installed inside the
-            # container, not on the host. Use include_role instead —
-            # runs in-process, no SSH-out, no PATH dependency. The
-            # vars: block mirrors playbooks/bootstrap_armbian.yml's
-            # play-level connection overrides for the freshly-flashed
-            # state. Feasible because armbian_netboot_bootstrap_ssh_keys lives
-            # in inventory, so include_role resolves the keys without duplicating
-            # them here.
-            - name: Phase 1 — auto-bootstrap (board appears freshly reflashed)
-              when: _inv_probe is failed
-              block:
-                - name: Phase 1 — auto-bootstrap notice
-                  ansible.builtin.debug:
-                    msg: >-
-                      Inventory user can't authenticate to {{ inventory_hostname }}
-                      but the board is reachable on TCP/22 — treating this as a
-                      freshly reflashed image and running bootstrap_armbian inline.
-
-                - name: Phase 1 — auto-bootstrap (run bootstrap_armbian role)
-                  ansible.builtin.include_role:
-                    name: bootstrap_armbian
-                  vars:
-                    ansible_user: root
-                    ansible_password: "{{ armbian_netboot_default_password }}"
-                    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-                    ansible_become: false
-
-            - name: Phase 1 — wait for SSH (SD-root identity, with cycle retry)
-              ansible.builtin.include_role:
-                name: boot_mode
-                tasks_from: wait_for_ssh_with_cycle_retry.yml
+            - name: Phase 1 — auto-bootstrap if needed
+              ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
               vars:
                 _phase_label: "Phase 1"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
-                armbian_netboot_boot_mode: sd
-    
+
+            - name: Phase 1 — wait for SSH (SD-root identity, with cycle retry)
+              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              vars:
+                _phase_label: "Phase 1"
+                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
 
@@ -356,7 +246,7 @@
               ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 1 — SD baseline"
-    
+
             - name: Phase 1 — assert rootfs is on a local block device
               ansible.builtin.assert:
                 that:
@@ -367,99 +257,40 @@
                   {{ _root_device }} ({{ _root_fstype }}).
                   Diagnostic bundle is in the prior debug task.
 
-        - name: Phase 2 — set pxelinux default to nfs for this board
-          ansible.builtin.set_fact:
+        - name: Phase 2 — render+upload pxelinux for nfs
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          vars:
             armbian_netboot_boot_mode: nfs
 
-        - name: Phase 2 — render pxelinux.cfg on rb5009 (default nfs)
-          delegate_to: "{{ armbian_netboot_router }}"
-          block:
-            - name: Phase 2 — include routeros_pxe_config
-              ansible.builtin.include_role:
-                name: routeros_pxe_config
-              vars:
-                _target_host: "{{ inventory_hostname }}"
-
-        # Same auto-bootstrap pattern as Phase 1's pre-wait. The
-        # per-host NFS rootfs is initially cloned from
-        # _templates/<model>/ (stock Armbian image), so a never-
-        # bootstrapped clone only has the Armbian default `root` user
-        # with the default password — but per-host clones persist
-        # across test sessions, and any prior iter that auto-
-        # bootstrapped this rootfs (e.g. iter 10 of #38, when stale
-        # rb5009 state caused Phase 1 to accidentally NFS-boot) leaves
-        # the inventory user provisioned + sshd password-auth
-        # disabled. The original Phase 2 verify hard-coded the
-        # never-bootstrapped state's connection vars (root +
-        # armbian_netboot_default_password) and broke on iter 15 once the rootfs had been
-        # bootstrapped (iter 15 of #38: "Permission denied
-        # (publickey)" for root@board for the full 330 s wait).
-        #
-        # The probe + auto-bootstrap structure makes Phase 2 work
-        # both ways:
-        #   1. wait_for TCP/22 (inside cold_boot_with_retry, with
-        #      optional retries) — identity-agnostic; a real NFS-boot
-        #      hardware/network failure still surfaces across all
-        #      attempts.
-        #   2. one short wait_for_connection probe as the inventory
-        #      user (key auth) — succeeds quickly if the per-host
-        #      NFS rootfs is already bootstrapped.
-        #   3. if (1) succeeds and (2) fails, bootstrap_armbian
-        #      inline against the NFS-rootfs root account; then fall
-        #      through to the regular wait below as the inv user.
         - name: Phase 2 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 2"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-            armbian_netboot_boot_mode: nfs
 
         - name: Phase 2 — reset connection so new identity takes effect
           ansible.builtin.meta: reset_connection
 
-        - name: Phase 2 — short SSH probe as inventory user (NFS rootfs may be bootstrapped)
-          ansible.builtin.wait_for_connection:
-            timeout: 30
-            sleep: 5
-            delay: 0
-          register: _phase2_inv_probe
-          ignore_errors: true # noqa: ignore-errors
-
-        - name: Phase 2 — auto-bootstrap if NFS rootfs is fresh (never bootstrapped)
-          when: _phase2_inv_probe is failed
-          block:
-            - name: Phase 2 — auto-bootstrap notice
-              ansible.builtin.debug:
-                msg: >-
-                  Inventory user can't authenticate to {{ inventory_hostname }}'s
-                  NFS rootfs — this is a fresh per-host clone. Running
-                  bootstrap_armbian inline.
-
-            - name: Phase 2 — auto-bootstrap (run bootstrap_armbian role)
-              ansible.builtin.include_role:
-                name: bootstrap_armbian
-              vars:
-                ansible_user: root
-                ansible_password: "{{ armbian_netboot_default_password }}"
-                ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-                ansible_become: false
-
-            - name: Phase 2 — reset connection after auto-bootstrap
-              ansible.builtin.meta: reset_connection
+        # Same auto-bootstrap pattern as Phase 1. The per-host NFS
+        # rootfs is initially cloned from _templates/<model>/ (stock
+        # Armbian image), so a never-bootstrapped clone only has the
+        # Armbian default root user. But per-host clones persist across
+        # test sessions; any prior iter that auto-bootstrapped the
+        # rootfs leaves the inventory user provisioned. Probe + auto-
+        # bootstrap handles both cases.
+        - name: Phase 2 — auto-bootstrap if needed (NFS rootfs may be fresh)
+          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+          vars:
+            _phase_label: "Phase 2"
 
         - name: Phase 2 — verify NFS-mounted boot
           block:
             - name: Phase 2 — wait for SSH (NFS-root identity, with cycle retry)
-              ansible.builtin.include_role:
-                name: boot_mode
-                tasks_from: wait_for_ssh_with_cycle_retry.yml
+              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 2"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
-                armbian_netboot_boot_mode: nfs
-    
+                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
 
@@ -474,61 +305,42 @@
               ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 2 — nfsroot"
-    
+
             - name: Phase 2 — assert rootfs is NFS
               ansible.builtin.assert:
                 that:
                   - _root_fstype in ['nfs', 'nfs4']
                 fail_msg: >-
                   Phase 2: expected NFS-mounted rootfs; got fstype
-                  {{ _root_fstype }}.
-                  Board did not PXE-boot into NFS root despite pxelinux.cfg
-                  default=nfs on rb5009.
-                  Diagnostic bundle is in the prior debug task — check
-                  /proc/cmdline for nfsroot=, and confirm rb5009's /ip tftp
-                  serves armbian/{{ armbian_netboot_board_model }}/{vmlinuz,initrd.img,board.dtb}.
+                  {{ _root_fstype }}. Board did not PXE-boot into NFS
+                  root despite pxelinux.cfg default=nfs on the router.
+                  Check /proc/cmdline in the diagnostic bundle and the
+                  router's /ip tftp serving for armbian/{{ armbian_netboot_board_model }}/.
 
-        - name: Phase 3 — set pxelinux default back to sd for this board
-          ansible.builtin.set_fact:
+        - name: Phase 3 — render+upload pxelinux for sd
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          vars:
             armbian_netboot_boot_mode: sd
 
-        - name: Phase 3 — render pxelinux.cfg on rb5009 (default sd)
-          delegate_to: "{{ armbian_netboot_router }}"
-          block:
-            - name: Phase 3 — include routeros_pxe_config
-              ansible.builtin.include_role:
-                name: routeros_pxe_config
-              vars:
-                _target_host: "{{ inventory_hostname }}"
-
         # Phase 3 intentionally has no block-scoped vars: the Phase 2
-        # verify-NFS block has exited so its NFS-root identity vars are
+        # verify block has exited so its NFS-root identity vars are
         # already out of scope. reset_connection runs BEFORE the cold
-        # boot retry so that the retry's internal wait_for_connection
-        # opens a fresh SSH session with the inventory ansible_user,
-        # not the stale ControlMaster from Phase 2's NFS-root identity.
-        # Do NOT wrap Phase 3 in a vars block for symmetry with Phase 2
-        # — that would re-introduce the override.
+        # boot retry so the retry's wait_for_connection opens a fresh
+        # SSH session with the inventory ansible_user.
         - name: Phase 3 — reset connection so inventory identity takes effect
           ansible.builtin.meta: reset_connection
 
         - name: Phase 3 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 3"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-            armbian_netboot_boot_mode: sd
 
         - name: Phase 3 — wait for SSH (SD-root identity, with cycle retry)
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
-            armbian_netboot_boot_mode: sd
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -552,32 +364,22 @@
               - _root_device is match('^/dev/')
             fail_msg: >-
               Phase 3: expected rootfs on /dev/<block> after converging
-              pxelinux.cfg to default sd on rb5009; got
-              {{ _root_device }} ({{ _root_fstype }}).
-              If still nfsroot, verify rb5009 uploaded pxelinux.cfg/01-{{
-              armbian_netboot_board_mac | lower | replace(':', '-')
-              }} contains `default sd` and that `sd` label references the
-              correct PARTUUID. Diagnostic bundle is in the prior debug task.
+              pxelinux.cfg to default sd; got {{ _root_device }}
+              ({{ _root_fstype }}).
+
       always:
         - name: Cleanup — print exit-state notice if leave_state
           ansible.builtin.debug:
             msg: >-
-              leave_state=true: not cleaning up. Board may still be in NFS
-              root; converge back to SD manually with:
+              leave_state=true: not cleaning up. Board may still be in
+              NFS root; converge back to SD manually with:
               ansible-playbook playbooks/converge_boot_mode.yml
               --limit {{ inventory_hostname }}
               -e armbian_netboot_boot_mode=sd
           when: leave_state | bool
 
-        - name: Cleanup — set pxelinux default target to sd for restore
-          ansible.builtin.set_fact:
-            armbian_netboot_boot_mode: sd
-          when: not (leave_state | bool)
-
-        - name: Cleanup — converge pxelinux default to sd on rb5009
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: converge.yml
+        - name: Cleanup — converge pxelinux default sd on router
+          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_netboot_boot_mode: sd
           when: not (leave_state | bool)
@@ -586,69 +388,24 @@
           ansible.builtin.meta: reset_connection
           when: not (leave_state | bool)
 
-        # Same TCP-probe + auto-bootstrap pattern as Phase 1's pre-wait.
-        # Iter 5 (#38) showed the cleanup wait timing at 330s with the
-        # same buried "Permission denied (publickey, password)" error
-        # that PR #41 fixed for Phase 1 — the cleanup PoE cycle gave
-        # the freshly-reflashed board another chance to boot, sshd came
-        # up, but Phase 1's auto-bootstrap had never run (TCP didn't
-        # come up there) so the inventory user still didn't exist.
-        # Auto-bootstrap during cleanup makes the test leave the board
-        # in a usable state regardless of which path Phase 1 took. The
-        # leave_state guard preserves the existing forensic-mode
-        # contract: leave_state=true means "do not mutate."
         - name: Cleanup — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Cleanup"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-            armbian_netboot_boot_mode: sd
           when: not (leave_state | bool)
 
-        # See the matching comment on the Phase 1 probe — the same
-        # `failed_when: false` masking bug applies here.
-        - name: Cleanup — short SSH probe as inventory user
-          ansible.builtin.wait_for_connection:
-            timeout: 30
-            sleep: 5
-            delay: 0
-          register: _cleanup_inv_probe
-          ignore_errors: true # noqa: ignore-errors
-          when: not (leave_state | bool)
-
-        # Same include_role refactor as Phase 1's auto-bootstrap (see that
-        # block's comment above).
         - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
-          when:
-            - not (leave_state | bool)
-            - _cleanup_inv_probe is failed
-          block:
-            - name: Cleanup — auto-bootstrap notice
-              ansible.builtin.debug:
-                msg: >-
-                  Inventory user can't authenticate to {{ inventory_hostname }}
-                  during cleanup. Running bootstrap_armbian inline so the
-                  board is left in a usable state.
-
-            - name: Cleanup — auto-bootstrap (run bootstrap_armbian role)
-              ansible.builtin.include_role:
-                name: bootstrap_armbian
-              vars:
-                ansible_user: root
-                ansible_password: "{{ armbian_netboot_default_password }}"
-                ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-                ansible_become: false
-
-        - name: Cleanup — wait for SSH after cleanup cycle (with cycle retry)
-          ansible.builtin.include_role:
-            name: boot_mode
-            tasks_from: wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
           vars:
             _phase_label: "Cleanup"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
-            armbian_netboot_boot_mode: sd
+          when: not (leave_state | bool)
+
+        - name: Cleanup — wait for SSH after cleanup cycle (with cycle retry)
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          vars:
+            _phase_label: "Cleanup"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to SD boot
@@ -669,29 +426,18 @@
               - _root_fstype not in ['nfs', 'nfs4']
             fail_msg: >-
               Cleanup left the board in NFS root mode despite converging
-              pxelinux.cfg to default sd on rb5009. Investigate the pxelinux.cfg
-              default directive for {{
-              armbian_netboot_board_mac | lower | replace(':', '-') }}
-              and the linux-u-boot-* deb on disk.
+              pxelinux.cfg to default sd. Investigate the pxelinux.cfg
+              default directive on the router and the linux-u-boot-*
+              deb on disk.
           when: not (leave_state | bool)
 
         # Stop serial capture last so the cleanup phase's reboots are
-        # captured. The log file persists at {{ _serial_log }} on the
-        # control node regardless of leave_state — it's an artifact, not
-        # device state. The pidfile may be missing (start block failed
-        # before socat spawned) and the recorded PID may already be dead
-        # (socat exited on its own); both cases are non-failures.
-        #
-        # Belt-and-suspenders: kill the pidfile-recorded PID first (the
-        # primary mechanism, dependable when the pidfile is fresh), then
-        # `pkill -f` any remaining socat reading {{ serial_device }} as
-        # a backstop for stale pidfiles. The post-Phase-1+2+3 cleanup
-        # only runs on plays that entered the Test phases block, so
-        # plays that abort earlier (plumbing-check failure, agent flake
-        # mid-pre-flight) still leak — those are caught by the
-        # defensive pre-start kill in the Pre-flight serial-capture
-        # block on the *next* run. Net effect: max one zombie socat
-        # in flight between any two runs.
+        # captured. Belt-and-suspenders: kill the pidfile-recorded PID
+        # first (the primary mechanism), then `pkill -f` any remaining
+        # socat reading {{ serial_device }} as a backstop for stale
+        # pidfiles. Plays that abort before the test phases block
+        # leak socat; the defensive pre-start kill in the Pre-flight
+        # serial-capture block catches those on the next run.
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |
             if [ -f {{ _serial_pid }} ]; then

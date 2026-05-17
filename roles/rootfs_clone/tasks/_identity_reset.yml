@@ -1,0 +1,68 @@
+---
+- name: Set per-host /etc/hostname
+  ansible.builtin.copy:
+    dest: "{{ target_dir }}/etc/hostname"
+    content: "{{ hostname }}\n"
+    mode: "0644"
+
+- name: Set per-host /etc/hosts entry
+  ansible.builtin.lineinfile:
+    path: "{{ target_dir }}/etc/hosts"
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1\t{{ hostname }}"
+    create: false
+  failed_when: false  # not all base images ship /etc/hosts pre-populated
+
+# Zero out machine-id rather than deleting it. Empty matches what
+# Armbian ships and what systemd treats as ConditionFirstBoot=yes,
+# which gates sshd-keygen.service (and other first-boot oneshots).
+# Deletion alone is fragile: any prior NFS boot can repopulate the
+# file via systemd-machine-id-setup, leaving the clone in the
+# "second boot" state where ConditionFirstBoot=no and no ssh host
+# keys ever get generated → sshd refuses to start on the NFS rootfs.
+- name: Zero out machine-id files (first-boot trigger for sshd-keygen)
+  ansible.builtin.copy:
+    dest: "{{ target_dir }}/{{ item }}"
+    content: ""
+    mode: "0444"
+    force: true
+  loop:
+    - etc/machine-id
+    - var/lib/dbus/machine-id
+
+# Generate per-host SSH host keys directly rather than relying on
+# Armbian's sshd-keygen.service ConditionFirstBoot=yes trigger.
+# Observed on rock-5b NFS boot: systemd-machine-id-setup populates
+# /etc/machine-id early enough that ConditionFirstBoot evaluates false
+# even with an empty machine-id at boot start; sshd-keygen is skipped;
+# no host keys ever exist; sshd accepts TCP but resets every connection
+# during kex_exchange_identification.
+- name: Remove stale SSH host keys before regeneration
+  ansible.builtin.shell: |
+    rm -f "{{ target_dir }}"/etc/ssh/ssh_host_*
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Generate per-host SSH host keys
+  ansible.builtin.command: >-
+    ssh-keygen -q -f {{ target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key
+    -N "" -t {{ item.type }} {{ item.extra | default('') }}
+  args:
+    creates: "{{ target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key"
+  loop:
+    - { type: rsa,     extra: "-b 4096" }
+    - { type: ecdsa,   extra: "-b 521" }
+    - { type: ed25519, extra: "" }
+  loop_control:
+    label: "{{ item.type }}"
+
+# Suppress armbian-firstrun-config's interactive password-change prompt
+# on first root login. Without this, the first SSH-as-root session
+# triggers a passwd dialog which Ansible's non-interactive session
+# cannot satisfy, and hardware E2E Phase 2's wait_for_connection hangs.
+- name: Touch /root/.no_armbian_first_login to skip first-login prompt
+  ansible.builtin.file:
+    path: "{{ target_dir }}/root/.no_armbian_first_login"
+    state: touch
+    mode: "0644"

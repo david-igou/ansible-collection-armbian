@@ -1,0 +1,66 @@
+---
+# image_extract — runs on a single host with sudo + losetup.
+# Inputs documented in meta/argument_specs.yml.
+
+- name: Compute per-invocation paths
+  ansible.builtin.set_fact:
+    _img_cache: "{{ image_cache_dir }}/{{ model_name }}.img.xz"
+    _img_raw: "{{ image_cache_dir }}/{{ model_name }}.img"
+
+- name: Force-refresh — remove stale state when requested
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ template_dir }}"
+    - "{{ tftp_dir }}"
+    - "{{ _img_cache }}"
+    - "{{ _img_raw }}"
+  when: force_refresh | bool
+
+- name: Ensure working directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ image_cache_dir }}"
+    - "{{ image_mount_dir }}"
+    - "{{ template_dir }}"
+    - "{{ tftp_dir }}"
+
+- name: Check whether template + TFTP artifacts are already populated
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: _populated_stats
+  loop:
+    - "{{ template_dir }}/bin/bash"
+    - "{{ tftp_dir }}/vmlinuz"
+
+- name: Skip extraction when both template and TFTP are populated
+  ansible.builtin.set_fact:
+    _already_extracted: >-
+      {{ _populated_stats.results | map(attribute='stat.exists') | min }}
+
+- name: Extract image when needed
+  when: not _already_extracted
+  block:
+    - name: Acquire .img.xz (download or copy)
+      ansible.builtin.include_tasks: _download_or_copy.yml
+
+    - name: Decompress, mount, rsync rootfs, copy kernel artifacts
+      ansible.builtin.include_tasks: _extract_inner.yml
+
+    - name: Copy vmlinuz / initrd / dtb to tftp_dir
+      ansible.builtin.include_tasks: _copy_kernel_artifacts.yml
+
+  always:
+    - name: Tear down loop device and unmount (always)
+      ansible.builtin.include_tasks: _cleanup.yml
+
+- name: Strip /dev entries from template fstab (idempotent)
+  ansible.builtin.lineinfile:
+    path: "{{ template_dir }}/etc/fstab"
+    regexp: "^/dev/"
+    state: absent
+  when: not _already_extracted

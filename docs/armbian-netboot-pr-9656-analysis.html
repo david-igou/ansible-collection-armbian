@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>armbian/build PR #9656 — netboot extension: design, overlaps, and migration plan</title>
+<style>
+  :root {
+    --fg: #1b1b1b; --bg: #fcfcfa; --muted: #555; --accent: #b65a00;
+    --good: #1f7a1f; --bad: #b00020; --warn: #a06b00;
+    --code-bg: #f3efe7; --rule: #d8d2c4;
+  }
+  html { color: var(--fg); background: var(--bg); }
+  body {
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    max-width: 1040px; margin: 2rem auto; padding: 0 1.25rem;
+  }
+  h1 { font-size: 1.65rem; margin: 0 0 0.5rem; }
+  h2 { font-size: 1.25rem; margin: 2.25rem 0 0.5rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.25rem; }
+  h3 { font-size: 1.05rem; margin: 1.4rem 0 0.4rem; color: var(--accent); }
+  h4 { font-size: 0.95rem; margin: 1rem 0 0.3rem; color: var(--muted); }
+  code, pre, kbd, samp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: 0.07em 0.32em; border-radius: 3px; font-size: 0.92em; }
+  pre {
+    background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 5px;
+    overflow-x: auto; font-size: 0.85em; line-height: 1.45;
+    border-left: 3px solid var(--accent);
+  }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; font-size: 0.92em; }
+  th, td { border: 1px solid var(--rule); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #f6f1e5; }
+  tbody tr:nth-child(odd) td { background: #fbf9f3; }
+  blockquote {
+    border-left: 4px solid var(--warn); margin: 0.8rem 0; padding: 0.4rem 0.9rem;
+    background: #fbf6e8; color: #4a3a00;
+  }
+  .pill {
+    display: inline-block; padding: 0.05em 0.5em; border-radius: 10px;
+    font-size: 0.72em; font-weight: 600; vertical-align: middle;
+  }
+  .pill.good { background: #d8f2d8; color: var(--good); }
+  .pill.bad  { background: #f7d7dc; color: var(--bad); }
+  .pill.warn { background: #f6e7c4; color: var(--warn); }
+  .pill.info { background: #d7e8f6; color: #114a7d; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  .meta { color: var(--muted); font-size: 0.85em; }
+  .footnote { font-size: 0.82em; color: var(--muted); }
+  ul.tight li, ol.tight li { margin: 0.1rem 0; }
+  .legend { font-size: 0.82em; color: var(--muted); margin-bottom: 0.5rem; }
+  .callout-good { background: #ebf6eb; border-left: 4px solid var(--good); padding: 0.5rem 0.8rem; margin: 0.8rem 0; }
+  .callout-bad  { background: #f9eaec; border-left: 4px solid var(--bad);  padding: 0.5rem 0.8rem; margin: 0.8rem 0; }
+  hr.section { border: 0; border-top: 1px dashed var(--rule); margin: 2rem 0; }
+  .toc { background: #f6f1e5; padding: 0.6rem 1rem 0.6rem 1.6rem; border-radius: 5px; }
+  .toc ol { margin: 0.2rem 0; }
+  .anno { color: var(--muted); font-style: italic; font-size: 0.88em; }
+  .nowrap { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<h1>armbian/build PR #9656 &mdash; netboot extension</h1>
+<p class="meta">
+  Design breakdown, overlap/gap analysis with <code>david_igou.armbian_netboot</code>,
+  and migration options for removing privileged TrueNAS operations.<br>
+  Source: <a href="https://github.com/armbian/build/pull/9656">armbian/build#9656</a>
+  (author <a href="https://github.com/iav">iav</a>, opened 2026-04-11, +2684/&minus;43, state <span class="pill warn">OPEN &middot; WIP</span>).
+  Analysis date 2026-05-15.
+</p>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol class="tight">
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#pr-anatomy">PR anatomy: what it adds, where, and why</a></li>
+    <li><a href="#fs-creation">Deep dive: how the extension creates filesystems</a></li>
+    <li><a href="#today">How <code>david_igou.armbian_netboot</code> creates filesystems today</a></li>
+    <li><a href="#overlap-gap">Overlaps and gaps, side by side</a></li>
+    <li><a href="#privilege">The privileged-on-TrueNAS problem, and how PR #9656 removes it</a></li>
+    <li><a href="#migration">Concrete changes to make once PR #9656 merges</a></li>
+    <li><a href="#risks">Risks, blockers, and pre-merge things to track</a></li>
+    <li><a href="#refs">References</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="tldr">1. TL;DR</h2>
+
+<p>
+PR #9656 introduces a first-class <strong>opt-in <code>netboot</code> extension</strong>
+in <code>armbian/build</code>. The headline switch is a new
+<code>ROOTFS_TYPE=nfs-root</code> case in <code>main-config.sh</code>, which:
+</p>
+<ul class="tight">
+  <li>auto-enables the new <code>extensions/netboot/netboot.sh</code> extension,</li>
+  <li>skips the SD-card image pipeline entirely (no <code>.img.xz</code> deliverable &mdash; the build does not even allocate a root partition),</li>
+  <li>directly produces the TFTP payload (<code>Image</code>/<code>zImage</code>, DTB tree, optional <code>uInitrd</code>, <code>pxelinux.cfg/&hellip;</code>),</li>
+  <li>turns the <em>chroot rootfs</em> into the deliverable: it is either <strong>tarred</strong> (<code>.tar.zst</code> / <code>.tar.gz</code>) or <strong>rsynced directly into a directory you specify</strong> via the new <code>ROOTFS_EXPORT_DIR</code> variable,</li>
+  <li>fires two new generic hooks &mdash; <code>post_create_rootfs_archive</code> and <code>artifact_ready</code> &mdash; so a sibling <code>netboot-deploy</code> extension can rsync everything to a remote NFS+TFTP server in one shot.</li>
+</ul>
+
+<p>
+For <code>david_igou.armbian_netboot</code>, the most consequential delta is
+<strong>where the rootfs is materialised</strong>:
+</p>
+
+<div class="grid2">
+  <div class="callout-bad">
+    <strong>Today (this collection):</strong> the build produces a stock <code>.img.xz</code>,
+    we publish it to TrueNAS, then on TrueNAS we <code>losetup</code> + <code>mount</code> + <code>rsync</code>
+    the rootfs partition out of the image. That requires <code>become: true</code> on TrueNAS plus
+    <code>losetup</code>/<code>mount</code> privileges &mdash; an awkward dependency on a NAS appliance
+    we&rsquo;d rather treat as an unprivileged file server.
+  </div>
+  <div class="callout-good">
+    <strong>With PR #9656:</strong> the build itself produces the unpacked rootfs tree
+    directly into a path of our choosing &mdash; including a path that lives on
+    NFS export storage. <code>losetup</code>, <code>mount</code>, image extraction,
+    DTB hunting all disappear from the TrueNAS side. TrueNAS becomes
+    <em>just an NFS server</em>; the rest of the pipeline runs as the build user.
+  </div>
+</div>
+
+<p>
+The rest of this document explains the design in enough depth to plan that migration,
+flags the two areas of real <strong>overlap</strong> with this collection
+(rootfs staging + <code>pxelinux.cfg</code> generation) and the
+<strong>non-trivial gaps</strong> that mean we still need our existing roles
+(per-board PXE multi-label, RouterOS TFTP plumbing, PoE-based boot mode flips,
+per-host SD-fallback PARTUUID, custom U-Boot baked with PXE-first
+<code>BOOT_TARGETS</code>).
+</p>
+
+<!-- ============================================================ -->
+<h2 id="pr-anatomy">2. PR anatomy: what it adds, where, and why</h2>
+
+<p>The PR touches 16 files. The interesting ones, grouped by role:</p>
+
+<h3>2.1 Core wiring (small, but load-bearing)</h3>
+<table>
+  <thead><tr><th>File</th><th>Change</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>lib/functions/configuration/main-config.sh</code></td>
+      <td>New <code>nfs-root</code> case branch in <code>ROOTFS_TYPE</code> dispatch; both <code>nfs</code> and <code>nfs-root</code> bypass <code>check_filesystem_compatibility_on_host</code>.</td>
+      <td><code>ROOTFS_TYPE=nfs-root</code> becomes the single user-facing switch &mdash; symmetric with how <code>fs-f2fs-support</code> / <code>fs-btrfs</code> enable their extensions. CodeRabbit reviewer pushed back on the original approach of enabling the extension from inside <code>extension_prepare_config</code>: too late in the lifecycle.</td>
+    </tr>
+    <tr>
+      <td><code>lib/functions/image/partitioning.sh</code></td>
+      <td><code>prepare_partitions</code> skips the root partition entry for <code>nfs-root</code>; SD-size sanity check skipped too.</td>
+      <td>No image is being produced &mdash; allocating partitions would be meaningless and the sanity check would false-positive.</td>
+    </tr>
+    <tr>
+      <td><code>lib/functions/image/rootfs-to-image.sh</code></td>
+      <td>Adds <code>ROOTFS_COMPRESSION</code> (<code>zstd</code>/<code>gzip</code>/<code>none</code>) and <code>ROOTFS_EXPORT_DIR</code> for both <code>nfs</code> and <code>nfs-root</code>; archive pipeline now runs under <code>set -o pipefail</code> with a hidden temp file renamed atomically; rsync uses <code>-AXS --numeric-ids</code> by default; new <code>pre_create_rootfs_archive</code> and <code>post_create_rootfs_archive</code> hooks; for <code>nfs-root</code>, <code>create_image_from_sdcard_rootfs</code> early-returns after the TFTP-collect hook, never writing an <code>.img</code>.</td>
+      <td>This is the heart of the PR. The rootfs is decoupled from the SD-card image; it is either archived or rsynced to a directory, with proper xattrs / ACLs / SELinux / sparse-file handling. Atomic archive write + <code>--delete</code> on the export rsync make repeat builds reliable.</td>
+    </tr>
+    <tr>
+      <td><code>lib/functions/artifacts/artifacts-obtain.sh</code></td>
+      <td>New generic <code>artifact_ready</code> extension hook, fired at the end of <code>obtain_complete_artifact</code> after reversioning.</td>
+      <td>Allows a sibling extension to react after <em>any</em> artifact is produced (kernel <code>.deb</code>, image, etc.) &mdash; used by <code>netboot-deploy</code> for kernel-only refreshes.</td>
+    </tr>
+    <tr>
+      <td><code>config/templates/nfs-boot.cmd.template</code></td>
+      <td>De-sunxi-ed; now arch-agnostic (handles <code>Image</code> + <code>booti</code> for arm64 alongside the legacy <code>zImage</code> + <code>bootz</code>). Wraps the DTB load in <code>if load &hellip; ; then true; else echo FATAL; reset; fi</code>.</td>
+      <td>The legacy <code>ROOTFS_TYPE=nfs</code> hybrid flow (kernel on SD, only / over NFS) is fixed for arm64 boards. Boot fails fast on a missing DTB instead of running off into an invalid address.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>2.2 The <code>netboot</code> extension itself</h3>
+<table>
+  <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>extensions/netboot/netboot.sh</code> (611 lines)</td>
+        <td>The extension. Hooks listed in §3. Variable surface: <code>NETBOOT_SERVER</code>, <code>NETBOOT_TFTP_PREFIX</code>, <code>NETBOOT_NFS_PATH</code>, <code>NETBOOT_HOSTNAME</code>, <code>NETBOOT_CLIENT_MAC</code>, <code>ROOTFS_COMPRESSION</code>, <code>ROOTFS_EXPORT_DIR</code>, <code>NETBOOT_EXPORT_FORCE</code>.</td></tr>
+    <tr><td><code>extensions/netboot/netboot-deploy.sh</code> (798 lines)</td>
+        <td>Reference deploy hook. Has <em>two</em> trigger points: <code>netboot_artifacts_ready</code> (full image build) and <code>artifact_ready</code> (kernel-only refresh, the BTF-mismatch fix).</td></tr>
+    <tr><td><code>extensions/netboot/README.md</code> (926 lines)</td>
+        <td>End-user guide &mdash; server setup, variable reference, DHCP-66/67 examples, helios64 walk-through.</td></tr>
+    <tr><td><code>extensions/netboot/files/dhcpcd-hooks/71-netboot-rootpath</code></td>
+        <td>Initramfs-side dhcpcd hook that reads <code>bootserver</code> from <code>/proc/net/pnp</code> (kernel IP-Config from DHCP <code>siaddr</code>) and overrides <code>ROOTSERVER</code> in <code>/run/net-${interface}.conf</code> &mdash; otherwise the stock <code>70-net-conf</code> sets <code>ROOTSERVER</code> to the default gateway.</td></tr>
+    <tr><td><code>extensions/netboot/files/initramfs-hooks/netboot-rootpath</code></td>
+        <td>Companion hook that copies the dhcpcd hook into the initramfs tree.</td></tr>
+    <tr><td><code>extensions/netboot/files/initramfs-scripts/init-premount/zz-netboot-watchdog</code><br><code>&hellip;/nfs-bottom/zz-netboot-watchdog-cancel</code></td>
+        <td>10-minute watchdog: <code>init-premount</code> arms it, <code>nfs-bottom</code> disarms once NFS is up. If NFS hangs early, the board reboots instead of sitting at a black serial console forever.</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 Hook lifecycle (mental map)</h3>
+<pre><code>extension_prepare_config__netboot_defaults_and_validate
+   |  validate ROOTFS_COMPRESSION x ROOTFS_EXPORT_DIR combo
+   |  normalize NETBOOT_CLIENT_MAC -> 01-aa-bb-cc-dd-ee-ff
+   |  set BOOTSIZE=0  <- skips phantom /boot partition + fstab entry
+host_pre_docker_launch__netboot_bindmount_external_export
+   |  if ROOTFS_EXPORT_DIR is outside ${SRC}, bind-mount it into the
+   |  container at the SAME absolute path
+custom_kernel_config__netboot_enable_nfs_root
+   |  opts_y+=("ROOT_NFS" "NFS_FS" "NFS_V3" "IP_PNP" "IP_PNP_DHCP")
+post_customize_image__netboot_*  (run inside chroot SDCARD)
+   |  drop armbian-resize-filesystem.service
+   |  drop /root/.not_logged_in_yet (skip firstlogin whiptail)
+   |  install 71-netboot-rootpath dhcpcd hook + initramfs hook
+   |  install zz-netboot-watchdog initramfs scripts
+   |  update-initramfs -u inside the chroot
+   |  stamp .netboot_export_marker at chroot root
+pre_umount_final_image__900_collect_netboot_artifacts
+   |  copy Image|zImage -> ${tftp_out}/${PREFIX}/Image|zImage
+   |  copy /boot/dtb/* -> ${tftp_out}/${PREFIX}/dtb/
+   |  copy /boot/uInitrd -> ${tftp_out}/${PREFIX}/uInitrd  (if present)
+   |  render pxelinux.cfg/${tag}.example or 01-&lt;mac&gt;.${tag}
+create_image_from_sdcard_rootfs (now in rootfs-to-image.sh)
+   |  -- archive path --
+   |     tar cp --numeric-owner --xattrs --xattrs-include=security.*
+   |         --acls --selinux --sparse SDCARD/ | pv | zstd -T0 -c &gt; tmp
+   |     mv tmp ${FINALDEST}/${version}-rootfs.tar.zst  (atomic)
+   |  -- ROOTFS_EXPORT_DIR path (additionally OR instead) --
+   |     rsync -aHWh -AXS --numeric-ids --delete --delete-excluded
+   |         SDCARD/ ${ROOTFS_EXPORT_DIR}/
+post_create_rootfs_archive__900_netboot_deploy
+   |  dispatch netboot_artifacts_ready hook to userpatches / netboot-deploy
+artifact_ready  (kernel-only flow, generic hook)
+   |  unpack reversioned linux-image-*.deb under ${SRC}/.tmp/
+   |  rsync vmlinuz, dtbs, /lib/modules/${kver}/ to TFTP + NFS server</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="fs-creation">3. Deep dive: how the extension creates filesystems</h2>
+
+<p>
+This is the part that materially affects this collection. The end-state question is:
+<em>given <code>ROOTFS_TYPE=nfs-root</code>, where does the rootfs that boards
+will mount over NFS actually come from, and what privilege does writing it
+require?</em>
+</p>
+
+<h3>3.1 Source of the rootfs: the build&rsquo;s own <code>$SDCARD</code> chroot</h3>
+
+<p>
+In a normal Armbian image build, <code>$SDCARD</code> is the chroot that
+debootstrap populates and that <code>post_customize_image</code> hooks
+modify. Today (without this PR) that chroot is then rsynced into a mounted
+partition inside a loop-mounted <code>.img</code> file, the image is finalised,
+compressed, etc.
+</p>
+
+<p>
+PR #9656 short-circuits everything from the second step onwards
+<em>for <code>ROOTFS_TYPE in {nfs, nfs-root}</code></em>. Inside
+<code>create_image_from_sdcard_rootfs</code> the new branch in
+<code>rootfs-to-image.sh</code> does (paraphrased):
+</p>
+
+<pre><code>if [[ $ROOTFS_TYPE == nfs || $ROOTFS_TYPE == nfs-root ]]; then
+    # --- (A) archive path ---
+    if [[ "$ROOTFS_COMPRESSION" != "none" ]]; then
+        ROOTFS_ARCHIVE_PATH="${FINALDEST}/${version}-rootfs.${archive_ext}"
+        rootfs_archive_tmp="${FINALDEST}/.${version}-rootfs.${archive_ext}.tmp"
+        ( set -o pipefail
+          tar cp --numeric-owner --xattrs \
+              --xattrs-include="${ROOTFS_TAR_XATTR_INCLUDE:-security.*}" \
+              --acls --selinux --sparse "${ROOTFS_TAR_EXTRA_FLAGS[@]}" \
+              --directory="$SDCARD/" "${tar_excludes[@]}" . \
+            | pv ... \
+            | ${archive_filter} > "${rootfs_archive_tmp}"  ## zstd -T0 -c | gzip -c
+        )
+        mv -v "${rootfs_archive_tmp}" "${ROOTFS_ARCHIVE_PATH}"
+    fi
+
+    # --- (B) direct-tree path (additive or exclusive) ---
+    if [[ -n "${ROOTFS_EXPORT_DIR}" ]]; then
+        ## safety: realpath check rejects /, /etc, ${SDCARD}, ..-segments
+        rsync -aHWh -AXS --numeric-ids --delete --delete-excluded $rsync_ea \
+            --exclude="/boot/*" --exclude="/dev/*" --exclude="/proc/*" \
+            --exclude="/run/*"  --exclude="/tmp/*" --exclude="/sys/*" \
+            $exclude_home --info=progress0,stats1 \
+            "$SDCARD/" "${ROOTFS_EXPORT_DIR}/"
+    fi
+fi</code></pre>
+
+<p>And then, critically, for <code>nfs-root</code> it skips the entire SD-card
+image emission &mdash; no <code>parted</code>, no <code>mkfs</code>, no
+<code>losetup</code>, no <code>partprobe</code>, no <code>.img.xz</code>. The
+build artifacts are just:</p>
+
+<ol class="tight">
+  <li><code>${FINALDEST}/${version}-rootfs.tar.zst</code> &mdash; the rootfs archive (skippable via <code>ROOTFS_COMPRESSION=none</code>)</li>
+  <li><code>${FINALDEST}/${version}-netboot-tftp/</code> &mdash; the TFTP payload tree (<code>${PREFIX}/Image</code>, <code>${PREFIX}/dtb/&hellip;</code>, optional <code>${PREFIX}/uInitrd</code>, <code>pxelinux.cfg/&hellip;</code>)</li>
+  <li>And optionally: <code>${ROOTFS_EXPORT_DIR}/</code> &mdash; the unpacked rootfs tree, written in place.</li>
+</ol>
+
+<h3>3.2 Identity correctness: <code>--xattrs --acls --selinux --numeric-ids</code></h3>
+
+<p>
+The PR fixes a real correctness bug across the board (not just for netboot): the
+old <code>tar cp --xattrs</code> dropped POSIX ACLs, SELinux contexts, and
+&mdash; the one that actually bites in practice &mdash; file capabilities
+(<code>security.capability</code> xattr), which is the namespace
+<code>setcap cap_net_raw+ep /usr/bin/ping</code> lives in. The new flags
+include <code>security.*</code> by default; tar in <code>create-cache.sh</code>
+and <code>rootfs-create.sh</code> got the same treatment.
+</p>
+
+<p>
+For our use case the practical implication is: <strong>per-host rootfs trees
+produced this way preserve original ownership and SUID/capability bits without
+a chroot or qemu pass on the deploy side</strong>. That matters because
+the moment we stop building images and start materialising trees directly,
+the integrity of those bits has to live in the rsync, not in
+<code>partclone</code>/<code>tar2img</code>.
+</p>
+
+<h3>3.3 The two on-disk write targets</h3>
+
+<p>The PR distinguishes three modes of writing the rootfs tree:</p>
+
+<table>
+<thead><tr><th>Variable combo</th><th>Result</th><th>Use case</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>ROOTFS_COMPRESSION=zstd</code> <span class="anno">(default)</span><br><code>ROOTFS_EXPORT_DIR</code> unset</td>
+  <td>Single <code>${version}-rootfs.tar.zst</code> in <code>FINALDEST</code>.</td>
+  <td>Build host ships the archive to a separate NFS server (the
+      <code>netboot-deploy</code> reference path).</td>
+</tr>
+<tr>
+  <td><code>ROOTFS_COMPRESSION=zstd</code><br><code>ROOTFS_EXPORT_DIR=&hellip;</code></td>
+  <td>Both: archive in <code>FINALDEST</code> + tree rsynced to the dir.</td>
+  <td>Local builder publishes a tree <em>and</em> keeps an archive for cold standby.</td>
+</tr>
+<tr>
+  <td><code>ROOTFS_COMPRESSION=none</code><br><code>ROOTFS_EXPORT_DIR=&hellip;</code></td>
+  <td>Only tree-rsync; no tar produced.</td>
+  <td>Build host <strong>is</strong> the NFS server (or has the export
+      NFS-mounted). The single fastest path &mdash; one rsync, no
+      compress/decompress cycle.</td>
+</tr>
+</tbody>
+</table>
+
+<h3>3.4 Safety on the rsync target</h3>
+
+<p>
+<code>rsync --delete</code> on an operator-supplied path is sharp. The PR
+spends visible care on this:
+</p>
+
+<ul class="tight">
+  <li><code>NETBOOT_EXPORT_DIR_BLACKLIST</code> rejects <code>/</code>,
+      <code>/etc</code>, <code>/usr</code>, <code>/bin</code>, <code>/sbin</code>,
+      <code>/lib</code>, <code>/lib64</code>, <code>/boot</code>,
+      <code>/proc</code>, <code>/sys</code>, <code>/dev</code>, <code>/run</code>,
+      <code>/tmp</code>, <code>/var/log</code>, <code>/var/run</code>
+      (extendable via <code>netboot_export_dir_blacklist</code> hook).</li>
+  <li><code>..</code> segments are rejected.</li>
+  <li>A non-empty target without the
+      <code>.netboot_export_marker</code> stamp at its root is refused
+      (the marker is written via <code>post_customize_image</code> so a
+      previously-exported tree carries it). Override with
+      <code>NETBOOT_EXPORT_FORCE=yes</code>.</li>
+  <li><code>realpath -m</code> validates the resolved path even when symlinks
+      are involved, so a misaimed symlink under the under-base namespace can&rsquo;t
+      escape into <code>/etc</code>.</li>
+</ul>
+
+<h3>3.5 Per-host vs shared rootfs &mdash; built into the variable schema</h3>
+
+<p>
+The PR formalises the per-host pattern this collection already implements
+manually:
+</p>
+
+<pre><code># shared rootfs (multiple boards mount the same path; not what we want)
+NETBOOT_NFS_PATH = /srv/netboot/rootfs/shared/${LINUXFAMILY}/${BOARD}/${BRANCH}-${RELEASE}${_FLAVOR}
+
+# per-host rootfs (NETBOOT_HOSTNAME=&lt;name&gt; -> own writable copy)
+NETBOOT_NFS_PATH = /srv/netboot/rootfs/hosts/&lt;hostname&gt;</code></pre>
+
+<p>
+Crucially, in the per-host mode the build is run <strong>once per host</strong>
+&mdash; each invocation produces a full rootfs at <code>hosts/&lt;hostname&gt;</code>.
+That is a different shape than this collection&rsquo;s &ldquo;build once per
+model + cheap reflink per host&rdquo; approach. See §5.3.
+</p>
+
+<h3>3.6 Initramfs work the extension does for you</h3>
+
+<p>Even though the PR&rsquo;s end-state assumes a kernel with <code>CONFIG_ROOT_NFS=y</code>
+that mounts NFS without an initramfs, it still bothers to build a sane
+initramfs path because not every distro+board combination guarantees a
+working <code>ip=dhcp</code> + builtin NFS root path:</p>
+
+<ul class="tight">
+  <li><code>71-netboot-rootpath</code> + companion initramfs-tools hook
+      &mdash; fixes the &ldquo;<code>ROOTSERVER=default-gateway</code>&rdquo;
+      bug from stock <code>70-net-conf</code>: reads <code>bootserver</code>
+      from <code>/proc/net/pnp</code> instead.</li>
+  <li><code>zz-netboot-watchdog</code> &mdash; arms a 10-minute hardware
+      watchdog at <code>init-premount</code>, cancelled at <code>nfs-bottom</code>
+      once <code>/</code> is up. A board whose initramfs hangs on
+      <code>/dev/nfs</code> reboots instead of becoming an unreachable serial
+      console.</li>
+  <li><code>update-initramfs -u</code> is invoked inside the chroot so the
+      <em>shipped</em> <code>uInitrd</code> on TFTP carries these hooks.</li>
+</ul>
+
+<p>This collection&rsquo;s pxelinux template currently relies on the kernel-side
+<code>ip=dhcp</code> + builtin NFS, plus a fixed <code>nfsroot=&lt;ip&gt;:&lt;path&gt;</code>
+baked at render time. The watchdog primitive is something we&rsquo;d strictly
+benefit from inheriting &mdash; today a stuck NFS mount manifests as &ldquo;board
+silent on serial for 20 min&rdquo; and the only recovery is a PoE cycle. §6.3.</p>
+
+<!-- ============================================================ -->
+<h2 id="today">4. How this collection creates filesystems today</h2>
+
+<p>Authoritative file: <code>roles/netboot_assets/tasks/per_board.yml</code>
+plus <code>tasks/per_host.yml</code>. Summarised:</p>
+
+<ol class="tight">
+  <li><strong>(builder)</strong> <code>playbooks/build_image.yml</code> runs
+      Armbian build in Docker on <code>armbian_builders</code>, producing a
+      stock-looking <code>.img.xz</code> (with our custom PXE-first U-Boot
+      patches), and rsyncs it to <code>${armbian_netboot_nfs_assets_export}/images/&lt;board&gt;/</code>
+      on the netboot server via a controller-mediated relay.</li>
+  <li><strong>(TrueNAS, <code>become: true</code>)</strong>
+      <code>playbooks/stage_nfs_rootfs.yml</code> &rarr;
+      <code>roles/netboot_assets/tasks/per_board.yml</code>:
+    <ul class="tight">
+      <li><code>xz -dk</code> the cached <code>.img.xz</code>,</li>
+      <li><code>losetup --find --show --partscan</code> the <code>.img</code>,</li>
+      <li><code>lsblk</code> to discover the rootfs partition node, then
+          <code>mount /dev/${PART} &hellip;</code>,</li>
+      <li><code>rsync -aHAX --exclude '/proc/*' &hellip;</code> the rootfs
+          tree into <code>_templates/&lt;model&gt;/</code>,</li>
+      <li><code>cp /boot/vmlinuz-*</code>, <code>cp /boot/initrd.img-*</code>
+          and DTB-hunt (try <code>/boot/dtb/</code>,
+          <code>/boot/dtbs/&lt;ver&gt;/</code>, <code>/boot/dtb-*/</code>) into
+          a TrueNAS-side TFTP cache,</li>
+      <li><code>umount</code> + <code>losetup -d</code> + remove
+          <code>/dev/*</code> entries from the template <code>fstab</code>.</li>
+    </ul>
+  </li>
+  <li><strong>(TrueNAS, <code>become: true</code>)</strong>
+      <code>tasks/per_host.yml</code> creates
+      <code>${nfs_rootfs_path}/&lt;hostname&gt;/</code> by
+      <code>cp -a --reflink=auto</code> of the model template &mdash; CoW
+      cheap on XFS/btrfs/ZFS, full copy on ext4. Then it customises
+      hostname, <code>/etc/hosts</code>, removes <code>machine-id</code>,
+      removes <code>ssh_host_*</code>, drops a
+      <code>/root/.no_armbian_first_login</code> marker.</li>
+  <li><strong>(control node + rb5009)</strong>
+      <code>playbooks/stage_tftp_assets.yml</code> + role <code>routeros_pxe_config</code>:
+      <code>fetch</code> kernel/initrd/dtb from TrueNAS to a controller cache,
+      then <code>net_put</code> them into <code>flash:/sbc/</code> on rb5009
+      and register matching <code>/ip tftp</code> rules. Render
+      <code>pxelinux.cfg/01-&lt;mac&gt;</code> from
+      <code>templates/pxelinux_cfg.j2</code> (multi-label
+      <code>nfs</code> + <code>sd</code>, controlled by
+      <code>default {{ armbian_netboot_boot_mode }}</code>).</li>
+</ol>
+
+<p>The privileged-on-TrueNAS chain is exactly steps 2(b)&ndash;2(d): <code>losetup</code>,
+<code>mount</code>, then a directory-as-root rsync. Removing those is the explicit goal.</p>
+
+<!-- ============================================================ -->
+<h2 id="overlap-gap">5. Overlaps and gaps, side by side</h2>
+
+<p class="legend">
+  <span class="pill good">overlap</span> = PR covers it; this collection should defer to it.
+  <span class="pill warn">partial</span> = PR covers part; bridge work needed.
+  <span class="pill bad">gap</span> = PR does not cover it; this collection keeps owning it.
+</p>
+
+<table>
+<thead><tr><th>Concern</th><th>This collection today</th><th>PR #9656</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr>
+  <td>Extract rootfs from a published <code>.img.xz</code></td>
+  <td><code>losetup</code> + <code>mount</code> + <code>rsync</code> on TrueNAS, requires root.</td>
+  <td>Doesn&rsquo;t happen &mdash; the rootfs comes straight out of <code>$SDCARD</code> as a tree or archive.</td>
+  <td><span class="pill good">overlap</span> <em>delete</em> the per-board extraction in <code>netboot_assets</code>.</td>
+</tr>
+<tr>
+  <td>Stage kernel + DTB + initrd for TFTP</td>
+  <td>copy from mounted rootfs to TrueNAS cache, then <code>fetch</code> to controller, then <code>net_put</code> to rb5009.</td>
+  <td>Build emits <code>${tftp_out}/${PREFIX}/{Image,dtb/,uInitrd}</code> + <code>pxelinux.cfg/&hellip;</code> directly.</td>
+  <td><span class="pill good">overlap</span> on the &ldquo;produce the files&rdquo; half. Loading them to rb5009 is still ours &mdash; see next row.</td>
+</tr>
+<tr>
+  <td>Push files to rb5009 flash + register <code>/ip tftp</code></td>
+  <td>Role <code>netboot_assets/tasks/stage_rb5009.yml</code> + <code>routeros_pxe_config</code>.</td>
+  <td>Doesn&rsquo;t exist. <code>netboot-deploy.sh</code> targets a generic SSH+rsync server (tftpd-hpa-style filesystem-backed TFTP), not a RouterOS device with TFTP-from-flash rules.</td>
+  <td><span class="pill bad">gap</span> &mdash; we keep owning all RouterOS interaction.</td>
+</tr>
+<tr>
+  <td>Per-host rootfs differentiation</td>
+  <td>Reflink-clone model template then mutate hostname/machine-id/ssh keys (single Ansible pass over N hosts).</td>
+  <td>Build once per host with <code>NETBOOT_HOSTNAME=&hellip;</code> &mdash; the chroot itself is per-host; <em>does not</em> rewrite hostname/machine-id from a shared template.</td>
+  <td><span class="pill warn">partial</span> &mdash; functionally equivalent for hostname; <strong>cost shape is different</strong> (full debootstrap per host vs reflink). See §5.3.</td>
+</tr>
+<tr>
+  <td>pxelinux.cfg with multiple labels (<code>nfs</code> + <code>sd</code>) and a <code>default</code> switch</td>
+  <td>Custom multi-label template in <code>routeros_pxe_config/templates/pxelinux_cfg.j2</code>; <code>default {{ boot_mode }}</code> directive selects the active mode; the <code>sd</code> label uses <code>root=PARTUUID=&hellip;</code> per host.</td>
+  <td>Single-label <code>DEFAULT armbian</code> stanza, NFS-root only. No SD-fallback label. No <code>default</code> switching contract.</td>
+  <td><span class="pill bad">gap</span> &mdash; we keep our template. (We could optionally consume the PR&rsquo;s generated <code>.example</code> as documentation but it doesn&rsquo;t replace ours.)</td>
+</tr>
+<tr>
+  <td>Custom U-Boot with PXE-first <code>BOOT_TARGETS</code></td>
+  <td><code>roles/armbian_build</code> + <code>build_image.yml</code> userpatches inject <code>pre_config_uboot_target__999_pxe_first</code>, force <code>CONFIG_PCI_INIT_R=y</code>, bump rock-5b u-boot to v2026.04, etc.</td>
+  <td>Not addressed at all. PR assumes you arrange PXE-first elsewhere (router DHCP <code>next-server</code>, or board defaults).</td>
+  <td><span class="pill bad">gap</span> &mdash; userpatches and build-time U-Boot surgery stay ours.</td>
+</tr>
+<tr>
+  <td>Boot mode flip (NFS &harr; SD) via pxelinux <code>default</code> + PoE cycle</td>
+  <td><code>roles/boot_mode</code> rewrites <code>default</code> in the per-board pxelinux.cfg on rb5009, then PoE-cycles the board, then verifies rootfs.</td>
+  <td>No concept of two coexisting modes; netboot is the only mode the extension considers.</td>
+  <td><span class="pill bad">gap</span> &mdash; entire <code>boot_mode</code> role stays.</td>
+</tr>
+<tr>
+  <td>PoE control on RouterOS switches</td>
+  <td><code>roles/routeros_poe</code> via <code>network_cli</code>.</td>
+  <td>Out of scope.</td>
+  <td><span class="pill bad">gap</span></td>
+</tr>
+<tr>
+  <td>rock-5b SPI U-Boot env persistence (Approach B)</td>
+  <td><code>playbooks/persist_uboot_env.yml</code> + <code>fw_setenv</code> from Linux.</td>
+  <td>Out of scope.</td>
+  <td><span class="pill bad">gap</span></td>
+</tr>
+<tr>
+  <td>Image URL preflight + HTTP HEAD</td>
+  <td><code>roles/netboot_assets/tasks/preflight.yml</code>.</td>
+  <td>N/A &mdash; the build IS the source of truth, no URLs to validate.</td>
+  <td><span class="pill good">overlap</span> &mdash; can be removed once we stop downloading <code>.img.xz</code> for staging.</td>
+</tr>
+<tr>
+  <td>Kernel-only refresh (vmlinuz + dtbs + <code>/lib/modules/&lt;ver&gt;</code>) without full image rebuild</td>
+  <td>Not implemented. We&rsquo;d need a full image rebuild then re-extract.</td>
+  <td>The new <code>artifact_ready__netboot_kernel_deploy</code> handler. <code>compile.sh kernel BOARD=&hellip;</code> rsyncs vmlinuz + dtb + modules under one <code>--delete</code>-scoped to <code>${kver}</code>.</td>
+  <td><span class="pill good">new capability</span> &mdash; worth wiring an Ansible wrapper for.</td>
+</tr>
+<tr>
+  <td>NFS hang watchdog in initramfs</td>
+  <td>Not implemented; a hung NFS mount appears as a silent serial console; recovery is a manual PoE cycle.</td>
+  <td><code>zz-netboot-watchdog</code> / <code>zz-netboot-watchdog-cancel</code>: 10 min watchdog armed pre-mount, cancelled in <code>nfs-bottom</code>.</td>
+  <td><span class="pill good">new capability</span> &mdash; we inherit this for free when we adopt <code>nfs-root</code> builds.</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="cost-shape">5.3 The per-host cost-shape question</h3>
+
+<p>
+The single biggest design difference is <em>where</em> the per-host distinction
+happens. PR #9656 expects you to build once per host (or once with a
+hostname and re-run with another hostname). This collection builds once per
+<em>model</em> and reflink-clones N hosts.
+</p>
+
+<table>
+<thead><tr><th></th><th>Build-per-host (PR shape)</th><th>Build-per-model + reflink (ours)</th></tr></thead>
+<tbody>
+<tr><td>CPU + IO cost for 4 hosts of the same model</td>
+    <td>4 &times; full debootstrap + <code>post_customize_image</code> + tar/rsync. ~7&nbsp;min &times; 4 = ~28&nbsp;min on helios64-class hardware.</td>
+    <td>1 &times; full debootstrap, then 3 &times; <code>cp -a --reflink=auto</code>. Reflink completes in seconds on XFS/btrfs/ZFS.</td></tr>
+<tr><td>Disk usage on the NFS server</td>
+    <td>4 &times; full tree. Roughly 1.5&nbsp;GB &times; 4 = 6&nbsp;GB.</td>
+    <td>1 template + 4 hosts. On XFS/btrfs/ZFS the hosts share blocks with the template until written; closer to ~1.5&nbsp;GB.</td></tr>
+<tr><td>Per-host identity fields</td>
+    <td>Whatever the build sets (hostname is the only one the extension differentiates).</td>
+    <td>hostname, <code>/etc/hostname</code>, <code>/etc/hosts</code> 127.0.1.1, <code>machine-id</code>, <code>ssh_host_*</code>, firstlogin skip marker.</td></tr>
+<tr><td>Refresh latency after a kernel change</td>
+    <td>Kernel-only deploy &mdash; one <code>compile.sh kernel</code> +  N rsyncs (the PR&rsquo;s new path is essentially what we&rsquo;d build by hand today).</td>
+    <td>Today: rebuild image, re-extract, re-clone. Days/weeks of toil.</td></tr>
+</tbody>
+</table>
+
+<div class="callout-good">
+<strong>Recommendation:</strong> adopt PR #9656&rsquo;s <code>ROOTFS_EXPORT_DIR</code> for the
+<em>per-model template</em>, keeping our existing <code>per_host.yml</code> reflink+identity
+flow on top of it. That preserves the cheap N-host shape, drops the privileged
+image extraction step, and gets us the kernel-only refresh path for free.
+This combination is what §7.1 describes in detail.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="privilege">6. The privileged-on-TrueNAS problem, and how PR #9656 removes it</h2>
+
+<h3>6.1 What we are doing on TrueNAS today, that we don&rsquo;t want to</h3>
+
+<p>From <code>per_board.yml</code>:</p>
+
+<pre><code># requires: become: true
+losetup --find --show --partscan /path/to/orange-pi-5-pro.img
+mount /dev/${PART} /mnt/extract
+rsync -aHAX --exclude '/proc/*' &hellip; /mnt/extract/ /export/_templates/&lt;model&gt;/
+cp /mnt/extract/boot/vmlinuz-* /export/_tftp_cache/&lt;model&gt;/vmlinuz
+&hellip;
+umount /mnt/extract
+losetup -d ${loopdev}</code></pre>
+
+<p>The capabilities that demands on the NAS:</p>
+<ul class="tight">
+  <li>Kernel-loop module loaded.</li>
+  <li>Permission to allocate <code>/dev/loopN</code> nodes.</li>
+  <li>Permission to mount arbitrary block devices into a host directory &mdash; on
+      TrueNAS this means we&rsquo;re running as root (or via a sudoers entry that
+      explicitly allows <code>mount/umount/losetup</code> on arbitrary
+      arguments &mdash; functionally root).</li>
+  <li>Read access to the rootfs partition&rsquo;s contents (which include
+      <code>/etc/shadow</code>, SSH host keys, etc.).</li>
+</ul>
+
+<p>On TrueNAS Scale this isn&rsquo;t just an
+ergonomics problem &mdash; it means we&rsquo;re effectively maintaining a privileged
+Ansible footprint on an appliance whose entire selling point is <em>not being a
+general-purpose Linux box</em>. The OS upgrade path can and does break
+<code>losetup</code> behaviour, kernel module availability, sudoers semantics.</p>
+
+<h3>6.2 What changes when the build writes the tree itself</h3>
+
+<p>If the build produces <code>${ROOTFS_EXPORT_DIR}/&lt;model&gt;/</code> as
+its primary output, the entire image-extraction step on TrueNAS goes away.
+Two viable transport patterns:</p>
+
+<ol class="tight">
+  <li><strong>Builder writes to an NFS mount of the export.</strong>
+      The builder host (currently <code>armbian_builders</code>) mounts the
+      TrueNAS NFS export as a regular client. <code>ROOTFS_EXPORT_DIR</code>
+      points at the mount. <code>rsync</code> writes through NFS as a
+      non-root remote user (use NFSv4 with <code>krb5</code> or
+      <code>no_root_squash</code> + a dedicated build UID); xattrs and ACLs
+      are preserved as long as the export is on a filesystem that supports
+      them (ZFS does on TrueNAS Scale).</li>
+  <li><strong>Builder writes locally, pushes via unprivileged SSH+rsync.</strong>
+      <code>ROOTFS_EXPORT_DIR</code> stays on the builder. A
+      <code>netboot-deploy.sh</code>-style hook
+      <code>rsync --delete</code>s the tree to TrueNAS as a regular SSH user
+      with a per-export directory the user owns. No <code>losetup</code>,
+      no <code>mount</code>, no <code>become: true</code> needed on TrueNAS.</li>
+</ol>
+
+<p>Either way, TrueNAS&rsquo;s job collapses to: <em>own the NFS export, own the
+disk, export it over NFS</em>. The Ansible role talks to it as a remote SSH
+user (or doesn&rsquo;t need to talk to it at all in pattern 1).</p>
+
+<h3>6.3 What we still need root for on the NAS &mdash; and how to bound it</h3>
+
+<p>Two residual privileges are worth being honest about:</p>
+
+<ul class="tight">
+  <li><strong>Ownership of files inside the tree.</strong> Boards expect
+      <code>/etc</code>, <code>/usr</code>, <code>/var</code>, etc. to be owned
+      by uid 0. Whichever process writes the tree must therefore be able to
+      <em>create</em> uid-0-owned files in the export. Two options:
+      <ul class="tight">
+        <li>NFS server-side: configure the export with
+            <code>no_root_squash</code> for the build client&rsquo;s IP only, or
+            use NFSv4 with krb5 and an export ACL pinning that principal.</li>
+        <li>SSH-and-rsync from the builder: use <code>rsync_path: 'sudo rsync'</code>
+            on the receive side, with a narrow sudoers entry that whitelists
+            only the destination path. This is much narrower than today&rsquo;s
+            arbitrary-<code>mount</code> sudoers.</li>
+      </ul>
+  </li>
+  <li><strong>NFS export ownership semantics.</strong> The directory that holds
+      the per-host rootfs trees still has to be ZFS-managed by TrueNAS itself
+      (creating the dataset, setting the NFS export options is an admin
+      action on the appliance). But that&rsquo;s a one-time setup, not part of
+      every build.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="migration">7. Concrete changes to make once PR #9656 merges</h2>
+
+<p>The PR is currently in <code>Work in progress</code> + <code>Needs review</code>
+state, milestone <code>05</code> (second-quarter 2026), so we can plan but
+shouldn&rsquo;t pin against a moving branch. The list below assumes the
+final-merged interface stays close to what&rsquo;s shipped now.</p>
+
+<h3>7.1 Phase A &mdash; switch the build to <code>ROOTFS_TYPE=nfs-root</code> and let it produce the per-model template</h3>
+
+<h4>What changes</h4>
+<ul class="tight">
+  <li>In <code>playbooks/build_image.yml</code>, extend
+      <code>armbian_build_compile_args</code> per board with:
+      <pre><code>ROOTFS_TYPE=nfs-root
+ENABLE_EXTENSIONS=netboot
+ROOTFS_COMPRESSION=none
+ROOTFS_EXPORT_DIR=&lt;path&gt;
+NETBOOT_TFTP_PREFIX=armbian/&lt;board_model&gt;</code></pre>
+  </li>
+  <li>Decide where <code>ROOTFS_EXPORT_DIR</code> lives. Two layouts to choose between, both eliminate the privileged extract step:
+    <ul class="tight">
+      <li><strong>(A1)</strong> Builder mounts TrueNAS NFS export; the path resolves to <code>&lt;nfs-mount&gt;/_templates/&lt;board_model&gt;/</code>. The PR&rsquo;s bind-mount-into-docker logic supports this transparently as long as the path exists on the host before the build.</li>
+      <li><strong>(A2)</strong> Builder writes locally to <code>${SRC}/output/netboot-export/&lt;board_model&gt;/</code> and a <code>netboot_artifacts_ready</code> userpatch rsyncs it to TrueNAS via unprivileged SSH (with the narrow <code>rsync_path: 'sudo rsync'</code> trick, or no sudo at all if the destination is user-owned).</li>
+    </ul>
+  </li>
+  <li>Delete from <code>roles/netboot_assets/tasks/per_board.yml</code> the
+      sub-tree handling <code>losetup</code> / <code>mount</code> /
+      <code>cp /boot/vmlinuz-*</code> / DTB hunt /
+      <code>umount</code> / <code>losetup -d</code>. The kernel + DTB + initrd
+      are now produced by the build at known paths inside
+      <code>${tftp_out}/${PREFIX}/</code> &mdash; the role only needs to
+      <code>fetch</code> them to the controller cache for
+      <code>net_put</code> to rb5009.</li>
+  <li>Drop the URL preflight (<code>roles/netboot_assets/tasks/preflight.yml</code>)
+      &mdash; the source of truth is the build, not <code>armbian_netboot_image_urls</code>.
+      Update <code>inventory/group_vars/all.yml</code> to remove that key.</li>
+  <li>Keep <code>per_host.yml</code> reflink+identity logic exactly as-is &mdash;
+      it operates on a directory tree, doesn&rsquo;t care how that tree was made.</li>
+</ul>
+
+<h4>Effect</h4>
+<ul class="tight">
+  <li>TrueNAS <code>become: true</code> need either eliminated (A1) or reduced to a single narrow sudoers entry (A2).</li>
+  <li>No image download → no URL preflight → no stale-mirror class of failure.</li>
+  <li>Per-host cost shape unchanged (still 1 build + N reflinks).</li>
+</ul>
+
+<h3>7.2 Phase B &mdash; align <code>routeros_pxe_config</code> with the PR&rsquo;s TFTP layout</h3>
+
+<p>The PR&rsquo;s default TFTP prefix is
+<code>armbian/${LINUXFAMILY}/${BOARD}/${BRANCH}-${RELEASE}</code>. Our
+existing layout is <code>armbian/&lt;model&gt;/</code>. Two options:</p>
+<ol class="tight">
+  <li>Override <code>NETBOOT_TFTP_PREFIX=armbian/&lt;board_model&gt;</code> per
+      build to match what our template already expects. Smallest delta,
+      keeps <code>pxelinux_cfg.j2</code> unchanged.</li>
+  <li>Migrate <code>pxelinux_cfg.j2</code> to the upstream default
+      <code>armbian/&lt;family&gt;/&lt;board&gt;/&lt;branch&gt;-&lt;release&gt;</code>
+      &mdash; future-proof against multi-branch coexistence, but bigger churn:
+      every <code>/ip tftp</code> rule&rsquo;s <code>req-filename</code> changes too.</li>
+</ol>
+<p>Option 1 is the obvious early move; option 2 only becomes useful if we
+ever want to ship multiple branches/releases for the same board
+simultaneously (e.g. <code>edge</code> + <code>current</code>).</p>
+
+<h3>7.3 Phase C &mdash; pick up the watchdog and dhcpcd-ROOTSERVER hooks</h3>
+
+<p>Both ship inside the rootfs that
+<code>post_customize_image</code> writes &mdash; we get them automatically as
+soon as we switch to <code>ROOTFS_TYPE=nfs-root</code>. No Ansible change
+required. <strong>Validate:</strong> verify <code>uInitrd</code> contains
+<code>71-netboot-rootpath</code> under <code>/usr/lib/dhcpcd/dhcpcd-hooks/</code>
+or <code>/usr/libexec/</code>, and that <code>zz-netboot-watchdog</code> lives
+under <code>/scripts/init-premount/</code> &mdash; the
+<code>testing-armbian-board-hardware</code> skill is the right harness for
+that check.</p>
+
+<h3>7.4 Phase D &mdash; kernel-only refresh path (optional but high ROI)</h3>
+
+<p>Wrap <code>compile.sh kernel BOARD=&hellip; BRANCH=&hellip; ENABLE_EXTENSIONS=netboot,netboot-deploy NETBOOT_DEPLOY_SSH=&hellip;</code>
+in a new playbook (e.g. <code>playbooks/refresh_kernel.yml</code>) or a new
+mode of <code>build_image.yml</code>. Outcomes:</p>
+<ul class="tight">
+  <li>Kernel + DTBs + matching <code>/lib/modules/&lt;ver&gt;/</code> rsynced
+      in one shot (the PR&rsquo;s code path scopes <code>--delete</code> to that
+      single kernel version, so it won&rsquo;t clobber an alternative kernel).</li>
+  <li>Avoids the <code>BPF: Invalid name_offset</code> / split-BTF spam class
+      of failure caused by vmlinuz + module mismatch.</li>
+  <li>Refresh cycle drops from <em>~7&nbsp;min (full build) + extraction +
+      reflink-N</em> to <em>~30&nbsp;sec (kernel build cache hit) +
+      rsync-N</em>.</li>
+</ul>
+<p>Per-host concern: if we&rsquo;ve reflinked, <code>/lib/modules/&lt;ver&gt;</code>
+will be deduped across hosts and the upstream rsync will COW-break it &mdash;
+which is fine, that&rsquo;s the point. The bandwidth is still ~modules-tree-size
+per host. No correctness issue.</p>
+
+<h3>7.5 Phase E &mdash; consider per-host as part of the build, not after</h3>
+
+<p>Only do this if Phase A&rsquo;s reflink model proves limiting (e.g. we
+want per-host customisations that are <em>impossible</em> to apply post-hoc
+to a templated tree &mdash; things baked into <code>debconf</code> answers
+that need to be set <em>during</em> debootstrap, or per-host package sets).
+The PR supports it via <code>NETBOOT_HOSTNAME=&hellip;</code>. The cost is
+the 4&times; build time discussed in §5.3.</p>
+
+<h3>7.6 Phase F &mdash; eventually drop our <code>build_userpatches</code> PXE-first overlay</h3>
+
+<p>Today <code>build_image.yml</code> injects
+<code>pre_config_uboot_target__999_pxe_first</code> to force PXE first in
+<code>BOOT_TARGETS</code>. This is logically separate from PR #9656, but
+worth mentioning: once the upstream <code>nfs-root</code> path is the
+documented happy path, there&rsquo;s a reasonable chance Armbian itself reorders
+boot targets when <code>ROOTFS_TYPE=nfs-root</code>. <strong>Not safe to
+delete on merge</strong> &mdash; verify on each board first; some boards
+(rock-5b) need additional surgery (<code>CONFIG_PCI_INIT_R</code> for
+RTL8125 enumeration, the v2026.04 bump). This stays ours until proven
+otherwise.</p>
+
+<h3>7.7 Suggested file-level migration checklist</h3>
+
+<table>
+<thead><tr><th>File</th><th>Action</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>playbooks/build_image.yml</code></td><td>Add per-build <code>ROOTFS_TYPE=nfs-root</code>, <code>ENABLE_EXTENSIONS=netboot</code>, <code>ROOTFS_COMPRESSION=none</code>, <code>ROOTFS_EXPORT_DIR=&hellip;</code>, <code>NETBOOT_TFTP_PREFIX=armbian/&lt;model&gt;</code>.</td><td>Validate that <code>build_branches: edge</code> still produces a kernel with <code>CONFIG_ROOT_NFS=y</code> &mdash; the PR forces these via <code>custom_kernel_config__netboot_enable_nfs_root</code>, but our boards override <code>BOOTBRANCH</code> in <code>extension_finish_config</code>; double-check hook ordering.</td></tr>
+<tr><td><code>roles/netboot_assets/tasks/per_board.yml</code></td><td><strong>Delete</strong> the <code>xz -d</code> / <code>losetup</code> / <code>mount</code> / <code>rsync</code>-from-mount / <code>cp /boot/*</code> / DTB-hunt / <code>umount</code> / <code>losetup -d</code> block. Replace with a stat that the build-produced template tree exists at <code>${ROOTFS_EXPORT_DIR}/&lt;model&gt;/</code>.</td><td>Keep <code>fstab</code>-cleanup logic only if the build doesn&rsquo;t already do it via <code>BOOTSIZE=0</code>. (The PR&rsquo;s <code>BOOTSIZE=0</code> short-circuit suppresses the phantom <code>/boot</code> fstab entry; verify on first run.)</td></tr>
+<tr><td><code>roles/netboot_assets/tasks/preflight.yml</code></td><td>Either delete entirely or replace with a stat on the build-produced template directory.</td><td>URL preflight is meaningless once we&rsquo;re the source of truth.</td></tr>
+<tr><td><code>roles/netboot_assets/tasks/main.yml</code></td><td>Reorder: build runs first (or runs separately), then this role only handles per-host reflink + RouterOS staging.</td><td>Less &ldquo;extract&rdquo;, more &ldquo;arrange&rdquo;. The two-pass structure (per-model, per-host) stays.</td></tr>
+<tr><td><code>roles/netboot_assets/tasks/per_host.yml</code></td><td>No changes &mdash; reflink + identity-reset logic is orthogonal to how the template was made.</td><td></td></tr>
+<tr><td><code>roles/routeros_pxe_config/templates/pxelinux_cfg.j2</code></td><td>No changes if we override <code>NETBOOT_TFTP_PREFIX</code>; otherwise update paths to upstream-default layout.</td><td>Keep multi-label nfs/sd &mdash; the upstream PR has no equivalent.</td></tr>
+<tr><td><code>inventory/group_vars/all.yml</code></td><td>Remove <code>armbian_netboot_image_urls</code>. Keep all path variables.</td><td></td></tr>
+<tr><td><code>vars/boards.yml</code></td><td>Remove <code>dtb</code> field? Only if the build always copies the canonical DTB to <code>${tftp_prefix}/dtb/&lt;family&gt;/&lt;board&gt;.dtb</code> with a stable name.</td><td>Worth verifying empirically &mdash; helios64 in the PR&rsquo;s test runs uses FDTDIR fallback; rk3588 boards usually have <code>BOOT_FDT_FILE</code> set and the PR writes <code>FDT &lt;prefix&gt;/dtb/&lt;file&gt;</code>. Our <code>fdt</code> line in <code>pxelinux_cfg.j2</code> should be auto-derivable from <code>BOOT_FDT_FILE</code> &mdash; we&rsquo;d still need the value at template render time though.</td></tr>
+<tr><td><code>playbooks/refresh_kernel.yml</code> (new)</td><td>Wrap <code>compile.sh kernel</code> + the PR&rsquo;s <code>artifact_ready</code> deploy hook for fast kernel-only iteration.</td><td>Optional; high ROI for debugging.</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="risks">8. Risks, blockers, and pre-merge things to track</h2>
+
+<table>
+<thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr>
+  <td>The PR is still <span class="pill warn">Work in progress</span>. The hook surface (<code>netboot_artifacts_ready</code>, <code>artifact_ready</code>, <code>post_create_rootfs_archive</code>) could be renamed before merge.</td>
+  <td>Don&rsquo;t pin against the feature branch in production. Wait for merge to <code>main</code> + an Armbian release containing it, then track CHANGELOG for renames.</td>
+</tr>
+<tr>
+  <td><code>NETBOOT_TFTP_PREFIX</code> default differs from ours.</td>
+  <td>Explicit override via build vars (§7.2 option 1). Fast and reversible.</td>
+</tr>
+<tr>
+  <td>The PR&rsquo;s <code>nfs-root</code> path assumes a kernel built with <code>CONFIG_ROOT_NFS</code> + <code>IP_PNP_DHCP</code> as builtins. Our <code>build_branches: edge</code> for rk3588 may or may not honour <code>custom_kernel_config</code> hooks correctly depending on hook ordering against our own <code>extension_finish_config__999_*</code> overrides.</td>
+  <td>Validate on first <code>orange-pi-5-pro</code> build: extract the produced <code>vmlinuz-*</code>, run <code>scripts/extract-ikconfig</code>, grep for the expected <code>CONFIG_*=y</code>.</td>
+</tr>
+<tr>
+  <td>The PR injects an <code>uInitrd</code> (with the rootpath + watchdog hooks) into TFTP, and writes an <code>INITRD</code> line into <code>pxelinux.cfg</code>. Our <code>routeros_pxe_config</code> template <em>always</em> emits an <code>initrd</code> line. There&rsquo;s a hard-to-debug class of failure where the <code>uInitrd</code> from one branch is paired with a <code>vmlinuz</code> from a different one.</td>
+  <td>Always re-stage TFTP after a rebuild; the per-host vs per-model split in <code>netboot_assets</code> already handles this if we&rsquo;re strict about it. Consider hashing kernel + initrd at deploy time and surfacing the digest in the <code>boot_mode</code> verify step.</td>
+</tr>
+<tr>
+  <td>The atomic rename of the archive (<code>mv tmp ${ROOTFS_ARCHIVE_PATH}</code>) requires <code>FINALDEST</code> to be on the same filesystem as the temp file. If we move <code>FINALDEST</code> across an NFS-mounted boundary, the rename is no longer atomic.</td>
+  <td>If we go with pattern A1 (builder writes via NFS mount), don&rsquo;t cross filesystem boundaries between <code>${SDCARD}</code> and <code>${ROOTFS_EXPORT_DIR}</code>. Keep the archive on the builder; only the export tree crosses.</td>
+</tr>
+<tr>
+  <td>helios4 testing in the PR found two real issues: RD-image-overlaps-OS-image on mvebu (need to skip <code>INITRD</code> on that family), and systemd-resolved not reading <code>/proc/net/pnp</code> (workaround documented but not auto-fixed).</td>
+  <td>Both irrelevant for rk3588 / rk3588s; mention for completeness. The second one could bite us once a board comes up over NFS but can&rsquo;t resolve DNS; add a check to the <code>testing-armbian-board-hardware</code> harness.</td>
+</tr>
+<tr>
+  <td>The <code>BOOT_FDT_FILE</code> normalisation in the PR&rsquo;s artifact-collect hook is rk-friendly but trips on K3/BeagleBone-style <code>.dts</code> values. Not relevant today; could be once we add boards.</td>
+  <td>The PR already handles this (<code>fdt_file=${BOOT_FDT_FILE%.dts}.dtb</code>). Track upstream changes.</td>
+</tr>
+<tr>
+  <td>The <code>.netboot_export_marker</code> stamp guards rsync&nbsp;<code>--delete</code> from clobbering an unrelated tree. Our current <code>_templates/&lt;model&gt;/</code> directories do <em>not</em> have this marker.</td>
+  <td>On first migration, either <code>touch _templates/&lt;model&gt;/.netboot_export_marker</code> before running the new build, or use <code>NETBOOT_EXPORT_FORCE=yes</code> once. Subsequent builds carry the marker automatically.</td>
+</tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="refs">9. References</h2>
+
+<ul class="tight">
+  <li><a href="https://github.com/armbian/build/pull/9656">armbian/build#9656</a> &mdash; <em>feat(extensions): add netboot extension for TFTP+NFS diskless boot</em>, opened 2026-04-11 by iav, milestone 05, state OPEN/WIP.</li>
+  <li>Companion PR mentioned in the description: an update to <a href="https://github.com/armbian/documentation">armbian/documentation</a> adding <code>Developer-Guide_Netboot.md</code>.</li>
+  <li>This collection&rsquo;s relevant files:
+    <code>roles/netboot_assets/tasks/{main,preflight,per_board,per_host}.yml</code>,
+    <code>roles/routeros_pxe_config/templates/pxelinux_cfg.j2</code>,
+    <code>playbooks/build_image.yml</code>,
+    <code>playbooks/stage_nfs_rootfs.yml</code>,
+    <code>vars/boards.yml</code>.</li>
+  <li>Always-netboot v2 spec (context for why per-board pxelinux.cfg always exists, why <code>default</code> is the boot-mode switch):
+    <code>docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md</code>.</li>
+  <li>U-Boot reasoning for our PXE-first userpatches:
+    <code>docs/uboot-armbian-build-explainer.html</code>.</li>
+</ul>
+
+<p class="footnote">Analysis generated 2026-05-15. PR <code>updatedAt: 2026-05-13T18:18:09Z</code>, head <code>enh/netboot-extension</code>. Re-verify upstream interface before acting on §7.</p>
+
+</body>
+</html>

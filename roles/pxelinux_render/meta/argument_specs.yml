@@ -1,0 +1,68 @@
+---
+argument_specs:
+  main:
+    short_description: "Render one per-board pxelinux.cfg file to a local directory."
+    description:
+      - >-
+        Renders an 01-<mac> pxelinux.cfg file using the supplied board
+        identity and netboot parameters. Always writes — never uploads.
+        The caller is responsible for moving the rendered file to the
+        TFTP server.
+      - >-
+        Typically reached via `delegate_to: localhost` inside a
+        `hosts: boards` play, so per-board hostvars are in scope and
+        one invocation per board renders one file.
+
+    options:
+      board_mac:
+        type: str
+        required: true
+        description: "Board MAC address; used to compute the 01-<mac> filename."
+      boot_mode:
+        type: str
+        required: true
+        choices: [nfs, sd]
+        description: "Which label the rendered pxelinux.cfg's `default` directive points at."
+      board_console:
+        type: str
+        required: true
+        description: "console= kernel argument value (e.g. ttyS2,1500000)."
+      model_name:
+        type: str
+        required: true
+        description: "Board model identifier — used to compose default TFTP paths."
+      nfs_server_ip:
+        type: str
+        required: true
+        description: "Server IP written into nfsroot=."
+      nfs_root_path:
+        type: path
+        required: true
+        description: "NFS export root path (per-host directory is composed as <nfs_root_path>/<hostname>)."
+      hostname:
+        type: str
+        required: true
+        description: "Inventory hostname — used as both the per-host NFS subdir and the menu-label suffix."
+      output_dir:
+        type: path
+        required: true
+        description: "Local directory where 01-<mac> is written."
+      sd_root:
+        type: str
+        default: "LABEL=armbi_root"
+      pxe_verbose:
+        type: bool
+        default: false
+      earlycon:
+        type: str
+        default: ""
+        description: "Required when pxe_verbose=true. Format <driver>,<bus>,<mmio_addr>."
+      tftp_kernel:
+        type: str
+        default: "armbian/{{ model_name }}/vmlinuz"
+      tftp_initrd:
+        type: str
+        default: "armbian/{{ model_name }}/initrd.img"
+      tftp_dtb:
+        type: str
+        default: "armbian/{{ model_name }}/board.dtb"
