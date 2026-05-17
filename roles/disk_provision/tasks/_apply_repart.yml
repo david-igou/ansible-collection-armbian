@@ -2,9 +2,9 @@
 # Invoke systemd-repart against the device. Handles two modes:
 #   - No preserves: --empty=force wipes the partition table from
 #     scratch; all partitions are created per the .repart.d configs.
-#   - Some preserves: --empty=allow leaves the existing partition
-#     table alone; only the non-preserved slots in the definitions
-#     dir are written.
+#   - Some preserves: --empty=refuse requires an existing GPT
+#     (preserves it) and only writes the non-preserved slots in
+#     the filtered definitions dir. Aborts if disk is blank.
 
 - name: "Apply repart: assert systemd-repart is available"
   ansible.builtin.command: "systemd-repart --version"
@@ -40,7 +40,7 @@
     _dp_repart_defs: >-
       {{ _dp_repart_dir + '.filtered' if _dp_preserve_ids | length > 0 else _dp_repart_dir }}
     _dp_repart_empty: >-
-      {{ 'allow' if _dp_preserve_ids | length > 0 else 'force' }}
+      {{ 'refuse' if _dp_preserve_ids | length > 0 else 'force' }}
 
 - name: "Apply repart: run systemd-repart"
   ansible.builtin.command:
@@ -57,7 +57,7 @@
 
 - name: "Apply repart: report what repart did"
   ansible.builtin.debug:
-    msg: "{{ _dp_repart_run.stdout_lines }}"
+    msg: "{{ _dp_repart_run.stdout_lines | join('\n') }}"
 
 - name: "Apply repart: force partition-table re-read"
   ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"

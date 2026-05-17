@@ -555,7 +555,7 @@ git commit -m "disk_provision: preserve-label scan + force escape hatch (#77)"
 
 `systemd-repart --empty=force --definitions=<dir> --dry-run=no` wipes and partitions per the .repart.d configs. When `_dp_preserve_ids` is non-empty, we exclude those partitions' `.conf` files from the definitions directory by symlinking the surviving subset to a filtered directory before invoking repart. This means repart sees only the partitions we want it to create; the preserved partitions are left untouched on the disk.
 
-This approach (filter the definitions, not the repart invocation) is simpler than trying to use `MatchPartitionType=` predicates and works because `--empty=force` only writes the partitions repart sees, leaving unmentioned slots alone — BUT `--empty=force` zeros the partition table itself, which would lose the preserved partition. We avoid this by using `--empty=allow` when any partition is preserved (preserves existing partition table, repart adds/updates only the slots in definitions).
+This approach (filter the definitions, not the repart invocation) is simpler than trying to use `MatchPartitionType=` predicates and works because `--empty=force` only writes the partitions repart sees, leaving unmentioned slots alone — BUT `--empty=force` zeros the partition table itself, which would lose the preserved partition. We avoid this by using `--empty=refuse` when any partition is preserved (requires existing GPT, preserves it, repart adds/updates only the slots in definitions).
 
 - [ ] **Step 5.1: Replace `_apply_repart.yml`**
 
@@ -564,9 +564,9 @@ This approach (filter the definitions, not the repart invocation) is simpler tha
 # Invoke systemd-repart against the device. Handles two modes:
 #   - No preserves: --empty=force wipes the partition table from
 #     scratch; all partitions are created per the .repart.d configs.
-#   - Some preserves: --empty=allow leaves the existing partition
-#     table alone; only the non-preserved slots in the definitions
-#     dir are written.
+#   - Some preserves: --empty=refuse requires an existing GPT
+#     (preserves it) and only writes the non-preserved slots in
+#     the filtered definitions dir. Aborts if disk is blank.
 
 - name: "Apply repart: assert systemd-repart is available"
   ansible.builtin.command: "systemd-repart --version"
@@ -602,7 +602,7 @@ This approach (filter the definitions, not the repart invocation) is simpler tha
     _dp_repart_defs: >-
       {{ _dp_repart_dir + '.filtered' if _dp_preserve_ids | length > 0 else _dp_repart_dir }}
     _dp_repart_empty: >-
-      {{ 'allow' if _dp_preserve_ids | length > 0 else 'force' }}
+      {{ 'refuse' if _dp_preserve_ids | length > 0 else 'force' }}
 
 - name: "Apply repart: run systemd-repart"
   ansible.builtin.command:
@@ -619,7 +619,7 @@ This approach (filter the definitions, not the repart invocation) is simpler tha
 
 - name: "Apply repart: report what repart did"
   ansible.builtin.debug:
-    msg: "{{ _dp_repart_run.stdout_lines }}"
+    msg: "{{ _dp_repart_run.stdout_lines | join('\n') }}"
 
 - name: "Apply repart: force partition-table re-read"
   ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"
