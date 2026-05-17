@@ -1,0 +1,86 @@
+---
+# Headless full-lifecycle reprovision to local-disk boot.
+#
+# Usage:
+#   ansible-playbook playbooks/reprovision_to_local.yml \
+#     --limit orange-pi-5-max-01
+#
+# Requires:
+#   armbian_netboot_local_disks: list of disk_binding dicts (per host)
+#   armbian_netboot_boot_mode: local (per host or via -e)
+#
+# Phases:
+#   1. Set boot mode to nfs and verify board is NFS-rooted.
+#   2. Cross-binding validation (mount-path collisions, exactly one /).
+#   3. Loop disk_provision over armbian_netboot_local_disks.
+#   4. Set boot mode to local and verify; on failure, auto-revert to nfs.
+
+- name: "1. Boot board into NFS so we can safely wipe local disks"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify nfs"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs   # already on nfs is the safe state
+
+- name: "2-3. Cross-binding validate + provision each disk"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  pre_tasks:
+    - name: "Assert / is on NFS before wiping anything"
+      ansible.builtin.assert:
+        that: >-
+          ansible_mounts | selectattr('mount', 'equalto', '/')
+          | map(attribute='fstype') | first in ['nfs', 'nfs4']
+        fail_msg: "Board must be NFS-booted before reprovisioning local disks."
+
+    - name: "Cross-binding validate: no two disks share a mount path"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (armbian_netboot_local_disks
+             | map(attribute='layout') | flatten
+             | selectattr('mount', 'defined')
+             | map(attribute='mount') | list
+             | length)
+            ==
+            (armbian_netboot_local_disks
+             | map(attribute='layout') | flatten
+             | selectattr('mount', 'defined')
+             | map(attribute='mount') | list
+             | unique | length)
+        fail_msg: >-
+          Two or more disks declare the same mount path in their layouts.
+          Mount paths: {{ armbian_netboot_local_disks | map(attribute='layout') | flatten | selectattr('mount', 'defined') | map(attribute='mount') | list }}
+
+    - name: "Cross-binding validate: exactly one '/' across all disks"
+      ansible.builtin.assert:
+        that:
+          - (armbian_netboot_local_disks | map(attribute='layout') | flatten | selectattr('mount', 'equalto', '/') | list | length) == 1
+        fail_msg: >-
+          Expected exactly one partition with mount: / across all
+          armbian_netboot_local_disks; found
+          {{ armbian_netboot_local_disks | map(attribute='layout') | flatten | selectattr('mount', 'equalto', '/') | list | length }}.
+
+  tasks:
+    - name: "Provision each disk"
+      ansible.builtin.include_role:
+        name: disk_provision
+      vars:
+        disk_binding: "{{ item }}"
+      loop: "{{ armbian_netboot_local_disks }}"
+      loop_control:
+        label: "{{ item.device }}"
+
+- name: "4. Flip pxelinux to local, verify, auto-revert on failure"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify local; auto-revert to nfs on failure"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: local
+        on_failure_revert_to: nfs
