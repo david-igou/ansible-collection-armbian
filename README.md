@@ -637,6 +637,12 @@ last 200 UART lines if `-e capture_serial=true`), then auto-reverts
 the board to nfs mode for forensic access. Operator fixes the root
 cause and re-runs.
 
+See [`docs/runbooks/reprovision-local-disk.md`](docs/runbooks/reprovision-local-disk.md)
+for the full operator runbook: pre-flight checks, what the lifecycle
+does play-by-play, environment-specific caveats observed in practice,
+failure recovery, and a worked example of changing the layout on an
+already-provisioned board.
+
 ### Hardware E2E test
 
 ```bash
