@@ -250,7 +250,7 @@ Create `roles/disk_provision/tasks/_validate.yml`:
     that:
       - disk_binding.device is defined
       - disk_binding.device.startswith('/dev/')
-      - not (disk_binding.device is match('/dev/.*p[0-9]+$|/dev/.*[a-z][0-9]+$'))
+      - not (disk_binding.device is match('/dev/(nvme[0-9]+n[0-9]+p|mmcblk[0-9]+p|loop[0-9]+p|sd[a-z]|vd[a-z]|hd[a-z])[0-9]+$'))
     fail_msg: >-
       device must be a whole-disk path under /dev/ (e.g. /dev/nvme0n1).
       Got: {{ disk_binding.device | default('<unset>') }}.
@@ -268,8 +268,9 @@ Create `roles/disk_provision/tasks/_validate.yml`:
     that:
       - _dp_device_stat.stat.exists
       - _dp_device_stat.stat.isblk
-    fail_msg: >-
-      device {{ disk_binding.device }} does not exist or is not a block device.
+    fail_msg: |
+      device {{ disk_binding.device }}: exists={{ _dp_device_stat.stat.exists }}, isblk={{ _dp_device_stat.stat.isblk | default(false) }}.
+      Confirm the device path with `lsblk` on the target host.
 
 - name: "Validate: find source of running rootfs"
   ansible.builtin.set_fact:
@@ -317,8 +318,7 @@ Create `roles/disk_provision/tasks/_validate.yml`:
       - (disk_binding.layout | selectattr('size', 'equalto', 'grow') | list | length) <= 1
     fail_msg: >-
       Disk {{ disk_binding.device }} has more than one partition with
-      size: grow. Exactly one partition per disk may grow to fill
-      remaining space.
+      size: grow. At most one partition per disk may use size: grow.
 
 - name: "Validate: ids are unique within this layout"
   ansible.builtin.assert:
