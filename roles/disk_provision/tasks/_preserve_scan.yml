@@ -1,0 +1,4 @@
+---
+- name: "TODO: implemented in Task 4"
+  ansible.builtin.debug:
+    msg: "_preserve_scan.yml not yet implemented"
