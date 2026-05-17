@@ -28,12 +28,18 @@
 #                                         default: render_and_upload_pxelinux.yml
 #                                                  (relative to this file's directory)
 
+# delegate_to and run_once must live on a block, not directly on
+# include_tasks — Ansible rejects them on TaskInclude. The block
+# inherits both to every task in the included file (verified against
+# the test_hardware_e2e.yml pattern that uses the same shape).
 - name: "converge[{{ armbian_netboot_boot_mode }}] — pre-flight plumbing check"
-  ansible.builtin.include_tasks: >-
-    {{ armbian_netboot_plumbing_check_tasks
-       | default('../routeros/tasks/plumbing_check_one.yml') }}
   delegate_to: "{{ armbian_netboot_router }}"
   run_once: true
+  block:
+    - name: "converge — include plumbing check tasks"
+      ansible.builtin.include_tasks: >-
+        {{ armbian_netboot_plumbing_check_tasks
+           | default('../routeros/tasks/plumbing_check_one.yml') }}
 
 - name: "converge[{{ armbian_netboot_boot_mode }}] — render pxelinux.cfg + upload"
   ansible.builtin.include_tasks: >-
