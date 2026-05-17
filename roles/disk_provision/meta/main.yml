@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: disk_provision
+  author: david-igou
+  description: "Partition + format a block device and rsync a rootfs onto it."
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Generic
+      versions: [all]
+dependencies: []

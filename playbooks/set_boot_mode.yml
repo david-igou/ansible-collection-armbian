@@ -28,6 +28,6 @@
       ansible.builtin.assert:
         that: armbian_netboot_boot_mode is defined
         fail_msg: >-
-          set_boot_mode.yml requires -e armbian_netboot_boot_mode=nfs|sd
+          set_boot_mode.yml requires -e armbian_netboot_boot_mode=nfs|sd|local
 
 - import_playbook: converge_boot_mode.yml
