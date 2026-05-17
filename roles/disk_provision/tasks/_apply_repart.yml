@@ -6,7 +6,21 @@
 #     (preserves it) and only writes the non-preserved slots in
 #     the filtered definitions dir. Aborts if disk is blank.
 
-- name: "Apply repart: assert systemd-repart is available"
+# On Debian 12 (Bookworm), systemd-repart shipped inside the main
+# `systemd` package. On Debian 13 (Trixie, what current Armbian
+# builds against), it was split into a standalone `systemd-repart`
+# package. Install it idempotently so this role works on both.
+# failed_when:false here because the package doesn't exist on
+# Bookworm — the next assert catches the real "binary missing" case.
+- name: "Apply repart: ensure systemd-repart package is installed"
+  ansible.builtin.apt:
+    name: systemd-repart
+    state: present
+    update_cache: false
+  become: true
+  failed_when: false
+
+- name: "Apply repart: assert systemd-repart binary is available"
   ansible.builtin.command: "systemd-repart --version"
   register: _dp_repart_version
   changed_when: false
