@@ -1,0 +1,108 @@
+---
+# Hardware E2E for reprovision_to_local.yml. Canonical target:
+# orange-pi-5-max-01 (NVMe, PoE-powered). Other boards may run via
+# --limit but acceptance criteria target this one.
+#
+# Phases:
+#   A. Assert starting on NFS.
+#   B. Run reprovision_to_local → assert findmnt / matches armbi_root_local.
+#   C. Re-run reprovision_to_local → assert no destructive change
+#      (preserved partition's sentinel survives).
+#   D. set_boot_mode nfs → assert NFS rootfs.
+#   E. set_boot_mode local → assert local rootfs intact.
+#   F. Cleanup: set_boot_mode nfs.
+
+- name: "A: Assert NFS starting state"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  tasks:
+    - name: "Set boot mode to nfs (in case not already)"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
+
+- name: "B: First reprovision"
+  import_playbook: reprovision_to_local.yml
+
+- name: "B2: Assert local rootfs label"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  tasks:
+    - name: "findmnt / reports armbi_root_local"
+      ansible.builtin.command: "findmnt -no SOURCE,LABEL /"
+      register: _fm
+      changed_when: false
+
+    - name: "Assert local label present"
+      ansible.builtin.assert:
+        that:
+          - "'armbi_root_local' in _fm.stdout"
+        fail_msg: "findmnt / shows {{ _fm.stdout }}; expected armbi_root_local."
+
+    - name: "Write sentinel into the preserved /var partition"
+      ansible.builtin.copy:
+        dest: /var/reprovision_sentinel
+        content: "E2E_PRESERVE_TEST\n"
+        mode: "0644"
+      become: true
+
+- name: "C: Second reprovision (idempotency on preserved /var)"
+  import_playbook: reprovision_to_local.yml
+
+- name: "C2: Assert sentinel survived"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Read sentinel"
+      ansible.builtin.slurp:
+        src: /var/reprovision_sentinel
+      register: _sent
+
+    - name: "Sentinel content matches"
+      ansible.builtin.assert:
+        that:
+          - (_sent.content | b64decode).strip() == 'E2E_PRESERVE_TEST'
+        fail_msg: "Preserve idempotency failed: sentinel reads as {{ _sent.content | b64decode }}"
+
+- name: "D: Back to nfs, assert NFS rootfs"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify nfs"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
+
+- name: "E: Back to local, sentinel still there"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify local"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: local
+        on_failure_revert_to: nfs
+
+    - name: "Sentinel still present after a nfs↔local round-trip"
+      ansible.builtin.slurp:
+        src: /var/reprovision_sentinel
+      register: _sent2
+
+    - name: "Sentinel content still matches"
+      ansible.builtin.assert:
+        that:
+          - (_sent2.content | b64decode).strip() == 'E2E_PRESERVE_TEST'
+
+- name: "F: Cleanup → nfs"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Final set + verify nfs"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
