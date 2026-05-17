@@ -10,7 +10,75 @@
 #      (preserved partition's sentinel survives).
 #   D. set_boot_mode nfs → assert NFS rootfs.
 #   E. set_boot_mode local → assert local rootfs intact.
-#   F. Cleanup: set_boot_mode nfs.
+#   F. Cleanup: set_boot_mode nfs + stop serial capture.
+#
+# Optional serial capture: pass `-e capture_serial=true -e serial_host=<host>`
+# to spawn socat on the serial host (defaults: serial_host=localhost,
+# serial_device=/dev/ttyUSB0, serial_baud=1500000). socat must be on
+# PATH; passwordless sudo for stty/socat against the UART device.
+# The log file location is /tmp/serial-<inventory_hostname>.log; the
+# pidfile is /tmp/socat-<inventory_hostname>.pid.
+#
+# If the test aborts before Phase F (e.g. early failure), socat will
+# leak; the pre-flight defensive pkill on the next run cleans it up,
+# or `pkill -f "socat -u /dev/ttyUSB0"` on the serial host manually.
+
+- name: "Pre-flight: start serial capture (when capture_serial=true)"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  vars:
+    capture_serial: false
+    serial_host: localhost
+    serial_device: /dev/ttyUSB0
+    serial_baud: 1500000
+    _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
+  tasks:
+    - name: "Pre-flight — start serial capture"
+      when: capture_serial | bool
+      delegate_to: "{{ serial_host }}"
+      run_once: true
+      become: true
+      block:
+        - name: "Serial — assert socat is available on the serial host"
+          ansible.builtin.command:
+            cmd: which socat
+          changed_when: false
+
+        # Defensive pre-start: kill any leaked socat from a prior run.
+        # `[s]ocat` regex avoids self-match: pkill -f matches against
+        # the full cmdline, so a literal `socat -u <dev>` would also
+        # match the shell running pkill itself.
+        - name: "Serial — kill any pre-existing socat on this device"
+          ansible.builtin.shell: |
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+            rm -f {{ _serial_pid }}
+          changed_when: false
+
+        - name: "Serial — assert serial device exists"
+          ansible.builtin.stat:
+            path: "{{ serial_device }}"
+          register: _serial_dev_stat
+          failed_when: not _serial_dev_stat.stat.exists
+
+        - name: "Serial — truncate log file and ensure world-readable"
+          ansible.builtin.copy:
+            dest: "{{ _serial_log }}"
+            content: ""
+            mode: "0644"
+
+        - name: "Serial — configure tty line discipline"
+          ansible.builtin.command:
+            cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
+          changed_when: true
+
+        - name: "Serial — start socat capture in background (pidfile-tracked)"
+          ansible.builtin.shell: |
+            echo $$ > {{ _serial_pid }}
+            exec socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0 OPEN:{{ _serial_log }},append
+          async: 86400
+          poll: 0
+          changed_when: true
 
 - name: "A: Assert NFS starting state"
   hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
@@ -106,3 +174,28 @@
       vars:
         target_boot_mode: nfs
         on_failure_revert_to: nfs
+
+# Stop serial capture last so all phases (including F) are captured.
+# Belt-and-suspenders: kill the pidfile-recorded PID first (primary),
+# then `pkill -f` any remaining socat as backstop for stale pidfiles.
+- name: "Post-flight: stop serial capture (when capture_serial=true)"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  vars:
+    capture_serial: false
+    serial_host: localhost
+    serial_device: /dev/ttyUSB0
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
+  tasks:
+    - name: "Post-flight — stop serial capture"
+      when: capture_serial | bool
+      delegate_to: "{{ serial_host }}"
+      run_once: true
+      become: true
+      ansible.builtin.shell: |
+        if [ -f {{ _serial_pid }} ]; then
+          kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
+          rm -f {{ _serial_pid }}
+        fi
+        pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+      changed_when: true
