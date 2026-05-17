@@ -47,10 +47,27 @@
           - "'default nfs' not in _sd_content"
         fail_msg: "sd render is wrong:\n{{ _sd_content }}"
 
-    - name: Assert verbose render contains the earlycon suffix on both labels
+    - name: Assert verbose render contains the earlycon suffix on all built-in labels
       ansible.builtin.assert:
         that:
           - "'earlycon=uart8250,mmio32,0xfeb50000' in _verbose_content"
           - "'loglevel=8' in _verbose_content"
-          - _verbose_content.split('earlycon=uart8250,mmio32,0xfeb50000') | length == 3  # 2 occurrences = 3 splits
+          - _verbose_content.split('earlycon=uart8250,mmio32,0xfeb50000') | length == 4  # 3 occurrences (nfs/sd/local) = 4 splits
         fail_msg: "verbose render is wrong:\n{{ _verbose_content }}"
+
+    - name: Slurp extra_modes rendered file
+      ansible.builtin.slurp:
+        src: /tmp/fixture/pxelinux.cfg_extra/01-aa-bb-cc-dd-ee-ff
+      register: _extra_render
+
+    - name: Decode extra_modes content
+      ansible.builtin.set_fact:
+        _extra_content: "{{ _extra_render.content | b64decode }}"
+
+    - name: Assert extra_modes render has usb_rescue label active and correct append
+      ansible.builtin.assert:
+        that:
+          - "'default usb_rescue' in _extra_content"
+          - "'label usb_rescue' in _extra_content"
+          - "'append root=LABEL=rescue_root' in _extra_content"
+        fail_msg: "extra_modes render is wrong:\n{{ _extra_content }}"
