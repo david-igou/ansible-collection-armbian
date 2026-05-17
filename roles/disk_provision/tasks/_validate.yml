@@ -88,3 +88,23 @@
     fail_msg: >-
       Duplicate id values in layout for {{ disk_binding.device }}.
       Each partition must have a unique id.
+
+- name: "Validate: vfat labels are uppercase (FAT volume label spec)"
+  # vfat volume labels are uppercase-only by spec (and ≤11 chars).
+  # If you pass lowercase, systemd-repart silently uppercases on
+  # write, but then our blkid label-lookup + generated fstab
+  # mismatch the on-disk label. Catch upfront with a clear message.
+  ansible.builtin.assert:
+    that:
+      - item.label == item.label | upper
+      - item.label | length <= 11
+    fail_msg: >-
+      Partition id={{ item.id }} (format=vfat) has label={{ item.label }}.
+      FAT volume labels must be uppercase and ≤11 chars. Use e.g.
+      {{ (item.label | upper)[:11] }}.
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when:
+    - item.format == 'vfat'
+    - item.label is defined
