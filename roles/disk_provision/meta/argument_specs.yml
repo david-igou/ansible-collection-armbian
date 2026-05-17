@@ -1,0 +1,118 @@
+---
+argument_specs:
+  main:
+    short_description: "Partition + format a block device and rsync a rootfs onto it."
+    description:
+      - >-
+        Wipes the GPT on `device`, creates a single partition spanning
+        the disk, formats it as `fstype` with the given filesystem
+        `label`, then rsyncs `source` to the mounted partition with
+        an exclude list that skips virtual filesystems (/dev, /proc,
+        /sys, /run, /tmp, /mnt, /media, /var/log/journal). Writes a
+        fresh `/etc/fstab` on the target referencing the new partition
+        by `LABEL=`, then unmounts.
+      - >-
+        Agnostic to device class — works on /dev/nvme*, /dev/sd*,
+        /dev/mmcblk*, /dev/vd*, /dev/loop* etc. Caller picks the
+        device path; the role derives the partition suffix automatically
+        (`p1` if the device name ends in a digit, else `1`).
+      - >-
+        Idempotent: if a partition matching `label` already exists on
+        `device`, the role skips all destructive steps unless `force`
+        is true. Re-running with the same inputs is a no-op.
+      - >-
+        Knows nothing about netboot, PXE, boot modes, or what the
+        rootfs will be used for. The caller decides which source to
+        copy, which device to target, and what to do with the disk
+        afterwards (set a U-Boot label, render a pxelinux.cfg, ignore).
+
+    options:
+      device:
+        type: path
+        required: true
+        description: >-
+          Block device to provision, e.g. /dev/nvme0n1. Must be the
+          whole disk, not a partition. WILL BE WIPED.
+      source:
+        type: path
+        required: true
+        description: >-
+          Source rootfs root to rsync from. Typically "/" when the
+          role runs on a board copying its currently-mounted rootfs;
+          can be any directory containing a populated Linux rootfs.
+      label:
+        type: str
+        required: true
+        description: >-
+          Filesystem label written by mkfs (-L) and emitted as
+          `LABEL=<label>` in the generated /etc/fstab. Must be valid
+          for the chosen fstype (ext4 ≤16 chars, vfat ≤11 chars
+          uppercase). Doubles as the idempotency key — re-runs check
+          for a partition matching this label and skip if found.
+      fstype:
+        type: str
+        default: ext4
+        choices: [ext4]
+        description: >-
+          Filesystem type for the partition. Only ext4 is supported
+          today (adding btrfs/f2fs requires per-fstype mkfs flag
+          handling and is out of scope for this role's first cut).
+      mount_opts:
+        type: str
+        default: "defaults,noatime"
+        description: >-
+          Mount options written into the generated /etc/fstab for the
+          root partition. Use `defaults,noatime,commit=600` to match
+          armbian-install's defaults.
+      excludes:
+        type: list
+        elements: str
+        default:
+          - /dev/*
+          - /proc/*
+          - /sys/*
+          - /run/*
+          - /tmp/*
+          - /mnt/*
+          - /media/*
+          - /var/log/journal
+        description: >-
+          rsync exclude patterns relative to `source`. Defaults to the
+          virtual / mount-point filesystems that must NOT be copied
+          (the kernel populates them at runtime). Override to add
+          patterns; replace to remove defaults. Does NOT include
+          `/boot/*` — kernel + initrd + dtb in /boot are copied
+          through so the disk is locally bootable as a fallback.
+      force:
+        type: bool
+        default: false
+        description: >-
+          When true, wipe + repartition + reformat + re-rsync even if
+          a partition matching `label` already exists. Use to refresh
+          stale rootfs content or change fstype/label.
+      armbian_installed_marker:
+        type: bool
+        default: true
+        description: >-
+          Write `INSTALLED=true` to /etc/armbian-image-release on the
+          target. Prevents armbian-resize-filesystem.service from
+          firing on first boot (it would attempt to expand the
+          partition that already fills the disk).
+      reset_identity:
+        type: bool
+        default: false
+        description: >-
+          When true, zero /etc/machine-id and /var/lib/dbus/machine-id
+          on the target so systemd regenerates them on first boot.
+          Default false because the typical caller (NFS-booted board
+          copying its rootfs to local disk) wants the same machine-id
+          across both boot modes — it's the same machine. Set true
+          when provisioning a disk for a *different* host than the
+          source.
+      mount_dir:
+        type: path
+        default: "/var/lib/armbian_netboot/disk_provision_mnt"
+        description: >-
+          Temporary mount point. Created if missing; mounted during
+          provisioning; unmounted (and left as an empty directory) at
+          the end. Not added to /etc/fstab on the source.

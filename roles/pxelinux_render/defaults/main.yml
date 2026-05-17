@@ -8,6 +8,12 @@
 # (PARTUUID=, UUID=, PARTLABEL=) handle multi-drive boards.
 sd_root: "LABEL=armbi_root"
 
+# Per-host kernel command-line knob: which device specifier the
+# kernel uses to find the root filesystem when boot_mode=local.
+# Default LABEL=armbi_root_local matches disk_provision's default
+# label; override per-host (UUID=, PARTUUID=, PARTLABEL=) when needed.
+local_root: "LABEL=armbi_root_local"
+
 # When true, append earlycon + verbose kernel params to both labels.
 pxe_verbose: false
 

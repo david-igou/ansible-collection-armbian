@@ -6,10 +6,10 @@ argument_specs:
       - >-
         Single-host role. Gathers facts, inspects ansible_mounts['/'],
         and asserts that the rootfs fstype matches the declared
-        boot_mode (nfs|nfs4 for nfs; not nfs for sd).
+        boot_mode (nfs|nfs4 for nfs; not nfs for sd or local).
 
     options:
       boot_mode:
         type: str
         required: true
-        choices: [nfs, sd]
+        choices: [nfs, sd, local]

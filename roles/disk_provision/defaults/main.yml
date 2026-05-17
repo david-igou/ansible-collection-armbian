@@ -1,0 +1,19 @@
+---
+# Defaults are in meta/argument_specs.yml so they're documented and
+# validated; mirror them here so the role is callable without
+# argument-spec validation enabled.
+fstype: ext4
+mount_opts: "defaults,noatime"
+excludes:
+  - /dev/*
+  - /proc/*
+  - /sys/*
+  - /run/*
+  - /tmp/*
+  - /mnt/*
+  - /media/*
+  - /var/log/journal
+force: false
+armbian_installed_marker: true
+reset_identity: false
+mount_dir: "/var/lib/armbian_netboot/disk_provision_mnt"

@@ -21,3 +21,10 @@ label sd
   initrd {{ tftp_initrd }}
   fdt    {{ tftp_dtb }}
   append root={{ sd_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}
+
+label local
+  menu label Armbian on local disk ({{ hostname }})
+  kernel {{ tftp_kernel }}
+  initrd {{ tftp_initrd }}
+  fdt    {{ tftp_dtb }}
+  append root={{ local_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}

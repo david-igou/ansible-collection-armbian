@@ -55,6 +55,7 @@
             hostname: "{{ inventory_hostname }}"
             output_dir: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg"
             sd_root: "{{ armbian_netboot_sd_root | default('LABEL=armbi_root') }}"
+            local_root: "{{ armbian_netboot_local_root | default('LABEL=' ~ (armbian_netboot_local_disk_label | default('armbi_root_local'))) }}"
             pxe_verbose: "{{ armbian_netboot_pxe_verbose | default(false) }}"
             earlycon: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].earlycon | default('') }}"
 
