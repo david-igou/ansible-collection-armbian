@@ -11,14 +11,18 @@
   changed_when: false
   become: true
 
-- name: "Preserve scan: parse labels into a list of {name, label} dicts"
+- name: "Preserve scan: parse labels into a list of [name, label] tuples"
   ansible.builtin.set_fact:
+    # regex_findall returns [] for non-matching lines and [("name","label")]
+    # for matching ones. Reject empties FIRST, then take `first` of each
+    # non-empty match. The `first` filter does NOT accept a `default`
+    # kwarg — that was the original plan's bug, caught by the first
+    # hardware run that exercised this scan.
     _dp_existing_labels: >-
       {{ _dp_lsblk.stdout_lines
          | map('regex_findall', 'NAME="([^"]+)"\s+LABEL="([^"]*)"')
-         | map('first', default=[])
          | reject('equalto', [])
-         | map('list')
+         | map('first')
          | list }}
 
 - name: "Preserve scan: build skip set of partition ids to preserve"
