@@ -1,0 +1,41 @@
+---
+- hosts: all
+  gather_facts: true
+  tasks:
+    - name: "Read loop device path"
+      ansible.builtin.slurp:
+        src: /tmp/loop_device
+      register: _loop_b64
+
+    - name: "Set loop device fact"
+      ansible.builtin.set_fact:
+        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
+
+    - name: "First provision: full layout, no preserves yet (disk is empty)"
+      ansible.builtin.include_role:
+        name: disk_provision
+      vars:
+        source: "/usr"  # small known directory for rsync test
+        disk_binding:
+          device: "{{ _loop }}"
+          wipe: true
+          layout:
+            - id: boot
+              size: 256MiB
+              type: linux
+              format: ext4
+              label: lp_boot
+              mount: /boot
+            - id: var
+              size: 512MiB
+              type: var
+              format: ext4
+              label: lp_var
+              mount: /var
+              preserve_on_reprovision: true
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: lp_root
+              mount: /

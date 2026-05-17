@@ -48,3 +48,50 @@
         output_dir: "{{ _output_base }}_verbose"
         pxe_verbose: true
         earlycon: "uart8250,mmio32,0xfeb50000"
+
+    - name: Render with extra_modes (usb_rescue active)
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.pxelinux_render
+      vars:
+        board_mac: "AA:BB:CC:DD:EE:FF"
+        board_console: "ttyS2,1500000"
+        model_name: test-model
+        nfs_server_ip: "10.10.9.213"
+        nfs_root_path: /srv/nfs
+        hostname: test-board
+        boot_mode: usb_rescue
+        output_dir: "{{ _output_base }}_extra"
+        extra_modes:
+          usb_rescue:
+            menu_label: "USB rescue rootfs"
+            root: "LABEL=rescue_root"
+            rootfstype: ext4
+
+    - name: Negative — bad boot_mode must fail fast (block/rescue)
+      block:
+        - name: Attempt render with nonexistent boot_mode (should fail)
+          ansible.builtin.include_role:
+            name: david_igou.armbian_netboot.pxelinux_render
+          vars:
+            board_mac: "11:22:33:44:55:66"
+            board_console: "ttyS2,1500000"
+            model_name: test-model
+            nfs_server_ip: "10.10.9.213"
+            nfs_root_path: /srv/nfs
+            hostname: test-board
+            boot_mode: nonexistent_mode
+            output_dir: /tmp/fixture/pxelinux.cfg_neg
+
+        - name: Sentinel — role did NOT fail; mark unexpected success
+          ansible.builtin.set_fact:
+            _boot_mode_negative_failed: false
+      rescue:
+        - name: Record expected failure
+          ansible.builtin.set_fact:
+            _boot_mode_negative_failed: true
+
+    - name: Assert negative fixture did fail as expected
+      ansible.builtin.assert:
+        that:
+          - _boot_mode_negative_failed | bool
+        fail_msg: "Role accepted boot_mode=nonexistent_mode but should have failed validation."

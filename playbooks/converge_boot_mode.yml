@@ -21,6 +21,12 @@
 # target different host groups (router for plumbing/upload, boards for
 # render/cycle/verify); --limit narrows ALL of them, silently skipping
 # the router-side plays with "no hosts matched".
+#
+# For block/rescue callers (e.g. _lifecycle_set_and_verify.yml) that
+# cannot use import_playbook inside a block, see:
+#   playbooks/tasks/_converge_boot_mode.yml
+# That file is the single-play-compatible alternative entry point with
+# identical behaviour for single-board invocations.
 
 - name: Pre-flight — assert router /ip tftp plumbing
   import_playbook: "{{ armbian_netboot_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"

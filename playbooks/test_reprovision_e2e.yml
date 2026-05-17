@@ -1,0 +1,201 @@
+---
+# Hardware E2E for reprovision_to_local.yml. Canonical target:
+# orange-pi-5-max-01 (NVMe, PoE-powered). Other boards may run via
+# --limit but acceptance criteria target this one.
+#
+# Phases:
+#   A. Assert starting on NFS.
+#   B. Run reprovision_to_local → assert findmnt / matches armbi_root_local.
+#   C. Re-run reprovision_to_local → assert no destructive change
+#      (preserved partition's sentinel survives).
+#   D. set_boot_mode nfs → assert NFS rootfs.
+#   E. set_boot_mode local → assert local rootfs intact.
+#   F. Cleanup: set_boot_mode nfs + stop serial capture.
+#
+# Optional serial capture: pass `-e capture_serial=true -e serial_host=<host>`
+# to spawn socat on the serial host (defaults: serial_host=localhost,
+# serial_device=/dev/ttyUSB0, serial_baud=1500000). socat must be on
+# PATH; passwordless sudo for stty/socat against the UART device.
+# The log file location is /tmp/serial-<inventory_hostname>.log; the
+# pidfile is /tmp/socat-<inventory_hostname>.pid.
+#
+# If the test aborts before Phase F (e.g. early failure), socat will
+# leak; the pre-flight defensive pkill on the next run cleans it up,
+# or `pkill -f "socat -u /dev/ttyUSB0"` on the serial host manually.
+
+- name: "Pre-flight: start serial capture (when capture_serial=true)"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  vars:
+    capture_serial: false
+    serial_host: localhost
+    serial_device: /dev/ttyUSB0
+    serial_baud: 1500000
+    _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
+  tasks:
+    - name: "Pre-flight — start serial capture"
+      when: capture_serial | bool
+      delegate_to: "{{ serial_host }}"
+      run_once: true
+      become: true
+      block:
+        - name: "Serial — assert socat is available on the serial host"
+          ansible.builtin.command:
+            cmd: which socat
+          changed_when: false
+
+        # Defensive pre-start: kill any leaked socat from a prior run.
+        # `[s]ocat` regex avoids self-match: pkill -f matches against
+        # the full cmdline, so a literal `socat -u <dev>` would also
+        # match the shell running pkill itself.
+        - name: "Serial — kill any pre-existing socat on this device"
+          ansible.builtin.shell: |
+            pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+            rm -f {{ _serial_pid }}
+          changed_when: false
+
+        - name: "Serial — assert serial device exists"
+          ansible.builtin.stat:
+            path: "{{ serial_device }}"
+          register: _serial_dev_stat
+          failed_when: not _serial_dev_stat.stat.exists
+
+        - name: "Serial — truncate log file and ensure world-readable"
+          ansible.builtin.copy:
+            dest: "{{ _serial_log }}"
+            content: ""
+            mode: "0644"
+
+        - name: "Serial — configure tty line discipline"
+          ansible.builtin.command:
+            cmd: stty -F {{ serial_device }} {{ serial_baud }} cs8 -cstopb -parenb -ixon -crtscts raw
+          changed_when: true
+
+        - name: "Serial — start socat capture in background (pidfile-tracked)"
+          ansible.builtin.shell: |
+            echo $$ > {{ _serial_pid }}
+            exec socat -u {{ serial_device }},b{{ serial_baud }},raw,echo=0 OPEN:{{ _serial_log }},append
+          async: 86400
+          poll: 0
+          changed_when: true
+
+- name: "A: Assert NFS starting state"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  tasks:
+    - name: "Set boot mode to nfs (in case not already)"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
+
+- name: "B: First reprovision"
+  import_playbook: reprovision_to_local.yml
+
+- name: "B2: Assert local rootfs label"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  tasks:
+    - name: "findmnt / reports armbi_root_local"
+      ansible.builtin.command: "findmnt -no SOURCE,LABEL /"
+      register: _fm
+      changed_when: false
+
+    - name: "Assert local label present"
+      ansible.builtin.assert:
+        that:
+          - "'armbi_root_local' in _fm.stdout"
+        fail_msg: "findmnt / shows {{ _fm.stdout }}; expected armbi_root_local."
+
+    - name: "Write sentinel into the preserved /var partition"
+      ansible.builtin.copy:
+        dest: /var/reprovision_sentinel
+        content: "E2E_PRESERVE_TEST\n"
+        mode: "0644"
+      become: true
+
+- name: "C: Second reprovision (idempotency on preserved /var)"
+  import_playbook: reprovision_to_local.yml
+
+- name: "C2: Assert sentinel survived"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Read sentinel"
+      ansible.builtin.slurp:
+        src: /var/reprovision_sentinel
+      register: _sent
+
+    - name: "Sentinel content matches"
+      ansible.builtin.assert:
+        that:
+          - (_sent.content | b64decode).strip() == 'E2E_PRESERVE_TEST'
+        fail_msg: "Preserve idempotency failed: sentinel reads as {{ _sent.content | b64decode }}"
+
+- name: "D: Back to nfs, assert NFS rootfs"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify nfs"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
+
+- name: "E: Back to local, sentinel still there"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Set + verify local"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: local
+        on_failure_revert_to: nfs
+
+    - name: "Sentinel still present after a nfs↔local round-trip"
+      ansible.builtin.slurp:
+        src: /var/reprovision_sentinel
+      register: _sent2
+
+    - name: "Sentinel content still matches"
+      ansible.builtin.assert:
+        that:
+          - (_sent2.content | b64decode).strip() == 'E2E_PRESERVE_TEST'
+
+- name: "F: Cleanup → nfs"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  tasks:
+    - name: "Final set + verify nfs"
+      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      vars:
+        target_boot_mode: nfs
+        on_failure_revert_to: nfs
+
+# Stop serial capture last so all phases (including F) are captured.
+# Belt-and-suspenders: kill the pidfile-recorded PID first (primary),
+# then `pkill -f` any remaining socat as backstop for stale pidfiles.
+- name: "Post-flight: stop serial capture (when capture_serial=true)"
+  hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
+  gather_facts: false
+  vars:
+    capture_serial: false
+    serial_host: localhost
+    serial_device: /dev/ttyUSB0
+    _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
+  tasks:
+    - name: "Post-flight — stop serial capture"
+      when: capture_serial | bool
+      delegate_to: "{{ serial_host }}"
+      run_once: true
+      become: true
+      ansible.builtin.shell: |
+        if [ -f {{ _serial_pid }} ]; then
+          kill "$(cat {{ _serial_pid }})" 2>/dev/null || true
+          rm -f {{ _serial_pid }}
+        fi
+        pkill -f "[s]ocat -u {{ serial_device }}" 2>/dev/null || true
+      changed_when: true

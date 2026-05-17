@@ -21,16 +21,18 @@ argument_specs:
       boot_mode:
         type: str
         required: true
-        choices: [nfs, sd, local]
         description: >-
           Which label the rendered pxelinux.cfg's `default` directive
-          points at. `nfs` = NFS rootfs (rb5009 kernel + nfsroot=).
-          `sd` = SD rootfs (rb5009 kernel + root=LABEL=armbi_root,
-          override via sd_root). `local` = arbitrary local block
-          device rootfs provisioned by disk_provision (rb5009 kernel
-          + root=LABEL=armbi_root_local, override via local_root).
-          All three fetch kernel/initrd/dtb from rb5009 over TFTP;
-          only the rootfs source differs.
+          points at. Built-in choices: nfs, sd, local. May also be any
+          key in extra_modes. Validated at task level against the
+          union {nfs, sd, local} ∪ keys(extra_modes).
+      extra_modes:
+        type: dict
+        default: {}
+        description: >-
+          User-defined named boot modes. Each entry adds a label to the
+          rendered pxelinux.cfg with the supplied root= and rootfstype.
+          Keys become label names and valid boot_mode values.
       board_console:
         type: str
         required: true

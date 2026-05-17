@@ -1,0 +1,79 @@
+---
+- hosts: all
+  gather_facts: true
+  tasks:
+    - name: "Read loop device path"
+      ansible.builtin.slurp:
+        src: /tmp/loop_device
+      register: _loop_b64
+
+    - name: "Set loop device fact"
+      ansible.builtin.set_fact:
+        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
+
+    - name: "lsblk -no NAME,FSTYPE,LABEL on the loop device"
+      ansible.builtin.command: "lsblk -no NAME,FSTYPE,LABEL {{ _loop }}"
+      register: _lsblk
+      changed_when: false
+
+    - name: "Assert all three partitions exist with correct labels and fstypes"
+      ansible.builtin.assert:
+        that:
+          - "'lp_boot' in _lsblk.stdout"
+          - "'lp_var'  in _lsblk.stdout"
+          - "'lp_root' in _lsblk.stdout"
+          - _lsblk.stdout.count('ext4') == 3
+        fail_msg: "Unexpected lsblk output:\n{{ _lsblk.stdout }}"
+
+    - name: "Second provision: same layout, /var should be preserved (not reformatted)"
+      block:
+        - name: "Write a sentinel into /var on the loop disk"
+          ansible.builtin.shell: |
+            mount LABEL=lp_var /mnt
+            echo SENTINEL > /mnt/preserve_test
+            sync
+            umount /mnt
+          changed_when: true
+
+        - name: "Re-run disk_provision with the same layout"
+          ansible.builtin.include_role:
+            name: disk_provision
+          vars:
+            source: "/usr"
+            disk_binding:
+              device: "{{ _loop }}"
+              wipe: true
+              layout:
+                - id: boot
+                  size: 256MiB
+                  type: linux
+                  format: ext4
+                  label: lp_boot
+                  mount: /boot
+                - id: var
+                  size: 512MiB
+                  type: var
+                  format: ext4
+                  label: lp_var
+                  mount: /var
+                  preserve_on_reprovision: true
+                - id: root
+                  size: grow
+                  type: root
+                  format: ext4
+                  label: lp_root
+                  mount: /
+
+        - name: "Assert sentinel survived"
+          ansible.builtin.shell: |
+            mount LABEL=lp_var /mnt
+            cat /mnt/preserve_test
+            umount /mnt
+          register: _sentinel
+          changed_when: false
+
+        - name: "Sentinel reads back as SENTINEL"
+          ansible.builtin.assert:
+            that:
+              - _sentinel.stdout.strip() == 'SENTINEL'
+            fail_msg: "Preserve idempotency failed: sentinel content is {{ _sentinel.stdout }}"

@@ -28,3 +28,12 @@ label local
   initrd {{ tftp_initrd }}
   fdt    {{ tftp_dtb }}
   append root={{ local_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}
+
+{% for mode_name, mode in (extra_modes | default({})).items() %}
+label {{ mode_name }}
+  menu label {{ mode.menu_label }} ({{ hostname }})
+  kernel {{ tftp_kernel }}
+  initrd {{ tftp_initrd }}
+  fdt    {{ tftp_dtb }}
+  append root={{ mode.root }} rootfstype={{ mode.rootfstype | default('ext4') }} rootwait rw console={{ board_console }}{% if mode.extra_append is defined %} {{ mode.extra_append }}{% endif %}{{ _verbose_suffix }}
+{% endfor %}

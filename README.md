@@ -285,7 +285,7 @@ Specs: [v3 design](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
 | [`board_boot_wait`](roles/board_boot_wait/) | a board | `wait_for` TCP/22 + `wait_for_connection` SSH (no power knowledge) |
 | [`board_boot_verify`](roles/board_boot_verify/) | a board | Asserts `ansible_mounts['/']` matches declared boot mode |
 | [`bootstrap_armbian`](roles/bootstrap_armbian/) | a board | SSH-key user with passwordless sudo on a freshly flashed board |
-| [`disk_provision`](roles/disk_provision/) | a board | Wipes + partitions + formats a block device, rsyncs `source` rootfs onto it, regenerates `/etc/fstab` (root by `LABEL=`). Transport-agnostic (no PXE / NFS knowledge); idempotent on filesystem label. |
+| [`disk_provision`](roles/disk_provision/) | a board | Apply a declarative GPT layout to one block device via `systemd-repart`, rsync `source` rootfs onto it, regenerate `/etc/fstab` (root by `LABEL=`). Idempotent on filesystem label; supports `preserve_on_reprovision: true` per partition for state preservation (e.g. `/var` for k3s). Single-disk contract — multi-disk hosts loop the role. |
 
 ### Playbooks
 
@@ -301,6 +301,7 @@ Specs: [v3 design](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
 | 7 | `poe_control.yml` | Ad-hoc | Power-cycles, powers off, or powers on a board via its upstream `armbian_netboot_poe_switch`. |
 | 8 | `persist_uboot_env.yml` | Once per rock-5b board (rare) | Writes the U-Boot env vars rock-5b needs for autonomous PXE via `fw_setenv` from Linux into SPI. |
 | 9 | `provision_local_disk.yml` | Once per board you want to make local-bootable (e.g. NVMe) | Wipes the target disk and rsyncs the board's currently-mounted `/` onto a fresh ext4 partition labeled `armbi_root_local`. Composes the `disk_provision` role; refuses to wipe the disk the board is currently booted from. |
+| 10 | `reprovision_to_local.yml` | Once per board (or whenever layout changes) | Headless full-lifecycle: boot board into NFS → loop disk_provision over `armbian_netboot_local_disks` → flip pxelinux to local → verify. Auto-reverts to nfs on local-boot failure with a diagnostic bundle captured. |
 | — | `test_hardware_e2e.yml` | Ad-hoc | Hardware regression test: drives a single board through SD → NFS → SD via pxelinux + PoE cycles, asserting `findmnt /` reports the expected source at each transition. |
 | — | `test_manual_psu_cold_boot.yml` | Ad-hoc | Same shape as the NFS-mode phase of `test_hardware_e2e.yml`, but for USB-C powered boards where power transitions are operator-driven. |
 
@@ -601,6 +602,47 @@ image's rootfs, no identity reset, no per-host customization. Booting into
 NFS first is what threads the per-host identity all the way through to
 the local disk.
 
+### Headless reprovision to local boot
+
+```bash
+ansible-playbook playbooks/reprovision_to_local.yml --limit orange-pi-5-max-01
+```
+
+Drives a board from any boot mode to verified local-disk boot in one
+command. The board's inventory must define
+`armbian_netboot_local_disks` (a list of disk bindings, each with a
+declarative `layout` of GPT partitions) and
+`armbian_netboot_boot_mode: local`.
+
+Inventory example:
+
+```yaml
+armbian_netboot_local_disks:
+  - device: /dev/nvme0n1
+    wipe: true
+    layout:
+      - { id: esp,  size: 512MiB, type: esp,   format: vfat, label: armbi_esp,        mount: /boot/efi }
+      - { id: boot, size: 1GiB,   type: linux, format: ext4, label: armbi_boot,       mount: /boot }
+      - { id: var,  size: 20GiB,  type: var,   format: ext4, label: armbi_var,        mount: /var, preserve_on_reprovision: true }
+      - { id: root, size: grow,   type: root,  format: ext4, label: armbi_root_local, mount: / }
+```
+
+`preserve_on_reprovision: true` partitions (typically `/var` for k3s state)
+are detected by filesystem label and skipped on every re-run. Set
+`force: true` on a binding to bypass preserve idempotency.
+
+If the final cold-boot in local mode fails, the playbook captures a
+diagnostic bundle (`findmnt`, `/proc/cmdline`, `lsblk`, `journalctl -k`,
+last 200 UART lines if `-e capture_serial=true`), then auto-reverts
+the board to nfs mode for forensic access. Operator fixes the root
+cause and re-runs.
+
+See [`docs/runbooks/reprovision-local-disk.md`](docs/runbooks/reprovision-local-disk.md)
+for the full operator runbook: pre-flight checks, what the lifecycle
+does play-by-play, environment-specific caveats observed in practice,
+failure recovery, and a worked example of changing the layout on an
+already-provisioned board.
+
 ### Hardware E2E test
 
 ```bash
@@ -633,6 +675,7 @@ lines at every checkpoint.
 | 7 | `poe_control.yml --limit <host> -e armbian_netboot_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
 | 8 | `persist_uboot_env.yml --limit rock-5b-01` | Once per rock-5b for autonomous PXE |
 | 9 | `provision_local_disk.yml --limit <host> -e armbian_netboot_local_disk_device=/dev/nvme0n1` | Wipe + materialize running `/` onto a local block device |
+| 10 | `reprovision_to_local.yml --limit <host>` | Headless reprovision: NFS → local with auto-revert |
 | — | `test_hardware_e2e.yml --limit <host>` | Ad-hoc SD ↔ NFS hardware E2E test |
 
 ## Testing

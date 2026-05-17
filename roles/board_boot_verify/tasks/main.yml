@@ -45,3 +45,17 @@
       rootfs, the kernel couldn't find the labeled partition — verify
       the target disk was provisioned via provision_local_disk.yml.
   when: boot_mode == 'local'
+
+- name: "Assert custom mode rootfs source matches verify_match"
+  ansible.builtin.assert:
+    that:
+      - extra_modes[boot_mode] is defined
+      - extra_modes[boot_mode].verify_match is defined
+      - _root_device is match(extra_modes[boot_mode].verify_match)
+    fail_msg: >-
+      boot_mode[{{ boot_mode }}]: _root_device={{ _root_device }}
+      does not match verify_match regex
+      '{{ extra_modes[boot_mode].verify_match | default('<unset>') }}'.
+      Define armbian_netboot_extra_modes[{{ boot_mode }}].verify_match
+      so this role can assert the rootfs source.
+  when: boot_mode not in ['nfs', 'sd', 'local']

@@ -1,0 +1,110 @@
+---
+# Pre-flight validation for one disk_binding. Runs before any
+# destructive op. All failures abort the playbook.
+
+- name: "Validate: device is set, starts with /dev/, is whole-disk path"
+  ansible.builtin.assert:
+    that:
+      - disk_binding.device is defined
+      - disk_binding.device.startswith('/dev/')
+      - not (disk_binding.device is match('/dev/(nvme[0-9]+n[0-9]+p|mmcblk[0-9]+p|loop[0-9]+p|sd[a-z]|vd[a-z]|hd[a-z])[0-9]+$'))
+    fail_msg: >-
+      device must be a whole-disk path under /dev/ (e.g. /dev/nvme0n1).
+      Got: {{ disk_binding.device | default('<unset>') }}.
+      Partition-suffixed paths (nvme0n1p1, sda1) are not accepted —
+      that would target a partition, not the disk.
+
+- name: "Validate: device is a real block device"
+  ansible.builtin.stat:
+    path: "{{ disk_binding.device }}"
+  register: _dp_device_stat
+  become: true
+  when: not (render_only | default(false) | bool)
+
+- name: "Validate: device stat returned a block device"
+  ansible.builtin.assert:
+    that:
+      - _dp_device_stat.stat.exists
+      - _dp_device_stat.stat.isblk
+    fail_msg: |
+      device {{ disk_binding.device }}: exists={{ _dp_device_stat.stat.exists }}, isblk={{ _dp_device_stat.stat.isblk | default(false) }}.
+      Confirm the device path with `lsblk` on the target host.
+  when: not (render_only | default(false) | bool)
+
+- name: "Validate: find source of running rootfs"
+  ansible.builtin.set_fact:
+    _dp_root_source: "{{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
+  when: not (render_only | default(false) | bool)
+
+- name: "Validate: refuse to wipe the disk the board is booted from"
+  ansible.builtin.assert:
+    that:
+      - not _dp_root_source.startswith(disk_binding.device)
+    fail_msg: >-
+      REFUSING: / is on {{ _dp_root_source }}, which is on
+      {{ disk_binding.device }} (the disk this binding would wipe).
+      Boot the board into a different rootfs (NFS or another local
+      disk) before provisioning this one.
+  when: not (render_only | default(false) | bool)
+
+- name: "Validate: every preserve_on_reprovision: true partition has a label"
+  ansible.builtin.assert:
+    that:
+      - item.label is defined
+      - item.label | length > 0
+    fail_msg: >-
+      Partition id={{ item.id }} has preserve_on_reprovision: true but
+      no `label` field. Preserve idempotency is keyed on label —
+      labels are required for preserved partitions.
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: item.preserve_on_reprovision | default(false)
+
+- name: "Validate: every mount path is absolute"
+  ansible.builtin.assert:
+    that:
+      - item.mount.startswith('/')
+    fail_msg: >-
+      Partition id={{ item.id }} has mount={{ item.mount }} — must be
+      an absolute path starting with /.
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: item.mount is defined
+
+- name: "Validate: at most one 'grow' partition per disk"
+  ansible.builtin.assert:
+    that:
+      - (disk_binding.layout | selectattr('size', 'equalto', 'grow') | list | length) <= 1
+    fail_msg: >-
+      Disk {{ disk_binding.device }} has more than one partition with
+      size: grow. At most one partition per disk may use size: grow.
+
+- name: "Validate: ids are unique within this layout"
+  ansible.builtin.assert:
+    that:
+      - (disk_binding.layout | map(attribute='id') | list | unique | length) == (disk_binding.layout | length)
+    fail_msg: >-
+      Duplicate id values in layout for {{ disk_binding.device }}.
+      Each partition must have a unique id.
+
+- name: "Validate: vfat labels are uppercase (FAT volume label spec)"
+  # vfat volume labels are uppercase-only by spec (and ≤11 chars).
+  # If you pass lowercase, systemd-repart silently uppercases on
+  # write, but then our blkid label-lookup + generated fstab
+  # mismatch the on-disk label. Catch upfront with a clear message.
+  ansible.builtin.assert:
+    that:
+      - item.label == item.label | upper
+      - item.label | length <= 11
+    fail_msg: >-
+      Partition id={{ item.id }} (format=vfat) has label={{ item.label }}.
+      FAT volume labels must be uppercase and ≤11 chars. Use e.g.
+      {{ (item.label | upper)[:11] }}.
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when:
+    - item.format == 'vfat'
+    - item.label is defined

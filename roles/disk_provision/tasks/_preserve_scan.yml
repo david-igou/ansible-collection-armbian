@@ -1,0 +1,48 @@
+---
+# For each preserve_on_reprovision: true partition, check whether a
+# partition with the requested label already exists on the disk.
+# If yes, mark its slot as "skip"; _apply_repart.yml will hold that
+# slot's existing partition and _populate.yml will rsync-exclude its
+# mount path.
+
+- name: "Preserve scan: list existing partitions on device"
+  ansible.builtin.command: "lsblk -no NAME,LABEL --pairs {{ disk_binding.device }}"
+  register: _dp_lsblk
+  changed_when: false
+  become: true
+
+- name: "Preserve scan: parse labels into a list of [name, label] tuples"
+  ansible.builtin.set_fact:
+    # regex_findall returns [] for non-matching lines and [("name","label")]
+    # for matching ones. Reject empties FIRST, then take `first` of each
+    # non-empty match. The `first` filter does NOT accept a `default`
+    # kwarg — that was the original plan's bug, caught by the first
+    # hardware run that exercised this scan.
+    _dp_existing_labels: >-
+      {{ _dp_lsblk.stdout_lines
+         | map('regex_findall', 'NAME="([^"]+)"\s+LABEL="([^"]*)"')
+         | reject('equalto', [])
+         | map('first')
+         | list }}
+
+- name: "Preserve scan: build skip set of partition ids to preserve"
+  ansible.builtin.set_fact:
+    _dp_preserve_ids: >-
+      {{ disk_binding.layout
+         | selectattr('preserve_on_reprovision', 'defined')
+         | selectattr('preserve_on_reprovision')
+         | selectattr('label', 'in', _dp_existing_labels | map('last') | list)
+         | map(attribute='id')
+         | list }}
+
+- name: "Preserve scan: report skip decision"
+  ansible.builtin.debug:
+    msg: >-
+      Preserve scan: existing labels on {{ disk_binding.device }}:
+      {{ _dp_existing_labels }}; partitions to preserve (skip wipe):
+      {{ _dp_preserve_ids }}; force={{ disk_binding.force | default(false) }}
+
+- name: "Preserve scan: when force=true, clear preserve list (operator escape hatch)"
+  ansible.builtin.set_fact:
+    _dp_preserve_ids: []
+  when: disk_binding.force | default(false) | bool

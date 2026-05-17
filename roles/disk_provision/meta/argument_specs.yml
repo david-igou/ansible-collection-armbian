@@ -1,118 +1,109 @@
 ---
 argument_specs:
   main:
-    short_description: "Partition + format a block device and rsync a rootfs onto it."
+    short_description: "Apply a declarative partition layout to one block device and populate it from a source rootfs."
     description:
       - >-
-        Wipes the GPT on `device`, creates a single partition spanning
-        the disk, formats it as `fstype` with the given filesystem
-        `label`, then rsyncs `source` to the mounted partition with
-        an exclude list that skips virtual filesystems (/dev, /proc,
-        /sys, /run, /tmp, /mnt, /media, /var/log/journal). Writes a
-        fresh `/etc/fstab` on the target referencing the new partition
-        by `LABEL=`, then unmounts.
+        Given one disk_binding (device + layout list), validates the
+        layout, translates it to systemd-repart .repart.d/*.conf files,
+        invokes systemd-repart against the device, populates the
+        resulting filesystems by rsyncing `source` (default /), writes
+        a generated /etc/fstab on the root partition referencing every
+        mount by LABEL=, and unmounts.
       - >-
-        Agnostic to device class — works on /dev/nvme*, /dev/sd*,
-        /dev/mmcblk*, /dev/vd*, /dev/loop* etc. Caller picks the
-        device path; the role derives the partition suffix automatically
-        (`p1` if the device name ends in a digit, else `1`).
+        Single-disk contract. Callers with multiple disks loop the
+        role per disk binding.
       - >-
-        Idempotent: if a partition matching `label` already exists on
-        `device`, the role skips all destructive steps unless `force`
-        is true. Re-running with the same inputs is a no-op.
+        Preserved partitions (preserve_on_reprovision: true with a
+        matching label already present on the disk) are skipped at
+        systemd-repart and excluded from rsync. Set `force: true` on
+        the binding to bypass preserve idempotency.
       - >-
-        Knows nothing about netboot, PXE, boot modes, or what the
-        rootfs will be used for. The caller decides which source to
-        copy, which device to target, and what to do with the disk
-        afterwards (set a U-Boot label, render a pxelinux.cfg, ignore).
+        Transport-agnostic. Knows nothing about netboot, PXE, boot
+        modes, or what the rootfs will be used for.
 
     options:
-      device:
-        type: path
+      disk_binding:
+        type: dict
         required: true
         description: >-
-          Block device to provision, e.g. /dev/nvme0n1. Must be the
-          whole disk, not a partition. WILL BE WIPED.
+          One entry from armbian_netboot_local_disks. Shape:
+          {device, wipe?, force?, layout: [partition_spec, ...]}.
+        options:
+          device:
+            type: path
+            required: true
+            description: "Whole-disk path, e.g. /dev/nvme0n1. WILL BE WIPED unless preserve rules apply."
+          wipe:
+            type: bool
+            default: true
+            description: "When true, allow destructive partitioning. When false, fail if disk layout doesn't already match (read-only audit mode)."
+          force:
+            type: bool
+            default: false
+            description: "Bypass preserve_on_reprovision idempotency — destructively wipe preserved partitions too."
+          layout:
+            type: list
+            elements: dict
+            required: true
+            options:
+              id:
+                type: str
+                required: true
+                description: "Unique within this layout. Drives the .repart.d filename ordering."
+              size:
+                type: str
+                required: true
+                description: "Size string: <number>MiB|GiB|TiB, or 'grow' (exactly one 'grow' per disk)."
+              type:
+                type: str
+                required: true
+                choices: [esp, linux, root, var, home, srv, swap]
+                description: "GPT partition type purpose. systemd-repart resolves to the architecture-appropriate GUID."
+              format:
+                type: str
+                required: true
+                choices: [vfat, ext4, xfs, btrfs, swap]
+                description: "Filesystem type."
+              label:
+                type: str
+                description: "Filesystem label. Required if preserve_on_reprovision is true. Recommended otherwise (fstab references it)."
+              mount:
+                type: path
+                description: "Absolute mount path written to /etc/fstab. Optional (e.g. swap has no mount)."
+              mount_opts:
+                type: str
+                description: "fstab mount options. Defaults: ext4='defaults,noatime'; vfat='defaults,noatime'; swap='sw'; xfs='defaults,noatime'; btrfs='defaults,noatime,compress=zstd'."
+              preserve_on_reprovision:
+                type: bool
+                default: false
+                description: "If true and a partition with matching label already exists, skip wipe + exclude from rsync. Requires label."
       source:
         type: path
-        required: true
+        default: "/"
         description: >-
-          Source rootfs root to rsync from. Typically "/" when the
-          role runs on a board copying its currently-mounted rootfs;
-          can be any directory containing a populated Linux rootfs.
-      label:
-        type: str
-        required: true
-        description: >-
-          Filesystem label written by mkfs (-L) and emitted as
-          `LABEL=<label>` in the generated /etc/fstab. Must be valid
-          for the chosen fstype (ext4 ≤16 chars, vfat ≤11 chars
-          uppercase). Doubles as the idempotency key — re-runs check
-          for a partition matching this label and skip if found.
-      fstype:
-        type: str
-        default: ext4
-        choices: [ext4]
-        description: >-
-          Filesystem type for the partition. Only ext4 is supported
-          today (adding btrfs/f2fs requires per-fstype mkfs flag
-          handling and is out of scope for this role's first cut).
-      mount_opts:
-        type: str
-        default: "defaults,noatime"
-        description: >-
-          Mount options written into the generated /etc/fstab for the
-          root partition. Use `defaults,noatime,commit=600` to match
-          armbian-install's defaults.
-      excludes:
-        type: list
-        elements: str
-        default:
-          - /dev/*
-          - /proc/*
-          - /sys/*
-          - /run/*
-          - /tmp/*
-          - /mnt/*
-          - /media/*
-          - /var/log/journal
-        description: >-
-          rsync exclude patterns relative to `source`. Defaults to the
-          virtual / mount-point filesystems that must NOT be copied
-          (the kernel populates them at runtime). Override to add
-          patterns; replace to remove defaults. Does NOT include
-          `/boot/*` — kernel + initrd + dtb in /boot are copied
-          through so the disk is locally bootable as a fallback.
-      force:
-        type: bool
-        default: false
-        description: >-
-          When true, wipe + repartition + reformat + re-rsync even if
-          a partition matching `label` already exists. Use to refresh
-          stale rootfs content or change fstype/label.
+          Source rootfs to rsync. Typically "/" when the role runs on
+          a board copying its currently-mounted rootfs; can be any
+          directory containing a populated Linux rootfs.
       armbian_installed_marker:
         type: bool
         default: true
-        description: >-
-          Write `INSTALLED=true` to /etc/armbian-image-release on the
-          target. Prevents armbian-resize-filesystem.service from
-          firing on first boot (it would attempt to expand the
-          partition that already fills the disk).
+        description: "Write INSTALLED=true to /etc/armbian-image-release on the target to suppress armbian-resize-filesystem."
       reset_identity:
         type: bool
         default: false
         description: >-
-          When true, zero /etc/machine-id and /var/lib/dbus/machine-id
-          on the target so systemd regenerates them on first boot.
-          Default false because the typical caller (NFS-booted board
-          copying its rootfs to local disk) wants the same machine-id
-          across both boot modes — it's the same machine. Set true
-          when provisioning a disk for a *different* host than the
-          source.
-      mount_dir:
+          Zero /etc/machine-id and /var/lib/dbus/machine-id on the
+          target. Default false because the typical caller (NFS-booted
+          board copying its rootfs to local disk) wants the same
+          machine-id across both boot modes — it's the same machine.
+          Set true when provisioning a disk for a *different* host
+          than the source.
+      mount_dir_base:
         type: path
         default: "/var/lib/armbian_netboot/disk_provision_mnt"
-        description: >-
-          Temporary mount point. Created if missing; mounted during
-          provisioning; unmounted (and left as an empty directory) at
-          the end. Not added to /etc/fstab on the source.
+        description: "Base for per-device temporary mount points. Each device mounts under <base>/<device-basename>/."
+      render_only:
+        type: bool
+        default: false
+        description: "When true, render .repart.d configs and run validation, then return. Used by Layer 1 molecule test."

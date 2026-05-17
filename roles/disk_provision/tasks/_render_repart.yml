@@ -1,0 +1,31 @@
+---
+# Render one .repart.d/<NN>-<id>.conf per layout entry, into a
+# per-device subdirectory under /run/disk_provision/. Numeric prefix
+# orders the partitions on disk.
+
+- name: "Render: derive device basename"
+  ansible.builtin.set_fact:
+    _dp_device_basename: "{{ disk_binding.device | basename }}"
+
+- name: "Render: define repart.d directory path"
+  ansible.builtin.set_fact:
+    _dp_repart_dir: "/run/disk_provision/{{ _dp_device_basename }}/repart.d"
+
+- name: "Render: ensure repart.d directory exists"
+  ansible.builtin.file:
+    path: "{{ _dp_repart_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: "Render: emit one .conf per layout entry"
+  ansible.builtin.template:
+    src: repart.conf.j2
+    dest: "{{ _dp_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
+    mode: "0644"
+  loop: "{{ disk_binding.layout }}"
+  loop_control:
+    loop_var: partition
+    label: "{{ partition.id }}"
+    index_var: idx
+  become: true
