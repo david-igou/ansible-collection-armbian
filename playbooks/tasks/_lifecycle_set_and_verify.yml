@@ -16,14 +16,14 @@
         armbian_netboot_boot_mode: "{{ target_boot_mode }}"
 
   rescue:
+    # diagnostic_bundle.yml has `failed_when: false` on every gather
+    # task internally, so this include cannot itself raise — no outer
+    # failed_when/ignore_errors needed (and neither is valid on
+    # include_tasks anyway).
     - name: "Lifecycle: capture diagnostic bundle before revert"
       ansible.builtin.include_tasks: diagnostic_bundle.yml
       vars:
-        bundle_dir: |
-          {{
-            armbian_netboot_diagnostic_bundle_dir | default('./diagnostics')
-          }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}
-      failed_when: false
+        bundle_dir: "{{ armbian_netboot_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}"
 
     - name: "Lifecycle: auto-revert to {{ on_failure_revert_to }}"
       ansible.builtin.include_tasks: _converge_boot_mode.yml
