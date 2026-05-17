@@ -12,6 +12,6 @@ render_only: false
 _disk_provision_default_mount_opts:
   ext4: "defaults,noatime"
   vfat: "defaults,noatime"
-  xfs:  "defaults,noatime"
+  xfs: "defaults,noatime"
   btrfs: "defaults,noatime,compress=zstd"
   swap: "sw"

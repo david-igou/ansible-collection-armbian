@@ -81,7 +81,10 @@ argument_specs:
       source:
         type: path
         default: "/"
-        description: "Source rootfs to rsync. Default / (the running rootfs)."
+        description: >-
+          Source rootfs to rsync. Typically "/" when the role runs on
+          a board copying its currently-mounted rootfs; can be any
+          directory containing a populated Linux rootfs.
       armbian_installed_marker:
         type: bool
         default: true
@@ -89,7 +92,13 @@ argument_specs:
       reset_identity:
         type: bool
         default: false
-        description: "Zero /etc/machine-id and /var/lib/dbus/machine-id on the target."
+        description: >-
+          Zero /etc/machine-id and /var/lib/dbus/machine-id on the
+          target. Default false because the typical caller (NFS-booted
+          board copying its rootfs to local disk) wants the same
+          machine-id across both boot modes — it's the same machine.
+          Set true when provisioning a disk for a *different* host
+          than the source.
       mount_dir_base:
         type: path
         default: "/var/lib/armbian_netboot/disk_provision_mnt"
