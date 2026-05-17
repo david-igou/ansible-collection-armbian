@@ -41,6 +41,14 @@
         {{ armbian_netboot_plumbing_check_tasks
            | default('../routeros/tasks/plumbing_check_one.yml') }}
 
+# pxelinux_render reads armbian_netboot_board_configs from
+# vars/boards.yml. Original converge_boot_mode.yml loads it in its
+# render play; we replicate that here so this tasks file is
+# self-sufficient regardless of caller.
+- name: "converge[{{ armbian_netboot_boot_mode }}] — load board configs"
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../vars/boards.yml"
+
 - name: "converge[{{ armbian_netboot_boot_mode }}] — render pxelinux.cfg + upload"
   ansible.builtin.include_tasks: >-
     {{ armbian_netboot_pxelinux_upload_tasks
