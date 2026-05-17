@@ -8,12 +8,12 @@
 - name: "Render systemd-repart configs"
   ansible.builtin.import_tasks: _render_repart.yml
 
-- name: "Scan for preserved partitions"
-  ansible.builtin.import_tasks: _preserve_scan.yml
-
 - name: "Return early in render-only mode"
   ansible.builtin.meta: end_host
   when: render_only | bool
+
+- name: "Scan for preserved partitions"
+  ansible.builtin.import_tasks: _preserve_scan.yml
 
 - name: "Apply systemd-repart"
   ansible.builtin.import_tasks: _apply_repart.yml
