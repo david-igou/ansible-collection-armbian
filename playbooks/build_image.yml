@@ -174,17 +174,19 @@
                   return 0
               fi
 
-              local discovered=""
+              # The defconfig SOURCE file only carries CONFIG_ENV_IS_*=y
+              # when the board explicitly opts INTO non-default env
+              # storage. U-Boot's Kconfig default when nothing is
+              # selected is ENV_IS_NOWHERE (see u-boot's env/Kconfig
+              # `default ENV_IS_NOWHERE`). So a defconfig with no
+              # CONFIG_ENV_IS_*=y line discovers as `nowhere`.
+              local discovered=nowhere
               if grep -q '^CONFIG_ENV_IS_NOWHERE=y' "${defconfig}"; then
                   discovered=nowhere
               elif grep -q '^CONFIG_ENV_IS_IN_SPI_FLASH=y' "${defconfig}"; then
                   discovered=spi_flash
               elif grep -q '^CONFIG_ENV_IS_IN_MMC=y' "${defconfig}"; then
                   discovered=mmc
-              fi
-
-              if [[ -z "${discovered}" ]]; then
-                  exit_with_error "${BOARD}: no CONFIG_ENV_IS_{NOWHERE,IN_SPI_FLASH,IN_MMC}=y in ${defconfig}; extend __999_uboot_env_check"
               fi
 
               declare -A DISCOVERED_SYMBOL=(
