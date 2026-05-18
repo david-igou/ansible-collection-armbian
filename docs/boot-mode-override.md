@@ -2,6 +2,16 @@
 
 Three ways to change a board's boot mode, ranked by durability.
 
+**Available boot modes** (rendered as labels in every pxelinux.cfg; the
+inventory's `armbian_netboot_boot_mode` selects which becomes `default`):
+
+| Mode | Kernel/initrd/dtb source | Rootfs source | Notes |
+|---|---|---|---|
+| `nfs` | TFTP (rb5009) | NFS export `/<host>/` | Default. Stateless rebuild via `stage_netboot_assets`. |
+| `sd` | TFTP (rb5009) | SD card `LABEL=armbi_root` | Survives rb5009 outage on SD-resident rootfs. |
+| `local` | TFTP (rb5009) | Local disk `LABEL=armbi_root_local` | Passthrough: kernel still central; rootfs local (e.g. NVMe via `provision_local_disk.yml`). |
+| `local_kernel` | **NVMe** `/boot/extlinux/extlinux.conf` | NVMe (whatever extlinux.conf declares) | OPi5Max-only in v1. Hands off via `localboot 0` → U-Boot `localcmd`. Decouples kernel updates from rb5009. |
+
 ## Comparison
 
 | Method | Durability | Touches rb5009? | Use case |

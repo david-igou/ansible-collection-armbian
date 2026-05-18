@@ -46,6 +46,22 @@
       the target disk was provisioned via provision_local_disk.yml.
   when: boot_mode == 'local'
 
+- name: Assert NVMe rootfs when boot_mode=local_kernel
+  ansible.builtin.assert:
+    that:
+      - _root_fstype not in ['nfs', 'nfs4']
+      - _root_device is match('^/dev/nvme')
+    fail_msg: >-
+      boot_mode[local_kernel]: expected NVMe rootfs but got
+      {{ _root_device }} ({{ _root_fstype }}). The local_kernel label
+      runs `localboot 0`, which executes U-Boot's `localcmd`. If
+      _root_device is on the SD card or eMMC, `bootflow scan` likely
+      picked up the wrong bootdev — constrain localcmd to NVMe
+      (e.g. `nvme scan; bootflow scan -b nvme0.blk`). If you got an
+      NFS rootfs, U-Boot fell through to PXE — check localcmd is
+      actually set in the U-Boot binary's default environment.
+  when: boot_mode == 'local_kernel'
+
 - name: "Assert custom mode rootfs source matches verify_match"
   ansible.builtin.assert:
     that:
@@ -58,4 +74,4 @@
       '{{ extra_modes[boot_mode].verify_match | default('<unset>') }}'.
       Define armbian_netboot_extra_modes[{{ boot_mode }}].verify_match
       so this role can assert the rootfs source.
-  when: boot_mode not in ['nfs', 'sd', 'local']
+  when: boot_mode not in ['nfs', 'sd', 'local', 'local_kernel']

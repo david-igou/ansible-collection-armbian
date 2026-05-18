@@ -406,8 +406,9 @@ interactive login replaces them.
 #### 1.3 Add the board to inventory
 
 Edit `inventory/hosts.yml`. Each host needs `armbian_netboot_board_mac`,
-`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` (`nfs` or
-`sd`). For `sd` mode the rendered kernel cmdline defaults to
+`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` (`nfs`,
+`sd`, `local`, or `local_kernel`). For `sd` mode the rendered kernel
+cmdline defaults to
 `root=LABEL=armbi_root`; override with `armbian_netboot_sd_root` only when
 a board has multiple drives carrying that label and the default would be
 ambiguous. The board model must match a key under
@@ -636,6 +637,26 @@ diagnostic bundle (`findmnt`, `/proc/cmdline`, `lsblk`, `journalctl -k`,
 last 200 UART lines if `-e capture_serial=true`), then auto-reverts
 the board to nfs mode for forensic access. Operator fixes the root
 cause and re-runs.
+
+### `local_kernel` boot mode (OPi5Max-only, v1 bring-up)
+
+Variant of `local` in which the **kernel itself** is loaded from the
+NVMe rootfs, not from rb5009's TFTP. The pxelinux.cfg's `local_kernel`
+label has only a `localboot 0` body; U-Boot's `localcmd` env (baked
+into the binary by `playbooks/build_image.yml`'s
+`__999_orangepi5max_localcmd` hook) runs `bootflow scan -b`, which
+hands off to the extlinux bootmeth on the NVMe and follows
+`/boot/extlinux/extlinux.conf` (Armbian's standard `apt`-managed
+boot path). Selecting this mode means `apt upgrade linux-image-*`
+on the board is the kernel update mechanism — no rb5009 TFTP
+refresh, no per-board module rsync from a central template.
+
+v1 scope is bring-up on `orange-pi-5-max-01` only; other boards
+keep the existing modes. The mode requires a rebuilt image (the
+`localcmd` value is baked into U-Boot because OPi5Max ships
+`CONFIG_ENV_IS_NOWHERE=y` and has no persistent env). See
+[`docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md`](docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md)
+for the design, bring-up plan, and verification approach.
 
 See [`docs/runbooks/reprovision-local-disk.md`](docs/runbooks/reprovision-local-disk.md)
 for the full operator runbook: pre-flight checks, what the lifecycle

@@ -49,6 +49,19 @@
         pxe_verbose: true
         earlycon: "uart8250,mmio32,0xfeb50000"
 
+    - name: Render in local_kernel mode (localboot-only label active)
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.pxelinux_render
+      vars:
+        board_mac: "AA:BB:CC:DD:EE:FF"
+        board_console: "ttyS2,1500000"
+        model_name: orange-pi-5-max
+        nfs_server_ip: "10.0.0.10"
+        nfs_root_path: /mnt/ssd/netboot/rootfs
+        hostname: smoke-host
+        boot_mode: local_kernel
+        output_dir: "{{ _output_base }}_local_kernel"
+
     - name: Render with extra_modes (usb_rescue active)
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
