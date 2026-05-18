@@ -14,21 +14,24 @@
    Chain shape (GPT-label partition lookup — board-agnostic):
      setenv bootargs root=LABEL=<root_label> rootfstype=ext4 rootwait rw console=<console>;
      <storage_scan>;
-     part number <storage_dev> 0 \#<root_label> rootpart;
-     ext4load <storage_dev> 0:${rootpart} ${kernel_addr_r} /boot/Image;
-     ext4load <storage_dev> 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
+     gpt setenv <storage_dev> 0 -p <root_label>;
+     ext4load <storage_dev> 0:${gpt_partition_number} ${kernel_addr_r} /boot/Image;
+     ext4load <storage_dev> 0:${gpt_partition_number} ${ramdisk_addr_r} /boot/uInitrd;
      setenv ramdisk_size ${filesize};
-     ext4load <storage_dev> 0:${rootpart} ${fdt_addr_r} /boot/dtb/<dtb>;
+     ext4load <storage_dev> 0:${gpt_partition_number} ${fdt_addr_r} /boot/dtb/<dtb>;
      booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
 
-   `part number <dev> 0 \#<label> rootpart` looks up the partition number
-   whose GPT PARTLABEL matches <root_label> and stores it in U-Boot env
-   var `rootpart`. The backslash-escaped `\#` prevents U-Boot's hush shell
-   from treating `#` as comment-start. This makes the chain work regardless of whether the
-   root partition is p2 (2-partition layout: opi5pro/opi5/rock-5a/rock-5b)
-   or p4 (4-partition layout: opi5max v1 with ESP+boot+var+root). The
-   ${rootpart} tokens are U-Boot env var references resolved at runtime —
-   Jinja does not substitute them.
+   `gpt setenv <dev> 0 -p <label>` looks up the partition whose GPT
+   PARTLABEL matches <root_label> and sets U-Boot env vars
+   ${gpt_partition_number}, ${gpt_partition_addr}, ${gpt_partition_size},
+   and ${gpt_partition_name}. Using `gpt setenv` instead of
+   `part number ... \#<label>` avoids the hush `#` comment-start issue
+   entirely — the partition name is passed as a plain `-p` argument.
+   This makes the chain work regardless of whether the root partition is
+   p2 (2-partition layout: opi5pro/opi5/rock-5a/rock-5b) or p4
+   (4-partition layout: opi5max v1 with ESP+boot+var+root). The
+   ${gpt_partition_number} tokens are U-Boot env var references resolved
+   at runtime — Jinja does not substitute them.
 
    Collection-level defaults (not overridable here — they're invariants
    of the Armbian rootfs layout):
@@ -50,10 +53,10 @@
 {%- set dtb          = overrides.dtb          | default(board_cfg.dtb) -%}
 setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }};
 {{- ' ' }}{{ storage_scan }};
-{{- ' ' }}part number {{ storage_dev }} 0 \\#{{ root_label }} rootpart;
-{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image;
-{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
+{{- ' ' }}gpt setenv {{ storage_dev }} 0 -p {{ root_label }};
+{{- ' ' }}ext4load {{ storage_dev }} 0:${gpt_partition_number} ${kernel_addr_r} /boot/Image;
+{{- ' ' }}ext4load {{ storage_dev }} 0:${gpt_partition_number} ${ramdisk_addr_r} /boot/uInitrd;
 {{- ' ' }}setenv ramdisk_size ${filesize};
-{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${fdt_addr_r} /boot/dtb/{{ dtb }};
+{{- ' ' }}ext4load {{ storage_dev }} 0:${gpt_partition_number} ${fdt_addr_r} /boot/dtb/{{ dtb }};
 {{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
 {%- endmacro -%}

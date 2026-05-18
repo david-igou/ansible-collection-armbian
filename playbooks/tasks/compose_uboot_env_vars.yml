@@ -52,11 +52,11 @@
 # file outside a role. Task 7's molecule scenario verifies both render
 # the same string.
 #
-# Uses `part number <dev> 0 \#<label> rootpart` to look up root partition
-# by GPT PARTLABEL — board-agnostic across 2- and 4-partition layouts.
-# The backslash-escaped `\#` prevents U-Boot's hush from treating `#` as
-# comment-start after whitespace. ${rootpart} is a U-Boot env var reference
-# resolved at runtime.
+# Uses `gpt setenv <dev> 0 -p <label>` to look up the root partition by
+# GPT PARTLABEL — board-agnostic across 2- and 4-partition layouts.
+# Avoids the hush `#` comment-start issue that `part number ... \#<label>`
+# had. ${gpt_partition_number} is a U-Boot env var reference resolved at
+# runtime.
 - name: Source 2b — collection-managed localcmd (only when persist_via == spi)
   vars:
     _lk: "{{ armbian_netboot_local_kernel | default({}) }}"
@@ -68,11 +68,11 @@
     _chain: >-
       setenv bootargs root=LABEL={{ _root_label }} rootfstype=ext4 rootwait rw console={{ _console }};
       {{- ' ' }}{{ _storage_scan }};
-      {{- ' ' }}part number {{ _storage_dev }} 0 \\#{{ _root_label }} rootpart;
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image;
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
+      {{- ' ' }}gpt setenv {{ _storage_dev }} 0 -p {{ _root_label }};
+      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${kernel_addr_r} /boot/Image;
+      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${ramdisk_addr_r} /boot/uInitrd;
       {{- ' ' }}setenv ramdisk_size ${filesize};
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${rootpart} ${fdt_addr_r} /boot/dtb/{{ _dtb }};
+      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${fdt_addr_r} /boot/dtb/{{ _dtb }};
       {{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
   ansible.builtin.set_fact:
     _src2_localcmd:

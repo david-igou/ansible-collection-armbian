@@ -22,14 +22,12 @@
           - "'nvme scan' in _table_text"
           - "'console=ttyS2,1500000n8' in _table_text"
           - "'root=LABEL=armbi_root_local' in _table_text"
-          - "'part number nvme 0' in _table_text"
-          - "' #armbi_root_local rootpart' not in _table_text"
-          - "'ext4load nvme 0:${rootpart}' in _table_text"
+          - "'gpt setenv nvme 0 -p armbi_root_local' in _table_text"
+          - "'ext4load nvme 0:${gpt_partition_number}' in _table_text"
           - "'booti' in _table_text"
         fail_msg: |
-          Expected orangepi5-max row with GPT-label lookup (part number nvme 0 \#armbi_root_local rootpart
-          — escaped # so U-Boot hush does not treat it as comment-start)
-          / ext4load nvme 0:${rootpart} / nvme scan / ttyS2,1500000n8 /
+          Expected orangepi5-max row with GPT-label lookup (gpt setenv nvme 0 -p armbi_root_local)
+          / ext4load nvme 0:${gpt_partition_number} / nvme scan / ttyS2,1500000n8 /
           rk3588-orangepi-5-max.dtb / armbi_root_local / booti.
           Got:
           {{ _table_text }}
