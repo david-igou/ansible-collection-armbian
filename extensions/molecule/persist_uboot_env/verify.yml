@@ -67,12 +67,11 @@
         that:
           - "'rockchip/rk3588-rock-5b.dtb' in _b.localcmd"
           - "'root=LABEL=armbi_root_local' in _b.localcmd"
-          - "'gpt setenv nvme 0 -p armbi_root_local' in _b.localcmd"
-          - "'ext4load nvme 0:${gpt_partition_number}' in _b.localcmd"
+          - "'ext4load nvme 0:2' in _b.localcmd"
+          - "'nvme scan' in _b.localcmd"
         fail_msg: >-
-          localcmd should contain dtb / root_label / GPT-label lookup
-          (gpt setenv nvme 0 -p armbi_root_local) / ext4load nvme
-          0:${gpt_partition_number} from local_kernel block.
+          localcmd should contain dtb / root_label / ext4load nvme 0:2
+          (rock-5b 2-partition layout, p2=root) / nvme scan from local_kernel block.
           Got: {{ _b.localcmd }}
 
     - name: HOST B — board defaults present, _extra keys absent

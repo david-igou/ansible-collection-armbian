@@ -52,15 +52,13 @@
 # file outside a role. Task 7's molecule scenario verifies both render
 # the same string.
 #
-# Uses `gpt setenv <dev> 0 -p <label>` to look up the root partition by
-# GPT PARTLABEL — board-agnostic across 2- and 4-partition layouts.
-# Avoids the hush `#` comment-start issue that `part number ... \#<label>`
-# had. ${gpt_partition_number} is a U-Boot env var reference resolved at
-# runtime.
+# Uses per-board hardcoded storage (full device address including partition,
+# e.g. "nvme 0:2"). Universal lookup approaches (part number + gpt setenv)
+# both failed on opi5pro hardware; reverted to hardcoded per #82 design.
 - name: Source 2b — collection-managed localcmd (only when persist_via == spi)
   vars:
     _lk: "{{ armbian_netboot_local_kernel | default({}) }}"
-    _storage_dev: "{{ _lk.storage_dev | default(_board_cfg.local_kernel.storage_dev) }}"
+    _storage: "{{ _lk.storage | default(_board_cfg.local_kernel.storage) }}"
     _storage_scan: "{{ _lk.storage_scan | default(_board_cfg.local_kernel.storage_scan) }}"
     _root_label: "{{ _lk.root_label | default('armbi_root_local') }}"
     _console: "{{ _lk.console | default(_board_cfg.console) }}"
@@ -68,11 +66,10 @@
     _chain: >-
       setenv bootargs root=LABEL={{ _root_label }} rootfstype=ext4 rootwait rw console={{ _console }};
       {{- ' ' }}{{ _storage_scan }};
-      {{- ' ' }}gpt setenv {{ _storage_dev }} 0 -p {{ _root_label }};
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${kernel_addr_r} /boot/Image;
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${ramdisk_addr_r} /boot/uInitrd;
+      {{- ' ' }}ext4load {{ _storage }} ${kernel_addr_r} /boot/Image;
+      {{- ' ' }}ext4load {{ _storage }} ${ramdisk_addr_r} /boot/uInitrd;
       {{- ' ' }}setenv ramdisk_size ${filesize};
-      {{- ' ' }}ext4load {{ _storage_dev }} 0:${gpt_partition_number} ${fdt_addr_r} /boot/dtb/{{ _dtb }};
+      {{- ' ' }}ext4load {{ _storage }} ${fdt_addr_r} /boot/dtb/{{ _dtb }};
       {{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
   ansible.builtin.set_fact:
     _src2_localcmd:
