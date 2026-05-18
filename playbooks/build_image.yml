@@ -446,18 +446,24 @@
       # lives at roles/image_build/templates/render_localcmd_chain.j2
       # and the molecule local_kernel_render scenario verifies the
       # rendered output.
+      #
+      # Chain uses `part number <dev> 0 #<label> rootpart` to look up the
+      # root partition by its GPT PARTLABEL — works on 2-partition layouts
+      # (p2=root: opi5pro/opi5/rock-5a/rock-5b) and 4-partition layouts
+      # (p4=root: opi5max v1) alike. ${rootpart} is a U-Boot env var
+      # reference resolved at runtime, not by Jinja.
       ansible.builtin.set_fact:
         _local_kernel_dispatch_table: |
           {% for board_model in _board_models %}
           {% set cfg = armbian_netboot_board_configs[board_model] %}
           {% if cfg.local_kernel is defined %}
           {%- set lk = cfg.local_kernel -%}
-          {%- set storage      = lk.storage -%}
+          {%- set storage_dev  = lk.storage_dev -%}
           {%- set storage_scan = lk.storage_scan -%}
           {%- set root_label   = 'armbi_root_local' -%}
           {%- set console      = cfg.console -%}
           {%- set dtb          = cfg.dtb -%}
-              [{{ cfg.armbian_board_name }}]='setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }}; {{ storage_scan }}; ext4load {{ storage }} ${kernel_addr_r} /boot/Image; ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }}; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
+              [{{ cfg.armbian_board_name }}]='setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }}; {{ storage_scan }}; part number {{ storage_dev }} 0 #{{ root_label }} rootpart; ext4load {{ storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image; ext4load {{ storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load {{ storage_dev }} 0:${rootpart} ${fdt_addr_r} /boot/dtb/{{ dtb }}; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
           {% endif %}
           {% endfor %}
 

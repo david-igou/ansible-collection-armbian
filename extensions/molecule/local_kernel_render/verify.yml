@@ -19,15 +19,16 @@
         that:
           - "'[orangepi5-max]=' in _table_text"
           - "'rockchip/rk3588-orangepi-5-max.dtb' in _table_text"
-          - "'nvme 0:4' in _table_text"
           - "'nvme scan' in _table_text"
           - "'console=ttyS2,1500000n8' in _table_text"
           - "'root=LABEL=armbi_root_local' in _table_text"
-          - "'ext4load nvme 0:4' in _table_text"
+          - "'part number nvme 0 #armbi_root_local rootpart' in _table_text"
+          - "'ext4load nvme 0:${rootpart}' in _table_text"
           - "'booti' in _table_text"
         fail_msg: |
-          Expected orangepi5-max row with nvme 0:4 / nvme scan / ttyS2,1500000n8 /
-          rk3588-orangepi-5-max.dtb / armbi_root_local / ext4load / booti.
+          Expected orangepi5-max row with GPT-label lookup (part number nvme 0 #armbi_root_local rootpart)
+          / ext4load nvme 0:${rootpart} / nvme scan / ttyS2,1500000n8 /
+          rk3588-orangepi-5-max.dtb / armbi_root_local / booti.
           Got:
           {{ _table_text }}
 

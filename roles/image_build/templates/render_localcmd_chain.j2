@@ -4,11 +4,30 @@
 
    Inputs:
      board_cfg: an entry from armbian_netboot_board_configs (must have
-                local_kernel.{storage,storage_scan}, dtb, console).
+                local_kernel.{storage_dev,storage_scan}, dtb, console).
      overrides: optional dict with keys that override the board defaults.
-                Useful for per-host customization in the SPI-persist path.
+                Supported override keys: storage_dev, storage_scan,
+                root_label, console, dtb.
 
    Output: single-line U-Boot command string ending in `booti`.
+
+   Chain shape (GPT-label partition lookup — board-agnostic):
+     setenv bootargs root=LABEL=<root_label> rootfstype=ext4 rootwait rw console=<console>;
+     <storage_scan>;
+     part number <storage_dev> 0 #<root_label> rootpart;
+     ext4load <storage_dev> 0:${rootpart} ${kernel_addr_r} /boot/Image;
+     ext4load <storage_dev> 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
+     setenv ramdisk_size ${filesize};
+     ext4load <storage_dev> 0:${rootpart} ${fdt_addr_r} /boot/dtb/<dtb>;
+     booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+
+   `part number <dev> 0 #<label> rootpart` looks up the partition number
+   whose GPT PARTLABEL matches <root_label> and stores it in U-Boot env
+   var `rootpart`. This makes the chain work regardless of whether the
+   root partition is p2 (2-partition layout: opi5pro/opi5/rock-5a/rock-5b)
+   or p4 (4-partition layout: opi5max v1 with ESP+boot+var+root). The
+   ${rootpart} tokens are U-Boot env var references resolved at runtime —
+   Jinja does not substitute them.
 
    Collection-level defaults (not overridable here — they're invariants
    of the Armbian rootfs layout):
@@ -23,16 +42,17 @@
 #}
 {%- macro render_localcmd_chain(board_cfg, overrides={}) -%}
 {%- set lk = board_cfg.local_kernel -%}
-{%- set storage      = overrides.storage      | default(lk.storage) -%}
+{%- set storage_dev  = overrides.storage_dev  | default(lk.storage_dev) -%}
 {%- set storage_scan = overrides.storage_scan | default(lk.storage_scan) -%}
 {%- set root_label   = overrides.root_label   | default('armbi_root_local') -%}
 {%- set console      = overrides.console      | default(board_cfg.console) -%}
 {%- set dtb          = overrides.dtb          | default(board_cfg.dtb) -%}
 setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }};
 {{- ' ' }}{{ storage_scan }};
-{{- ' ' }}ext4load {{ storage }} ${kernel_addr_r} /boot/Image;
-{{- ' ' }}ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd;
+{{- ' ' }}part number {{ storage_dev }} 0 #{{ root_label }} rootpart;
+{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image;
+{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
 {{- ' ' }}setenv ramdisk_size ${filesize};
-{{- ' ' }}ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }};
+{{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${fdt_addr_r} /boot/dtb/{{ dtb }};
 {{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
 {%- endmacro -%}

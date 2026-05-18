@@ -66,10 +66,12 @@
       ansible.builtin.assert:
         that:
           - "'rockchip/rk3588-rock-5b.dtb' in _b.localcmd"
-          - "'nvme 0:4' in _b.localcmd"
           - "'root=LABEL=armbi_root_local' in _b.localcmd"
+          - "'part number nvme 0' in _b.localcmd"
+          - "'ext4load nvme 0:${rootpart}' in _b.localcmd"
         fail_msg: >-
-          localcmd should contain dtb/storage/root_label from local_kernel block.
+          localcmd should contain dtb / root_label / GPT-label lookup (part number nvme 0)
+          / ext4load nvme 0:${rootpart} from local_kernel block.
           Got: {{ _b.localcmd }}
 
     - name: HOST B — board defaults present, _extra keys absent

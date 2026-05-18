@@ -16,7 +16,7 @@
         console: ttyS2,1500000n8
         earlycon: uart8250,mmio32,0xfeb50000
         local_kernel:
-          storage: "nvme 0:4"
+          storage_dev: "nvme"
           storage_scan: "nvme scan"
         uboot_env:
           storage: nowhere
@@ -28,7 +28,7 @@
         console: ttyS2,1500000n8
         earlycon: uart8250,mmio32,0xfeb50000
         local_kernel:
-          storage: "nvme 0:4"
+          storage_dev: "nvme"
           storage_scan: "nvme scan"
         uboot_env:
           storage: spi_flash

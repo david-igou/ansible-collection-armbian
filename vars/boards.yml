@@ -21,7 +21,13 @@
 #                        armbian_netboot_pxe_verbose=true; consulted
 #                        only by the verbose path in pxelinux_cfg.j2.
 #   local_kernel         OPTIONAL. Board's local_kernel mechanism config.
-#                        - storage: U-Boot device address (e.g. "nvme 0:4").
+#                        - storage_dev: U-Boot device class without partition
+#                          (e.g. "nvme"). Used with " 0" for `part number
+#                          nvme 0 #<label> rootpart`, then as the device
+#                          prefix in ext4load commands. Replaces the old
+#                          hardcoded "nvme 0:4" field so the chain works on
+#                          2-partition layouts (p2=root) and 4-partition
+#                          layouts (p4=root) alike.
 #                        - storage_scan: scan command (e.g. "nvme scan").
 #                        Absent => board does not support local_kernel mode.
 #   uboot_env            Board's U-Boot env storage characteristics. Required
@@ -46,7 +52,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage_dev: "nvme"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere
@@ -59,7 +65,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage_dev: "nvme"
       storage_scan: "nvme scan"
     uboot_env:
       storage: spi_flash
@@ -84,7 +90,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage_dev: "nvme"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere
@@ -97,7 +103,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage_dev: "nvme"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere    # confirmed: rock-5a has no SPI flash
@@ -110,7 +116,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage_dev: "nvme"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere    # CONFIG_ENV_IS_NOWHERE=y in defconfig
