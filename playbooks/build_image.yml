@@ -88,83 +88,37 @@
               fi
           }
 
-          # Bake `localcmd` into the OPi5Max U-Boot binary's compile-time
-          # default environment so the pxelinux `local_kernel` label —
-          # whose body is `localboot 0` — can boot kernel/initrd/dtb off
-          # the NVMe. `localboot <flag>` in U-Boot's pxe extension runs
-          # `$localcmd` (the flag is ignored, per
-          # docs.u-boot.org/en/stable/usage/pxe.html). Net result:
-          # kernel/initrd/dtb load from NVMe; rb5009 only served the
-          # pxelinux.cfg that selected the mode.
+          # Generic local_kernel bake hook. Replaces the OPi5Max-specific
+          # __999_orangepi5max_localcmd hook from #82. The dispatch table
+          # below is templated by Ansible from vars/boards.yml at playbook
+          # run time — adding a new board to local_kernel means adding a
+          # local_kernel:{storage,storage_scan} block to its entry in
+          # vars/boards.yml, not editing this hook.
           #
-          # Mechanism: Approach B (explicit `ext4load + booti` chain).
-          # Approach A (bake `localcmd=bootflow scan -b` and let bootstd
-          # find /boot/extlinux/extlinux.conf or /boot/boot.scr) does
-          # NOT work on this disk_provision-generated layout because
-          # bootstd skips the ext4 partitions: armbi_var (p3) and
-          # armbi_root_local (p4) carry GPT attribute bit 59
-          # (0x0800000000000000 = systemd-repart "GrowFs"/no-auto), and
-          # bootflow scan respects no-auto. Bootstd then fails out of
-          # partition 1 (FAT/ESP — `FAT sector size mismatch (fs=4096,
-          # dev=512)`) and never finds anything. Verified on hardware
-          # iter LK1 (2026-05-17). Approach B sidesteps bootstd entirely
-          # and loads the kernel directly off the labeled partition.
+          # Approach B per #82's LK1 evidence — explicit ext4load + booti
+          # because U-Boot bootstd's bootflow scan skips
+          # disk_provision-generated GPT partitions carrying the systemd-
+          # repart "GrowFs" attribute bit 59. See the closing notes in
+          # docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md
+          # for the rationale; this hook just makes the mechanism board-
+          # agnostic.
           #
-          # OPi5Max's defconfig sets CONFIG_ENV_IS_NOWHERE=y (env is
-          # volatile — see the `0099-prefer-chip-mac-over-cpuid.patch`
-          # rationale above), so fw_setenv has no persistent store. The
-          # localcmd value is locked into the binary by this hook;
-          # changing it requires a rebuild + reflash. Acceptable because
-          # the value is a stable design choice. Per-host variations
-          # (which kernel/initrd actually run) come from the stable
-          # Armbian symlinks `/boot/Image`, `/boot/uInitrd`, `/boot/dtb`
-          # — all maintained by `apt upgrade linux-image-*`, so kernel
-          # updates on this board are decoupled from rb5009 (#78).
-          #
-          # Brittleness baked into the binary (OPi5Max-only constants):
-          #  - NVMe partition number `nvme 0:4` — bound to
-          #    disk_provision's layout (4 partitions, root last).
-          #  - DTB filename `rockchip/rk3588-orangepi-5-max.dtb` —
-          #    per-board.
-          #  - Root label `armbi_root_local` — matches disk_provision's
-          #    default and pxelinux_render's `local_root` default.
-          #  - Console `ttyS2,1500000n8` — per-board from vars/boards.yml.
-          # Generalizing this hook for other boards would lift these
-          # into vars/boards.yml entries and template-substitute at
-          # build time. v1 hardcodes; the function is BOARD-gated so
-          # other boards' builds are unaffected.
-          #
-          # Mechanism: sed-insert one entry into the
-          # `CFG_EXTRA_ENV_SETTINGS` macro chain in
-          # `include/configs/rockchip-common.h`. The macro is a
-          # backslash-continued `\0`-terminated string concatenation;
-          # one extra entry on the line after the macro header is
-          # well-formed. The legacy `CONFIG_`-prefixed name was renamed
-          # to `CFG_` in v2024.01; accept either form so this hook
-          # survives an upstream rebase. Missing macro → loud build
-          # failure rather than silently shipping a binary without
-          # localcmd. Idempotent on repeat builds (greps for marker text
-          # before inserting).
-          #
-          # See docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md
-          # for design + LK1 evidence.
-          function pre_config_uboot_target__999_orangepi5max_localcmd() {
-              [[ "${BOARD}" != "orangepi5-max" ]] && return 0
+          # Idempotent: the literal `localcmd=setenv bootargs root=LABEL=`
+          # substring is the marker; repeat builds against a cached tree
+          # skip the insert. Post-condition grep defends against a silent
+          # sed no-op (matched-0-lines).
+          function pre_config_uboot_target__999_local_kernel_bake() {
               [[ "${BRANCH}" != "edge" ]] && return 0
 
-              # Constrain the macro search to rk3588 SoC config headers.
-              # Hundreds of unrelated `include/configs/*.h` define the
-              # same macro (ColdFire boards, PowerPC, x86, etc.) — a
-              # broad glob picks the alphabetically-first match (e.g.
-              # M5208EVBE.h), which silently patches a binary that
-              # never reaches the rk3588 build. v2025.04 places the
-              # rk3588 family's macro in include/configs/rk3588_common.h;
-              # earlier/later trees may rename — fall back to a
-              # narrower glob across rk3588* files. The hook is
-              # already BOARD-gated to orangepi5-max (rk3588), so a
-              # rk3588-restricted search is correct by construction.
-              # Accept either the modern `CFG_`-prefixed name or the
-              # legacy `CONFIG_`-prefixed form (renamed in v2024.01).
+              declare -A LOCAL_KERNEL_CHAIN=(
+          {{ _local_kernel_dispatch_table | trim }}
+              )
+
+              local chain="${LOCAL_KERNEL_CHAIN[${BOARD}]:-}"
+              [[ -z "${chain}" ]] && return 0   # board doesn't opt into local_kernel
+
+              # Locate CFG_EXTRA_ENV_SETTINGS in rk3588_common.h (fall
+              # back to CONFIG_-prefixed for pre-v2024.01 trees).
               local header marker
               if [[ -f include/configs/rk3588_common.h ]] \
                  && grep -qE '^[[:space:]]*#define[[:space:]]+(CFG_|CONFIG_)EXTRA_ENV_SETTINGS' include/configs/rk3588_common.h; then
@@ -173,7 +127,7 @@
                   header="$(grep -lE '^[[:space:]]*#define[[:space:]]+(CFG_|CONFIG_)EXTRA_ENV_SETTINGS' include/configs/rk3588*.h 2>/dev/null | head -n 1)"
               fi
               if [[ -z "${header}" ]]; then
-                  exit_with_error "${BOARD}: no EXTRA_ENV_SETTINGS in include/configs/rk3588*.h — upstream changed; fix __999_orangepi5max_localcmd"
+                  exit_with_error "${BOARD}: no EXTRA_ENV_SETTINGS in include/configs/rk3588*.h — upstream changed; fix __999_local_kernel_bake"
               fi
               if grep -q '^[[:space:]]*#define[[:space:]]\+CFG_EXTRA_ENV_SETTINGS' "${header}"; then
                   marker='^[[:space:]]*#define[[:space:]]\+CFG_EXTRA_ENV_SETTINGS'
@@ -182,41 +136,23 @@
               fi
               display_alert "${BOARD}" "localcmd target macro found in ${header}" "info"
 
-              # Idempotency: skip if the literal localcmd marker is
-              # already present (repeat build against a cached tree).
-              if grep -q 'localcmd=setenv bootargs root=LABEL=armbi_root_local' "${header}"; then
+              # Idempotency: skip if any localcmd marker is already present.
+              if grep -q 'localcmd=setenv bootargs root=LABEL=' "${header}"; then
                   display_alert "${BOARD}" "localcmd already baked into ${header}" "info"
                   return 0
               fi
 
-              # Approach B chain (proven on iter LK1). Single-quoted in
-              # bash so `${kernel_addr_r}` etc. pass through to U-Boot
-              # at boot time unmolested.
-              local chain='setenv bootargs root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=ttyS2,1500000n8; nvme scan; ext4load nvme 0:4 ${kernel_addr_r} /boot/Image; ext4load nvme 0:4 ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load nvme 0:4 ${fdt_addr_r} /boot/dtb/rockchip/rk3588-orangepi-5-max.dtb; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
-
-              # `printf` builds the inserted line with all escapes
-              # resolved deterministically. `%s` substitutes the chain
-              # literally (no escape interpretation inside %s).
-              #   \t   → literal TAB (indent for readability)
-              #   \\0  → literal backslash-zero (env-entry NUL terminator
-              #          embedded in the C string literal)
-              #   \\   → trailing backslash (C preprocessor line cont.)
-              # `sed r` then reads the file and inserts its contents
-              # after the marker line, with no further escape interp.
               local tmp
               tmp="$(mktemp)"
               printf '\t"localcmd=%s\\0" \\\n' "${chain}" > "${tmp}"
               sed -i "/${marker}/r ${tmp}" "${header}"
               rm -f "${tmp}"
 
-              # Post-condition: verify the line landed where expected
-              # (defends against an `r` insertion that found no marker
-              # — sed would silently no-op).
-              if ! grep -q 'localcmd=setenv bootargs root=LABEL=armbi_root_local' "${header}"; then
+              if ! grep -q 'localcmd=setenv bootargs root=LABEL=' "${header}"; then
                   exit_with_error "${BOARD}: localcmd bake silently failed — marker matched 0 lines in ${header}"
               fi
 
-              display_alert "${BOARD}" "baked Approach-B localcmd chain into U-Boot default env" "info"
+              display_alert "${BOARD}" "baked local_kernel localcmd chain into U-Boot default env" "info"
           }
 
           # Bumps rock-5b's mainline u-boot pin from armbian/build's
@@ -448,6 +384,27 @@
              | map('extract', hostvars, 'armbian_netboot_board_model')
              | unique
              | list }}
+
+    - name: Render local_kernel dispatch table for the build hook
+      # Macro inlined here because Jinja's set_fact context blocks
+      # absolute-path imports via {%- from ... -%}. The canonical macro
+      # lives at roles/image_build/templates/render_localcmd_chain.j2
+      # and the molecule local_kernel_render scenario verifies the
+      # rendered output.
+      ansible.builtin.set_fact:
+        _local_kernel_dispatch_table: |
+          {% for board_model in _board_models %}
+          {% set cfg = armbian_netboot_board_configs[board_model] %}
+          {% if cfg.local_kernel is defined %}
+          {%- set lk = cfg.local_kernel -%}
+          {%- set storage      = lk.storage -%}
+          {%- set storage_scan = lk.storage_scan -%}
+          {%- set root_label   = 'armbi_root_local' -%}
+          {%- set console      = cfg.console -%}
+          {%- set dtb          = cfg.dtb -%}
+              [{{ cfg.armbian_board_name }}]='setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }}; {{ storage_scan }}; ext4load {{ storage }} ${kernel_addr_r} /boot/Image; ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }}; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
+          {% endif %}
+          {% endfor %}
 
     - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
       ansible.builtin.assert:
