@@ -22,12 +22,12 @@
 #                        only by the verbose path in pxelinux_cfg.j2.
 #   local_kernel         OPTIONAL. Board's local_kernel mechanism config.
 #                        - storage: Full U-Boot device address including
-#                          partition number (e.g. "nvme 0:2" for the common
-#                          2-partition layout where p2=root, or "nvme 0:4"
-#                          for opi5max's outlier 4-partition layout where
-#                          p4=root). Per-board hardcoded — disk_provision
-#                          creates 2 partitions (var=p1, root=p2) for all
-#                          boards except opi5max v1 (4 partitions, p4=root).
+#                          partition number. Canonical layout is a single
+#                          root partition at p1, so the universal default
+#                          is "nvme 0:1". Override per-host via
+#                          armbian_netboot_local_kernel.storage if your
+#                          disk_provision DSL creates a different layout
+#                          (e.g. additional data partitions).
 #                        - storage_scan: scan command (e.g. "nvme scan").
 #                        Absent => board does not support local_kernel mode.
 #   uboot_env            Board's U-Boot env storage characteristics. Required
@@ -52,7 +52,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:2"
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere
@@ -65,7 +65,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:2"
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: spi_flash
@@ -90,7 +90,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:2"
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere
@@ -103,7 +103,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:2"
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere    # confirmed: rock-5a has no SPI flash
@@ -116,7 +116,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"    # outlier: v1 has 4-partition layout (ESP+boot+var+root), proven via #82 LK1
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: nowhere    # CONFIG_ENV_IS_NOWHERE=y in defconfig

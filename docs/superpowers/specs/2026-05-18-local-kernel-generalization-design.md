@@ -54,7 +54,8 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:                  # absent => board doesn't support local_kernel
-      storage: "nvme 0:4"          # U-Boot device address
+      storage: "nvme 0:1"          # U-Boot device address — "nvme 0:1" is the
+                                   # universal default (single root partition at p1)
       storage_scan: "nvme scan"    # how to enumerate the controller
     uboot_env:                     # board's U-Boot env characteristics
       storage: nowhere             # 'nowhere' | 'spi_flash' | 'mmc'
@@ -67,7 +68,7 @@ armbian_netboot_board_configs:
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
     local_kernel:
-      storage: "nvme 0:4"
+      storage: "nvme 0:1"
       storage_scan: "nvme scan"
     uboot_env:
       storage: spi_flash
@@ -262,30 +263,23 @@ Five boards in the live fleet. After this spec lands, the target inventory state
 
 | Host | Board model | `uboot_env.storage` | `boot_mode` | `persist_via` | NVMe layout |
 |---|---|---|---|---|---|
-| opi5pro-01 | orange-pi-5-pro | nowhere¹ | local_kernel | hook | new |
-| rock-5b-01 | rock-5b | spi_flash | local_kernel | **spi** | new |
-| orange-pi-5-01 | orange-pi-5 | nowhere¹ | local_kernel | hook | new |
-| rock-5a-01 | rock-5a | nowhere | local_kernel | hook | new |
-| orange-pi-5-max-01 | orange-pi-5-max | nowhere | local_kernel | hook | existing |
+| opi5pro-01 | orange-pi-5-pro | nowhere¹ | local_kernel | hook | single-partition (p1=root) |
+| rock-5b-01 | rock-5b | spi_flash | local_kernel | **spi** | single-partition (p1=root) |
+| orange-pi-5-01 | orange-pi-5 | nowhere¹ | local_kernel | hook | single-partition (p1=root) |
+| rock-5a-01 | rock-5a | nowhere | local_kernel | hook | single-partition (p1=root) |
+| orange-pi-5-max-01 | orange-pi-5-max | nowhere | local_kernel | hook | single-partition (p1=root) |
 
 ¹ Verified at first build via the defconfig assertion in Section 2.
 
 **Per-board metadata additions** (`vars/boards.yml`): every board gets a `local_kernel` block (storage = `"nvme 0:4"`, storage_scan = `"nvme scan"`) and a `uboot_env` block. rock-5b's `uboot_env` carries the `fw_env_config` + `defaults` migrated from today's `persist_uboot_env.yml` hardcoded values. The other four boards' `uboot_env: { storage: nowhere }` is trivial.
 
-**Per-host NVMe layout** — for the four boards not currently on `local_disks`, the inventory gains an `armbian_netboot_local_disks` block matching opi5max-01's shape:
+**Per-host NVMe layout** — canonical layout is a single root partition that grows to fill the disk. The `disk_provision` DSL creates one partition labeled `armbi_root_local` at `/dev/nvme0n1p1`, matching `local_kernel.storage: "nvme 0:1"` in `vars/boards.yml`. If an operator needs additional partitions (e.g. a dedicated data volume), they override `armbian_netboot_local_disks` per-host and adjust `armbian_netboot_local_kernel.storage` accordingly.
 
 ```yaml
 armbian_netboot_local_disks:
   - device: /dev/nvme0n1
     wipe: true
     layout:
-      - id: var
-        size: 20GiB
-        type: var
-        format: ext4
-        label: armbi_var
-        mount: /var
-        preserve_on_reprovision: true
       - id: root
         size: grow
         type: root
@@ -293,8 +287,6 @@ armbian_netboot_local_disks:
         label: armbi_root_local
         mount: /
 ```
-
-The `preserve_on_reprovision: true` on `/var` stays (orthogonal to the kernel-update story; useful for any data that should survive a rootfs swap). The rest of the spec does not depend on it.
 
 **Bring-up sequence per board** (executed during plan execution, not in this spec):
 
@@ -324,7 +316,7 @@ Closing comment posts:
 ## Open questions
 
 1. **Default `persist_via` per board.** Currently the default in the inventory shape is `hook`. Should the default be inferred from the board's `uboot_env.storage` (i.e., `hook` on NOWHERE, `spi` on SPI-flash)? Trade-off: smarter default vs. surprise factor when a board's env storage changes. Leaning toward explicit `hook` default, but worth revisiting after rock-5b-01 bring-up evidence.
-2. **Should `preserve_on_reprovision: true` on `/var` partitions stay as the recommended default?** The spec is framing it as orthogonal. Useful for any user data on `/var`. May want a separate doc note on when to enable / disable, since the original motivation (k3s state preservation across kernel updates) is no longer load-bearing.
+2. **Single-partition canonical layout adopted.** The `/var` separate partition and `preserve_on_reprovision: true` have been dropped. The canonical `disk_provision` layout is a single root partition at p1 (`armbi_root_local`), matching `local_kernel.storage: "nvme 0:1"` for all boards. Operators who need additional partitions (e.g. a dedicated data volume) override `armbian_netboot_local_disks` per-host and set `armbian_netboot_local_kernel.storage` accordingly. The `preserve_on_reprovision` DSL field remains in the provisioner for other use cases but is not used in the reference inventory.
 3. **Defconfig assertion threshold.** The build-time assertion errors out on storage-class mismatch. Should it warn-only on first build of a new board (giving an operator time to align `vars/boards.yml`) and harden to error after? Probably error-only — silent storage-class drift would break Section-1 validation downstream.
 
 ## Sources

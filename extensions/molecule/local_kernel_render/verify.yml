@@ -22,10 +22,10 @@
           - "'nvme scan' in _table_text"
           - "'console=ttyS2,1500000n8' in _table_text"
           - "'root=LABEL=armbi_root_local' in _table_text"
-          - "'ext4load nvme 0:4' in _table_text"
+          - "'ext4load nvme 0:1' in _table_text"
           - "'booti' in _table_text"
         fail_msg: |
-          Expected orangepi5-max row with ext4load nvme 0:4 (4-partition layout, p4=root)
+          Expected orangepi5-max row with ext4load nvme 0:1 (single-partition layout, p1=root)
           / nvme scan / ttyS2,1500000n8 / rk3588-orangepi-5-max.dtb / armbi_root_local / booti.
           Got:
           {{ _table_text }}
@@ -37,10 +37,10 @@
           - "'rockchip/rk3588-rock-5b.dtb' in _table_text"
           - "'console=ttyS2,1500000n8' in _table_text"
           - "'root=LABEL=armbi_root_local' in _table_text"
-          - "'ext4load nvme 0:2' in _table_text"
+          - "'ext4load nvme 0:1' in _table_text"
           - "'booti' in _table_text"
         fail_msg: |
-          Expected rock-5b row with ext4load nvme 0:2 (2-partition layout, p2=root)
+          Expected rock-5b row with ext4load nvme 0:1 (single-partition layout, p1=root)
           / rk3588-rock-5b.dtb / ttyS2,1500000n8 / armbi_root_local / booti.
           Got:
           {{ _table_text }}
@@ -82,32 +82,21 @@
           rock-5b's row should contain rk3588-rock-5b.dtb.
           Row: {{ _rock5b_row }}
 
-    - name: Assert opi5max row uses nvme 0:4 (not nvme 0:2)
+    - name: Assert both rows use nvme 0:1 (single-partition canonical layout)
       vars:
-        # Stop at closing quote so the match covers only the opi5max line.
         _opi5max_row: >-
           {{ _table_text
              | regex_search("\[orangepi5-max\]='[^']*'", multiline=True)
              | default('') }}
-      ansible.builtin.assert:
-        that:
-          - "'nvme 0:4' in _opi5max_row"
-          - "'nvme 0:2' not in _opi5max_row"
-        fail_msg: |
-          opi5max row should use nvme 0:4 (4-partition layout), not nvme 0:2.
-          Row: {{ _opi5max_row }}
-
-    - name: Assert rock-5b row uses nvme 0:2 (not nvme 0:4)
-      vars:
-        # Stop at closing quote so the match covers only the rock-5b line.
         _rock5b_row: >-
           {{ _table_text
              | regex_search("\[rock-5b\]='[^']*'", multiline=True)
              | default('') }}
       ansible.builtin.assert:
         that:
-          - "'nvme 0:2' in _rock5b_row"
-          - "'nvme 0:4' not in _rock5b_row"
+          - "'nvme 0:1' in _opi5max_row"
+          - "'nvme 0:1' in _rock5b_row"
         fail_msg: |
-          rock-5b row should use nvme 0:2 (2-partition layout), not nvme 0:4.
-          Row: {{ _rock5b_row }}
+          Both boards should use nvme 0:1 (single-partition layout).
+          opi5max row: {{ _opi5max_row }}
+          rock-5b row: {{ _rock5b_row }}
