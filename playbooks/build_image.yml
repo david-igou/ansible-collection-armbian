@@ -532,13 +532,22 @@
   vars:
     _builder: "{{ groups['armbian_builders'][0] }}"
   tasks:
+    # ansible.posix.synchronize splits --rsh on whitespace, causing -o flags
+    # to escape the ssh argument scope and break agent-disabled auth.
+    # Use direct rsync via command: with argv: so --rsh is a discrete token.
     - name: Push staged image + manifest to netboot server (sudo on receive)
-      ansible.posix.synchronize:
-        src: "/tmp/armbian_publish/{{ item }}/"
-        dest: "{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
-        delete: false
-        rsync_path: "sudo rsync"
-        rsync_opts:
-          - "--mkpath"
-          - "--rsh=ssh -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --compress
+          - --mkpath
+          - --rsync-path=sudo rsync
+          - --rsh
+          - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
+          - "/tmp/armbian_publish/{{ item }}/"
+          - "{{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
+      delegate_to: localhost
+      connection: local
+      changed_when: true
       loop: "{{ hostvars[_builder]._build_targets }}"
