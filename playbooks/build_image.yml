@@ -194,11 +194,20 @@
                   [spi_flash]=CONFIG_ENV_IS_IN_SPI_FLASH
                   [mmc]=CONFIG_ENV_IS_IN_MMC
               )
+              # NOTE: pre_config_uboot_target fires BEFORE armbian/build
+              # applies board-config-level defconfig fragments that may
+              # add CONFIG_ENV_IS_IN_SPI_FLASH=y or similar. So
+              # `discovered` here reflects the SOURCE defconfig only,
+              # not the final resolved config. False-positive mismatches
+              # (e.g. rock-5b's source defconfig has no CONFIG_ENV_IS_*
+              # but the running binary uses SPI) downgrade this from a
+              # build-blocker to a warning. A future improvement would
+              # move the check to a post-defconfig hook stage.
               if [[ "${discovered}" != "${expected}" ]]; then
-                  exit_with_error "${BOARD}: defconfig reports ${DISCOVERED_SYMBOL[${discovered}]}=y but vars/boards.yml says uboot_env.storage=${expected}"
+                  display_alert "${BOARD}" "uboot_env.storage drift suspected: defconfig reports ${DISCOVERED_SYMBOL[${discovered}]}=y but vars/boards.yml says uboot_env.storage=${expected}; may be a false positive if board-config patches in env storage later" "wrn"
+              else
+                  display_alert "${BOARD}" "uboot_env.storage matches defconfig (${discovered})" "info"
               fi
-
-              display_alert "${BOARD}" "uboot_env.storage matches defconfig (${discovered})" "info"
           }
 
           # Bumps rock-5b's mainline u-boot pin from armbian/build's
