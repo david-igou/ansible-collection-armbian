@@ -518,7 +518,7 @@
           - --delete
           - --mkpath
           - --rsh
-          - "ssh -p {{ ansible_port | default(22) }}"
+          - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
           - "{{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ armbian_build_output_dir }}/{{ item }}/"
           - "/tmp/armbian_publish/{{ item }}/"
       delegate_to: localhost
@@ -540,4 +540,5 @@
         rsync_path: "sudo rsync"
         rsync_opts:
           - "--mkpath"
+          - "--rsh=ssh -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
       loop: "{{ hostvars[_builder]._build_targets }}"
