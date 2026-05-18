@@ -36,22 +36,62 @@
           /etc/hostname is {{ (_clone_hostname.content | b64decode | trim) }};
           expected smoke-host.
 
-    - name: Stat identity files that must be ABSENT after reset
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: _must_absent
+    - name: Read machine-id files (must be zeroed out, not deleted)
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: _machine_ids
       loop:
         - /tmp/fixture/clone/etc/machine-id
         - /tmp/fixture/clone/var/lib/dbus/machine-id
+
+    - name: Assert machine-id files are empty (first-boot trigger)
+      ansible.builtin.assert:
+        that:
+          - (item.content | b64decode) == ''
+        fail_msg: >-
+          {{ item.item }} is not empty; expected zeroed machine-id for
+          first-boot trigger. Got: {{ item.content | b64decode | truncate(40) }}
+      loop: "{{ _machine_ids.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Stat regenerated SSH host keys (must exist after keygen)
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _ssh_keys
+      loop:
+        - /tmp/fixture/clone/etc/ssh/ssh_host_rsa_key
+        - /tmp/fixture/clone/etc/ssh/ssh_host_ecdsa_key
+        - /tmp/fixture/clone/etc/ssh/ssh_host_ed25519_key
+
+    - name: Assert SSH host keys were regenerated
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.size > 0
+        fail_msg: >-
+          {{ item.item }} missing or empty after identity reset;
+          ssh-keygen step may have failed.
+      loop: "{{ _ssh_keys.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read regenerated SSH host keys to confirm they are not stale
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: _ssh_key_contents
+      loop:
         - /tmp/fixture/clone/etc/ssh/ssh_host_rsa_key
         - /tmp/fixture/clone/etc/ssh/ssh_host_ed25519_key
 
-    - name: Assert identity files are gone
+    - name: Assert regenerated keys do not contain stale fixture content
       ansible.builtin.assert:
         that:
-          - not item.stat.exists
-        fail_msg: "{{ item.item }} still exists; identity reset failed"
-      loop: "{{ _must_absent.results }}"
+          - "'STALE-KEY-FIXTURE' not in (item.content | b64decode)"
+        fail_msg: >-
+          {{ item.item }} still contains stale fixture key content;
+          remove-and-regen step did not run.
+      loop: "{{ _ssh_key_contents.results }}"
       loop_control:
         label: "{{ item.item }}"
 

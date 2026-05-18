@@ -5,10 +5,13 @@
   become: true
 
   tasks:
-    - name: Ensure sudo is installed (so the role works as non-root if needed)
-      ansible.builtin.package:
-        name: sudo
+    - name: Ensure sudo and openssh-client are installed
+      ansible.builtin.apt:
+        name:
+          - sudo
+          - openssh-client
         state: present
+        update_cache: true
 
     - name: Create synthetic template directory tree
       ansible.builtin.file:
