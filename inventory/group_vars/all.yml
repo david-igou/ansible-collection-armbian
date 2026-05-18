@@ -102,3 +102,35 @@ armbian_netboot_tftp_cache_dir: "{{ inventory_dir }}/../.cache/sbc-tftp"
 # Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
 # value below if this is not set in your real inventory.
 armbian_netboot_image_cache: /var/lib/armbian_netboot/cache
+
+# ---------------------------------------------------------------------
+# local_kernel mode (per host)
+# ---------------------------------------------------------------------
+# Opt a host into local_kernel mode by setting:
+#   armbian_netboot_boot_mode: local_kernel
+# and an optional override block:
+#   armbian_netboot_local_kernel:
+#     persist_via: hook       # 'hook' (default) | 'spi'
+#     # storage: "nvme 0:4"   # default from vars/boards.yml's local_kernel.storage
+#     # storage_scan: "nvme scan"
+#     # root_label: armbi_root_local
+#
+# persist_via:
+#   hook — use the U-Boot binary's compile-time default localcmd (baked
+#          by playbooks/build_image.yml's __999_local_kernel_bake hook).
+#          No runtime fw_setenv step. Default.
+#   spi  — write per-host localcmd to SPI via fw_setenv at convergence
+#          time. Only valid on boards with uboot_env.storage: spi_flash.
+#
+# armbian_netboot_uboot_env_extra (escape hatch, host or group scope):
+#   Flat dict of arbitrary U-Boot env vars merged into the converged
+#   set with highest precedence. Can override anything in
+#   uboot_env.defaults, ethaddr derived from board_mac, or the
+#   collection-rendered localcmd. Documented as "you own what you
+#   override."
+#
+# armbian_netboot_persist_uboot_env (playbook-level knob):
+#   auto    — default; run step 3.5 for hosts where uboot_env.storage
+#             == spi_flash.
+#   always  — run step 3.5 unconditionally (no-op on NOWHERE hosts).
+#   never   — skip step 3.5 entirely.
