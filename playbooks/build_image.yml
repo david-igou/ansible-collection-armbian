@@ -71,20 +71,31 @@
               sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                   include/configs/rockchip-common.h
 
-              # Bootstd / bootflow framework finds boot devices among
-              # PCI-enumerated devices. Mainline u-boot rk3588 defconfigs
-              # commonly set CONFIG_PCI=y but NOT CONFIG_PCI_INIT_R=y,
-              # so PCIe devices (e.g. Rock 5B's RTL8125 NIC) are NOT
-              # enumerated at init_r — bootflow scan never sees the NIC
-              # → no DHCP request → silent PXE failure (HITS=0 on the
-              # TFTP server). Append CONFIG_PCI_INIT_R=y to the defconfig
-              # being built (via $BOOTCONFIG, set by armbian/build's
-              # per-board config) for any board that opts into CONFIG_PCI.
+              # rk3588(s) U-Boot defconfig backfill for our local_kernel
+              # boot model. All rk3588(s) boards in this collection are
+              # used with PCIe NVMe for local_kernel root storage; some
+              # upstream defconfigs ship without CONFIG_PCI=y (assuming
+              # the M.2 slot is WiFi, e.g. rock5a-rk3588s_defconfig), or
+              # with CONFIG_PCI=y but without CONFIG_PCI_INIT_R=y (means
+              # bootstd's bootflow scan won't see the PCIe NIC at
+              # init_r → silent PXE failure on Rock 5B's RTL8125), or
+              # without CONFIG_CMD_NVME=y / CONFIG_NVME_PCI=y (means the
+              # baked localcmd chain hits `Unknown command 'nvme'` and
+              # falls through to SD boot). Backfill all four
+              # unconditionally — they're harmless on boards without
+              # PCIe NVMe and required for the boards that do.
               local defconfig="configs/${BOOTCONFIG}"
-              if [[ -f "$defconfig" ]] \
-                 && grep -q "^CONFIG_PCI=y" "$defconfig" \
-                 && ! grep -q "^CONFIG_PCI_INIT_R=y" "$defconfig"; then
-                  echo "CONFIG_PCI_INIT_R=y" >> "$defconfig"
+              if [[ -f "$defconfig" ]]; then
+                  grep -q "^CONFIG_PCI=y" "$defconfig" \
+                      || echo "CONFIG_PCI=y" >> "$defconfig"
+                  grep -q "^CONFIG_PCIE_DW_ROCKCHIP=y" "$defconfig" \
+                      || echo "CONFIG_PCIE_DW_ROCKCHIP=y" >> "$defconfig"
+                  grep -q "^CONFIG_PCI_INIT_R=y" "$defconfig" \
+                      || echo "CONFIG_PCI_INIT_R=y" >> "$defconfig"
+                  grep -q "^CONFIG_CMD_NVME=y" "$defconfig" \
+                      || echo "CONFIG_CMD_NVME=y" >> "$defconfig"
+                  grep -q "^CONFIG_NVME_PCI=y" "$defconfig" \
+                      || echo "CONFIG_NVME_PCI=y" >> "$defconfig"
               fi
           }
 
