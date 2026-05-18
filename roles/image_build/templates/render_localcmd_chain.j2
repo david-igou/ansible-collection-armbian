@@ -14,16 +14,17 @@
    Chain shape (GPT-label partition lookup — board-agnostic):
      setenv bootargs root=LABEL=<root_label> rootfstype=ext4 rootwait rw console=<console>;
      <storage_scan>;
-     part number <storage_dev> 0 #<root_label> rootpart;
+     part number <storage_dev> 0 \#<root_label> rootpart;
      ext4load <storage_dev> 0:${rootpart} ${kernel_addr_r} /boot/Image;
      ext4load <storage_dev> 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
      setenv ramdisk_size ${filesize};
      ext4load <storage_dev> 0:${rootpart} ${fdt_addr_r} /boot/dtb/<dtb>;
      booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
 
-   `part number <dev> 0 #<label> rootpart` looks up the partition number
+   `part number <dev> 0 \#<label> rootpart` looks up the partition number
    whose GPT PARTLABEL matches <root_label> and stores it in U-Boot env
-   var `rootpart`. This makes the chain work regardless of whether the
+   var `rootpart`. The backslash-escaped `\#` prevents U-Boot's hush shell
+   from treating `#` as comment-start. This makes the chain work regardless of whether the
    root partition is p2 (2-partition layout: opi5pro/opi5/rock-5a/rock-5b)
    or p4 (4-partition layout: opi5max v1 with ESP+boot+var+root). The
    ${rootpart} tokens are U-Boot env var references resolved at runtime —
@@ -49,7 +50,7 @@
 {%- set dtb          = overrides.dtb          | default(board_cfg.dtb) -%}
 setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }};
 {{- ' ' }}{{ storage_scan }};
-{{- ' ' }}part number {{ storage_dev }} 0 #{{ root_label }} rootpart;
+{{- ' ' }}part number {{ storage_dev }} 0 \\#{{ root_label }} rootpart;
 {{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image;
 {{- ' ' }}ext4load {{ storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
 {{- ' ' }}setenv ramdisk_size ${filesize};

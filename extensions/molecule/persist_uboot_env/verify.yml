@@ -68,9 +68,11 @@
           - "'rockchip/rk3588-rock-5b.dtb' in _b.localcmd"
           - "'root=LABEL=armbi_root_local' in _b.localcmd"
           - "'part number nvme 0' in _b.localcmd"
+          - "' #armbi_root_local rootpart' not in _b.localcmd"
           - "'ext4load nvme 0:${rootpart}' in _b.localcmd"
         fail_msg: >-
-          localcmd should contain dtb / root_label / GPT-label lookup (part number nvme 0)
+          localcmd should contain dtb / root_label / GPT-label lookup
+          (part number nvme 0 \#armbi_root_local rootpart — escaped # for U-Boot hush)
           / ext4load nvme 0:${rootpart} from local_kernel block.
           Got: {{ _b.localcmd }}
 

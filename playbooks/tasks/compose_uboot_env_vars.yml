@@ -52,9 +52,11 @@
 # file outside a role. Task 7's molecule scenario verifies both render
 # the same string.
 #
-# Uses `part number <dev> 0 #<label> rootpart` to look up root partition
+# Uses `part number <dev> 0 \#<label> rootpart` to look up root partition
 # by GPT PARTLABEL — board-agnostic across 2- and 4-partition layouts.
-# ${rootpart} is a U-Boot env var reference resolved at runtime.
+# The backslash-escaped `\#` prevents U-Boot's hush from treating `#` as
+# comment-start after whitespace. ${rootpart} is a U-Boot env var reference
+# resolved at runtime.
 - name: Source 2b — collection-managed localcmd (only when persist_via == spi)
   vars:
     _lk: "{{ armbian_netboot_local_kernel | default({}) }}"
@@ -66,7 +68,7 @@
     _chain: >-
       setenv bootargs root=LABEL={{ _root_label }} rootfstype=ext4 rootwait rw console={{ _console }};
       {{- ' ' }}{{ _storage_scan }};
-      {{- ' ' }}part number {{ _storage_dev }} 0 #{{ _root_label }} rootpart;
+      {{- ' ' }}part number {{ _storage_dev }} 0 \\#{{ _root_label }} rootpart;
       {{- ' ' }}ext4load {{ _storage_dev }} 0:${rootpart} ${kernel_addr_r} /boot/Image;
       {{- ' ' }}ext4load {{ _storage_dev }} 0:${rootpart} ${ramdisk_addr_r} /boot/uInitrd;
       {{- ' ' }}setenv ramdisk_size ${filesize};
