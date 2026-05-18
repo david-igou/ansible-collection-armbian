@@ -23,9 +23,13 @@ argument_specs:
         required: true
         description: >-
           Which label the rendered pxelinux.cfg's `default` directive
-          points at. Built-in choices: nfs, sd, local. May also be any
-          key in extra_modes. Validated at task level against the
-          union {nfs, sd, local} ∪ keys(extra_modes).
+          points at. Built-in choices: nfs, sd, local, local_kernel.
+          May also be any key in extra_modes. Validated at task level
+          against the union {nfs, sd, local, local_kernel}
+          ∪ keys(extra_modes). `local_kernel` selects a localboot-only
+          label whose body is `localboot 0`; the U-Boot environment's
+          `localcmd` decides what runs (typically a `bootflow scan -b`
+          that hands off to the extlinux bootmeth on a local disk).
       extra_modes:
         type: dict
         default: {}

@@ -55,6 +55,48 @@
           - _verbose_content.split('earlycon=uart8250,mmio32,0xfeb50000') | length == 4  # 3 occurrences (nfs/sd/local) = 4 splits
         fail_msg: "verbose render is wrong:\n{{ _verbose_content }}"
 
+    - name: Slurp local_kernel rendered file
+      ansible.builtin.slurp:
+        src: /tmp/fixture/pxelinux.cfg_local_kernel/01-aa-bb-cc-dd-ee-ff
+      register: _local_kernel_render
+
+    - name: Decode local_kernel content
+      ansible.builtin.set_fact:
+        _local_kernel_content: "{{ _local_kernel_render.content | b64decode }}"
+
+    - name: Assert local_kernel render emits localboot-only label and selects it
+      ansible.builtin.assert:
+        that:
+          - "'default local_kernel' in _local_kernel_content"
+          - "'label local_kernel' in _local_kernel_content"
+          - "'localboot 0' in _local_kernel_content"
+          # Built-in labels still rendered so the operator can flip back
+          # without re-uploading.
+          - "'label nfs' in _local_kernel_content"
+          - "'label sd' in _local_kernel_content"
+          - "'label local' in _local_kernel_content"
+        fail_msg: "local_kernel render is wrong:\n{{ _local_kernel_content }}"
+
+    - name: Assert local_kernel label body has no kernel/initrd/fdt/append directives
+      vars:
+        # After the label header, find the next label boundary. Use
+        # '\nlabel ' (newline + 'label ') to avoid false-matching the
+        # `menu label` directive within the same body.
+        _after_header: "{{ _local_kernel_content.split('label local_kernel')[1] }}"
+        _local_kernel_body: "{{ _after_header.split('\nlabel ')[0] }}"
+      ansible.builtin.assert:
+        that:
+          - "'localboot 0' in _local_kernel_body"
+          # Indented directives — won't match the label header line itself.
+          - "'\n  kernel ' not in _local_kernel_body"
+          - "'\n  initrd ' not in _local_kernel_body"
+          - "'\n  fdt ' not in _local_kernel_body"
+          - "'\n  append ' not in _local_kernel_body"
+        fail_msg: |
+          local_kernel label body should contain only `localboot 0`.
+          Got:
+          {{ _local_kernel_body }}
+
     - name: Slurp extra_modes rendered file
       ansible.builtin.slurp:
         src: /tmp/fixture/pxelinux.cfg_extra/01-aa-bb-cc-dd-ee-ff

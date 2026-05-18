@@ -2,11 +2,12 @@
 - name: "Validate boot_mode is built-in or in extra_modes"
   ansible.builtin.assert:
     that:
-      - boot_mode in (['nfs', 'sd', 'local'] + (extra_modes | default({}) | dict2items | map(attribute='key') | list))
+      - boot_mode in (['nfs', 'sd', 'local', 'local_kernel'] + (extra_modes | default({}) | dict2items | map(attribute='key') | list))
     fail_msg: >-
       boot_mode={{ boot_mode }} is not valid. Must be one of
-      nfs|sd|local or a key in armbian_netboot_extra_modes. Defined
-      extra_modes keys: {{ extra_modes | default({}) | dict2items | map(attribute='key') | list }}.
+      nfs|sd|local|local_kernel or a key in armbian_netboot_extra_modes.
+      Defined extra_modes keys:
+      {{ extra_modes | default({}) | dict2items | map(attribute='key') | list }}.
 
 - name: Validate earlycon is set when pxe_verbose is true
   ansible.builtin.assert:

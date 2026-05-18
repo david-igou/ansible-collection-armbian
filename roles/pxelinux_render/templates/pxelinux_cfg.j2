@@ -29,6 +29,10 @@ label local
   fdt    {{ tftp_dtb }}
   append root={{ local_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}
 
+label local_kernel
+  menu label Boot local kernel from NVMe ({{ hostname }})
+  localboot 0
+
 {% for mode_name, mode in (extra_modes | default({})).items() %}
 label {{ mode_name }}
   menu label {{ mode.menu_label }} ({{ hostname }})

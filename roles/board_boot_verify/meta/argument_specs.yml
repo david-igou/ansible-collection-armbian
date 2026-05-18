@@ -6,13 +6,19 @@ argument_specs:
       - >-
         Single-host role. Gathers facts, inspects ansible_mounts['/'],
         and asserts that the rootfs fstype matches the declared
-        boot_mode (nfs|nfs4 for nfs; not nfs for sd or local).
+        boot_mode (nfs|nfs4 for nfs; not nfs for sd, local, or
+        local_kernel; for local_kernel additionally asserts the
+        device path starts with /dev/nvme).
 
     options:
       boot_mode:
         type: str
         required: true
-        choices: [nfs, sd, local]
+        choices: [nfs, sd, local, local_kernel]
+        description: >-
+          The declared boot mode. `local_kernel` asserts NVMe rootfs
+          (the local_kernel pxelinux label hands off to U-Boot's
+          extlinux bootmeth which loads kernel+rootfs off NVMe).
       extra_modes:
         type: dict
         default: {}
