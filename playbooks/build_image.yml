@@ -546,7 +546,7 @@
           - --rsh
           - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
           - "/tmp/armbian_publish/{{ item }}/"
-          - "{{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
+          - "{{ ansible_user }}@{{ inventory_hostname }}:{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
       delegate_to: localhost
       connection: local
       changed_when: true
