@@ -1,0 +1,113 @@
+---
+- name: Converge — compose uboot_env_vars for three fixture cases
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    # Fixture: rock-5b (SPI flash board with full uboot_env block) and
+    # orange-pi-5-max (nowhere board — negative-path reference).
+    armbian_netboot_board_configs:
+      rock-5b:
+        armbian_dl_dir: rock-5b
+        armbian_board_name: rock-5b
+        armbian_support: standard
+        dtb: rockchip/rk3588-rock-5b.dtb
+        console: ttyS2,1500000n8
+        earlycon: uart8250,mmio32,0xfeb50000
+        local_kernel:
+          storage: "nvme 0:4"
+          storage_scan: "nvme scan"
+        uboot_env:
+          storage: spi_flash
+          fw_env_config:
+            device: /dev/mtd0
+            offset: "0xc00000"
+            size: "0x20000"
+            sect_size: "0x1000"
+          defaults:
+            pxefile_addr_r: "0x00500000"
+            kernel_addr_r: "0x02080000"
+            ramdisk_addr_r: "0x06000000"
+            fdt_addr_r: "0x08000000"
+            scriptaddr: "0x00c00000"
+            bootmeths: "pxe extlinux script efi"
+      orange-pi-5-max:
+        armbian_dl_dir: orangepi5-max
+        armbian_board_name: orangepi5-max
+        armbian_support: community
+        dtb: rockchip/rk3588-orangepi-5-max.dtb
+        console: ttyS2,1500000n8
+        earlycon: uart8250,mmio32,0xfeb50000
+        local_kernel:
+          storage: "nvme 0:4"
+          storage_scan: "nvme scan"
+        uboot_env:
+          storage: nowhere
+
+  tasks:
+    # ===== Host A: override host — _extra overrides bootmeths, ethaddr, and localcmd =====
+    - name: HOST A — set host vars (override)
+      ansible.builtin.set_fact:
+        armbian_netboot_board_model: rock-5b
+        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
+        armbian_netboot_boot_mode: local_kernel
+        armbian_netboot_local_kernel:
+          persist_via: spi
+        armbian_netboot_uboot_env_extra:
+          bootmeths: "pxe extlinux"         # override board default
+          ethaddr: "aa:bb:cc:dd:ee:ff"      # override collection-managed
+          localcmd: "echo custom localcmd"  # override structured render
+
+    - name: HOST A — compose
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../playbooks/tasks/compose_uboot_env_vars.yml"
+
+    - name: HOST A — snapshot composed dict for verify
+      ansible.builtin.copy:
+        content: "{{ _uboot_env_vars | to_nice_yaml }}"
+        dest: /tmp/host_a.yml
+        mode: "0644"
+
+    # ===== Host B: control — no _extra; persist_via=spi produces localcmd =====
+    - name: HOST B — reset host vars (control)
+      ansible.builtin.set_fact:
+        armbian_netboot_board_model: rock-5b
+        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
+        armbian_netboot_boot_mode: local_kernel
+        armbian_netboot_local_kernel:
+          persist_via: spi
+        armbian_netboot_uboot_env_extra: {}
+        # Explicitly clear previous-iteration intermediates so they don't
+        # leak across the sequential include_tasks calls on the same host.
+        _uboot_env_vars: null
+        _src2_localcmd: null
+
+    - name: HOST B — compose
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../playbooks/tasks/compose_uboot_env_vars.yml"
+
+    - name: HOST B — snapshot
+      ansible.builtin.copy:
+        content: "{{ _uboot_env_vars | to_nice_yaml }}"
+        dest: /tmp/host_b.yml
+        mode: "0644"
+
+    # ===== Host C: persist_via=hook — no localcmd key expected =====
+    - name: HOST C — reset host vars (hook persist)
+      ansible.builtin.set_fact:
+        armbian_netboot_board_model: rock-5b
+        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
+        armbian_netboot_boot_mode: local_kernel
+        armbian_netboot_local_kernel:
+          persist_via: hook
+        armbian_netboot_uboot_env_extra: {}
+        _uboot_env_vars: null
+        _src2_localcmd: null
+
+    - name: HOST C — compose
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../playbooks/tasks/compose_uboot_env_vars.yml"
+
+    - name: HOST C — snapshot
+      ansible.builtin.copy:
+        content: "{{ _uboot_env_vars | to_nice_yaml }}"
+        dest: /tmp/host_c.yml
+        mode: "0644"
