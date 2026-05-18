@@ -29,7 +29,6 @@
   gather_facts: false
   vars:
     armbian_netboot_persist_uboot_env_cycle: true
-    armbian_netboot_uboot_env_extra: "{{ armbian_netboot_uboot_env_extra | default({}) }}"
 
   pre_tasks:
     - name: Load board configs (needed for per-host lookups)
