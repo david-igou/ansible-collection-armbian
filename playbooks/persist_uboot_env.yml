@@ -1,96 +1,75 @@
 ---
-# Approach B from docs/uboot-armbian-build-explainer.html §8 ("Fixing
-# rock-5b's autonomous-PXE problem").
+# Persist per-host U-Boot env state to SPI flash via fw_setenv. Generalized
+# from the rock-5b-specific Approach B (per #82's design). Any board whose
+# vars/boards.yml entry declares uboot_env.storage: spi_flash gets convergence;
+# NOWHERE boards (e.g. opi5max) skip silently.
 #
-# Persist the U-Boot environment vars that rock-5b's stock SPI env is
-# missing, by writing them with `fw_setenv` from Linux on the running
-# board. The next cold boot reads the updated env from SPI and clears
-# two of the three failure layers in one pass:
+# Composes the per-host uboot_env_vars dict from three sources in precedence
+# order (board defaults → collection-managed → operator _extra). See
+# playbooks/tasks/compose_uboot_env_vars.yml.
 #
-#   Layer 1 (wrong MAC on DHCP) — setting `ethaddr` short-circuits
-#     rockchip_setup_macaddr() so DHCP DISCOVER carries the inventory
-#     MAC that rb5009's static reservation recognises.
-#
-#   Layer 2 (PXE addresses vanish) — restores `pxefile_addr_r`,
-#     `kernel_addr_r`, `ramdisk_addr_r`, `fdt_addr_r`, `scriptaddr`
-#     (which CONFIG_ENV_IS_IN_SPI_FLASH=y erases on first successful
-#     `fw_setenv`) plus `bootmeths` so `bootflow scan` enumerates the
-#     ethernet bootdev.
-#
-# Layer 0 (NIC not enumerated) is already cleared at build time by the
-# `__999_pxe_first` family hook in playbooks/build_image.yml — without
-# it CONFIG_PCI_INIT_R is unset and the RTL8125 isn't a bootdev, so
-# this playbook has nothing to act on.
-#
-# Idempotent: each var is read with `fw_printenv -n` first; `fw_setenv`
-# only fires on the vars that actually drift. The cold-cycle handler
-# runs only when at least one var was rewritten.
-#
-# State lives in per-board SPI, not the U-Boot binary. Re-image a board
-# and the env reverts to whatever the U-Boot binary's defaults are; re-
-# run this playbook to converge. Per-board MAC comes from the same
-# `armbian_netboot_board_mac` hostvar that drives pxelinux.cfg/01-<mac>, so the SPI env
-# and rb5009 TFTP layout can't drift apart.
+# Cold-cycle ownership: when run standalone, this play cold-cycles on drift.
+# When imported by converge_boot_mode.yml, the converge play sets
+# armbian_netboot_persist_uboot_env_cycle: false and owns the cycle in step 4.
 #
 # Prerequisites:
-#   - Board must boot to Linux on SD (Approach B can't run on a board
-#     that won't reach an init system — use Approach A for that case).
-#   - playbooks/bootstrap_armbian.yml must have run so this play can
-#     SSH in as the inventory user with passwordless sudo.
-#   - inventory hostvars: `armbian_netboot_board_mac` (mandatory); `armbian_netboot_poe_switch` +
-#     `armbian_netboot_poe_port` (mandatory; consumed by the cold-cycle handler).
+#   - Board must boot to Linux (this play SSHes in to run fw_setenv).
+#   - playbooks/bootstrap_armbian.yml must have run.
+#   - inventory hostvars: armbian_netboot_board_mac (mandatory),
+#     armbian_netboot_poe_switch + armbian_netboot_poe_port (mandatory for
+#     the cold-cycle handler).
 #
-# Usage:
-#   # Converge SPI env on all rock-5b boards
+# Usage (standalone):
 #   ansible-playbook playbooks/persist_uboot_env.yml
-#
-#   # Single board
 #   ansible-playbook playbooks/persist_uboot_env.yml --limit rock-5b-01
-#
-#   # Skip the cold-cycle (e.g. you'll PoE-cycle out-of-band)
-#   ansible-playbook playbooks/persist_uboot_env.yml \
-#     --skip-tags cold_cycle
+#   ansible-playbook playbooks/persist_uboot_env.yml --skip-tags cold_cycle
 
-- name: Persist U-Boot env vars to SPI on rock-5b boards
-  hosts: rock_5b
+- name: Persist U-Boot env vars to SPI on SPI-flash boards
+  hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   vars:
-    # SPI env layout for rock-5b. Pulled from
-    # cache/sources/u-boot-worktree/.../configs/rock5b-rk3588_defconfig:
-    #   CONFIG_ENV_OFFSET=0xc00000     (env start in SPI)
-    #   CONFIG_ENV_SIZE=0x20000        (env region size)
-    #   CONFIG_ENV_SECT_SIZE=0x1000    (flash erase block)
-    # fw_env.config columns: <device> <offset> <env-size> <sect-size>.
-    fw_env_config: "/dev/mtd0    0xc00000    0x20000    0x1000\n"
-
-    # Vars to converge in SPI. Values come from upstream u-boot's
-    # default_environment[] for rk3588 (include/configs/rockchip-common.h
-    # + arch/arm/include/asm/arch-rockchip/boot_mode.h), preserved here
-    # so a CRC-valid SPI env doesn't silently drop them. armbian_netboot_board_mac is
-    # lowercased: U-Boot's eth_env_get_enetaddr_by_index() parses hex
-    # case-insensitively, but fw_printenv returns the stored string
-    # verbatim — keeping case consistent avoids spurious drift each run.
-    uboot_env_vars:
-      ethaddr: "{{ armbian_netboot_board_mac | lower }}"
-      pxefile_addr_r: "0x00500000"
-      kernel_addr_r: "0x02080000"
-      ramdisk_addr_r: "0x06000000"
-      fdt_addr_r: "0x08000000"
-      scriptaddr: "0x00c00000"
-      bootmeths: "pxe extlinux script efi"
+    armbian_netboot_persist_uboot_env_cycle: true
+    armbian_netboot_uboot_env_extra: "{{ armbian_netboot_uboot_env_extra | default({}) }}"
 
   pre_tasks:
-    # Minimal fact set — we need ansible_date_time for the snapshot
-    # filename, but gathering every fact is wasted work on a play that
-    # only touches one userspace tool.
-    - name: Gather date facts for snapshot filename
-      ansible.builtin.setup:
-        gather_subset:
-          - "!all"
-          - "!min"
-          - date_time
+    - name: Load board configs (needed for per-host lookups)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
 
-    - name: Assert per-host armbian_netboot_board_mac is defined
+    - name: Skip hosts whose board has no SPI flash env
+      ansible.builtin.meta: end_host
+      when: >-
+        armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage
+        | default('nowhere') != 'spi_flash'
+
+    - name: Validate persist_via against board env storage
+      ansible.builtin.assert:
+        that:
+          - >-
+            (armbian_netboot_local_kernel.persist_via | default('hook')) == 'hook'
+            or armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage == 'spi_flash'
+        fail_msg: >-
+          {{ inventory_hostname }}: local_kernel.persist_via=spi but board
+          {{ armbian_netboot_board_model }} uboot_env.storage={{
+            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage }};
+          change persist_via to 'hook' or pick a board with SPI env.
+
+    - name: Validate fw_env_config completeness when persist_via=spi
+      ansible.builtin.assert:
+        that:
+          - >-
+            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.device is defined
+          - >-
+            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.offset is defined
+          - >-
+            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.size is defined
+          - >-
+            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.sect_size is defined
+        fail_msg: >-
+          {{ inventory_hostname }}: uboot_env.fw_env_config missing required keys
+          (device/offset/size/sect_size) for SPI persistence.
+
+    - name: Assert per-host armbian_netboot_board_mac is defined and well-formed
       ansible.builtin.assert:
         that:
           - armbian_netboot_board_mac is defined
@@ -101,6 +80,24 @@
           colon-separated hex MAC (xx:xx:xx:xx:xx:xx). Got:
           '{{ armbian_netboot_board_mac | default("<undefined>") }}'.
 
+    - name: Gather date facts for snapshot filename
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - date_time
+
+    - name: Compose per-host uboot_env_vars
+      ansible.builtin.include_tasks: tasks/compose_uboot_env_vars.yml
+
+    - name: Render per-host fw_env_config string
+      ansible.builtin.set_fact:
+        _fw_env_config_str: >-
+          {{ _board_cfg.uboot_env.fw_env_config.device }}    {{
+             _board_cfg.uboot_env.fw_env_config.offset }}    {{
+             _board_cfg.uboot_env.fw_env_config.size }}    {{
+             _board_cfg.uboot_env.fw_env_config.sect_size }}
+
   tasks:
     - name: Ensure u-boot-tools is installed
       become: true
@@ -108,16 +105,11 @@
         name: u-boot-tools
         state: present
 
-    # Asserting fw_env.config matches the rock-5b SPI layout is what
-    # makes fw_setenv aim at the right flash region. Wrong offsets here
-    # corrupt the env (or worse, U-Boot proper). Treat this file as
-    # collection-owned: overwrite unconditionally so an operator who
-    # tweaked it can't silently desync the layout.
-    - name: Ensure /etc/fw_env.config matches the SPI env layout
+    - name: Ensure /etc/fw_env.config matches the board's SPI env layout
       become: true
       ansible.builtin.copy:
         dest: /etc/fw_env.config
-        content: "{{ fw_env_config }}"
+        content: "{{ _fw_env_config_str }}\n"
         owner: root
         group: root
         mode: "0644"
@@ -131,9 +123,6 @@
         group: root
         mode: "0755"
 
-    # Snapshot BEFORE any fw_setenv so the operator has a recovery
-    # hatch. One snapshot per run (per host); replays of this playbook
-    # within the same minute reuse the existing snapshot via `creates`.
     - name: Snapshot current U-Boot env before mutating
       become: true
       ansible.builtin.shell:
@@ -142,10 +131,6 @@
           /var/backups/uboot-env-{{ ansible_facts.date_time.iso8601_basic_short }}.bak
         creates: "/var/backups/uboot-env-{{ ansible_facts.date_time.iso8601_basic_short }}.bak"
 
-    # `fw_printenv -n <name>` exits non-zero when the var is missing —
-    # that's "drift" too, so we suppress the failure and let the
-    # drift-detect step (next task) treat an empty stdout as a value
-    # the set task must write.
     - name: Read each U-Boot env var currently in SPI
       become: true
       ansible.builtin.command:
@@ -153,19 +138,10 @@
       register: _current_env
       changed_when: false
       failed_when: false
-      loop: "{{ uboot_env_vars | dict2items }}"
+      loop: "{{ _uboot_env_vars | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
 
-    # Set each var only on drift. The zip pairs the desired (k,v) with
-    # the corresponding fw_printenv result for the same key. We compare
-    # the stored value (lowercased to match the desired form) against
-    # the desired value; non-equal triggers a set + cold-cycle.
-    #
-    # The cold-cycle isn't expressed as a handler because Ansible
-    # rejects include_role inside `handlers:` (handlers run a more
-    # restricted task set). Instead we register the loop result and
-    # gate the cycle task on any iteration having changed.
     - name: Persist each drifted U-Boot env var to SPI
       become: true
       ansible.builtin.command:
@@ -174,19 +150,15 @@
           - "{{ item.0.key }}"
           - "{{ item.0.value }}"
       when: (item.1.stdout | default('') | lower) != (item.0.value | lower)
-      loop: "{{ uboot_env_vars | dict2items | zip(_current_env.results) | list }}"
+      loop: "{{ _uboot_env_vars | dict2items | zip(_current_env.results) | list }}"
       loop_control:
         label: "{{ item.0.key }}"
       register: _set_results
-      # The `when:` above skips iterations with no drift, so anything
-      # that runs has just modified SPI. Mark it changed unconditionally
-      # for the lint profile and for downstream `_set_results` checks.
       changed_when: true
 
-    # Warm `reboot` may skip re-reading SPI env on some RK3588 boot
-    # ROMs, so we PoE-cycle. The cycle tasks file delegates to the
-    # board's armbian_netboot_poe_switch internally.
-    - name: Cold-cycle the board when any env var drifted
+    - name: Cold-cycle the board when any env var drifted (standalone only)
       ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file | default('routeros/tasks/poe_cycle.yml') }}"
-      when: _set_results.results | selectattr('changed') | list | length > 0
+      when:
+        - _set_results.results | selectattr('changed') | list | length > 0
+        - armbian_netboot_persist_uboot_env_cycle | bool
       tags: cold_cycle
