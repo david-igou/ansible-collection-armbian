@@ -1,0 +1,142 @@
+---
+# Playbook-level preconditions (not validated by the role itself):
+#
+# image_build expects callers to pre-render the local_kernel dispatch
+# table into _local_kernel_dispatch_table and _uboot_env_storage_table
+# (see playbooks/build_image.yml's pre_tasks). These facts are
+# templated into build_userpatches_common's __999_local_kernel_bake
+# and __999_uboot_env_check hooks at playbook run time. See the spec
+# at docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md.
+
+argument_specs:
+  main:
+    short_description: >-
+      Build a custom Armbian image with caller-supplied userpatches via
+      armbian/build (Docker mode)
+    description:
+      - >-
+        Single-purpose, intent-agnostic role. The caller supplies the board,
+        branch, release, and userpatches list; the role enforces the desired
+        output state under armbian_build_output_dir/<board>/.
+      - >-
+        Workflow playbooks (e.g. playbooks/build_image.yml) pre-compute
+        _local_kernel_dispatch_table and _uboot_env_storage_table in their
+        pre_tasks and inject the results into armbian_build_userpatches
+        before invoking this role. The role itself is agnostic to the
+        content of those patches.
+    options:
+      armbian_build_board:
+        type: str
+        required: true
+        description: >-
+          Armbian board identifier passed as BOARD= to compile.sh.
+          Must match a supported board in the armbian/build tree at
+          armbian_build_ref.
+
+      armbian_build_branch:
+        type: str
+        required: false
+        default: current
+        description: >-
+          Armbian kernel branch (current, edge, legacy, vendor).
+          Passed as BRANCH= to compile.sh.
+
+      armbian_build_release:
+        type: str
+        required: false
+        default: bookworm
+        description: >-
+          Debian/Ubuntu release codename. Passed as RELEASE= to compile.sh.
+
+      armbian_build_userpatches:
+        type: list
+        required: false
+        default: []
+        description: >-
+          List of userpatches to apply before the build. Each entry is a
+          mapping with keys dest (path relative to USERPATCHES_DIR, no
+          leading slash, no ..) and content (raw file text). The role is
+          fully agnostic to what the patches do.
+        elements: dict
+
+      armbian_build_ref:
+        type: str
+        required: false
+        default: v26.2.0-trunk.844
+        description: >-
+          armbian/build git ref to checkout. Pinned for reproducibility;
+          bumping is a deliberate role-level change.
+
+      armbian_build_cache_dir:
+        type: str
+        required: false
+        default: /var/lib/armbian_build
+        description: >-
+          Directory on the builder host for the armbian/build checkout,
+          cache, and userpatches tree.
+
+      armbian_build_output_dir:
+        type: str
+        required: false
+        default: /var/lib/armbian_build/output
+        description: >-
+          Directory where the final .img.xz and manifest.json are written.
+
+      armbian_build_user:
+        type: str
+        required: false
+        default: ""
+        description: >-
+          User that owns the build tree and runs compile.sh. Must be in
+          the docker group on the builder host. Defaults to ansible_user
+          when empty.
+
+      armbian_netboot_publish_target:
+        type: str
+        required: false
+        default: ""
+        description: >-
+          Optional SCP destination for the built .img.xz after a
+          successful build. Format "<ssh-host>:<absolute-path-on-remote>".
+          Empty (default) skips publish; the artifact stays on the builder.
+
+      armbian_build_min_free_gb:
+        type: int
+        required: false
+        default: 50
+        description: >-
+          Minimum free disk space (GiB) required on the builder before
+          starting the build. Preflight fails if the threshold is not met.
+
+      armbian_build_required_egress_hosts:
+        type: list
+        required: false
+        description: >-
+          Hostnames that must be TCP-reachable from the builder before the
+          build starts. Defaults to github.com, apt.armbian.com, ghcr.io,
+          and registry-1.docker.io.
+        elements: str
+
+      armbian_build_compile_args:
+        type: dict
+        required: false
+        description: >-
+          Extra key=value arguments passed verbatim to compile.sh. Not
+          folded into the patch_hash; changing these forces a rebuild only
+          when armbian_build_force is true.
+
+      armbian_build_timeout:
+        type: int
+        required: false
+        default: 7200
+        description: >-
+          Maximum seconds to wait for compile.sh to complete. 7200 (2 h)
+          covers cold-cache full builds.
+
+      armbian_build_force:
+        type: bool
+        required: false
+        default: false
+        description: >-
+          Set to true (e.g. via -e armbian_build_force=true) to bypass
+          the manifest-match skip logic and force a full rebuild.

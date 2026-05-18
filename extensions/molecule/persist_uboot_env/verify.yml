@@ -1,0 +1,104 @@
+---
+- name: Verify — precedence of uboot_env_vars composition
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Load Host A composed dict
+      ansible.builtin.slurp:
+        src: /tmp/host_a.yml
+      register: _a_raw
+
+    - name: Load Host B composed dict
+      ansible.builtin.slurp:
+        src: /tmp/host_b.yml
+      register: _b_raw
+
+    - name: Load Host C composed dict
+      ansible.builtin.slurp:
+        src: /tmp/host_c.yml
+      register: _c_raw
+
+    - name: Parse all three snapshots
+      ansible.builtin.set_fact:
+        _a: "{{ _a_raw.content | b64decode | from_yaml }}"
+        _b: "{{ _b_raw.content | b64decode | from_yaml }}"
+        _c: "{{ _c_raw.content | b64decode | from_yaml }}"
+
+    # ===== HOST A: _extra overrides win at every layer =====
+    - name: HOST A — _extra.bootmeths wins over board default
+      ansible.builtin.assert:
+        that:
+          - _a.bootmeths == 'pxe extlinux'
+        fail_msg: "_extra override of bootmeths did NOT win. Got: {{ _a.bootmeths }}"
+
+    - name: HOST A — _extra.ethaddr wins over MAC-derived value
+      ansible.builtin.assert:
+        that:
+          - _a.ethaddr == 'aa:bb:cc:dd:ee:ff'
+        fail_msg: "_extra override of ethaddr did NOT win. Got: {{ _a.ethaddr }}"
+
+    - name: HOST A — _extra.localcmd wins over structured render
+      ansible.builtin.assert:
+        that:
+          - _a.localcmd == 'echo custom localcmd'
+        fail_msg: "_extra override of localcmd did NOT win. Got: {{ _a.localcmd }}"
+
+    - name: HOST A — non-overridden board defaults still present
+      ansible.builtin.assert:
+        that:
+          - _a.pxefile_addr_r == '0x00500000'
+          - _a.kernel_addr_r == '0x02080000'
+        fail_msg: >-
+          Board defaults should survive when not overridden by _extra.
+          pxefile_addr_r={{ _a.pxefile_addr_r }}
+          kernel_addr_r={{ _a.kernel_addr_r }}
+
+    # ===== HOST B: control — collection defaults + structured localcmd render =====
+    - name: HOST B — ethaddr derived from board MAC (lowercased)
+      ansible.builtin.assert:
+        that:
+          - _b.ethaddr == '00:e0:4c:68:00:3b'
+        fail_msg: "ethaddr should be MAC lowercased. Got: {{ _b.ethaddr }}"
+
+    - name: HOST B — localcmd rendered from local_kernel block
+      ansible.builtin.assert:
+        that:
+          - "'rockchip/rk3588-rock-5b.dtb' in _b.localcmd"
+          - "'root=LABEL=armbi_root_local' in _b.localcmd"
+          - "'ext4load nvme 0:1' in _b.localcmd"
+          - "'nvme scan' in _b.localcmd"
+        fail_msg: >-
+          localcmd should contain dtb / root_label / ext4load nvme 0:1
+          (single-partition layout, p1=root) / nvme scan from local_kernel block.
+          Got: {{ _b.localcmd }}
+
+    - name: HOST B — board defaults present, _extra keys absent
+      ansible.builtin.assert:
+        that:
+          - _b.bootmeths == 'pxe extlinux script efi'
+          - _b.pxefile_addr_r == '0x00500000'
+        fail_msg: >-
+          Board defaults should be present when _extra is empty.
+          bootmeths={{ _b.bootmeths }}
+          pxefile_addr_r={{ _b.pxefile_addr_r }}
+
+    # ===== HOST C: persist_via=hook — NO localcmd key =====
+    - name: HOST C — localcmd NOT present when persist_via=hook
+      ansible.builtin.assert:
+        that:
+          - "'localcmd' not in _c"
+        fail_msg: >-
+          Hook-mode host should not have a localcmd key in composed dict.
+          Got: {{ _c }}
+
+    - name: HOST C — ethaddr + board defaults still present for hook-mode host
+      ansible.builtin.assert:
+        that:
+          - _c.ethaddr == '00:e0:4c:68:00:3b'
+          - _c.bootmeths == 'pxe extlinux script efi'
+        fail_msg: >-
+          Hook-mode host should still have ethaddr and board defaults.
+          ethaddr={{ _c.ethaddr }}
+          bootmeths={{ _c.bootmeths }}

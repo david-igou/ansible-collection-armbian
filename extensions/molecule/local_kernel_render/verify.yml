@@ -1,0 +1,102 @@
+---
+- name: Verify — local_kernel dispatch table content
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Read the rendered dispatch table
+      ansible.builtin.slurp:
+        src: /tmp/dispatch_table.txt
+      register: _table
+
+    - name: Decode for readability in failures
+      ansible.builtin.set_fact:
+        _table_text: "{{ _table.content | b64decode }}"
+
+    - name: Assert orangepi5-max row present with correct chain content
+      ansible.builtin.assert:
+        that:
+          - "'[orangepi5-max]=' in _table_text"
+          - "'rockchip/rk3588-orangepi-5-max.dtb' in _table_text"
+          - "'nvme scan' in _table_text"
+          - "'console=ttyS2,1500000n8' in _table_text"
+          - "'root=LABEL=armbi_root_local' in _table_text"
+          - "'ext4load nvme 0:1' in _table_text"
+          - "'booti' in _table_text"
+        fail_msg: |
+          Expected orangepi5-max row with ext4load nvme 0:1 (single-partition layout, p1=root)
+          / nvme scan / ttyS2,1500000n8 / rk3588-orangepi-5-max.dtb / armbi_root_local / booti.
+          Got:
+          {{ _table_text }}
+
+    - name: Assert rock-5b row present with correct chain content
+      ansible.builtin.assert:
+        that:
+          - "'[rock-5b]=' in _table_text"
+          - "'rockchip/rk3588-rock-5b.dtb' in _table_text"
+          - "'console=ttyS2,1500000n8' in _table_text"
+          - "'root=LABEL=armbi_root_local' in _table_text"
+          - "'ext4load nvme 0:1' in _table_text"
+          - "'booti' in _table_text"
+        fail_msg: |
+          Expected rock-5b row with ext4load nvme 0:1 (single-partition layout, p1=root)
+          / rk3588-rock-5b.dtb / ttyS2,1500000n8 / armbi_root_local / booti.
+          Got:
+          {{ _table_text }}
+
+    - name: Assert rock-5a row ABSENT (no local_kernel block in fixture)
+      ansible.builtin.assert:
+        that:
+          - "'[rock-5a]=' not in _table_text"
+        fail_msg: |
+          rock-5a has no local_kernel block in the fixture; the dispatch
+          table must not contain a row for it.
+          Got:
+          {{ _table_text }}
+
+    - name: Assert no cross-contamination — opi5max DTB not in rock-5b row
+      vars:
+        # Stop at closing quote so the match covers only the rock-5b line.
+        _rock5b_row: >-
+          {{ _table_text
+             | regex_search("\[rock-5b\]='[^']*'", multiline=True)
+             | default('') }}
+      ansible.builtin.assert:
+        that:
+          - "'rk3588-orangepi-5-max.dtb' not in _rock5b_row"
+        fail_msg: |
+          Cross-contamination: rock-5b's row contains the opi5max DTB.
+          Row: {{ _rock5b_row }}
+
+    - name: Assert rock-5b row uses rock-5b DTB (not cross-contaminated with opi5max)
+      vars:
+        _rock5b_row: >-
+          {{ _table_text
+             | regex_search("\[rock-5b\]='[^']*'", multiline=True)
+             | default('') }}
+      ansible.builtin.assert:
+        that:
+          - "'rk3588-rock-5b.dtb' in _rock5b_row"
+        fail_msg: |
+          rock-5b's row should contain rk3588-rock-5b.dtb.
+          Row: {{ _rock5b_row }}
+
+    - name: Assert both rows use nvme 0:1 (single-partition canonical layout)
+      vars:
+        _opi5max_row: >-
+          {{ _table_text
+             | regex_search("\[orangepi5-max\]='[^']*'", multiline=True)
+             | default('') }}
+        _rock5b_row: >-
+          {{ _table_text
+             | regex_search("\[rock-5b\]='[^']*'", multiline=True)
+             | default('') }}
+      ansible.builtin.assert:
+        that:
+          - "'nvme 0:1' in _opi5max_row"
+          - "'nvme 0:1' in _rock5b_row"
+        fail_msg: |
+          Both boards should use nvme 0:1 (single-partition layout).
+          opi5max row: {{ _opi5max_row }}
+          rock-5b row: {{ _rock5b_row }}

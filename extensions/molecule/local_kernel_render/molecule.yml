@@ -1,0 +1,49 @@
+---
+# Scenario: verify the local_kernel build-hook dispatch table renders
+# correctly for an inventory containing a mix of opted-in and
+# not-opted-in boards.  No real U-Boot build — rendering only.
+
+dependency:
+  name: galaxy
+  options:
+    requirements-file: extensions/molecule/provisioners/${PROVISIONER:-podman}/requirements.yml
+    force: true
+
+driver:
+  name: default
+  options:
+    managed: true
+    ansible_connection_options:
+      connection: local
+
+platforms:
+  - name: local-kernel-render
+    podman:
+      image: docker.io/geerlingguy/docker-ubuntu2404-ansible:latest
+      command: sleep 1d
+
+provisioner:
+  name: ansible
+  playbooks:
+    converge: converge.yml
+    create: ../provisioners/${PROVISIONER:-podman}/create.yml
+    destroy: ../provisioners/${PROVISIONER:-podman}/destroy.yml
+    prepare: ../provisioners/${PROVISIONER:-podman}/prepare.yml
+    verify: verify.yml
+  inventory:
+    links:
+      group_vars: ../provisioners/${PROVISIONER:-podman}/group_vars/
+
+verifier:
+  name: ansible
+
+scenario:
+  name: local_kernel_render
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

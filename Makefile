@@ -3,7 +3,7 @@ COLLECTION_NAME      := armbian_netboot
 COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 
-MOLECULE_SCENARIOS := default rootfs_clone pxelinux_render image_build
+MOLECULE_SCENARIOS := default rootfs_clone pxelinux_render image_build local_kernel_render persist_uboot_env
 PROVISIONER ?= podman
 
 .PHONY: help install lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean

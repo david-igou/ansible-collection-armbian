@@ -20,6 +20,28 @@
 #                        UART2 base is 0xfeb50000. Required when
 #                        armbian_netboot_pxe_verbose=true; consulted
 #                        only by the verbose path in pxelinux_cfg.j2.
+#   local_kernel         OPTIONAL. Board's local_kernel mechanism config.
+#                        - storage: Full U-Boot device address including
+#                          partition number. Canonical layout is a single
+#                          root partition at p1, so the universal default
+#                          is "nvme 0:1". Override per-host via
+#                          armbian_netboot_local_kernel.storage if your
+#                          disk_provision DSL creates a different layout
+#                          (e.g. additional data partitions).
+#                        - storage_scan: scan command (e.g. "nvme scan").
+#                        Absent => board does not support local_kernel mode.
+#   uboot_env            Board's U-Boot env storage characteristics. Required
+#                        for any board the collection builds.
+#                        - storage: REQUIRED. 'nowhere' | 'spi_flash' | 'mmc'.
+#                          Verified against the U-Boot defconfig at build
+#                          time (see playbooks/build_image.yml's
+#                          __999_uboot_env_check hook).
+#                        - fw_env_config: device/offset/size/sect_size for
+#                          /etc/fw_env.config. Only when storage allows
+#                          runtime read/write (e.g. spi_flash).
+#                        - defaults: dict of env vars to keep in SPI
+#                          (consumed by persist_uboot_env.yml when storage
+#                          is spi_flash).
 
 armbian_netboot_board_configs:
   orange-pi-5-pro:
@@ -29,6 +51,11 @@ armbian_netboot_board_configs:
     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+    local_kernel:
+      storage: "nvme 0:1"
+      storage_scan: "nvme scan"
+    uboot_env:
+      storage: nowhere
 
   rock-5b:
     armbian_dl_dir: rock-5b
@@ -37,6 +64,23 @@ armbian_netboot_board_configs:
     dtb: rockchip/rk3588-rock-5b.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+    local_kernel:
+      storage: "nvme 0:1"
+      storage_scan: "nvme scan"
+    uboot_env:
+      storage: spi_flash
+      fw_env_config:
+        device: /dev/mtd0
+        offset: "0xc00000"
+        size: "0x20000"
+        sect_size: "0x1000"
+      defaults:
+        pxefile_addr_r: "0x00500000"
+        kernel_addr_r: "0x02080000"
+        ramdisk_addr_r: "0x06000000"
+        fdt_addr_r: "0x08000000"
+        scriptaddr: "0x00c00000"
+        bootmeths: "pxe extlinux script efi"
 
   orange-pi-5:
     armbian_dl_dir: orangepi5
@@ -45,6 +89,11 @@ armbian_netboot_board_configs:
     dtb: rockchip/rk3588s-orangepi-5.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+    local_kernel:
+      storage: "nvme 0:1"
+      storage_scan: "nvme scan"
+    uboot_env:
+      storage: nowhere
 
   rock-5a:
     armbian_dl_dir: rock-5a
@@ -53,6 +102,11 @@ armbian_netboot_board_configs:
     dtb: rockchip/rk3588s-rock-5a.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+    local_kernel:
+      storage: "nvme 0:1"
+      storage_scan: "nvme scan"
+    uboot_env:
+      storage: nowhere    # confirmed: rock-5a has no SPI flash
 
   orange-pi-5-max:
     armbian_dl_dir: orangepi5-max
@@ -61,3 +115,8 @@ armbian_netboot_board_configs:
     dtb: rockchip/rk3588-orangepi-5-max.dtb
     console: ttyS2,1500000n8
     earlycon: uart8250,mmio32,0xfeb50000
+    local_kernel:
+      storage: "nvme 0:1"
+      storage_scan: "nvme scan"
+    uboot_env:
+      storage: nowhere    # CONFIG_ENV_IS_NOWHERE=y in defconfig

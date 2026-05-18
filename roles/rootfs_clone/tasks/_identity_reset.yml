@@ -51,8 +51,8 @@
   args:
     creates: "{{ target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key"
   loop:
-    - { type: rsa,     extra: "-b 4096" }
-    - { type: ecdsa,   extra: "-b 521" }
+    - { type: rsa, extra: "-b 4096" }
+    - { type: ecdsa, extra: "-b 521" }
     - { type: ed25519, extra: "" }
   loop_control:
     label: "{{ item.type }}"
