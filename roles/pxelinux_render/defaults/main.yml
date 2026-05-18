@@ -22,7 +22,7 @@ pxe_verbose: false
 # paths on the rendering host. Defaults assume armbian/<model>/<file>.
 tftp_kernel: "armbian/{{ model_name }}/vmlinuz"
 tftp_initrd: "armbian/{{ model_name }}/initrd.img"
-tftp_dtb:    "armbian/{{ model_name }}/board.dtb"
+tftp_dtb: "armbian/{{ model_name }}/board.dtb"
 
 # User-defined extra boot modes. Each key becomes a pxelinux label
 # coexisting with nfs/sd/local. Empty by default.
