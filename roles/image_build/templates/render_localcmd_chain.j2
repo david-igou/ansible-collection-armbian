@@ -1,0 +1,38 @@
+{# Macro: render_localcmd_chain(board_cfg, overrides={}) renders a
+   single U-Boot command-chain string used as the localcmd value for
+   the `local_kernel` boot mode.
+
+   Inputs:
+     board_cfg: an entry from armbian_netboot_board_configs (must have
+                local_kernel.{storage,storage_scan}, dtb, console).
+     overrides: optional dict with keys that override the board defaults.
+                Useful for per-host customization in the SPI-persist path.
+
+   Output: single-line U-Boot command string ending in `booti`.
+
+   Collection-level defaults (not overridable here — they're invariants
+   of the Armbian rootfs layout):
+     kernel_path:  /boot/Image
+     initrd_path:  /boot/uInitrd
+     rootfstype:   ext4
+     root_label:   armbi_root_local  (overridable; matches pxelinux_render default)
+
+   Consumed by:
+     - playbooks/build_image.yml's __999_local_kernel_bake hook (Task 4)
+     - playbooks/tasks/compose_uboot_env_vars.yml (Task 6)
+#}
+{%- macro render_localcmd_chain(board_cfg, overrides={}) -%}
+{%- set lk = board_cfg.local_kernel -%}
+{%- set storage      = overrides.storage      | default(lk.storage) -%}
+{%- set storage_scan = overrides.storage_scan | default(lk.storage_scan) -%}
+{%- set root_label   = overrides.root_label   | default('armbi_root_local') -%}
+{%- set console      = overrides.console      | default(board_cfg.console) -%}
+{%- set dtb          = overrides.dtb          | default(board_cfg.dtb) -%}
+setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }};
+{{- ' ' }}{{ storage_scan }};
+{{- ' ' }}ext4load {{ storage }} ${kernel_addr_r} /boot/Image;
+{{- ' ' }}ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd;
+{{- ' ' }}setenv ramdisk_size ${filesize};
+{{- ' ' }}ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }};
+{{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+{%- endmacro -%}
