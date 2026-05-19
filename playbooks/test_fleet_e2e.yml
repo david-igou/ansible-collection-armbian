@@ -326,6 +326,50 @@
         ansible_connection: local
       delegate_to: localhost
 
+- name: "Phase 3 — dd canonical SD image via disk_image role"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_phase_3: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/3-dd-sd"
+  tasks:
+    - name: "Phase 3 — block"
+      when: not (skip_phase_3 | bool)
+      block:
+        - name: "Phase 3 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_3_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        - name: "Phase 3 — dd canonical image to SD"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
+            target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
+
+        - name: "Phase 3 — write evidence"
+          ansible.builtin.copy:
+            content: |
+              === Phase 3 (dd SD) — {{ inventory_hostname }} ===
+              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
+              target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
+              From-state: NFS rootfs (board was bootstrapped + verified NFS in Phase 2)
+            dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
+          delegate_to: localhost
+          vars:
+            ansible_connection: local
+
+        - name: "Phase 3 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "3\t{{ _t_phase_3_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_3_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
