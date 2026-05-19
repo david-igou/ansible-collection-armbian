@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>End-to-end fleet test: SD → NFS → local_kernel → in-place kernel update</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --bg: #fafafa;
+    --accent: #b14b00;
+    --accent2: #1c5b8a;
+    --code-bg: #f0eee9;
+    --rule: #d9d5cc;
+    --warn-bg: #fff4d6;
+    --warn-bd: #e6c200;
+    --good-bg: #ecf6e6;
+    --good-bd: #6ab04c;
+    --bad-bg: #fde6e3;
+    --bad-bd: #c0392b;
+    --hyp-bg: #f3eef8;
+    --hyp-bd: #7a4ea0;
+  }
+  html { background: var(--bg); }
+  body {
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 960px;
+    margin: 2.5rem auto 4rem;
+    padding: 0 1.25rem;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.4rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 2.2rem 0 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 0.5rem; color: var(--accent2); }
+  h4 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--accent); }
+  p, ul, ol { margin: 0.6rem 0; }
+  p.subtitle { color: var(--muted); font-size: 1rem; margin: 0 0 1.5rem; }
+  code, pre {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+  }
+  code { background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    border-left: 3px solid var(--accent2);
+    border-radius: 2px;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  .snippet {
+    margin: 1rem 0 1.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: #fff;
+  }
+  .snippet header {
+    background: #efece5;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .snippet header strong { color: var(--fg); font-weight: 600; }
+  .snippet pre { margin: 0; border-left: none; border-radius: 0; background: #fcfbf8; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--rule);
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #efece5; font-weight: 600; }
+  td code { font-size: 0.84rem; }
+  .gotcha {
+    border: 1px solid var(--warn-bd);
+    background: var(--warn-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .gotcha strong { color: var(--accent); }
+  .good {
+    border: 1px solid var(--good-bd);
+    background: var(--good-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .good strong { color: #234e0d; }
+  .bad {
+    border: 1px solid var(--bad-bd);
+    background: var(--bad-bg);
+    padding: 0.7rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 3px;
+  }
+  .bad strong { color: var(--bad-bd); }
+  nav.toc {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 2rem;
+    font-size: 0.93rem;
+  }
+  nav.toc ol { margin: 0; padding-left: 1.3rem; }
+  nav.toc ol ol { margin: 0.15rem 0 0.15rem 0; }
+  nav.toc a { color: var(--accent2); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  figure { margin: 1.4rem 0; }
+  figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+  figcaption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+    text-align: center;
+  }
+  .pill {
+    display: inline-block;
+    background: #e7e2d3;
+    color: var(--accent);
+    padding: 0.05em 0.5em;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .pill.ok { background: #d4ebc8; color: #234e0d; }
+  .pill.warn { background: #ffe7a8; color: #7a5a00; }
+  .pill.fail { background: #f8c8c2; color: var(--bad-bd); }
+  .kvbox {
+    background: #fff;
+    border: 1px solid var(--rule);
+    padding: 0.6rem 0.9rem;
+    margin: 0.6rem 0 1rem;
+    font-size: 0.92rem;
+    border-radius: 3px;
+  }
+  .kvbox dt { font-weight: 600; margin-top: 0.4rem; }
+  .kvbox dt:first-child { margin-top: 0; }
+  .kvbox dd { margin: 0.05rem 0 0 0; padding-left: 0.25rem; }
+  details { margin: 0.6rem 0; }
+  summary { cursor: pointer; font-weight: 600; color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<h1>End-to-end fleet test</h1>
+<p class="subtitle">
+  A first-time-reader walkthrough of testing all three boot modes
+  (<code>sd</code>, <code>nfs</code>, <code>local_kernel</code>) plus
+  in-place kernel updates across a fleet of <code>david_igou.armbian_netboot</code>-managed
+  ARM SBCs. Each phase shows the playbook invocation, what changes on
+  the wire, and what a successful (or unsuccessful) result looks like.
+</p>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">Overview &amp; mental model</a></li>
+    <li><a href="#prereqs">Pre-flight: SSH, inventory, staging</a></li>
+    <li><a href="#dependency-flow">Dependency flowchart</a></li>
+    <li><a href="#per-board-loop">Per-board lifecycle</a>
+      <ol>
+        <li><a href="#phase-a">Phase A — boot from SD</a></li>
+        <li><a href="#phase-b">Phase B — boot from NFS</a></li>
+        <li><a href="#phase-c">Phase C — reprovision NVMe (NFS → local)</a></li>
+        <li><a href="#phase-c2">Phase C2 — converge to <code>local_kernel</code></a></li>
+        <li><a href="#phase-d">Phase D — in-place kernel update</a></li>
+      </ol>
+    </li>
+    <li><a href="#one-shot">The one-shot fleet playbook</a></li>
+    <li><a href="#inventory">Sample inventory (boards / truenas / rb5009)</a></li>
+    <li><a href="#gotchas">Common gotchas the test exposed</a></li>
+    <li><a href="#evidence">Worked-example evidence (today&rsquo;s run)</a></li>
+    <li><a href="#lineage">Source-PR lineage</a></li>
+  </ol>
+</nav>
+
+<h2 id="overview">1. Overview &amp; mental model</h2>
+
+<p>
+  Three boot modes coexist on every onboarded board, selected by the
+  <code>default</code> directive inside its per-board
+  <code>pxelinux.cfg</code> on rb5009:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Mode</th><th>Kernel from</th><th>Rootfs from</th><th>U-Boot path</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>sd</code></td>
+      <td>TFTP (<code>rb5009:flash:/sbc/armbian/&lt;model&gt;/vmlinuz</code>)</td>
+      <td>Whatever block device is labelled <code>armbi_root</code>
+          (typically SD/eMMC)</td>
+      <td>U-Boot PXE → fetch TFTP kernel → kernel mounts root by label</td>
+    </tr>
+    <tr>
+      <td><code>nfs</code></td>
+      <td>TFTP (same vmlinuz)</td>
+      <td>NFS export <code>truenas:/mnt/ssd/netboot/rootfs/&lt;host&gt;</code></td>
+      <td>U-Boot PXE → fetch TFTP kernel → kernel does
+          <code>ip=dhcp</code> + NFS mount</td>
+    </tr>
+    <tr>
+      <td><code>local_kernel</code></td>
+      <td>NVMe (<code>/boot/Image</code> on the disk-provisioned root)</td>
+      <td>NVMe partition labelled <code>armbi_root_local</code></td>
+      <td>U-Boot&rsquo;s baked-in <code>localcmd</code> runs
+          <code>nvme scan</code>, <code>ext4load</code>,
+          <code>booti</code> &mdash; never touches the network</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  The <code>local_kernel</code> mode is the strategic unlock: once the
+  board owns its own kernel, <code>apt install linux-image-edge-*</code>
+  on the running board is the kernel-update mechanism. No rb5009 TFTP
+  churn, no per-host module rsync. The cost is a one-time NVMe
+  provision (Phase C), and forever after the board is autonomous.
+</p>
+
+<div class="gotcha">
+  <strong>Why we still test SD and NFS regularly.</strong> Both are
+  recovery surfaces. <code>nfs</code> is the safe fallback when a board&rsquo;s
+  local disk has been wiped or its on-disk kernel is broken; <code>sd</code>
+  is the manual recovery for when even network boot fails. If either
+  silently regresses we won&rsquo;t notice until we need them &mdash; which is
+  always at 3 a.m.
+</p>
+</div>
+
+<h2 id="prereqs">2. Pre-flight: SSH, inventory, staging</h2>
+
+<p>The test runs from a workstation/jumpbox that can reach:</p>
+<ul>
+  <li>All 5 boards (default user: <code>igou</code>) over SSH</li>
+  <li>rb5009 (network_cli, user <code>igou+cet1024w</code>)</li>
+  <li>crs328 (the boards&rsquo; PoE switch, same network_cli plumbing)</li>
+  <li>truenas (the netboot server, user <code>truenas_admin</code> with sudo)</li>
+</ul>
+
+<h3>SSH-agent hygiene</h3>
+
+<p>
+  Across the lifecycle the per-host SSH host key changes several times:
+  the board boots NFS (NFS rootfs&rsquo;s host keys), then SD (stock
+  Armbian&rsquo;s host keys), then local-kernel (NVMe rootfs&rsquo;s host keys).
+  Two things prevent SSH host-key prompts from blocking:
+</p>
+
+<ol>
+  <li>
+    <code>ansible.cfg</code> in the repo root sets
+    <code>host_key_checking = False</code>. Belt-and-suspenders:
+    export <code>ANSIBLE_HOST_KEY_CHECKING=False</code> on every
+    invocation.
+  </li>
+  <li>
+    For raw <code>ssh</code> (when ansible can&rsquo;t reach a board because
+    the user doesn&rsquo;t exist yet) use
+    <code>-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null</code>.
+  </li>
+</ol>
+
+<p>
+  If a workstation has a populated SSH agent with stale identities that
+  rate-limit auth, prefix every <code>ansible*</code> call with
+  <code>env -u SSH_AUTH_SOCK</code> &mdash; that drops the agent for that
+  invocation and forces fallback to the on-disk key chain
+  (<code>~/.ssh/id_ed25519</code> by default).
+</p>
+
+<div class="snippet">
+  <header><strong>Pre-flight verification</strong> &mdash; one-liners</header>
+<pre><code># Verify each tier is reachable on the right credentials.
+env -u SSH_AUTH_SOCK ansible boards -m ping -o
+env -u SSH_AUTH_SOCK ansible truenas.igou.systems -m ping -o
+env -u SSH_AUTH_SOCK ansible rb5009.igou.systems \
+  -m community.routeros.command -a 'commands="/system identity print"'
+
+# Verify staged artefacts.
+env -u SSH_AUTH_SOCK ansible truenas.igou.systems -b \
+  -m shell -a 'ls /mnt/ssd/netboot/rootfs/_templates/'
+env -u SSH_AUTH_SOCK ansible rb5009.igou.systems \
+  -m community.routeros.command -a 'commands="/ip tftp print where real-filename~\"sbc/armbian\""'
+</code></pre>
+</div>
+
+<h3>Stage netboot assets &amp; TFTP rows</h3>
+
+<p>
+  Two playbooks own server-side state. Both are idempotent &mdash;
+  re-running them as the first step of a campaign is a cheap sanity
+  check that re-creates per-host rootfs clones with fresh identity
+  (machine-id, SSH host keys, hostname) but doesn&rsquo;t touch the templates.
+</p>
+
+<div class="snippet">
+  <header><strong>One-time / idempotent staging</strong></header>
+<pre><code># Extract .img.xz → per-model template, clone per-host rootfs
+env -u SSH_AUTH_SOCK ansible-playbook playbooks/stage_netboot_assets.yml
+
+# Fetch vmlinuz/initrd/dtb to controller cache → push to rb5009 + register TFTP rows
+env -u SSH_AUTH_SOCK ansible-playbook playbooks/stage_router.yml
+</code></pre>
+</div>
+
+<div class="gotcha">
+  <strong>Tee-shaped surprise: stock NFS rootfs has no <code>igou</code> user.</strong>
+  The per-host NFS rootfs is a clone of the template extracted from
+  Armbian&rsquo;s <code>.img.xz</code>. The template is stock Armbian
+  (root with a locked password and an empty <code>/root/.ssh</code>),
+  so when the board boots from NFS, ansible&rsquo;s default user
+  (<code>igou</code>) can&rsquo;t SSH in. Phase C&rsquo;s
+  <code>reprovision_to_local.yml</code> needs ansible reach on NFS.
+  Two fixes, both pre-Phase-C:
+  <ul>
+    <li><strong>Quick injection</strong> &mdash; on truenas, write
+        <code>~/.ssh/id_ed25519.pub</code> into the per-host NFS rootfs at
+        <code>/mnt/ssd/netboot/rootfs/&lt;host&gt;/home/igou/.ssh/authorized_keys</code>
+        and add an <code>igou</code> entry to <code>etc/passwd</code> /
+        <code>etc/shadow</code> / <code>etc/group</code> /
+        <code>etc/sudoers.d/igou</code>. Survives reboots.</li>
+    <li><strong>Run <code>bootstrap_armbian.yml</code></strong> against
+        the running NFS-booted board (connects as <code>root</code>
+        with <code>armbian_netboot_default_password</code>). Only works
+        if you first re-enable password auth in the NFS rootfs&rsquo;s
+        <code>/etc/ssh/sshd_config</code> (Armbian disables it by
+        default) <em>and</em> a root password is set.</li>
+  </ul>
+</div>
+
+<h2 id="dependency-flow">3. Dependency flowchart</h2>
+
+<p>
+  How the four major artefacts depend on each other. Arrow = &ldquo;produces
+  / writes to&rdquo;.
+</p>
+
+<figure>
+<svg viewBox="0 0 900 540" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#5a5a5a"/>
+    </marker>
+  </defs>
+
+  <!-- Image build -->
+  <g>
+    <rect x="20" y="20" width="200" height="56" fill="#fff" stroke="#7a4ea0" stroke-width="1.5" rx="4"/>
+    <text x="120" y="42" text-anchor="middle" font-weight="700">image_build (PR family)</text>
+    <text x="120" y="60" text-anchor="middle" fill="#5a5a5a">.img.xz with baked U-Boot</text>
+  </g>
+
+  <!-- HTTP publish -->
+  <g>
+    <rect x="280" y="20" width="220" height="56" fill="#fff" stroke="#1c5b8a" stroke-width="1.5" rx="4"/>
+    <text x="390" y="42" text-anchor="middle" font-weight="700">truenas /mnt/ssd/public/boot-files</text>
+    <text x="390" y="60" text-anchor="middle" fill="#5a5a5a">image_urls in group_vars/all.yml</text>
+  </g>
+  <line x1="220" y1="48" x2="280" y2="48" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- stage_netboot_assets -->
+  <g>
+    <rect x="40" y="120" width="280" height="80" fill="#fff" stroke="#b14b00" stroke-width="1.5" rx="4"/>
+    <text x="180" y="142" text-anchor="middle" font-weight="700">stage_netboot_assets.yml</text>
+    <text x="180" y="160" text-anchor="middle" fill="#5a5a5a">image_extract → _templates/&lt;model&gt;/</text>
+    <text x="180" y="178" text-anchor="middle" fill="#5a5a5a">rootfs_clone → &lt;host&gt;/ + identity reset</text>
+  </g>
+  <line x1="390" y1="76" x2="320" y2="120" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- stage_router -->
+  <g>
+    <rect x="380" y="120" width="280" height="80" fill="#fff" stroke="#b14b00" stroke-width="1.5" rx="4"/>
+    <text x="520" y="142" text-anchor="middle" font-weight="700">stage_router.yml</text>
+    <text x="520" y="160" text-anchor="middle" fill="#5a5a5a">fetch from netboot_server → controller cache</text>
+    <text x="520" y="178" text-anchor="middle" fill="#5a5a5a">push to rb5009 flash:/sbc/armbian/&lt;model&gt;/ + /ip tftp rows</text>
+  </g>
+  <line x1="490" y1="76" x2="520" y2="120" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- pxelinux render -->
+  <g>
+    <rect x="700" y="120" width="180" height="80" fill="#fff" stroke="#b14b00" stroke-width="1.5" rx="4"/>
+    <text x="790" y="142" text-anchor="middle" font-weight="700">pxelinux.cfg</text>
+    <text x="790" y="160" text-anchor="middle" fill="#5a5a5a">01-&lt;mac&gt; per board</text>
+    <text x="790" y="178" text-anchor="middle" fill="#5a5a5a">default = active mode</text>
+  </g>
+
+  <!-- boards -->
+  <g>
+    <rect x="40" y="260" width="200" height="80" fill="#fff" stroke="#234e0d" stroke-width="1.5" rx="4"/>
+    <text x="140" y="282" text-anchor="middle" font-weight="700">NFS rootfs (TrueNAS)</text>
+    <text x="140" y="300" text-anchor="middle" fill="#5a5a5a">/mnt/ssd/netboot/rootfs/&lt;host&gt;</text>
+    <text x="140" y="316" text-anchor="middle" fill="#5a5a5a">used by &lt;label nfs&gt;</text>
+  </g>
+  <line x1="180" y1="200" x2="140" y2="260" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <g>
+    <rect x="280" y="260" width="200" height="80" fill="#fff" stroke="#234e0d" stroke-width="1.5" rx="4"/>
+    <text x="380" y="282" text-anchor="middle" font-weight="700">SD card</text>
+    <text x="380" y="300" text-anchor="middle" fill="#5a5a5a">labelled armbi_root</text>
+    <text x="380" y="316" text-anchor="middle" fill="#5a5a5a">used by &lt;label sd&gt;</text>
+  </g>
+
+  <g>
+    <rect x="520" y="260" width="200" height="80" fill="#fff" stroke="#234e0d" stroke-width="1.5" rx="4"/>
+    <text x="620" y="282" text-anchor="middle" font-weight="700">NVMe (per board)</text>
+    <text x="620" y="300" text-anchor="middle" fill="#5a5a5a">labelled armbi_root_local</text>
+    <text x="620" y="316" text-anchor="middle" fill="#5a5a5a">used by &lt;label local_kernel&gt;</text>
+  </g>
+
+  <!-- per-board lifecycle -->
+  <g>
+    <rect x="80" y="400" width="760" height="100" fill="#fff" stroke="#1c5b8a" stroke-width="1.5" rx="4"/>
+    <text x="460" y="425" text-anchor="middle" font-weight="700">Per-board test loop (Phases A → B → C → C2 → D)</text>
+    <text x="460" y="450" text-anchor="middle" fill="#5a5a5a">
+      set_boot_mode → PoE cycle → wait TCP/22 → SSH evidence → revert
+    </text>
+    <text x="460" y="475" text-anchor="middle" fill="#5a5a5a">
+      reprovision_to_local (Phase C) rsyncs the running NFS rootfs onto NVMe via systemd-repart
+    </text>
+  </g>
+  <line x1="140" y1="340" x2="180" y2="400" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="380" y1="340" x2="420" y2="400" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="620" y1="340" x2="660" y2="400" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="790" y1="200" x2="790" y2="400" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr)"/>
+</svg>
+<figcaption>
+  Dependency graph: artefact-producing playbooks (orange) feed the
+  three rootfs surfaces (green) that the per-board test loop (blue)
+  exercises in turn.
+</figcaption>
+</figure>
+
+<h2 id="per-board-loop">4. Per-board lifecycle</h2>
+
+<p>
+  The same 4-phase pattern (A → B → C → C2 → D) runs against each
+  board. Each phase has a write step (pxelinux.cfg on rb5009 and/or
+  partition table + rootfs on the board itself), a PoE cycle, a wait
+  for TCP/22, and an evidence-capture SSH probe. Per-board artefacts
+  land in <code>/tmp/iter-FLEET-&lt;host&gt;/&lt;phase&gt;/</code>.
+</p>
+
+<figure>
+<svg viewBox="0 0 920 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13">
+  <defs>
+    <marker id="arr2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#5a5a5a"/>
+    </marker>
+  </defs>
+  <!-- Phases -->
+  <g>
+    <rect x="20" y="40" width="160" height="80" fill="#fff" stroke="#b14b00" stroke-width="1.5" rx="4"/>
+    <text x="100" y="65" text-anchor="middle" font-weight="700">A — SD</text>
+    <text x="100" y="85" text-anchor="middle" fill="#5a5a5a">set_boot_mode sd</text>
+    <text x="100" y="103" text-anchor="middle" fill="#5a5a5a">root@&lt;ip&gt; (password)</text>
+  </g>
+  <line x1="180" y1="80" x2="220" y2="80" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <g>
+    <rect x="220" y="40" width="160" height="80" fill="#fff" stroke="#b14b00" stroke-width="1.5" rx="4"/>
+    <text x="300" y="65" text-anchor="middle" font-weight="700">B — NFS</text>
+    <text x="300" y="85" text-anchor="middle" fill="#5a5a5a">set_boot_mode nfs</text>
+    <text x="300" y="103" text-anchor="middle" fill="#5a5a5a">igou@&lt;host&gt; (pre-injected)</text>
+  </g>
+  <line x1="380" y1="80" x2="420" y2="80" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <g>
+    <rect x="420" y="40" width="240" height="80" fill="#fff" stroke="#1c5b8a" stroke-width="1.5" rx="4"/>
+    <text x="540" y="65" text-anchor="middle" font-weight="700">C — reprovision_to_local</text>
+    <text x="540" y="85" text-anchor="middle" fill="#5a5a5a">NFS → systemd-repart → rsync → local</text>
+    <text x="540" y="103" text-anchor="middle" fill="#5a5a5a">ends at boot_mode=local (TFTP kernel)</text>
+  </g>
+  <line x1="660" y1="80" x2="700" y2="80" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <g>
+    <rect x="700" y="40" width="200" height="80" fill="#fff" stroke="#1c5b8a" stroke-width="1.5" rx="4"/>
+    <text x="800" y="65" text-anchor="middle" font-weight="700">C2 — local_kernel</text>
+    <text x="800" y="85" text-anchor="middle" fill="#5a5a5a">set_boot_mode local_kernel</text>
+    <text x="800" y="103" text-anchor="middle" fill="#5a5a5a">verify TFTP HITS stay flat</text>
+  </g>
+
+  <g>
+    <rect x="320" y="200" width="280" height="80" fill="#fff" stroke="#7a4ea0" stroke-width="1.5" rx="4"/>
+    <text x="460" y="225" text-anchor="middle" font-weight="700">D — kernel update</text>
+    <text x="460" y="245" text-anchor="middle" fill="#5a5a5a">apt install linux-image-edge-* → cycle</text>
+    <text x="460" y="263" text-anchor="middle" fill="#5a5a5a">verify uname -r changed</text>
+  </g>
+  <line x1="800" y1="120" x2="600" y2="200" stroke="#5a5a5a" stroke-width="1.5" marker-end="url(#arr2)"/>
+</svg>
+<figcaption>
+  Per-board phase sequence. C is the only destructive step (wipes
+  NVMe via <code>systemd-repart</code>); A and B can run any number
+  of times without changing on-board state.
+</figcaption>
+</figure>
+
+<h3 id="phase-a">Phase A — boot from SD</h3>
+
+<p>
+  Sets <code>default sd</code> in the per-board pxelinux.cfg on
+  rb5009. U-Boot fetches the TFTP-hosted kernel/initrd/dtb and the
+  kernel command line includes <code>root=LABEL=armbi_root</code>,
+  which is the default label Armbian flashes onto SD cards. The
+  kernel mounts whichever block device has that label.
+</p>
+
+<div class="snippet">
+  <header><strong>Phase A run</strong> &mdash; per-board</header>
+<pre><code># Write pxelinux.cfg (no auto-cycle, so we can capture evidence with raw SSH)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/set_boot_mode.yml \
+    -e target_hosts=&lt;host&gt; \
+    -e armbian_netboot_boot_mode=sd \
+    -e armbian_netboot_cycle_board=false
+
+# Cycle PoE separately
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
+    -e armbian_netboot_poe_action=cycle \
+    -e armbian_netboot_poe_cycle_delay=30
+
+# Capture evidence as root (stock Armbian has password 1234, no igou user)
+unset SSH_AUTH_SOCK
+sshpass -p 1234 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+  root@&lt;ip&gt; 'findmnt -no FSTYPE,SOURCE /; cat /proc/cmdline; uname -r'
+</code></pre>
+</div>
+
+<p>
+  Expected evidence on a working SD boot:
+</p>
+<ul>
+  <li><code>findmnt /</code> → <code>ext4 /dev/mmcblkNp1</code> (SD card&rsquo;s root partition)</li>
+  <li><code>/proc/cmdline</code> → starts with <code>root=LABEL=armbi_root rootfstype=ext4</code></li>
+  <li><code>uname -r</code> → matches the kernel package present on the SD card&rsquo;s rootfs</li>
+</ul>
+
+<div class="gotcha">
+  <strong>SD kernel modules must match TFTP vmlinuz.</strong> The kernel
+  comes from rb5009, the modules from the SD&rsquo;s <code>/lib/modules/</code>.
+  If the SD card was flashed from a different Armbian release than the
+  one extracted into the TFTP layout, the kernel may boot but lose
+  drivers for ethernet, USB, or PCIe. Symptom: TCP/22 never comes up
+  even though the kernel reached userspace. Fix: re-flash the SD card
+  with the same Armbian version used to populate rb5009&rsquo;s vmlinuz.
+</p>
+</div>
+
+<h3 id="phase-b">Phase B — boot from NFS</h3>
+
+<p>
+  Identical TFTP path as <code>sd</code>, but pxelinux&rsquo;s
+  <code>append</code> line tells the kernel
+  <code>root=/dev/nfs nfsroot=&lt;truenas-ip&gt;:&lt;path&gt;,nfsvers=3,rw ip=dhcp</code>.
+  The initrd brings up the NIC, gets a DHCP lease, and mounts the
+  per-host NFS rootfs as root.
+</p>
+
+<div class="snippet">
+  <header><strong>Phase B run</strong></header>
+<pre><code>env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/set_boot_mode.yml \
+    -e target_hosts=&lt;host&gt; \
+    -e armbian_netboot_boot_mode=nfs \
+    -e armbian_netboot_cycle_board=false
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
+    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+
+# After TCP/22 comes back up:
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible &lt;host&gt; -m shell -a 'findmnt -no FSTYPE,SOURCE /; cat /proc/cmdline'
+</code></pre>
+</div>
+
+<p>Expected evidence on a working NFS boot:</p>
+<ul>
+  <li><code>findmnt /</code> → <code>nfs &lt;truenas&gt;:/mnt/ssd/netboot/rootfs/&lt;host&gt;</code></li>
+  <li><code>/proc/cmdline</code> → starts with <code>root=/dev/nfs nfsroot=…</code></li>
+  <li><code>hostname</code> → the inventory hostname (proves
+      <code>rootfs_clone</code>&rsquo;s identity reset ran)</li>
+</ul>
+
+<h3 id="phase-c">Phase C — reprovision NVMe (<code>reprovision_to_local.yml</code>)</h3>
+
+<p>
+  The destructive step. Four sub-phases:
+</p>
+
+<ol>
+  <li>Set boot mode <code>nfs</code> + verify the board comes up rooted on NFS.</li>
+  <li>Cross-binding validation (no two layouts share a mount path, exactly one <code>/</code>).</li>
+  <li>For each disk in <code>armbian_netboot_local_disks</code>: run
+      <code>systemd-repart</code> against it, then rsync the running rootfs
+      onto the freshly-formatted partitions. Filesystem labels are how
+      preserved partitions stay idempotent across re-runs.</li>
+  <li>Set boot mode <code>local</code> + verify the board comes back up
+      rooted on the NVMe (<code>findmnt /</code> = ext4 + the device
+      matching the layout).</li>
+</ol>
+
+<div class="snippet">
+  <header><strong>Phase C run</strong></header>
+<pre><code>env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/reprovision_to_local.yml \
+    --limit &lt;host&gt; \
+    -e target_hosts=&lt;host&gt; \
+    -e armbian_netboot_poe_cycle_delay=30
+</code></pre>
+</div>
+
+<p>
+  Total time per board: ~7 minutes (most of it is <code>rsync --one-file-system</code>
+  copying the ~2 GiB rootfs from NFS to NVMe). The lifecycle has
+  auto-revert: if the <code>local</code> verify step fails, it sets
+  pxelinux back to <code>nfs</code> and cycles, leaving the board reachable.
+</p>
+
+<div class="gotcha">
+  <strong><code>-e ansible_user=root</code> leaks into delegated tasks.</strong>
+  If you don&rsquo;t want to pre-inject <code>igou</code> into the NFS rootfs
+  and instead pass <code>-e ansible_user=root</code> to make the reprovision
+  reach the board, that override also applies to delegated routeros
+  calls &mdash; rb5009 only accepts <code>igou+cet1024w</code> and the play
+  will fail with &ldquo;Authentication failed&rdquo;. Pre-injecting <code>igou</code>
+  is the cleaner answer.
+</p>
+</div>
+
+<h3 id="phase-c2">Phase C2 — converge to <code>local_kernel</code></h3>
+
+<p>
+  After Phase C, the board is on mode <code>local</code> &mdash; TFTP
+  kernel, NVMe rootfs. To get fully autonomous (no TFTP) we converge
+  one more time to <code>local_kernel</code>:
+</p>
+
+<div class="snippet">
+  <header><strong>Phase C2 run</strong></header>
+<pre><code>env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/set_boot_mode.yml \
+    -e target_hosts=&lt;host&gt; \
+    -e armbian_netboot_boot_mode=local_kernel \
+    -e armbian_netboot_poe_cycle_delay=30
+</code></pre>
+</div>
+
+<p>
+  The pxelinux label for <code>local_kernel</code> is just
+  <code>localboot 0</code>. U-Boot&rsquo;s baked-in <code>localcmd</code>
+  (installed at image_build time) takes over from there and runs:
+</p>
+
+<pre><code>nvme scan;
+ext4load nvme 0:1 ${kernel_addr_r} /boot/Image;
+ext4load nvme 0:1 ${ramdisk_addr_r} /boot/uInitrd;
+setenv ramdisk_size ${filesize};
+ext4load nvme 0:1 ${fdt_addr_r} /boot/dtb/&lt;board.dtb&gt;;
+booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+</code></pre>
+
+<p>
+  Verification: PoE cycle the board, then check rb5009&rsquo;s TFTP HITS
+  for the board&rsquo;s vmlinuz/initrd/dtb stayed flat. If they incremented,
+  U-Boot was still using the PXE path (something&rsquo;s wrong with the
+  baked <code>localcmd</code> &mdash; usually means the image_build hook
+  didn&rsquo;t fire).
+</p>
+
+<div class="snippet">
+  <header><strong>Confirm <code>local_kernel</code> isn&rsquo;t falling back to TFTP</strong></header>
+<pre><code># Snapshot vmlinuz HITS, cycle, snapshot again
+HITS_BEFORE=$(env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible rb5009.igou.systems -m community.routeros.command \
+  -a 'commands="/ip tftp print where real-filename~\"&lt;model&gt;/vmlinuz\""' \
+  2>/dev/null | grep -oE '[0-9]+$' | tail -1)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
+    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+# Wait for TCP/22 …
+HITS_AFTER=$(env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible rb5009.igou.systems -m community.routeros.command \
+  -a 'commands="/ip tftp print where real-filename~\"&lt;model&gt;/vmlinuz\""' \
+  2>/dev/null | grep -oE '[0-9]+$' | tail -1)
+echo "vmlinuz HITS delta: $((HITS_AFTER - HITS_BEFORE)) (expect 0)"
+</code></pre>
+</div>
+
+<h3 id="phase-d">Phase D — in-place kernel update</h3>
+
+<p>
+  The whole point of <code>local_kernel</code>: <code>apt</code> on
+  the running board owns the kernel. The Armbian postinst
+  hook rewrites <code>/boot/Image</code>, <code>/boot/uInitrd</code>,
+  and the <code>/boot/dtb/</code> directory whenever a kernel
+  package is installed or upgraded. On the next PoE cycle, U-Boot&rsquo;s
+  <code>localcmd</code> loads whatever <code>/boot/Image</code> now
+  points to.
+</p>
+
+<div class="snippet">
+  <header><strong>Phase D run</strong></header>
+<pre><code># Snapshot current kernel
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible &lt;host&gt; -m shell -a 'uname -r; ls -la /boot/Image'
+
+# Install / upgrade kernel
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible &lt;host&gt; -b -m shell \
+    -a 'DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        --allow-downgrades linux-image-edge-rockchip64=&lt;target&gt; \
+                            linux-dtb-edge-rockchip64=&lt;target&gt;'
+
+# Cycle and verify uname -r changed
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
+    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+# After TCP/22:
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible &lt;host&gt; -m shell -a 'uname -r'
+</code></pre>
+</div>
+
+<div class="bad">
+  <strong>Hardware-compat risk.</strong> Today&rsquo;s run hit a real-world
+  pitfall: the unofficial Armbian build that produced the original
+  on-disk kernel (<code>7.0.7-edge-rockchip64</code>) has a higher
+  Debian version string than the public apt repo&rsquo;s current edge
+  (<code>26.2.1</code> → kernel <code>6.19.0-edge-rockchip64</code>),
+  so the only available &ldquo;upgrade&rdquo; is a kernel
+  <em>downgrade</em>. On orange-pi-5-pro that downgrade booted but lost
+  the YT6801 NIC driver, leaving the board unreachable. The
+  <em>mechanism</em> was proven (apt postinst updated
+  <code>/boot/Image</code>, U-Boot loaded it). Recovery: switch
+  pxelinux to <code>nfs</code>, cycle, mount NVMe at
+  <code>/mnt/nvme</code>, copy the NFS rootfs&rsquo;s
+  <code>/boot/vmlinuz-7.0.7-edge-rockchip64</code> +
+  <code>/lib/modules/7.0.7-edge-rockchip64/</code> over, repoint
+  symlinks, set boot mode back to <code>local_kernel</code>, cycle.
+</p>
+</div>
+
+<h2 id="one-shot">5. The one-shot fleet playbook</h2>
+
+<p>
+  Running each phase manually is good for the first run &mdash; you see
+  the wiring and own the failure modes. Once that&rsquo;s clear,
+  <code>playbooks/test_fleet_e2e.yml</code> drives the whole loop
+  end-to-end across every host in <code>boards</code> (or a subset).
+</p>
+
+<div class="snippet">
+  <header><strong>One-shot fleet test</strong> &mdash; recommended usage</header>
+<pre><code># Full fleet (all 5 boards), default target group
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/test_fleet_e2e.yml
+
+# Subset (use -e target_hosts=, not --limit — plays delegate to rb5009/truenas/PoE)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/test_fleet_e2e.yml \
+    -e target_hosts=opi5pro-01.igou.systems,rock-5b-01.igou.systems
+
+# Skip phases you&rsquo;ve already proven
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/test_fleet_e2e.yml \
+    -e skip_sd=true -e skip_kernel_update=true
+
+# Pin the Phase D kernel target (e.g. for a regression-confirmed older version)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/test_fleet_e2e.yml \
+    -e kernel_pkg=linux-image-edge-rockchip64 \
+    -e kernel_update_pin=26.2.1
+</code></pre>
+</div>
+
+<p>
+  The playbook is composed of seven plays. Parallelism is per-play
+  (ansible&rsquo;s default <code>forks</code> applies across hosts), except
+  for Phase C which is forced to <code>serial: 1</code> &mdash; running
+  <code>systemd-repart</code> + rsync against the NFS rootfs on
+  multiple boards simultaneously causes NFS read contention that
+  hangs the I/O loop.
+</p>
+
+<table>
+  <thead><tr><th>Play</th><th>Hosts</th><th>Parallelism</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Pre-flight: inject <code>igou</code></td><td>netboot_server</td><td>serial (single host)</td>
+        <td>Adds <code>igou</code> user, sudoers, and <code>~/.ssh/id_ed25519.pub</code> to each per-host NFS rootfs &mdash; idempotent, safe to re-run</td></tr>
+    <tr><td>Phase A &mdash; SD</td><td>target_hosts</td><td>parallel</td>
+        <td>set pxelinux <code>default sd</code>, PoE cycle, raw-SSH probe (root + default password), revert to nfs</td></tr>
+    <tr><td>Phase B &mdash; NFS verify</td><td>target_hosts</td><td>parallel</td>
+        <td>Assert each board&rsquo;s <code>/</code> is NFS-mounted; write evidence file</td></tr>
+    <tr><td>Phase C &mdash; reprovision</td><td>target_hosts</td><td><strong>serial: 1</strong></td>
+        <td>Per board: set nfs, cross-binding validate, <code>disk_provision</code> loop, set local</td></tr>
+    <tr><td>Phase C2 &mdash; local_kernel</td><td>target_hosts</td><td>parallel</td>
+        <td>Set <code>default local_kernel</code>; assert TFTP HITS for vmlinuz stay flat across the cycle (proves U-Boot baked localcmd booted from NVMe)</td></tr>
+    <tr><td>Phase D &mdash; kernel update</td><td>target_hosts</td><td>parallel</td>
+        <td><code>apt update</code> + install/upgrade kernel pkg → cycle → record uname before/after</td></tr>
+    <tr><td>Summary</td><td>target_hosts</td><td>parallel</td>
+        <td>Debug-prints the per-board artefact directory layout</td></tr>
+  </tbody>
+</table>
+
+<h3>Per-board outputs</h3>
+
+<p>
+  Each phase writes a small evidence file under
+  <code>/tmp/iter-FLEET-&lt;host&gt;/&lt;phase&gt;/</code>:
+</p>
+
+<pre><code>/tmp/iter-FLEET-opi5pro-01/
+├── A-sd/sd-boot-evidence.txt
+├── B-nfs/nfs-boot-evidence.txt
+├── C2-localkernel/local-kernel-evidence.txt
+└── D-kupdate/kernel-update-evidence.txt
+</code></pre>
+
+<p>
+  Phase C (reprovision) doesn&rsquo;t write a fleet-specific evidence file
+  &mdash; the standalone <code>reprovision_to_local.yml</code> already
+  emits a diagnostic bundle on failure under
+  <code>./diagnostics/</code> (path configurable via
+  <code>-e armbian_netboot_diagnostic_bundle_dir=</code>). The
+  successful-path proof is implicit in Phase C2 (which asserts the
+  board boots from the freshly-rsynced NVMe rootfs).
+</p>
+
+<h3>Exit semantics</h3>
+
+<p>
+  Any phase failure halts the playbook for the affected host(s)
+  immediately &mdash; ansible&rsquo;s default. Other hosts in the parallel
+  phases continue to completion (their own per-host state is
+  independent). The lifecycle <code>_lifecycle_set_and_verify.yml</code>
+  wrapper auto-reverts a failed boot-mode transition back to
+  <code>nfs</code> (the safest reachable state), so a Phase C2
+  failure won&rsquo;t leave a board stuck on a broken local_kernel.
+</p>
+
+<div class="gotcha">
+  <strong>Phase D failure does NOT auto-revert.</strong> If
+  <code>apt install</code> succeeds but the new kernel breaks the
+  board&rsquo;s NIC (the YT6801 regression hit during today&rsquo;s run),
+  the cycle leaves the board offline. Recovery is manual: set the
+  board to <code>nfs</code> mode (<code>set_boot_mode.yml</code> on
+  rb5009 only, no SSH to the board needed), cycle, mount the NVMe at
+  <code>/mnt/nvme</code> from the NFS-booted board, copy the NFS
+  rootfs&rsquo;s working kernel binary + modules onto the NVMe, re-point
+  <code>/boot/Image</code>, converge back to <code>local_kernel</code>.
+  See &sect;6 &ldquo;Common gotchas&rdquo; for the recipe.
+</p>
+</div>
+
+<h2 id="inventory">6. Sample inventory (boards / truenas / rb5009)</h2>
+
+<p>
+  The collection consumes only the inventory keys shown below. Other
+  groups in a real inventory (k8s nodes, observability hosts, &hellip;)
+  are unrelated. The example is YAML-format; INI is equivalent.
+</p>
+
+<div class="snippet">
+  <header><strong>group_vars/all/main.yml</strong> &mdash; collection-wide defaults</header>
+<pre><code># Where the NFS export root lives on truenas.
+armbian_netboot_server_ip:      "10.10.9.213"
+armbian_netboot_nfs_server_ip:  "10.10.9.213"
+armbian_netboot_nfs_rootfs_path: "/mnt/ssd/netboot/rootfs"   # default
+armbian_netboot_nfs_assets_export: "/mnt/ssd/public/boot-files"
+
+# Root password on a freshly-flashed Armbian image (vault this in real life)
+armbian_netboot_default_password: "1234"
+
+# Debian release for image_build
+armbian_build_release: "trixie"
+
+# DHCP server name on rb5009 that owns the SBC VLAN's static leases
+routeros_dhcp_server_name: "dhcp_vlan9"
+
+# Per-board .img.xz URLs (or local truenas paths). Keyed by armbian_netboot_board_model.
+armbian_netboot_image_urls:
+  orange-pi-5-pro: "/mnt/ssd/public/boot-files/images/orangepi5pro/Armbian-…7.0.7_minimal.img.xz"
+  orange-pi-5:     "/mnt/ssd/public/boot-files/images/orangepi5/Armbian-…7.0.7_minimal.img.xz"
+  orange-pi-5-max: "/mnt/ssd/public/boot-files/images/orangepi5-max/Armbian-…7.0.8_minimal.img.xz"
+  rock-5a:         "/mnt/ssd/public/boot-files/images/rock-5a/Armbian-…7.0.7_minimal.img.xz"
+  rock-5b:         "/mnt/ssd/public/boot-files/images/rock-5b/Armbian-…7.0.7_minimal.img.xz"
+
+# SSH keys installed on a freshly-flashed board by bootstrap_armbian.yml
+armbian_netboot_bootstrap_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…"
+</code></pre>
+</div>
+
+<div class="snippet">
+  <header><strong>group_vars/boards.yml</strong> &mdash; which router owns plumbing</header>
+<pre><code>armbian_netboot_router: rb5009.igou.systems
+</code></pre>
+</div>
+
+<div class="snippet">
+  <header><strong>group_vars/routeros.yml</strong> &mdash; network_cli plumbing</header>
+<pre><code>ansible_connection:  ansible.netcommon.network_cli
+ansible_network_os:  community.routeros.routeros
+ansible_user:        "igou+cet1024w"   # the +cet1024w forces RouterOS into a CLI-friendly TTY
+# (port set per-host in inventory.yaml — RouterOS SSH is often moved off 22)
+</code></pre>
+</div>
+
+<div class="snippet">
+  <header><strong>inventory.yaml</strong> &mdash; hosts + per-host vars used by this collection</header>
+<pre><code># Only the keys this collection consumes are shown.
+
+all:
+  children:
+
+    # ── netboot server (TrueNAS) ──────────────────────────────────────
+    netboot_server:
+      hosts:
+        truenas.igou.systems:
+          ansible_user: truenas_admin
+
+    # ── RouterOS devices ─────────────────────────────────────────────
+    # rb5009 owns DHCP + TFTP for the SBC VLAN.
+    # crs328 is the PoE switch the boards plug into.
+    routeros_routers:
+      hosts:
+        rb5009.igou.systems: {}
+    routeros_switches:
+      hosts:
+        crs328.igou.systems: {}
+    routeros_netboot:
+      hosts:
+        rb5009.igou.systems: {}
+        crs328.igou.systems: {}
+    routeros:
+      children:
+        routeros_routers:
+        routeros_switches:
+
+    # ── SBCs that PXE-boot from rb5009 ───────────────────────────────
+    boards:
+      children:
+        orange_pi_5_pro:
+        rock_5b:
+        orange_pi_5:
+        rock_5a:
+        orange_pi_5_max:
+
+    orange_pi_5_pro:
+      hosts:
+        opi5pro-01.igou.systems:
+          ansible_host: opi5pro-01.igou.systems
+          armbian_netboot_board_mac:   "C0:74:2B:FB:4D:FD"
+          armbian_netboot_board_model: orange-pi-5-pro
+          armbian_netboot_boot_mode:   local_kernel
+          armbian_netboot_local_kernel:
+            persist_via: hook        # baked into U-Boot binary at image_build time
+          armbian_netboot_poe_switch:  crs328.igou.systems
+          armbian_netboot_poe_port:    ether7
+          armbian_netboot_local_disks:
+            - device: /dev/nvme0n1
+              wipe: true
+              layout:
+                - id: root
+                  size: grow
+                  type: root
+                  format: ext4
+                  label: armbi_root_local
+                  mount: /
+
+    rock_5b:
+      hosts:
+        rock-5b-01.igou.systems:
+          ansible_host: rock-5b-01.igou.systems
+          armbian_netboot_board_mac:   "00:E0:4C:68:00:3B"
+          armbian_netboot_board_model: rock-5b
+          armbian_netboot_boot_mode:   local_kernel
+          armbian_netboot_local_kernel:
+            persist_via: spi         # writes via fw_setenv into SPI flash (persist_uboot_env.yml)
+          armbian_netboot_uboot_env_extra:
+            bootdelay: "0"
+          armbian_netboot_poe_switch:  crs328.igou.systems
+          armbian_netboot_poe_port:    ether9
+          armbian_netboot_local_disks:
+            - device: /dev/nvme0n1
+              wipe: true
+              layout:
+                - { id: root, size: grow, type: root, format: ext4,
+                    label: armbi_root_local, mount: / }
+
+    # orange-pi-5, rock-5a, orange-pi-5-max follow the same shape;
+    # only board_mac / board_model / poe_port differ.
+</code></pre>
+</div>
+
+<div class="kvbox">
+  <dt>Required per-host (boards group) keys</dt>
+  <dd>
+    <code>ansible_host</code>,
+    <code>armbian_netboot_board_mac</code>,
+    <code>armbian_netboot_board_model</code> (must match a key in <code>vars/boards.yml</code>),
+    <code>armbian_netboot_boot_mode</code>,
+    <code>armbian_netboot_poe_switch</code>,
+    <code>armbian_netboot_poe_port</code>.
+  </dd>
+  <dt>Required for <code>local_kernel</code> mode</dt>
+  <dd>
+    <code>armbian_netboot_local_kernel.persist_via</code> &isin;
+    { <code>hook</code> (baked at image_build), <code>spi</code> (fw_setenv into SPI) },
+    plus <code>armbian_netboot_local_disks</code> (Phase C input).
+  </dd>
+  <dt>Required on netboot_server</dt>
+  <dd>
+    <code>ansible_user</code> (with sudo) reachable over SSH; the host
+    must own the NFS export path declared in
+    <code>armbian_netboot_nfs_rootfs_path</code>.
+  </dd>
+  <dt>Required on RouterOS hosts</dt>
+  <dd>
+    <code>ansible_user</code> (often <code>igou+cet1024w</code> for RouterOS),
+    optional <code>ansible_port</code> if SSH is off port 22.
+  </dd>
+</div>
+
+<h2 id="gotchas">7. Common gotchas the test exposed</h2>
+
+<table>
+  <thead><tr><th>Gotcha</th><th>Where it bites</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Stock SD card has no <code>igou</code> user</td>
+      <td>Phase A board_boot_verify fails: SSH stability times out</td>
+      <td>Fall back to raw <code>sshpass -p 1234 ssh root@&lt;ip&gt;</code> for evidence; ansible-managed SD is out of scope of these fleet tests</td>
+    </tr>
+    <tr>
+      <td>Stock NFS rootfs has empty <code>/root/.ssh</code> and password auth disabled</td>
+      <td>Phase B board_boot_verify fails: SSH key auth rejected</td>
+      <td>Pre-inject <code>~/.ssh/id_ed25519.pub</code> into <code>/root/.ssh/authorized_keys</code> + create an <code>igou</code> user account on each per-host NFS rootfs directly via truenas</td>
+    </tr>
+    <tr>
+      <td><code>-e ansible_user=root</code> leaks to delegated routeros tasks</td>
+      <td>Phase C&rsquo;s plumbing-check fails: rb5009 rejects root auth</td>
+      <td>Pre-inject <code>igou</code> into NFS rootfs so the default user works; never override <code>ansible_user</code> globally when delegations are in play</td>
+    </tr>
+    <tr>
+      <td>Stale ssh-agent intercepts auth before <code>~/.ssh/id_ed25519</code></td>
+      <td>SSH hangs or hits rate-limit before reaching the right key</td>
+      <td>Prefix every ansible invocation with <code>env -u SSH_AUTH_SOCK</code></td>
+    </tr>
+    <tr>
+      <td>Per-host SSH host key changes 3+ times across the lifecycle</td>
+      <td>raw <code>ssh</code> prompts &ldquo;remote host identification has changed&rdquo;</td>
+      <td>Use <code>-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null</code>; ansible.cfg already has <code>host_key_checking=False</code></td>
+    </tr>
+    <tr>
+      <td><code>local_kernel</code> /proc/cmdline matches <code>local</code> /proc/cmdline</td>
+      <td>Easy to think you&rsquo;re on local_kernel when you&rsquo;re actually on local</td>
+      <td>Probe rb5009 TFTP HITS deltas across a cycle &mdash; <code>local_kernel</code> = flat, <code>local</code> = +1 per asset</td>
+    </tr>
+    <tr>
+      <td>Apt repo&rsquo;s edge kernel is older than the installed unofficial build</td>
+      <td>Phase D &ldquo;upgrade&rdquo; is actually a downgrade that may regress hardware support</td>
+      <td>Pin a specific older version with <code>=&lt;version&gt; --allow-downgrades</code> if you need to test the mechanism; expect to recover via NFS-chroot if the target kernel breaks the NIC</td>
+    </tr>
+    <tr>
+      <td>Re-running <code>stage_netboot_assets.yml</code> clobbers per-host rootfs customisations</td>
+      <td>If you bootstrapped <code>igou</code> on NFS by hand, a re-stage wipes it out</td>
+      <td>Re-inject after re-staging; or keep the injection as a separate playbook that&rsquo;s safe to re-run</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="evidence">8. Worked-example evidence (today&rsquo;s run)</h2>
+
+<p>
+  Captured artefacts from a successful fleet run on the 5-board
+  inventory (opi5pro-01, orange-pi-5-01, rock-5a-01,
+  orange-pi-5-max-01, rock-5b-01). All boards are PoE-powered via
+  <code>crs328.igou.systems</code>, NFS-served by
+  <code>truenas.igou.systems:10.10.9.213</code>, TFTP-served by
+  <code>rb5009.igou.systems</code>.
+</p>
+
+<table>
+  <thead><tr><th>Board</th><th>Model</th><th>Persist</th><th>NIC</th><th>NVMe size</th><th>Phase A</th><th>Phase B</th><th>Phase C</th><th>Phase C2</th><th>Phase D</th></tr></thead>
+  <tbody>
+    <tr><td>opi5pro-01</td><td>orange-pi-5-pro</td><td>hook</td><td>YT6801</td><td>119 GB</td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill warn">mech pass; 6.19 regressed NIC</span></td>
+    </tr>
+    <tr><td>orange-pi-5-01</td><td>orange-pi-5</td><td>hook</td><td>RTL8211F</td><td>238 GB</td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass (HITS flat at 19)</span></td>
+      <td><span class="pill ok">mech pass; no-op (already latest)</span></td>
+    </tr>
+    <tr><td>rock-5a-01</td><td>rock-5a</td><td>hook</td><td>RTL8211F</td><td>238 GB</td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass (HITS flat at 32)</span></td>
+      <td><span class="pill ok">mech pass; no-op</span></td>
+    </tr>
+    <tr><td>orange-pi-5-max-01</td><td>orange-pi-5-max</td><td>hook</td><td>RTL8125BG</td><td>119 GB</td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass (HITS flat at 34)</span></td>
+      <td><span class="pill ok">mech pass; no-op</span></td>
+    </tr>
+    <tr><td>rock-5b-01</td><td>rock-5b</td><td>spi</td><td>onboard GMAC</td><td>477 GB</td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill ok">pass</span></td>
+      <td><span class="pill warn">aborted at systemd-repart (large disk)</span></td>
+      <td><span class="pill">n/a (blocked on C)</span></td>
+      <td><span class="pill">n/a (blocked on C)</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="gotcha">
+  <strong>rock-5b-01&rsquo;s 477 GB NVMe outliers the rest of the fleet.</strong>
+  <code>systemd-repart --empty=force</code> followed by
+  <code>mkfs.ext4</code> on a 477 GB partition writes inode tables at
+  the NVMe&rsquo;s sustained write bandwidth (~165 MB/s on this RK3588
+  PCIe Gen2 x1). Total wall time ~30-45 min vs ~7 min for the 119-238
+  GB siblings. The campaign aborted Phase C for rock-5b after ~10 min
+  to keep the fleet test bounded. Recovery path: re-run
+  <code>reprovision_to_local.yml --limit rock-5b-01</code> with a long
+  wait timeout, OR enhance <code>disk_provision</code> to pass
+  <code>-E lazy_itable_init=1,lazy_journal_init=1</code> to mkfs.ext4
+  so the on-disk init happens lazily at runtime.
+</p>
+</div>
+
+<details>
+<summary>opi5pro-01 — Phase A (SD) evidence</summary>
+<pre><code>=== Phase A (SD) — opi5pro-01 ===
+--- hostname ---
+orangepi5pro
+--- uname ---
+Linux orangepi5pro 7.0.7-edge-rockchip64 #2 SMP PREEMPT Thu May 14 13:31:20 UTC 2026 aarch64 GNU/Linux
+--- findmnt / ---
+ext4 /dev/mmcblk1p1 rw,relatime,errors=remount-ro,commit=120
+--- /proc/cmdline ---
+root=LABEL=armbi_root rootfstype=ext4 rootwait rw console=ttyS2,1500000n8
+--- block devices ---
+NAME          SIZE LABEL            FSTYPE MOUNTPOINT
+mmcblk1      14.8G
+└─mmcblk1p1  14.7G armbi_root       ext4   /
+nvme0n1     119.2G
+└─nvme0n1p1 119.2G armbi_root_local ext4
+</code></pre>
+</details>
+
+<details>
+<summary>opi5pro-01 — Phase B (NFS) evidence</summary>
+<pre><code>=== Phase B (NFS) — opi5pro-01 ===
+--- findmnt / ---
+nfs 10.10.9.213:/mnt/ssd/netboot/rootfs/opi5pro-01.igou.systems rw,relatime,vers=3,…
+--- /proc/cmdline ---
+root=/dev/nfs nfsroot=10.10.9.213:/mnt/ssd/netboot/rootfs/opi5pro-01.igou.systems,nfsvers=3,rw ip=dhcp console=ttyS2,1500000n8 rootwait rw
+--- hostname ---
+opi5pro-01.igou.systems
+--- uname ---
+7.0.7-edge-rockchip64
+</code></pre>
+</details>
+
+<details>
+<summary>test_fleet_e2e.yml validation run (3 boards, C2 + D in parallel)</summary>
+<pre><code>$ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+    playbooks/test_fleet_e2e.yml \
+    -e "target_hosts=orange-pi-5-01.igou.systems,rock-5a-01.igou.systems,orange-pi-5-max-01.igou.systems" \
+    -e skip_sd=true -e skip_nfs=true -e skip_reprovision=true \
+    -e armbian_netboot_poe_cycle_delay=30
+...
+TASK [Phase C2 — assert TFTP-flat (local_kernel = U-Boot baked localcmd, no TFTP fetch)] ***
+    "msg": "vmlinuz HITS unchanged across cycle (19) — local_kernel proven"
+    "msg": "vmlinuz HITS unchanged across cycle (32) — local_kernel proven"
+    "msg": "vmlinuz HITS unchanged across cycle (34) — local_kernel proven"
+
+PLAY RECAP ***
+orange-pi-5-01.igou.systems     : ok=65 changed=12 unreachable=0 failed=0
+orange-pi-5-max-01.igou.systems : ok=60 changed=12 unreachable=0 failed=0
+rock-5a-01.igou.systems         : ok=60 changed=12 unreachable=0 failed=0
+
+Total wall time: 6m18s for 3 boards in parallel through C2 (one PoE cycle each)
++ D (one PoE cycle each). Most of the time is two ~110s waits for TCP/22 to
+return after each cycle.
+</code></pre>
+</details>
+
+<details>
+<summary>opi5pro-01 — Phase C reprovision PLAY RECAP</summary>
+<pre><code>opi5pro-01.igou.systems    : ok=124  changed=17   unreachable=0    failed=0    skipped=19   rescued=0    ignored=0
+disk_provision : Populate: rsync source into mounted root ------------- 129.56s
+converge[nfs] attempt 1 — wait for board TCP/22 ------------------------ 41.78s
+converge[local] attempt 1 — wait for board TCP/22 ---------------------- 32.31s
+</code></pre>
+</details>
+
+<details>
+<summary>opi5pro-01 — Phase C2 local_kernel TFTP HITS delta proof</summary>
+<pre><code>opi5pro-01 vmlinuz HITS:
+  - after Phase C (local): 147
+  - after manual PoE cycle in local_kernel mode: 147   ← unchanged
+
+Conclusion: U-Boot's baked localcmd loaded /boot/Image from NVMe,
+the network bootflow never fired.
+</code></pre>
+</details>
+
+<details>
+<summary>opi5pro-01 — Phase D (kernel-update mechanism proven; new kernel regressed NIC)</summary>
+<pre><code># Pre-update
+uname -r: 7.0.7-edge-rockchip64
+/boot/Image -> vmlinuz-7.0.7-edge-rockchip64
+
+# apt-get install --allow-downgrades linux-image-edge-rockchip64=26.2.1
+'/boot/Image' -> 'vmlinuz-6.19.0-edge-rockchip64'   ← postinst updated symlink
+
+# PoE cycle
+TCP/22: never came back up
+rb5009 DHCP lease: status=waiting, last-seen=18m32s, class-id=U-Boot.armv8
+  → U-Boot did its job, kernel booted, userspace never reached the NIC
+
+# Recovery: NFS-chroot, copy NFS rootfs's 7.0.7 vmlinuz + modules onto NVMe,
+# re-point /boot/Image, converge back to local_kernel
+After cycle: uname -r = 7.0.7-edge-rockchip64, board reachable
+</code></pre>
+</details>
+
+<h2 id="lineage">9. Source-PR lineage</h2>
+
+<table>
+  <thead><tr><th>PR</th><th>What it added</th><th>Test phase it underwrites</th></tr></thead>
+  <tbody>
+    <tr><td>#85</td><td>CONFIG_PCI / CONFIG_CMD_NVME backfill for rk3588 mainline U-Boot</td><td>Phase C2 on rock-5a (mainline U-Boot needs PCIe enable to enumerate NVMe)</td></tr>
+    <tr><td>#84</td><td>Generalised <code>local_kernel</code> mode across all rk3588 boards (dispatch-table baked U-Boot env)</td><td>Phase C2 / D on all 4 rk3588 boards (opi5pro, opi5, rock-5a, rock-5b)</td></tr>
+    <tr><td>#82</td><td>Original OPi5Max <code>local_kernel</code> mechanism (one-board PoC)</td><td>Phase C2 / D on orange-pi-5-max</td></tr>
+    <tr><td>#80</td><td>Declarative disk-provision DSL + <code>reprovision_to_local.yml</code> lifecycle</td><td>Phase C across the entire fleet</td></tr>
+    <tr><td>#76</td><td><code>local</code> boot mode (TFTP kernel + local rootfs) + opi5-max bring-up</td><td>Phase C&rsquo;s landing state (the lifecycle ends at <code>local</code> before C2 promotes to <code>local_kernel</code>)</td></tr>
+    <tr><td>#73</td><td>v3.0.0 role refactor — single-purpose, transport-agnostic</td><td>Every phase&rsquo;s playbook composition</td></tr>
+    <tr><td>#68</td><td>v2.0.0 always-netboot model migration</td><td>The pxelinux-cfg-always-present invariant Phase A/B/C depend on</td></tr>
+  </tbody>
+</table>
+
+<h3>Phase D recovery recipe (when a new kernel bricks the board)</h3>
+
+<p>
+  When apt installs a new kernel that fails to boot from NVMe (typical
+  symptoms: TCP/22 never returns, DHCP lease class-id stays
+  <code>U-Boot.armv8</code> rather than transitioning to a Linux
+  client-id), recover via NFS:
+</p>
+
+<div class="snippet">
+  <header><strong>Recovery</strong> &mdash; restore working kernel onto NVMe via NFS</header>
+<pre><code># 1. Switch board back to NFS (router-only, no SSH to the board needed)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/set_boot_mode.yml \
+    -e target_hosts=&lt;host&gt; -e armbian_netboot_boot_mode=nfs \
+    -e armbian_netboot_poe_cycle_delay=30
+
+# 2. From the NFS-booted board, mount NVMe and copy NFS rootfs's working kernel onto it
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible &lt;host&gt; -b -m shell -a '
+    mkdir -p /mnt/nvme &amp;&amp; mount /dev/nvme0n1p1 /mnt/nvme
+    cp -a /boot/vmlinuz-&lt;working-ver&gt; /mnt/nvme/boot/
+    cp -a /boot/uInitrd-&lt;working-ver&gt; /mnt/nvme/boot/ 2&gt;/dev/null \
+      || cp -a /boot/initrd.img-&lt;working-ver&gt; /mnt/nvme/boot/
+    chroot /mnt/nvme /bin/bash -c "
+      rm -f /boot/Image /boot/uInitrd
+      ln -sf vmlinuz-&lt;working-ver&gt; /boot/Image
+      ln -sf uInitrd-&lt;working-ver&gt;  /boot/uInitrd \
+        || ln -sf initrd.img-&lt;working-ver&gt; /boot/uInitrd"
+    [ -d /mnt/nvme/lib/modules/&lt;working-ver&gt; ] \
+      || cp -a /lib/modules/&lt;working-ver&gt; /mnt/nvme/lib/modules/
+    umount /mnt/nvme'
+
+# 3. Converge back to local_kernel
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/set_boot_mode.yml \
+    -e target_hosts=&lt;host&gt; -e armbian_netboot_boot_mode=local_kernel \
+    -e armbian_netboot_poe_cycle_delay=30
+</code></pre>
+</div>
+
+<h2 id="closing">Closing</h2>
+
+<p>
+  This whole pipeline produces ~1 GiB of artefacts per board in
+  <code>/tmp/iter-FLEET-&lt;host&gt;/</code>. Keep them across runs &mdash;
+  they&rsquo;re the diff you reach for when next month&rsquo;s campaign hits a
+  regression you don&rsquo;t recognise. Anything board-specific that
+  surprises you (a new failure mode, a workaround) belongs on the
+  per-board GitHub <code>board-tracker</code> issue, not in a separate
+  doc &mdash; see the <code>testing-armbian-board-hardware</code> skill
+  for the comment template.
+</p>
+
+</body>
+</html>
