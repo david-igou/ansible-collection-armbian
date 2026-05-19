@@ -30,9 +30,15 @@
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `netboot_server`,
 #     `rb5009`, and each PoE switch.
-#   - Inventory's `armbian_netboot_image_urls[<model>]` published
-#     somewhere reachable from netboot_server (Phase 1) and from the
-#     board (Phase 3 dd-from-URL).
+#   - Inventory's `armbian_netboot_image_urls[<model>]` set per model
+#     (path or URL the netboot_server can read; Phase 1 image_extract).
+#   - Inventory's `armbian_netboot_image_urls_http[<model>]` set per
+#     model (http(s):// URL the boards can stream from; Phase 3
+#     disk_image). These two vars are split because the netboot_server
+#     and the boards typically need different addressing for the same
+#     image (e.g. netboot_server reads a local NFS path; boards stream
+#     from an HTTP endpoint that the netboot_server itself can't reach
+#     when the URL points at the netboot_server's own macvlan address).
 #   - stage_router.yml has been run (per-model TFTP rows on rb5009).
 #   - Inventory's `armbian_netboot_local_disks` set per board (Phase 5).
 #   - Inventory's `armbian_netboot_poe_switch` + `armbian_netboot_poe_port`
@@ -342,18 +348,24 @@
           ansible.builtin.set_fact:
             _t_phase_3_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
+        # disk_image runs on the board and must reach the image
+        # itself. armbian_netboot_image_urls_http is the per-model
+        # http(s):// URL the boards stream from; distinct from
+        # armbian_netboot_image_urls (Phase 1 image_extract on
+        # netboot_server consumes that one — typically a local NFS
+        # path the netboot_server can't reach via its own macvlan IP).
         - name: "Phase 3 — dd canonical image to SD"
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
+            image_source: "{{ armbian_netboot_image_urls_http[armbian_netboot_board_model] }}"
             target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 3 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 3 (dd SD) — {{ inventory_hostname }} ===
-              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
+              source:  {{ armbian_netboot_image_urls_http[armbian_netboot_board_model] }}
               target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
               From-state: NFS rootfs (board was bootstrapped + verified NFS in Phase 2)
             dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"

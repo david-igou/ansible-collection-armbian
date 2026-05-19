@@ -207,7 +207,15 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   `/mnt/ssd/netboot/rootfs`.
 - `armbian_netboot_default_password` — Armbian NFS root SSH password (default `1234`);
   encrypt with vault.
-- `armbian_netboot_image_urls` — full `.img.xz` URL per board model.
+- `armbian_netboot_image_urls` — per-model `.img.xz` source consumed by
+  `image_extract` on the netboot_server (Phase 1 of `test_fleet_e2e.yml`,
+  plus `stage_netboot_assets.yml`). Typically a local NFS path on the
+  server.
+- `armbian_netboot_image_urls_http` — per-model http(s):// URL consumed
+  by the `disk_image` role on each board (Phase 3 of `test_fleet_e2e.yml`).
+  Must resolve to the SAME `.img.xz` as `armbian_netboot_image_urls` but
+  via a URL the boards can reach (the netboot_server often can't reach
+  its own macvlan-fronted HTTP address, hence the split).
 - `armbian_netboot_nfs_assets_export` — netboot-owned subtree on the HTTP host.
   Default `/mnt/ssd/public/boot-files`.
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
@@ -389,7 +397,9 @@ Minimum touched files for a new board:
    `armbian_board_name`, `armbian_support`, `dtb`, `console`, `earlycon`.
 3. `inventory/group_vars/all.yml`: add an
    `armbian_netboot_image_urls[<model>]` entry pointing at the
-   locally-published custom build.
+   locally-published custom build (consumed on the netboot_server),
+   AND an `armbian_netboot_image_urls_http[<model>]` entry with the
+   http(s):// URL the boards stream from for the Phase 3 dd-to-SD step.
 4. `playbooks/build_image.yml` `build_branches:` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
    boards need `edge` for mainline U-Boot).

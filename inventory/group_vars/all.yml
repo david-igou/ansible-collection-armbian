@@ -43,6 +43,25 @@ armbian_netboot_image_urls:
   rock-5a: "https://public.igou.systems/boot-files/images/rock-5a/Armbian-unofficial_<version>_Rock-5a_<dist>_current_<kver>_minimal.img.xz"
   orange-pi-5-max: "https://public.igou.systems/boot-files/images/orangepi5-max/Armbian-unofficial_<version>_Orangepi5-max_<dist>_edge_<kver>_minimal.img.xz"
 
+# Per-model HTTP URL the BOARDS stream from when the disk_image role
+# images SD (test_fleet_e2e.yml Phase 3). Distinct from
+# armbian_netboot_image_urls above because:
+#   - armbian_netboot_image_urls is consumed on the netboot_server
+#     (image_extract role) where the image is typically a local NFS
+#     path the server can read directly without an HTTP round-trip.
+#   - armbian_netboot_image_urls_http is consumed on each board, which
+#     can't read the netboot_server's local filesystem; the board
+#     curls the URL.
+# Both should resolve to the SAME .img.xz file. The split exists
+# because the netboot_server typically can't reach its own
+# macvlan-fronted HTTP address (so a unified URL won't work).
+armbian_netboot_image_urls_http:
+  orange-pi-5-pro: "http://<your-http-host>/boot-files/images/orangepi5pro/Armbian-unofficial_<version>_Orangepi5pro_<dist>_current_<kver>_minimal.img.xz"
+  rock-5b: "http://<your-http-host>/boot-files/images/rock-5b/Armbian-unofficial_<version>_Rock-5b_<dist>_edge_<kver>_minimal.img.xz"
+  orange-pi-5: "http://<your-http-host>/boot-files/images/orangepi5/Armbian-unofficial_<version>_Orangepi5_<dist>_current_<kver>_minimal.img.xz"
+  rock-5a: "http://<your-http-host>/boot-files/images/rock-5a/Armbian-unofficial_<version>_Rock-5a_<dist>_current_<kver>_minimal.img.xz"
+  orange-pi-5-max: "http://<your-http-host>/boot-files/images/orangepi5-max/Armbian-unofficial_<version>_Orangepi5-max_<dist>_edge_<kver>_minimal.img.xz"
+
 # U-Boot branch — informational; the canonical branch source is each
 # armbian_netboot_board_configs.<model>.uboot_apt_package field in the
 # collection.

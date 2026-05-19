@@ -64,23 +64,38 @@ Required:
 Missing any → playbook fails in the relevant phase. Add them to inventory
 before running.
 
-### A.2 — `armbian_netboot_image_urls[<model>]`
+### A.2 — `armbian_netboot_image_urls[<model>]` + `armbian_netboot_image_urls_http[<model>]`
 
-Phase 1 (`image_extract` on netboot_server) and Phase 3 (`disk_image`
-streaming from URL) both consume this. Confirm each target board's model
-has a URL:
+Two distinct inventory vars feed the .img.xz to two different consumers
+on two different hosts:
+
+- `armbian_netboot_image_urls` — consumed on the netboot_server by
+  `image_extract` (Phase 1). Typically a local NFS path the server
+  reads directly.
+- `armbian_netboot_image_urls_http` — consumed on each board by the
+  `disk_image` role (Phase 3). Must be an `http(s)://` URL the board
+  can stream from. The split exists because the netboot_server often
+  can't reach its own macvlan-fronted HTTP address, so a single
+  unified URL doesn't work.
+
+Both must resolve to the same `.img.xz` file per board model. Confirm
+both are set:
 
 ```bash
 ansible-inventory --list 2>/dev/null \
-  | jq -er '.all.vars.armbian_netboot_image_urls'
+  | jq -er '{
+      paths: .all.vars.armbian_netboot_image_urls,
+      http:  .all.vars.armbian_netboot_image_urls_http
+    }'
 ```
 
-Image must be reachable from BOTH the netboot_server and from the
-boards. If you've just published a new image, walk it once from each:
+Probe reachability from BOTH consumers:
 
 ```bash
-ansible netboot_server -m uri -a "url=<image_url> method=HEAD return_content=no"
-ansible <board> -m uri -a "url=<image_url> method=HEAD return_content=no"
+# netboot_server reads its local path (image_extract)
+ansible netboot_server -b -m stat -a "path=<armbian_netboot_image_urls value>"
+# Boards stream from the HTTP URL (disk_image)
+ansible <board> -m uri -a "url=<armbian_netboot_image_urls_http value> method=HEAD return_content=no"
 ```
 
 ### A.3 — Router TFTP plumbing
@@ -463,7 +478,7 @@ multiple boards and the per-board tracker model doesn't 1:1 with them.
 ```bash
 # Pre-flight probes (Phase A)
 ansible <board> --list-vars | grep armbian_netboot_
-ansible-inventory --list | jq '.all.vars.armbian_netboot_image_urls'
+ansible-inventory --list | jq '{paths: .all.vars.armbian_netboot_image_urls, http: .all.vars.armbian_netboot_image_urls_http}'
 ansible <armbian_netboot_router> -m community.routeros.command -a 'commands="/ip tftp print count-only"'
 ansible boards:netboot_server:routeros_switches:routeros_routers -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 
