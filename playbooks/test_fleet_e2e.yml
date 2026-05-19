@@ -263,20 +263,34 @@
           ansible.builtin.set_fact:
             _t_phase_2_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # Self-revert to nfs (not sd) is deliberate: Phase 3 hasn't
-        # dd'd SD yet, so reverting to sd would land on whatever stale
-        # prior-run state is there. A clean diagnostic-bundle + fail is
-        # more useful to the operator than a silent fallback to unknown
-        # SD state. Spec accepted this caveat.
-        - name: "Phase 2a — set + verify nfs"
-          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
-          vars:
-            target_boot_mode: nfs
-            on_failure_revert_to: nfs
+        # Cannot use `_lifecycle_set_and_verify` here: its internal
+        # `cold_boot_with_retry` runs `wait_for_connection` as the
+        # inventory user, and the freshly-cloned NFS rootfs has no igou
+        # yet — bootstrap_armbian (below) is what creates it. Same
+        # constraint as the old playbook's Phase A. Sequence the
+        # lower-level primitives manually instead, with
+        # `_skip_ssh_stability_check: true` for the cycle step.
 
-        # Fresh NFS clone has only root+default-password. Run
-        # bootstrap_armbian unconditionally to install igou. No
-        # auto_bootstrap_if_needed probe — we know the answer.
+        # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
+        - name: "Phase 2a — render+upload pxelinux for nfs (no cycle)"
+          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+          vars:
+            armbian_netboot_boot_mode: nfs
+            armbian_netboot_cycle_board: false
+            armbian_netboot_verify_state: false
+
+        # Step 2 — PoE cycle + TCP/22 wait. _skip_ssh_stability_check
+        # skips the wait_for_connection-as-igou check that would
+        # otherwise fail on the bootstrap-less rootfs.
+        - name: "Phase 2a — PoE cycle + TCP/22 wait (no SSH-as-igou)"
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "Phase 2a"
+            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
+            _skip_ssh_stability_check: true
+
+        # Step 3 — bootstrap_armbian as root+password creates igou.
+        # Fresh NFS clone is guaranteed to have only the default user.
         - name: "Phase 2a — bootstrap_armbian (unconditional; fresh NFS clone)"
           ansible.builtin.include_role:
             name: bootstrap_armbian
@@ -286,9 +300,18 @@
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
-        - name: "Phase 2a — reset connection (so subsequent tasks use igou identity)"
+        - name: "Phase 2a — reset connection (subsequent tasks use igou)"
           ansible.builtin.meta: reset_connection
 
+        # Step 4 — now that igou exists, wait for SSH-as-igou.
+        - name: "Phase 2a — wait for SSH as igou (post-bootstrap)"
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          vars:
+            _phase_label: "Phase 2a"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+
+        # Step 5 — verify rootfs is on NFS (board_boot_verify gathers
+        # facts under the hood, which now works because igou is up).
         - name: "Phase 2a — verify rootfs is on NFS"
           ansible.builtin.include_role:
             name: board_boot_verify
@@ -402,12 +425,28 @@
           ansible.builtin.set_fact:
             _t_phase_4_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        - name: "Phase 4 — set + verify sd"
-          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
-          vars:
-            target_boot_mode: sd
-            on_failure_revert_to: nfs
+        # Same constraint as Phase 2a: freshly-dd'd SD has only root +
+        # default-password, no igou yet. bootstrap_armbian (below)
+        # creates it. Manual sequencing avoids the SSH-as-igou check
+        # that _lifecycle_set_and_verify would otherwise run.
 
+        # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
+        - name: "Phase 4 — render+upload pxelinux for sd (no cycle)"
+          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+          vars:
+            armbian_netboot_boot_mode: sd
+            armbian_netboot_cycle_board: false
+            armbian_netboot_verify_state: false
+
+        # Step 2 — PoE cycle + TCP/22 wait, skipping SSH-as-igou.
+        - name: "Phase 4 — PoE cycle + TCP/22 wait (no SSH-as-igou)"
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          vars:
+            _phase_label: "Phase 4"
+            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
+            _skip_ssh_stability_check: true
+
+        # Step 3 — bootstrap_armbian as root+password creates igou on SD.
         - name: "Phase 4 — bootstrap_armbian (unconditional; freshly dd'd SD)"
           ansible.builtin.include_role:
             name: bootstrap_armbian
@@ -417,9 +456,17 @@
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
-        - name: "Phase 4 — reset connection"
+        - name: "Phase 4 — reset connection (subsequent tasks use igou)"
           ansible.builtin.meta: reset_connection
 
+        # Step 4 — wait for SSH as igou now that bootstrap created it.
+        - name: "Phase 4 — wait for SSH as igou (post-bootstrap)"
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          vars:
+            _phase_label: "Phase 4"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+
+        # Step 5 — verify rootfs is on a local block device (SD).
         - name: "Phase 4 — verify rootfs is on a local block device"
           ansible.builtin.include_role:
             name: board_boot_verify
