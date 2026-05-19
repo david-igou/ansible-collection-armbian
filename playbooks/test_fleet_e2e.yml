@@ -116,6 +116,59 @@
 # Phase plays (0, 1, 2a, 2b, 3, 4, 5) are appended by subsequent tasks
 # in this implementation plan.
 
+- name: "Phase 0 — PoE down all target boards"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_phase_0: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/0-poe-down"
+  tasks:
+    - name: "Phase 0 — block"
+      when: not (skip_phase_0 | bool)
+      block:
+        - name: "Phase 0 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_0_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        # Power off the board's PoE port + drain capacitors. We don't
+        # re-energise here — Phase 2's PoE cycle owns the next power-on.
+        - name: "Phase 0 — PoE off"
+          community.routeros.command:
+            commands:
+              - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
+          delegate_to: "{{ armbian_netboot_poe_switch }}"
+          register: _poe_off
+          retries: 3
+          delay: 5
+          until: _poe_off is succeeded
+
+        - name: "Phase 0 — pause for capacitor drain"
+          ansible.builtin.pause:
+            seconds: "{{ armbian_netboot_poe_cycle_delay | int }}"
+
+        - name: "Phase 0 — write evidence"
+          ansible.builtin.copy:
+            content: |
+              === Phase 0 (PoE down) — {{ inventory_hostname }} ===
+              switch:  {{ armbian_netboot_poe_switch }}
+              port:    {{ armbian_netboot_poe_port }}
+              drain_s: {{ armbian_netboot_poe_cycle_delay }}
+            dest: "{{ fleet_artifact_dir }}/poe-down-evidence.txt"
+          delegate_to: localhost
+          vars:
+            ansible_connection: local
+
+        - name: "Phase 0 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "0\t{{ _t_phase_0_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_0_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
