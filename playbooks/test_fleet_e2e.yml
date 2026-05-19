@@ -47,6 +47,20 @@
 #   env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 #     ansible-playbook playbooks/test_fleet_e2e.yml
 
+- name: "Pre-flight: ensure all per-board artifact dirs exist on controller"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Create /tmp/iter-FLEET-<host>/{A-sd,B-nfs,C-reprovision,C2-localkernel,D-kupdate}"
+      ansible.builtin.file:
+        path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop: [A-sd, B-nfs, C-reprovision, C2-localkernel, D-kupdate]
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
+
 - name: "Pre-flight: ensure igou user + key on each per-host NFS rootfs"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -90,14 +104,6 @@
     - name: "Phase A — skip block"
       when: not (skip_sd | bool)
       block:
-        - name: "Phase A — ensure artifact dir"
-          ansible.builtin.file:
-            path: "{{ fleet_artifact_dir }}"
-            state: directory
-            mode: '0755'
-          delegate_to: localhost
-          run_once: false
-
         - name: "Phase A — set boot_mode=sd (no cycle)"
           ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
           vars:
@@ -116,6 +122,8 @@
             delay: 10
             timeout: 240
           delegate_to: localhost
+          vars:
+            ansible_connection: local
 
         - name: "Phase A — capture SD boot evidence via raw SSH (root + default password)"
           ansible.builtin.shell: |
@@ -130,6 +138,8 @@
           register: _sd_probe
           delegate_to: localhost
           failed_when: false
+          vars:
+            ansible_connection: local
 
         - name: "Phase A — write evidence file"
           ansible.builtin.copy:
@@ -141,6 +151,8 @@
               {{ _sd_probe.stderr | default('') }}
             dest: "{{ fleet_artifact_dir }}/sd-boot-evidence.txt"
           delegate_to: localhost
+          vars:
+            ansible_connection: local
 
         - name: "Phase A — assert SD boot looks healthy"
           ansible.builtin.assert:
@@ -263,12 +275,6 @@
     - name: "Phase C2 — guard"
       when: not (skip_local_kernel | bool)
       block:
-        - name: "Phase C2 — ensure artifact dir"
-          ansible.builtin.file:
-            path: "{{ fleet_artifact_dir }}"
-            state: directory
-          delegate_to: localhost
-
         - name: "Phase C2 — record TFTP HITS BEFORE cycle"
           community.routeros.command:
             commands:
@@ -312,6 +318,8 @@
               U-Boot baked localcmd loaded kernel from NVMe.
             dest: "{{ fleet_artifact_dir }}/local-kernel-evidence.txt"
           delegate_to: localhost
+          vars:
+            ansible_connection: local
 
 - name: "Phase D — in-place kernel update (parallel; mechanism-only)"
   hosts: "{{ target_hosts | default('boards') }}"
@@ -326,12 +334,6 @@
     - name: "Phase D — guard"
       when: not (skip_kernel_update | bool)
       block:
-        - name: "Phase D — ensure artifact dir"
-          ansible.builtin.file:
-            path: "{{ fleet_artifact_dir }}"
-            state: directory
-          delegate_to: localhost
-
         - name: "Phase D — record uname -r BEFORE"
           ansible.builtin.command: uname -r
           register: _uname_before
@@ -368,6 +370,8 @@
             delay: 10
             timeout: 300
           delegate_to: localhost
+          vars:
+            ansible_connection: local
 
         - name: "Phase D — record uname -r AFTER"
           ansible.builtin.command: uname -r
@@ -388,6 +392,8 @@
               key signal is that the board came back up after the cycle.
             dest: "{{ fleet_artifact_dir }}/kernel-update-evidence.txt"
           delegate_to: localhost
+          vars:
+            ansible_connection: local
 
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
