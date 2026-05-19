@@ -2239,19 +2239,19 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 
 <h3 id="improve-dd-preflight">Shipped: dd a known image to SD as a pre-flight (full state reset)</h3>
 
-<p>
-  Shipped in <code>playbooks/test_fleet_e2e.yml</code> Phase 0,
-  backed by the <code>disk_image</code> role. Phase 0 converges every
-  board to NFS first, then streams the canonical image from
-  <code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
-  <code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
-  with <code>-e skip_dd_sd=true</code>.
-</p>
+<p>Shipped in <code>playbooks/test_fleet_e2e.yml</code> Phase 3 of
+the deterministic six-phase flow, backed by the <code>disk_image</code>
+role. Phase 3 runs after Phase 2 has booted every target board on a
+freshly-refreshed NFS rootfs (Phase 1) and bootstrapped igou, then
+streams the canonical image from
+<code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
+<code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
+with <code>-e skip_phase_3=true</code>.</p>
 
 <p>
   The original design considered the <code>auto_bootstrap_if_needed</code>
   approach &mdash; <em>reactive</em> probe-then-bootstrap &mdash; as the
-  primary path. Phase 0 takes the complementary <em>proactive</em> stance:
+  primary path. Phase 3 takes the complementary <em>proactive</em> stance:
   every board starts each run in the same known (stock-Armbian,
   un-bootstrapped) state, making Phase A&rsquo;s bootstrap path
   deterministic.</p>
@@ -2281,7 +2281,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 
 <p>
   Implemented as
-  <code>Phase 0 &mdash; dd canonical image to SD</code>, running
+  <code>Phase 3 &mdash; dd canonical image to SD</code>, running
   while each board is on NFS (SD card unmounted), using the
   existing per-host NFS rootfs as the imaging host. The
   <code>disk_image</code> role&rsquo;s mount-aware guard enforces
@@ -2451,9 +2451,9 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
         <td>Image-build pipeline change</td>
         <td>open</td>
         <td>Reproducible campaigns, drift detection</td></tr>
-    <tr><td>dd canonical image to SD as Phase 0 (full state reset)</td>
+    <tr><td>dd canonical image to SD as Phase 3 (full state reset)</td>
         <td>new play + per-host NFS dd</td>
-        <td>shipped (<code>disk_image</code> role + Phase 0)</td>
+        <td>shipped (<code>disk_image</code> role + Phase 3)</td>
         <td>Deterministic SD state per run; cost: ~30 s + bandwidth per board</td></tr>
   </tbody>
 </table>
