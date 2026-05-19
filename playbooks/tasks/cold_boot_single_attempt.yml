@@ -19,10 +19,18 @@
         state: started
       delegate_to: localhost
 
+    # SSH-stability gate uses the inventory user's identity. Callers
+    # whose SSH identity isn't guaranteed to exist yet on the booting
+    # board (Phase A of test_fleet_e2e against a stock-Armbian SD card,
+    # for instance) can set _skip_ssh_stability_check=true and chain a
+    # following call to tasks/auto_bootstrap_if_needed.yml, which
+    # probe-then-bootstraps the inventory user before any later
+    # wait_for_connection runs.
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — wait for SSH ready (stability)"
       ansible.builtin.wait_for_connection:
         delay: 5
         timeout: "{{ armbian_netboot_ssh_wait_timeout | default(90) }}"
+      when: not (_skip_ssh_stability_check | default(false) | bool)
 
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — succeeded"
       ansible.builtin.set_fact:
