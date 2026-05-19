@@ -1053,8 +1053,8 @@ all:
   <tbody>
     <tr>
       <td>Stock SD card has no <code>igou</code> user</td>
-      <td>Phase A board_boot_verify fails: SSH stability times out</td>
-      <td>Fall back to raw <code>sshpass -p 1234 ssh root@&lt;ip&gt;</code> for evidence; ansible-managed SD is out of scope of these fleet tests</td>
+      <td>Phase A&rsquo;s SSH-as-igou step would fail with <em>publickey,password</em> denied</td>
+      <td>Phase A passes <code>_skip_ssh_stability_check: true</code> to <code>cold_boot_with_retry</code> so the retry loop is TCP/22 only, then <code>auto_bootstrap_if_needed</code> probes as <code>igou</code> and falls back to <code>bootstrap_armbian</code> against <code>root + armbian_netboot_default_password</code> when needed. <strong>Shipped + validated; no operator intervention required.</strong></td>
     </tr>
     <tr>
       <td>Stock NFS rootfs has empty <code>/root/.ssh</code> and password auth disabled</td>
@@ -1073,8 +1073,8 @@ all:
     </tr>
     <tr>
       <td>Per-host SSH host key changes 3+ times across the lifecycle</td>
-      <td>raw <code>ssh</code> prompts &ldquo;remote host identification has changed&rdquo;</td>
-      <td>Use <code>-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null</code>; ansible.cfg already has <code>host_key_checking=False</code></td>
+      <td>ansible <code>wait_for_connection</code> fails with &ldquo;remote host identification has changed&rdquo; on the second phase boot-mode transition; <code>host_key_checking=False</code> only handles unknown keys, not the existing-but-mismatched case</td>
+      <td><code>test_fleet_e2e.yml</code> pre-flight does <code>ssh-keygen -R</code> per-board AND <code>set_fact</code>&rsquo;s <code>ansible_ssh_common_args</code> to <code>-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR</code> for the duration of the run &mdash; every transition&rsquo;s host-key swap is invisible to ansible. For raw <code>ssh</code> outside the playbook, use the same flags.</td>
     </tr>
     <tr>
       <td><code>local_kernel</code> /proc/cmdline matches <code>local</code> /proc/cmdline</td>
@@ -1501,6 +1501,157 @@ converge[local_kernel] — wait for SSH (first attempt) -------------------- 31.
 </p>
 </div>
 
+<h4 id="post-recs-validation-run">Validation run after slow-nvme recs 1/2/3 + Phase A ansible-native rewrite</h4>
+
+<p>
+  After shipping the slow-nvme recommendations and the
+  <code>auto_bootstrap_if_needed</code>-based Phase A rewrite (commit
+  <code>db32a46</code> on branch <code>docs/fleet-e2e-test</code>),
+  a fresh all-fleet validation run produced the following per-board
+  per-phase wall times:
+</p>
+
+<table>
+  <thead><tr><th>Board</th><th>A (SD)</th><th>B (NFS)</th><th>C (reprovision)</th><th>C2 (local_kernel)</th><th>D (kernel update)</th><th>PLAY RECAP</th></tr></thead>
+  <tbody>
+    <tr><td>opi5pro-01 (119 GB)</td>
+        <td>260 s</td><td>237 s</td><td>881 s*</td><td>231 s</td><td>160 s</td>
+        <td><code>ok=305 changed=50 failed=0</code></td></tr>
+    <tr><td>orange-pi-5-01 (238 GB)</td>
+        <td>260 s</td><td>237 s</td><td>881 s*</td><td>231 s</td><td>160 s</td>
+        <td><code>ok=283 changed=50 failed=0</code></td></tr>
+    <tr><td>orange-pi-5-max-01 (119 GB)</td>
+        <td>260 s</td><td>237 s</td><td>881 s*</td><td>231 s</td><td>160 s</td>
+        <td><code>ok=283 changed=50 failed=0</code></td></tr>
+    <tr><td>rock-5a-01 (238 GB)</td>
+        <td>260 s</td><td>237 s</td><td>881 s*</td><td>231 s</td><td>160 s</td>
+        <td><code>ok=283 changed=50 failed=0</code></td></tr>
+    <tr><td>rock-5b-01 (477 GB)</td>
+        <td>260 s</td><td>237 s</td><td>881 s*</td><td>231 s</td><td>160 s</td>
+        <td><code>ok=283 changed=50 failed=0</code></td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Full-fleet wall time: 29 min 38 s</strong>
+  (2026-05-19 12:11:45 &rarr; 12:41:24). <strong>5/5 boards PASS;
+  no failures, no unreachable hosts, every board converged through
+  the full SD &rarr; NFS &rarr; reprovision &rarr; local_kernel
+  &rarr; kernel-update lifecycle.</strong> The previous instrumented
+  run was 44 min 48 s with 4/5 healthy boards &mdash; the 33 % wall-time
+  reduction comes from
+  <a href="#improve-poe-budget">skip Phase A revert-to-NFS</a>
+  (Phase A from 538 s &rarr; 260 s; Phase B picks up the SD&nbsp;&rarr;&nbsp;NFS
+  transition cost of 237 s) +
+  <a href="#improve-parallel-phase-c">throttled parallel Phase C</a>
+  (881 s wall over 5 boards in batches of 2, vs ~1 751 s serial-over-4).
+</p>
+
+<p>
+  <strong>*</strong> Phase C per-board figures all show the same wall
+  time because each board records the timestamp of the play start and
+  end, and <code>throttle: 2</code> holds the play open until the last
+  batch finishes. The genuinely-busy time per board is ~5-7 min;
+  the rest is &ldquo;wait for the next batch slot&rdquo; cost.
+</p>
+
+<p>
+  <strong>opi5pro-01&rsquo;s task-count delta</strong> (305 vs 283)
+  is <code>bootstrap_armbian</code> firing inline: its SD card was at
+  stock-Armbian state (root + password 1234, no <code>igou</code>
+  user). Phase A&rsquo;s <code>auto_bootstrap_if_needed</code> probed
+  as <code>igou</code>, got <code>Permission denied
+  (publickey,password)</code>, and ran
+  <code>bootstrap_armbian</code> against <code>root</code> +
+  <code>armbian_netboot_default_password</code> to create the
+  inventory user with SSH-key auth. End-to-end demonstration that the
+  fleet test now handles either SD-card user state without operator
+  intervention.
+</p>
+
+<h4 id="post-recs-validation-blockers">What the validation run surfaced</h4>
+
+<p>
+  Three runtime blockers fired iteratively before the 5/5 PASS landed,
+  all in the new Phase A code path. None were caught by
+  <code>ansible-playbook --syntax-check</code> or
+  <code>ansible-lint --profile=production</code>:
+</p>
+
+<ol>
+  <li>
+    <strong>Self-referential play-var template:</strong>
+    <code>armbian_netboot_boot_retry_attempts: "{{
+    armbian_netboot_boot_retry_attempts | default(1) }}"</code> at
+    play-vars scope. Ansible&rsquo;s variable resolution is lazy;
+    shadowing a name with a same-name template recurses infinitely
+    when no underlying scope provides the literal. Fired in &lt; 60 s,
+    all 5 boards failed before any PoE cycle.
+    <em>Same trap was latently present for
+    <code>armbian_netboot_poe_cycle_delay</code> in Phase D &mdash;
+    only fired on opi5pro because the
+    bootstrap_armbian role &amp; <code>meta: reset_connection</code>
+    path left that host&rsquo;s var scope different from the other 4
+    by the time Phase D ran.</em>
+    <strong>Fix:</strong> pre-flight <code>set_fact</code>
+    materializes both vars as host facts (literal values, not
+    templates). Host facts persist for the whole run; every Phase reads
+    a literal int. Inventory overrides still honored because
+    <code>set_fact</code>&rsquo;s RHS reads inventory before the fact
+    is created.
+  </li>
+  <li>
+    <strong>Stale <code>~/.ssh/known_hosts</code> across phase
+    boot-key transitions:</strong> each Phase boots from a different
+    rootfs (SD &rarr; NFS &rarr; NVMe), and each carries its own host
+    keys. <code>ansible.cfg</code>&rsquo;s
+    <code>host_key_checking=False</code> only sets
+    <code>StrictHostKeyChecking=no</code>, which does NOT cover an
+    <em>existing-but-mismatched</em> known_hosts entry &mdash;
+    ssh&rsquo;s &ldquo;REMOTE HOST IDENTIFICATION HAS CHANGED&rdquo;
+    path is fatal regardless. <strong>Fix:</strong> pre-flight runs
+    <code>ssh-keygen -R</code> per-board (same fix
+    <code>test_hardware_e2e.yml</code> already carries) AND
+    <code>set_fact</code>&rsquo;s <code>ansible_ssh_common_args</code>
+    to <code>UserKnownHostsFile=/dev/null
+    StrictHostKeyChecking=no LogLevel=ERROR</code> for the rest of the
+    run, so every boot-mode transition&rsquo;s host-key swap is
+    invisible to ansible.
+  </li>
+  <li>
+    <strong><code>cold_boot_single_attempt</code>&rsquo;s
+    <code>wait_for_connection</code> chickens-and-eggs the SD-state
+    case:</strong> Phase A&rsquo;s <code>cold_boot_with_retry</code>
+    used to do PoE cycle &rarr; TCP/22 wait &rarr;
+    <code>wait_for_connection</code> as the inventory user. On a
+    stock-Armbian SD card with only <code>root</code> bootstrapped,
+    the SSH step fails with publickey/password permission denied &mdash;
+    before <code>auto_bootstrap_if_needed</code> has a chance to
+    create <code>igou</code>. <em>This is the same trap the user
+    described needing to make Phase A &ldquo;aware&rdquo; of SD-card
+    user state, which the prior sshpass+raw-SSH approach side-stepped
+    by hard-coding root+1234.</em> <strong>Fix:</strong> added a
+    <code>_skip_ssh_stability_check</code> opt-in flag to
+    <code>cold_boot_single_attempt.yml</code> (default false &mdash;
+    <code>test_hardware_e2e.yml</code> behavior preserved). Phase A
+    sets it true; the retry loop turns on TCP/22 alone, then the
+    immediately-following <code>auto_bootstrap_if_needed</code>
+    establishes <code>igou</code> from root+password if needed, then
+    <code>wait_for_ssh_with_cycle_retry</code> does the real
+    SSH-stability check.
+  </li>
+</ol>
+
+<p>
+  All three fixes are in commit <code>db32a46</code>. The recipe for
+  iterating against real hardware: every run that fails should produce
+  a Jinja stack trace pointing at a specific
+  <code>test_fleet_e2e.yml:&lt;line&gt;</code> &mdash; treat the
+  origin column number as the column of the offending var reference
+  in the failing template, then walk variable-scope precedence outward
+  from there.
+</p>
+
 <h3 id="systemd-repart-loop-discard">Deep-dive: why Phase C is slow on large NVMes</h3>
 
 <p>
@@ -1867,7 +2018,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   <code>playbooks/test_fleet_e2e.yml</code>; the rest remain open.
 </p>
 
-<h3 id="improve-parallel-phase-c">Parallelise Phase C (NFS rsync contention) &mdash; <strong>shipped (throttle: 2)</strong></h3>
+<h3 id="improve-parallel-phase-c">Parallelise Phase C (NFS rsync contention) &mdash; <strong>shipped + validated (throttle: 2)</strong></h3>
 
 <p>
   <strong>Status:</strong> Phase C now defaults to
@@ -1876,6 +2027,10 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   <code>fleet_phase_c_throttle=1</code> restores pure-serial behaviour
   for operators on under-provisioned NFS servers. ZFS-per-host +
   vmtouch pinning remain open (would unlock fully-parallel).
+  Validated on the
+  <a href="#post-recs-validation-run">5-board fleet run</a>:
+  Phase C wall time 881 s (over 5 boards in batches of 2) vs ~1 751 s
+  serial-over-4 in the prior baseline.
 </p>
 
 <p>
@@ -2009,12 +2164,14 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   </li>
   <li>
     <strong>Skip Phase A&rsquo;s revert-to-NFS</strong> &mdash;
-    <strong>shipped</strong>: Phase A&rsquo;s second cycle is gone.
-    Phase B now owns the SD&nbsp;&rarr;&nbsp;NFS transition end-to-end via
-    <code>_lifecycle_set_and_verify</code> (writes
-    <code>default nfs</code> + PoE-cycles + verifies). Net result:
-    ~30&nbsp;s capacitor drain + ~30&nbsp;s TCP/22 wait per board off
-    the run.
+    <strong>shipped + validated</strong>: Phase A&rsquo;s second cycle
+    is gone. Phase B now owns the SD&nbsp;&rarr;&nbsp;NFS transition
+    end-to-end via <code>_lifecycle_set_and_verify</code> (writes
+    <code>default nfs</code> + PoE-cycles + verifies). On the
+    <a href="#post-recs-validation-run">validation run</a> Phase A
+    dropped from 538 s &rarr; 260 s (per board) while Phase B picked
+    up 237 s &mdash; net savings ~40 s per board because one of the
+    two cycles is no longer needed.
   </li>
 </ul>
 
@@ -2023,7 +2180,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   what&rsquo;s tested.
 </p>
 
-<h3 id="improve-phase-a-native">Phase A &mdash; replace <code>sshpass</code> raw-SSH with ansible-native &mdash; <strong>shipped</strong></h3>
+<h3 id="improve-phase-a-native">Phase A &mdash; replace <code>sshpass</code> raw-SSH with ansible-native &mdash; <strong>shipped + validated</strong></h3>
 
 <p>
   The Phase A probe used to be a delegated <code>shell:</code> task that
@@ -2037,16 +2194,20 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 
 <p>
   Phase A now uses the same in-tree primitives as
-  <code>test_hardware_e2e.yml</code> Phase 1:
+  <code>test_hardware_e2e.yml</code> Phase 1 (with one new flag for
+  the SD-state-unaware case):
 </p>
 
 <ol>
   <li>
-    <code>cold_boot_with_retry.yml</code> &mdash; PoE cycle + TCP/22
-    + sustained ssh-ping, with
-    <code>armbian_netboot_boot_retry_attempts</code> retries on flake
-    (defaults to 1 at fleet-play scope &mdash; one rock-5b SD
-    voltage-select flake survives).
+    <code>cold_boot_with_retry.yml</code> with
+    <code>_skip_ssh_stability_check: true</code> &mdash; PoE cycle +
+    TCP/22 wait, retried on flake via
+    <code>armbian_netboot_boot_retry_attempts</code> (default 1 at
+    fleet-play scope &mdash; one rock-5b SD voltage-select flake
+    survives). The <code>wait_for_connection</code> step inside
+    <code>cold_boot_single_attempt</code> is gated on the new flag, so
+    the inventory-user identity isn&rsquo;t consulted yet.
   </li>
   <li>
     <code>auto_bootstrap_if_needed.yml</code> &mdash; probes as the
@@ -2066,6 +2227,15 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
     is the durable invariant across the fleet.
   </li>
 </ol>
+
+<p>
+  Validated end-to-end on the
+  <a href="#post-recs-validation-run">post-recs validation run</a>:
+  5/5 boards PASS in 29 min 38 s; opi5pro-01 specifically exercised
+  the bootstrap-fallback branch (its SD card had only root +
+  password 1234) while the other four hit the fast no-op path because
+  <code>igou</code> was already present.
+</p>
 
 <h3 id="improve-dd-preflight">Open: dd a known image to SD as a pre-flight (full state reset)</h3>
 
@@ -2236,11 +2406,11 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   <tbody>
     <tr><td>Throttled parallel Phase C (<code>throttle: 2</code>)</td>
         <td>1-line playbook change</td>
-        <td><strong>shipped</strong></td>
-        <td>~2&times; faster full-fleet runs</td></tr>
+        <td><strong>shipped + validated</strong></td>
+        <td>Phase C 1 751 s &rarr; 881 s over 5 boards (in batches of 2)</td></tr>
     <tr><td>Per-host kernel pin (<code>armbian_netboot_kernel_target</code>)</td>
         <td>~20-line inventory + playbook change</td>
-        <td><strong>shipped</strong></td>
+        <td><strong>shipped + validated</strong></td>
         <td>Phase D goes from &ldquo;mech check&rdquo; to deterministic per-host pin</td></tr>
     <tr><td>2-step Phase D (downgrade-then-restore)</td>
         <td>~20-line playbook addition on top of pin</td>
@@ -2248,12 +2418,12 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
         <td>Phase D verifies an actual swap even when fleet pin == repo latest</td></tr>
     <tr><td>Skip Phase A revert-to-NFS (Phase B owns SD&nbsp;&rarr;&nbsp;NFS)</td>
         <td>refactor</td>
-        <td><strong>shipped</strong></td>
-        <td>~30 s off Phase A per board (~2.5 min off fleet)</td></tr>
+        <td><strong>shipped + validated</strong></td>
+        <td>Phase A 538 s &rarr; 260 s per board; Phase B picks up 237 s</td></tr>
     <tr><td>Phase A ansible-native rewrite + auto_bootstrap_if_needed</td>
-        <td>~50-line playbook rewrite</td>
-        <td><strong>shipped</strong></td>
-        <td>SD-state-agnostic; SD-flake retry via cold_boot_with_retry</td></tr>
+        <td>~50-line playbook rewrite + cold_boot_single_attempt flag</td>
+        <td><strong>shipped + validated</strong></td>
+        <td>SD-state-agnostic; opi5pro hit the bootstrap branch live, other 4 the no-op branch</td></tr>
     <tr><td>PoE <code>poe_cycle_delay</code> + <code>wait_for_connection delay</code> tuning</td>
         <td>inventory knobs</td>
         <td>open</td>
