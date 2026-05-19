@@ -370,6 +370,71 @@
             ansible_connection: local
           delegate_to: localhost
 
+- name: "Phase 4 — SD boot + bootstrap_armbian + verify"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_phase_4: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/4-sd-bootstrap"
+  pre_tasks:
+    - name: "Phase 4 — load board configs"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+  tasks:
+    - name: "Phase 4 — block"
+      when: not (skip_phase_4 | bool)
+      block:
+        - name: "Phase 4 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_4_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        - name: "Phase 4 — set + verify sd"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: sd
+            on_failure_revert_to: nfs
+
+        - name: "Phase 4 — bootstrap_armbian (unconditional; freshly dd'd SD)"
+          ansible.builtin.include_role:
+            name: bootstrap_armbian
+          vars:
+            ansible_user: root
+            ansible_password: "{{ armbian_netboot_default_password }}"
+            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            ansible_become: false
+
+        - name: "Phase 4 — reset connection"
+          ansible.builtin.meta: reset_connection
+
+        - name: "Phase 4 — verify rootfs is on a local block device"
+          ansible.builtin.include_role:
+            name: board_boot_verify
+          vars:
+            boot_mode: sd
+
+        - name: "Phase 4 — write evidence"
+          ansible.builtin.copy:
+            content: |
+              === Phase 4 (SD boot + bootstrap) — {{ inventory_hostname }} ===
+              rootfs:  SD (local block device, post-bootstrap)
+              source:  freshly dd'd canonical image (Phase 3)
+              igou:    bootstrapped via bootstrap_armbian
+            dest: "{{ fleet_artifact_dir }}/sd-bootstrap-evidence.txt"
+          delegate_to: localhost
+          vars:
+            ansible_connection: local
+
+        - name: "Phase 4 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "4\t{{ _t_phase_4_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_4_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
