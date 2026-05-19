@@ -1,0 +1,20 @@
+---
+- hosts: all
+  gather_facts: true
+  tasks:
+    - name: "Placeholder verify — checks fixtures exist (no role behaviour yet)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _fixtures
+      loop:
+        - /tmp/target_loop
+        - /tmp/test.img
+        - /tmp/test.img.xz
+
+    - name: "Assert all fixtures exist"
+      ansible.builtin.assert:
+        that:
+          - _fixtures.results | map(attribute='stat.exists') | min
+        fail_msg: >-
+          Prepare did not produce all fixtures. Got:
+          {{ _fixtures.results | map(attribute='item') | zip(_fixtures.results | map(attribute='stat.exists')) | list }}

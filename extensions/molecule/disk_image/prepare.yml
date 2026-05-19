@@ -1,0 +1,96 @@
+---
+# Prepares the disk_image molecule scenario:
+#   - python3 + tools the role's runtime prereqs require
+#   - 64 MiB loop device (target_device under test)
+#   - 32 MiB test "image": one ext4 partition, sentinel file inside
+#   - .img.xz copy of the test image for the xz dispatch branch
+#   - background python http.server on 127.0.0.1:8765 serving both
+#
+# Requires real losetup access — this scenario is hardware-host-only,
+# mirroring extensions/molecule/disk_provision_loopback/. Not in
+# Makefile's MOLECULE_SCENARIOS; run manually on a host with
+# losetup available:  make molecule SCENARIO=disk_image
+
+- name: Prepare disk-image instance (raw bootstrap)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.raw: apt-get update -qq
+      changed_when: true
+
+    - name: Bootstrap python3
+      ansible.builtin.raw: apt-get install -y --no-install-recommends python3
+      changed_when: true
+
+- name: Install runtime prereqs and stage fixtures
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: "Install runtime prereqs: curl xz-utils parted util-linux e2fsprogs"
+      ansible.builtin.apt:
+        name:
+          - curl
+          - xz-utils
+          - parted
+          - util-linux
+          - e2fsprogs
+        state: present
+        update_cache: false
+
+    - name: "Create a 64 MiB sparse file as the target block-device backing"
+      ansible.builtin.command: "truncate -s 64M /tmp/target.img"
+      changed_when: true
+
+    - name: "Attach target.img as a loop device"
+      ansible.builtin.command: "losetup -f --show /tmp/target.img"
+      register: _target_loop
+      changed_when: true
+
+    - name: "Persist target loop device path"
+      ansible.builtin.copy:
+        dest: /tmp/target_loop
+        content: "{{ _target_loop.stdout }}\n"
+        mode: "0644"
+
+    - name: "Create a 32 MiB raw test image with one ext4 partition + sentinel"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        truncate -s 32M /tmp/test.img
+        parted -s /tmp/test.img mklabel msdos
+        parted -s /tmp/test.img mkpart primary ext4 1MiB 100%
+        SRC_LOOP=$(losetup -f --show -P /tmp/test.img)
+        mkfs.ext4 -F -L diskimg_test "${SRC_LOOP}p1"
+        mkdir -p /tmp/mnt
+        mount "${SRC_LOOP}p1" /tmp/mnt
+        echo "DISK_IMAGE_SENTINEL" > /tmp/mnt/sentinel
+        umount /tmp/mnt
+        losetup -d "${SRC_LOOP}"
+      args:
+        creates: /tmp/test.img
+        executable: /bin/bash
+
+    - name: "Compress the test image to .img.xz (for xz dispatch branch test)"
+      ansible.builtin.command: "xz -k -f /tmp/test.img"
+      args:
+        creates: /tmp/test.img.xz
+
+    - name: "Start a background http.server serving /tmp on 127.0.0.1:8765"
+      ansible.builtin.shell: |
+        nohup python3 -m http.server 8765 \
+          --bind 127.0.0.1 \
+          --directory /tmp \
+          >/tmp/http.log 2>&1 &
+        echo $! > /tmp/http.pid
+        # Wait until the port is accepting connections.
+        for _ in $(seq 1 20); do
+          if (echo > /dev/tcp/127.0.0.1/8765) >/dev/null 2>&1; then
+            exit 0
+          fi
+          sleep 0.25
+        done
+        echo "http.server did not come up" >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      changed_when: true

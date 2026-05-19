@@ -1,0 +1,10 @@
+---
+# Converge is intentionally empty in Task 2.
+# Tasks 3/4/5/6 add include_role calls here as the role's behaviour
+# is implemented.
+- hosts: all
+  gather_facts: true
+  tasks:
+    - name: "Placeholder converge — role-skeleton scenario boot test"
+      ansible.builtin.debug:
+        msg: "disk_image molecule scaffolding works; behaviour added in later tasks."
