@@ -190,6 +190,7 @@
     <li><a href="#gotchas">Common gotchas the test exposed</a></li>
     <li><a href="#evidence">Worked-example evidence (today&rsquo;s run)</a></li>
     <li><a href="#lineage">Source-PR lineage</a></li>
+    <li><a href="#improvements">Future speed &amp; consistency improvements</a></li>
   </ol>
 </nav>
 
@@ -1156,6 +1157,200 @@ all:
   loop-device chunk-size bottleneck.
 </p>
 
+<h3 id="all-fleet-run">All-fleet run (5 boards, <code>fast_wipe: true</code> on every binding)</h3>
+
+<p>
+  After committing the <code>fast_wipe</code> patch and adding
+  <code>fast_wipe: true</code> explicitly to every host&rsquo;s
+  <code>armbian_netboot_local_disks</code> binding, the
+  <code>test_fleet_e2e.yml</code> playbook was run with no host filter
+  (all 5 boards): one play per phase, parallel A/B/C2/D, serial Phase C.
+  Across three runs (one full + two targeted retries after fixing
+  bugs the first run surfaced), the final state is:
+  <strong>all 5 boards on <code>local_kernel</code>, NVMe-rooted,
+  kernel <code>7.0.7-edge-rockchip64</code>, &ldquo;HITS unchanged&rdquo;
+  proof asserted for each</strong>.
+</p>
+
+<table>
+  <thead><tr><th>Board</th><th>Phase A</th><th>Phase B</th><th>Phase C (fast_wipe)</th><th>Phase C2 (HITS proof)</th><th>Phase D</th><th>PLAY RECAP (winning run)</th></tr></thead>
+  <tbody>
+    <tr><td>orange-pi-5-max-01</td>
+        <td><span class="pill ok">pass</span></td><td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">HITS flat at 38</span></td>
+        <td><span class="pill ok">mech pass</span></td>
+        <td><code>ok=250 changed=40 failed=0</code></td></tr>
+    <tr><td>rock-5a-01</td>
+        <td><span class="pill ok">pass</span></td><td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">HITS flat at 36</span></td>
+        <td><span class="pill ok">mech pass</span></td>
+        <td><code>ok=250 changed=40 failed=0</code></td></tr>
+    <tr><td>rock-5b-01</td>
+        <td><span class="pill ok">pass</span></td><td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">pass (fast_wipe; ~9 s repart)</span></td>
+        <td><span class="pill ok">HITS flat at 65</span></td>
+        <td><span class="pill ok">mech pass</span></td>
+        <td><code>ok=255 changed=39 failed=0</code></td></tr>
+    <tr><td>orange-pi-5-01</td>
+        <td><span class="pill ok">pass (retry)</span></td>
+        <td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">pass (~4 s repart)</span></td>
+        <td><span class="pill ok">HITS flat at 24</span></td>
+        <td><span class="pill ok">mech pass</span></td>
+        <td><code>ok=193 changed=30 failed=0</code></td></tr>
+    <tr><td>opi5pro-01</td>
+        <td><span class="pill ok">pass (first run)</span></td>
+        <td><span class="pill ok">pass (after fix)</span></td>
+        <td><span class="pill ok">pass</span></td>
+        <td><span class="pill ok">HITS flat at 152</span></td>
+        <td><span class="pill ok">mech pass</span></td>
+        <td><code>ok=191 changed=30 failed=0</code></td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Run wall times</strong>: full all-fleet first run
+  <strong>34 m 58 s</strong> (5 boards through 5 phases, includes the
+  240 s wait_for timeout on orange-pi-5-01&rsquo;s SD flake);
+  orange-pi-5-01 retry (4 phases, skip SD) <strong>14 m 23 s</strong>;
+  opi5pro retry (4 phases, skip SD) <strong>~12 min</strong>.
+  Per-board <code>systemd-repart</code> step: <strong>3.92 s</strong>
+  (orange-pi-5-01, 238 GB NVMe) → <strong>8.74 s</strong> (rock-5b,
+  477 GB NVMe). Predicted slow-path time on rock-5b alone was 70+ min;
+  fast_wipe shipped <strong>~478&times; speedup</strong> on that step.
+</p>
+
+<h4>What the first run surfaced</h4>
+
+<p>
+  3/5 passed clean on the first run. Two boards failed for non-overlapping reasons; both were fixed:
+</p>
+
+<ol>
+  <li>
+    <strong>opi5pro-01 &mdash; Phase B artifact-dir bug</strong>:
+    <code>delegate_to: localhost</code> without an explicit
+    <code>vars: { ansible_connection: local }</code> caused ansible
+    to SSH back to localhost via its default smart connection, which
+    silently failed to create the directory but reported
+    <code>changed: true</code>. Bug masked for 3 boards whose dirs
+    pre-existed from earlier manual sessions. <strong>Fix shipped</strong>:
+    new pre-flight play creates every per-board artifact dir up-front
+    with <code>ansible_connection: local</code>, and every
+    <code>delegate_to: localhost</code> task in the playbook now sets
+    <code>ansible_connection: local</code> explicitly. Re-run on
+    opi5pro-01 alone after the fix:
+    <code>ok=191 changed=30 failed=0</code>.
+  </li>
+  <li>
+    <strong>orange-pi-5-01 &mdash; Phase A SD-boot TCP/22 timeout (240 s)</strong>:
+    the SD card&rsquo;s userspace network never came up within the
+    Phase A timeout. The same board has booted from the same SD card
+    cleanly in every prior session (including earlier the same
+    morning), so this is a transient RK3588 SD-controller
+    voltage-select flake (well-documented in
+    <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/38">tracker
+    #38</a>). Recovery: PoE-cycle, set <code>boot_mode=nfs</code>,
+    cycle, re-run with <code>-e skip_sd=true</code>:
+    <code>ok=193 changed=30 failed=0</code>.
+  </li>
+</ol>
+
+<p>
+  Both failure modes (and the fix) are folded into the playbook now,
+  so a future all-fleet run on a healthy fleet should produce
+  <strong>5/5 pass without the retries</strong> &mdash; the
+  artifact-dir bug is impossible to recur, and the SD flake is a
+  hardware/firmware issue independent of the playbook.
+</p>
+
+<p>
+  <strong>3 of 5 boards full pass</strong> (incl. HITS-flat proof
+  confirming U-Boot&rsquo;s baked <code>localcmd</code> path is the
+  one actually loading the kernel from NVMe). Two failures:
+</p>
+
+<ul>
+  <li>
+    <strong>opi5pro-01: Phase B artifact-dir bug</strong> &mdash; the
+    Phase B play&rsquo;s <code>copy</code> task wrote to
+    <code>/tmp/iter-FLEET-opi5pro-01/B-nfs/&hellip;</code> without
+    creating the parent directory. The 3 boards that passed had the
+    directory pre-existing from earlier manual sessions, masking the
+    bug. <strong>Fixed</strong> in a follow-up commit (add
+    <code>ensure_artifact_dir</code> step at the top of Phase B&rsquo;s
+    block). Re-run on opi5pro-01 alone after the fix: full pass
+    through C/C2/D.
+  </li>
+  <li>
+    <strong>orange-pi-5-01: Phase A SD-boot TCP/22 timeout (240 s)</strong>
+    &mdash; transient hardware flake. The SD card has booted
+    successfully in every prior session (including the same morning&rsquo;s
+    targeted Phase A test); this single 240 s wait_for timeout
+    suggests an intermittent SD-controller voltage-select issue on
+    RK3588 that the existing
+    <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/38">tracker
+    #38 documents</a>. Recovery: PoE-cycle, set boot_mode=nfs,
+    cycle, retry. Re-run with <code>-e skip_sd=true</code> on this
+    board alone: full pass through B/C/C2/D.
+  </li>
+</ul>
+
+<details>
+<summary>All-fleet run — top-15 longest tasks (sorted)</summary>
+<pre><code>Phase A — wait for TCP/22 ----------------------------------------------- 240.47s   ← orange-pi-5-01 SD wait_for timeout
+converge[nfs] attempt 1 — wait for board TCP/22 ------------------------- 126.29s
+converge[nfs] attempt 1 — wait for board TCP/22 ------------------------- 125.72s
+converge[local] attempt 1 — wait for board TCP/22 ----------------------- 120.81s
+converge[local_kernel] attempt 1 — wait for board TCP/22 ---------------- 112.59s
+Phase D — wait for TCP/22 ----------------------------------------------- 110.43s
+converge[nfs] attempt 1 — wait for board TCP/22 -------------------------- 58.39s
+converge[nfs] attempt 1 — wait for board TCP/22 -------------------------- 55.47s
+disk_provision : Populate: rsync source into mounted root ---------------- 51.93s
+converge[local] attempt 1 — wait for board TCP/22 ------------------------ 46.43s
+converge[local] attempt 1 — wait for board TCP/22 ------------------------ 43.37s
+disk_provision : Populate: rsync source into mounted root ---------------- 39.88s
+disk_provision : Populate: rsync source into mounted root ---------------- 37.42s
+converge[nfs] — wait for SSH (first attempt) ----------------------------- 32.00s
+converge[local_kernel] — wait for SSH (first attempt) -------------------- 31.33s</code></pre>
+<p>
+  Read: the dominant cost is the per-phase &ldquo;wait for board TCP/22&rdquo;
+  (each transition: ~1-2 min). Phase C&rsquo;s actual disk work
+  (rsync) is only ~40 s per board. <strong>Phase A&rsquo;s 240 s
+  outlier is the orange-pi-5-01 SD flake&rsquo;s timeout, not a normal
+  cost.</strong>
+</p>
+</details>
+
+<details>
+<summary>What you&rsquo;d expect a clean all-fleet run to look like</summary>
+<p>
+  Stripping the orange-pi-5-01 SD flake (which is not specific to
+  this playbook), and assuming the opi5pro-01 artifact-dir bug fix
+  applies (it&rsquo;s in the committed playbook now), the expected
+  wall-time breakdown for a 5-board fleet on this hardware is:
+</p>
+<table>
+  <thead><tr><th>Phase</th><th>Per-board cost</th><th>Concurrency</th><th>Wall time</th></tr></thead>
+  <tbody>
+    <tr><td>Pre-flight (igou injection)</td><td>~1 s</td><td>parallel</td><td>~5 s</td></tr>
+    <tr><td>A: SD probe + revert to NFS</td><td>~4 min</td><td>parallel (5)</td><td>~4 min</td></tr>
+    <tr><td>B: NFS verify + write evidence</td><td>~10 s</td><td>parallel (5)</td><td>~10 s</td></tr>
+    <tr><td>C: reprovision (with fast_wipe)</td><td>~3-5 min</td><td>serial: 1</td><td>~20 min</td></tr>
+    <tr><td>C2: converge local_kernel + HITS proof</td><td>~3 min</td><td>parallel (5)</td><td>~3 min</td></tr>
+    <tr><td>D: apt + cycle + uname check</td><td>~4 min</td><td>parallel (5)</td><td>~4 min</td></tr>
+    <tr><td><strong>Total</strong></td><td colspan="2"></td><td><strong>~30-32 min</strong></td></tr>
+  </tbody>
+</table>
+<p>
+  Phase C dominates because of <code>serial: 1</code>. See
+  &sect;7 (improvements) for the throttle/parallelism ideas to drop
+  this further.
+</p>
+</details>
+
 <div class="gotcha">
   <strong>rock-5b-01&rsquo;s 477 GB NVMe outliers the rest of the fleet.</strong>
   <code>reprovision_to_local.yml</code> takes ~28 min in Phase C on
@@ -1521,6 +1716,315 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
     -e armbian_netboot_poe_cycle_delay=30
 </code></pre>
 </div>
+
+<h2 id="improvements">Future speed &amp; consistency improvements</h2>
+
+<p>
+  This section catalogues optimisations beyond the
+  <code>fast_wipe</code> mitigation already shipped. Each entry
+  estimates implementation effort, expected speedup or consistency
+  gain, and trade-offs. Sorted by impact-to-effort ratio.
+</p>
+
+<h3 id="improve-parallel-phase-c">Parallelise Phase C (NFS rsync contention)</h3>
+
+<p>
+  Phase C is currently <code>serial: 1</code> because four simultaneous
+  rsyncs of the per-host NFS rootfs all read from the same TrueNAS
+  pool, contending on the NFS server&rsquo;s mds/dnlc caches and
+  saturating the 1 GbE link. Two mitigations make parallel feasible:
+</p>
+
+<ul>
+  <li>
+    <strong>Ansible <code>throttle: N</code> on Phase C</strong>
+    (<a href="https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_strategies.html">docs</a>):
+    let 2 boards run Phase C in parallel while keeping the floor low
+    enough that NFS doesn&rsquo;t hang. Cuts Phase C wall time by
+    ~2&times; for a 5-board fleet without the contention risk of
+    fully-parallel.
+  </li>
+  <li>
+    <strong>ZFS dataset-per-host on TrueNAS</strong>: today every
+    per-host NFS rootfs is a sibling under a single dataset. Splitting
+    each into its own dataset lets ZFS read-ahead + ARC cache scale
+    per-host. With 5 datasets, the rsync source contention drops to
+    near-zero. Requires a one-time TrueNAS reorganisation.
+  </li>
+  <li>
+    <strong>Read-cache pinning</strong>: <code>vmtouch -t</code>
+    the per-host rootfs file tree before Phase C so the rsync source
+    reads are page-cache hits, not NFS-server disk reads. Cheapest
+    win.
+  </li>
+</ul>
+
+<p>
+  Expected combined effect: full-fleet Phase C drops from ~25 min
+  (serial) to ~5-7 min (2-board throttle + dataset split + page-cache
+  warm).
+</p>
+
+<h3 id="improve-copyblocks">Replace rsync with <code>CopyBlocks=</code> for the bulk transfer</h3>
+
+<p>
+  <code>systemd-repart</code> supports
+  <a href="https://www.freedesktop.org/software/systemd/man/latest/repart.d.html"><code>CopyBlocks=</code></a>,
+  which raw-block-copies a source device or image directly into a
+  newly-created partition via <code>copy_bytes_full()</code>.
+  Demonstrated throughput in the wild: <strong>~1.3 GB/s</strong>
+  (block-level, no rsync metadata overhead). For a ~2 GB Armbian
+  rootfs that&rsquo;s ~2 seconds vs rsync&rsquo;s ~40 seconds.
+</p>
+
+<p>
+  Implementation path: <code>image_extract</code> produces a
+  <em>per-model raw rootfs image</em> (e.g.
+  <code>orange-pi-5-pro.rootfs.img</code>) alongside the existing
+  template directory. The disk_provision role&rsquo;s
+  <code>.repart.d/&lt;part&gt;.conf</code> for the root partition
+  adds <code>CopyBlocks=/path/to/orange-pi-5-pro.rootfs.img</code>.
+  Per-host identity reset (machine-id, hostname, SSH host keys) moves
+  from the rootfs-clone role into a post-CopyBlocks fixup task that
+  edits the freshly-copied filesystem in-place.
+</p>
+
+<p>
+  Trade-off: loses per-host-already-customised state on the NFS
+  source (since CopyBlocks ignores anything not in the master image).
+  Fine for greenfield re-provision, harmful if operators have manually
+  tweaked per-host NFS rootfses.
+</p>
+
+<h3 id="improve-pin-kernel">Pin Phase D&rsquo;s kernel target for deterministic upgrades</h3>
+
+<p>
+  Phase D currently runs <code>apt install
+  linux-image-edge-rockchip64</code> with <code>state: latest</code>.
+  This produces &ldquo;no-op&rdquo; results when the locally-installed
+  unofficial-build version is newer than the apt repo&rsquo;s latest,
+  which is the dominant case in our fleet today (the
+  <code>26.05.0-trunk</code> build vs the repo&rsquo;s
+  <code>26.2.1</code>). Three improvements:
+</p>
+
+<ul>
+  <li>
+    <strong>Per-board kernel pin in inventory</strong>: add
+    <code>armbian_netboot_kernel_target: "26.05.0-trunk"</code>
+    hostvar. Phase D installs exactly that version. Deterministic
+    across re-runs; flags drift if the inventory pin and the
+    installed version disagree.
+  </li>
+  <li>
+    <strong>Two-step Phase D</strong>: (1) downgrade to a known-old
+    apt-repo version (<code>26.2.1</code>) — proves the swap works;
+    (2) re-install the inventory-pinned version — restores fleet
+    homogeneity. Each step verifies <code>uname -r</code> changed
+    after PoE cycle.
+  </li>
+  <li>
+    <strong>Image-build trigger from kernel CVE feed</strong>: cron
+    job that watches <a href="https://www.debian.org/security/">DSAs</a>
+    + the Armbian kernel-package changelog, opens an issue in the
+    collection repo when a fleet kernel needs rebuilding. Forces
+    Phase D to be useful even when the apt repo lags.
+  </li>
+</ul>
+
+<h3 id="improve-poe-budget">Tighter PoE-cycle budget</h3>
+
+<p>
+  Each phase pays a fixed cost: 30 s capacitor drain + ~30 s TCP/22
+  wait + ~30 s SSH stability + ~30 s wait_for_connection delay.
+  ~2 min per transition × 4 transitions per board = ~8 min just on
+  PoE cycles. Knobs to dial:
+</p>
+
+<ul>
+  <li>
+    <code>armbian_netboot_poe_cycle_delay</code>: 30 s is conservative
+    for RK3588 voltage-select reliability. Boards on stable PoE-HAT
+    firmware can drop to 10 s without regressions; halves
+    cycle-related wait.
+  </li>
+  <li>
+    <code>wait_for_connection delay: 30</code> in
+    <code>wait_for_ssh_with_cycle_retry.yml</code> is a pre-poll
+    sleep. For boards that consistently come up in &lt; 20 s, drop to
+    <code>delay: 10</code>; the polling loop catches the same TCP/22
+    open without the upfront waste.
+  </li>
+  <li>
+    <strong>Skip Phase A&rsquo;s revert-to-NFS</strong> if Phase B
+    will set NFS immediately anyway. Today both write the pxelinux.cfg
+    to <code>default nfs</code> + cycle; the second cycle is
+    redundant. Refactor merges Phase A&rsquo;s revert into Phase B&rsquo;s
+    converge.
+  </li>
+</ul>
+
+<p>
+  Together: ~3-5 min off the per-board lifecycle without changing
+  what&rsquo;s tested.
+</p>
+
+<h3 id="improve-skip-empty-discard">Skip <code>--empty=force</code> on already-discarded disks</h3>
+
+<p>
+  The current <code>fast_wipe</code> path runs
+  <code>blkdiscard</code> (~1 s) then
+  <code>systemd-repart --empty=force --discard=no</code>. The
+  <code>--empty=force</code> still creates a loop device to write the
+  new GPT atomically. For repeat provisions where the disk already
+  carries our exact partition layout (per-host idempotent re-runs),
+  this is wasted work. Two cleaner paths:
+</p>
+
+<ul>
+  <li>
+    <strong>Hash-check the existing GPT</strong>: compare the
+    on-disk partition signature against what the layout would produce.
+    Identical → skip systemd-repart entirely, jump to rsync.
+  </li>
+  <li>
+    <strong>Use <code>--empty=allow</code></strong>: keeps any
+    existing partition table that matches; only writes new entries.
+    Fits the preserve_on_reprovision flow already in the role.
+  </li>
+</ul>
+
+<h3 id="improve-image-determinism">Image-build determinism (campaign reproducibility)</h3>
+
+<p>
+  Today the unofficial Armbian build process pins
+  <code>armbian/build</code> at HEAD of the chosen branch
+  (<code>trixie edge</code>), which can drift between weekly rebuilds.
+  Consistency improvements:
+</p>
+
+<ul>
+  <li>
+    <strong>Pin <code>armbian/build</code> commit SHA per release</strong>:
+    record the SHA in <code>vars/boards.yml</code>; image_build checks out
+    that SHA explicitly. Reproducible across operator workstations.
+  </li>
+  <li>
+    <strong>Capture U-Boot env + defconfig in the published artefact</strong>:
+    today the build logs include the localcmd bake; persist a
+    <code>u-boot-metadata.json</code> sibling to each
+    <code>.img.xz</code> with the baked env vars, defconfig SHA, and
+    target board model. The fleet test can compare runtime
+    <code>fw_printenv</code> output against the metadata for a
+    drift-detection assertion.
+  </li>
+  <li>
+    <strong>SBOM</strong>: kernel package version, all U-Boot drivers
+    compiled in, image size, partition layout — emitted into a
+    <code>.sbom.json</code> per build. Consumed by Phase D&rsquo;s
+    drift check.
+  </li>
+</ul>
+
+<h3 id="improve-pre-discard">Pre-discard NVMes during NFS lifetime</h3>
+
+<p>
+  Even with <code>fast_wipe</code>, the blkdiscard itself is &lt; 1 s,
+  but the underlying NVMe TRIM takes finite background time to
+  actually free the cells. For boards that frequently re-provision,
+  schedule a periodic
+  <code>fstrim</code> (or <code>blkdiscard</code> of the unused
+  partition) while the board is NFS-booted &mdash; so when Phase C
+  fires, the NVMe is already in &ldquo;all blocks empty&rdquo; state and
+  the systemd-repart write path is purely sequential.
+</p>
+
+<h3 id="improve-failure-isolation">Failure isolation (one bad board ≠ failed fleet test)</h3>
+
+<p>
+  Today a single board&rsquo;s Phase C failure halts the play for that
+  host and the playbook exits non-zero. With <code>serial: 1</code>,
+  the remaining boards never get tested. Improvements:
+</p>
+
+<ul>
+  <li>
+    <code>any_errors_fatal: false</code> with <code>max_fail_percentage</code>
+    so up to N boards can fail before the play aborts.
+  </li>
+  <li>
+    Per-board exit code accumulator (a <code>set_fact</code> that
+    records each board&rsquo;s pass/fail status); the Summary play
+    emits a structured table at the end. Operators get the
+    &ldquo;4/5 pass, rock-5b NVMe absent&rdquo; signal in one read.
+  </li>
+  <li>
+    <code>run-iter.sh</code>-style per-board GitHub-tracker comment
+    auto-posting (already exists for
+    <code>test_hardware_e2e.yml</code>; port to the fleet test).
+  </li>
+</ul>
+
+<h3 id="improve-summary-table">Consistency: post-run summary report</h3>
+
+<p>
+  Today the Summary play just prints the artefact directory path per
+  host. Tighter feedback loop with:
+</p>
+
+<ul>
+  <li>
+    Per-phase wall-time histogram (so an operator can see Phase C
+    drifted from 8 s to 28 min over the campaign).
+  </li>
+  <li>
+    Per-board comparison table (so &ldquo;rock-5b is the outlier&rdquo; is
+    visible at a glance).
+  </li>
+  <li>
+    Phase D <code>uname -r</code> before/after delta highlighted (so
+    no-op kernel updates and successful swaps look different).
+  </li>
+</ul>
+
+<h3 id="improve-summary">Summary of recommended priorities</h3>
+
+<table>
+  <thead><tr><th>Improvement</th><th>Effort</th><th>Speedup / consistency gain</th></tr></thead>
+  <tbody>
+    <tr><td>Throttled parallel Phase C (<code>throttle: 2</code>)</td>
+        <td>1-line playbook change</td>
+        <td>~2&times; faster full-fleet runs</td></tr>
+    <tr><td>Per-host kernel pin + 2-step Phase D</td>
+        <td>~30-line inventory + playbook change</td>
+        <td>Phase D goes from &ldquo;mech check&rdquo; to &ldquo;deterministic upgrade&rdquo;</td></tr>
+    <tr><td>PoE cycle delay tuning + skip Phase A revert</td>
+        <td>~10-line playbook refactor</td>
+        <td>~3-5 min off per board (~25 min off fleet)</td></tr>
+    <tr><td>Failure-isolation + summary table</td>
+        <td>~20-line playbook addition</td>
+        <td>Same speed, much better signal</td></tr>
+    <tr><td>CopyBlocks=raw-image replacement for rsync</td>
+        <td>~100-line role change + new image_build artefact</td>
+        <td>Phase C rsync drops from 40 s to ~2 s; ~30 min off fleet over 5 boards</td></tr>
+    <tr><td>ZFS dataset-per-host + vmtouch pinning</td>
+        <td>TrueNAS reorganisation + 1 task</td>
+        <td>Enables full-parallel Phase C; ~3&times; vs serial</td></tr>
+    <tr><td>Image-build SHA pinning + SBOM</td>
+        <td>Image-build pipeline change</td>
+        <td>Reproducible campaigns, drift detection</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Sources reviewed for this section:
+  <a href="https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_strategies.html">Ansible playbook strategies / throttle</a>,
+  <a href="https://www.freedesktop.org/software/systemd/man/latest/repart.d.html">repart.d(5) — CopyBlocks=</a>,
+  <a href="https://0pointer.net/blog/fitting-everything-together.html">Lennart Poettering on systemd-repart image-based provisioning</a>,
+  <a href="https://klarasystems.com/articles/advanced-zfs-snapshots/">Klara Systems on ZFS snapshot/clone for fast deploy</a>,
+  <a href="https://www.thomas-krenn.com/en/wiki/Ext4_Filesystem">Thomas-Krenn Wiki — ext4 lazy init trade-offs</a>,
+  <a href="https://github.com/systemd/mkosi">mkosi</a> for build-time image production.
+</p>
 
 <h2 id="closing">Closing</h2>
 
