@@ -2,17 +2,22 @@
 # Multi-board fleet end-to-end test.
 #
 # Runs the full per-board lifecycle on every host in the target group:
-#   Phase A — set boot_mode=sd, cycle, raw-SSH probe (root@<ip>+default password)
-#   Phase B — set boot_mode=nfs, cycle, ansible verify (requires `igou` user
-#             pre-injected into per-host NFS rootfs — done by pre_tasks)
+#   Phase A — set boot_mode=sd, cycle, auto-bootstrap inventory user if
+#             needed, gather facts, assert rootfs is a local block device
+#   Phase B — set boot_mode=nfs (lifecycle_set_and_verify), auto-bootstrap
+#             per-host NFS rootfs if needed, assert / is on NFS
 #   Phase C — reprovision_to_local lifecycle (NFS → systemd-repart → local)
 #   Phase C2 — set boot_mode=local_kernel, cycle, verify TFTP HITS flat
-#   Phase D — apt install/upgrade kernel, cycle, verify uname -r changed
+#   Phase D — apt install/upgrade kernel (per-host pin via
+#             armbian_netboot_kernel_target hostvar), cycle, verify
+#             uname -r delta
 #
 # Parallelism: Phases A, B, C2, D run all hosts in parallel
-# (ansible's default `forks` behaviour). Phase C runs serial: 1
-# because simultaneous rsync of the per-host NFS rootfs causes NFS
-# read contention that hangs systemd-repart's I/O loop.
+# (ansible's default `forks` behaviour). Phase C runs `throttle: 2`
+# (slow-nvme rec #1) — two boards in parallel keeps simultaneous-rsync
+# contention from hanging systemd-repart while still 2× faster than the
+# pure-serial baseline. Dial via -e fleet_phase_c_throttle=N (1 = old
+# serial behaviour; higher needs healthy NFS server-side concurrency).
 #
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `truenas`, `rb5009`,
@@ -38,14 +43,19 @@
 #   # Skip phases you've already proven on a previous run:
 #   ansible-playbook playbooks/test_fleet_e2e.yml -e skip_sd=true -e skip_kernel_update=true
 #
-#   # Override kernel update target (default: latest in apt repo,
-#   # downgrade-tolerant for unofficial-build fleets):
+#   # Override kernel update target (precedence: per-host
+#   # `armbian_netboot_kernel_target` hostvar > -e kernel_update_pin >
+#   # "" (state: latest from apt)):
 #   ansible-playbook playbooks/test_fleet_e2e.yml \
 #     -e kernel_update_pin=26.2.1 -e kernel_pkg=linux-image-edge-rockchip64
 #
-# Bypassing the ssh-agent (recommended when the agent holds stale keys):
-#   env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
-#     ansible-playbook playbooks/test_fleet_e2e.yml
+# SD-flake survival: Phases A/B/C/C2/D all use the in-tree
+# cold_boot_with_retry primitive and default to
+# armbian_netboot_boot_retry_attempts=1 at fleet-play scope. A single
+# rock-5b voltage-select flake (tracker #38) gets one automatic retry
+# before the host falls out of the run. Override with
+#   -e armbian_netboot_boot_retry_attempts=N
+# or set in inventory for fleet-wide tuning.
 
 - name: "Pre-flight: ensure all per-board artifact dirs exist on controller"
   hosts: "{{ target_hosts | default('boards') }}"
@@ -106,8 +116,12 @@
   vars:
     skip_sd: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/A-sd"
+    # Default to one retry at the fleet-play scope so a single SD
+    # voltage-select flake (rock-5b tracker #38 style) doesn't drop the
+    # host from the run. Operators can override via -e or inventory.
+    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
-    - name: Load board configs (consumed by pxelinux_render + board_boot_verify)
+    - name: Load board configs (consumed by pxelinux_render + auto_bootstrap_if_needed)
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../vars/boards.yml"
   tasks:
@@ -118,69 +132,84 @@
           ansible.builtin.set_fact:
             _t_phase_a_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        - name: "Phase A — set boot_mode=sd (no cycle)"
+        # Converge pxelinux to SD without cycling here — cold_boot_with_retry
+        # owns the PoE cycle below so a single SD flake gets retried at the
+        # same loop boundary every other phase uses.
+        - name: "Phase A — set boot_mode=sd (pxelinux only, no cycle)"
           ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
           vars:
             armbian_netboot_boot_mode: sd
             armbian_netboot_cycle_board: false
 
-        - name: "Phase A — PoE cycle (inline)"
-          ansible.builtin.include_tasks: routeros/tasks/poe_cycle.yml
+        - name: "Phase A — PoE cycle + wait for TCP/22 (with retries)"
+          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
-            armbian_netboot_poe_cycle_delay: "{{ armbian_netboot_poe_cycle_delay | default(30) }}"
+            _phase_label: "Phase A"
+            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
 
-        - name: "Phase A — wait for TCP/22"
-          ansible.builtin.wait_for:
-            host: "{{ ansible_host | default(inventory_hostname) }}"
-            port: 22
-            delay: 10
-            timeout: 240
-          delegate_to: localhost
+        # SD card user state may be either:
+        #   (a) freshly flashed → only Armbian default `root` exists, or
+        #   (b) previously bootstrapped → inventory `igou` user is present.
+        # auto_bootstrap_if_needed probes as the inventory user with a short
+        # timeout; if that fails it runs bootstrap_armbian inline against
+        # root + armbian_netboot_default_password. Either way the play
+        # converges on inventory-user SSH-key auth before the assert.
+        - name: "Phase A — auto-bootstrap if needed (SD may be pre- or post-bootstrap)"
+          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
           vars:
-            ansible_connection: local
+            _phase_label: "Phase A"
 
-        - name: "Phase A — capture SD boot evidence via raw SSH (root + default password)"
-          ansible.builtin.shell: |
-            sshpass -p '{{ armbian_netboot_default_password }}' \
-              ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-                -o PreferredAuthentications=password -o PubkeyAuthentication=no \
-                -o ConnectTimeout=15 \
-                root@{{ ansible_host | default(inventory_hostname) }} \
-                'findmnt -no FSTYPE,SOURCE /; cat /proc/cmdline; uname -r; lsblk -o NAME,SIZE,LABEL,FSTYPE,MOUNTPOINT'
-          environment:
-            SSH_AUTH_SOCK: ""
-          register: _sd_probe
-          delegate_to: localhost
-          failed_when: false
+        - name: "Phase A — wait for SSH (inventory identity, with cycle retry)"
+          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
-            ansible_connection: local
+            _phase_label: "Phase A"
+            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+
+        - name: "Phase A — gather facts (mounts + cmdline + kernel)"
+          ansible.builtin.setup:
+            gather_subset: ['!all', '!min', mounts, kernel, cmdline]
+
+        - name: "Phase A — capture root mount facts"
+          ansible.builtin.set_fact:
+            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='fstype') | first }}"
+            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                                             | map(attribute='device') | first }}"
 
         - name: "Phase A — write evidence file"
           ansible.builtin.copy:
             content: |
               === Phase A (SD) — {{ inventory_hostname }} ===
-              date: {{ ansible_date_time.iso8601 | default('') }}
-              ---
-              {{ _sd_probe.stdout | default('NO STDOUT') }}
-              {{ _sd_probe.stderr | default('') }}
+              date:     {{ ansible_date_time.iso8601 | default('') }}
+              kernel:   {{ ansible_kernel | default('?') }}
+              root fs:  {{ _root_fstype }}
+              root dev: {{ _root_device }}
+              cmdline:  {{ ansible_cmdline | default({}) | to_nice_yaml }}
             dest: "{{ fleet_artifact_dir }}/sd-boot-evidence.txt"
           delegate_to: localhost
           vars:
             ansible_connection: local
 
-        - name: "Phase A — assert SD boot looks healthy"
+        # Match hardware_e2e Phase 1's invariant: SD boot must land on a
+        # local block device (root_device starts with /dev/) with a
+        # non-NFS filesystem. We don't pin to mmcblk* specifically — the
+        # board's SD slot enumeration is per-board (see CLAUDE.md "MMC
+        # controller index" note); local-block + non-NFS is the durable
+        # signal across boards.
+        - name: "Phase A — assert rootfs is on a local block device"
           ansible.builtin.assert:
             that:
-              - "'root=LABEL=armbi_root' in (_sd_probe.stdout | default(''))"
-              - "'mmcblk' in (_sd_probe.stdout | default(''))"
+              - _root_fstype not in ['nfs', 'nfs4']
+              - _root_device is match('^/dev/')
             fail_msg: >-
-              Phase A SD probe didn't show root=LABEL=armbi_root and an
-              mmcblk* mount. Evidence: {{ fleet_artifact_dir }}/sd-boot-evidence.txt
+              Phase A: expected SD-rooted local block device; got
+              {{ _root_device }} ({{ _root_fstype }}). Evidence:
+              {{ fleet_artifact_dir }}/sd-boot-evidence.txt
 
-        - name: "Phase A — revert to nfs (sets up Phase B)"
-          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
-          vars:
-            armbian_netboot_boot_mode: nfs
+        # Phase A's old "revert to nfs" step was dropped (slow-nvme rec #3):
+        # Phase B's _lifecycle_set_and_verify NFS converge writes the same
+        # pxelinux + cycles the board anyway, so the second cycle here is
+        # pure overhead.
 
         - name: "Phase A — record timing"
           ansible.builtin.lineinfile:
@@ -195,11 +224,15 @@
 
 - name: "Phase B — boot from NFS (parallel)"
   hosts: "{{ target_hosts | default('boards') }}"
-  gather_facts: "{{ not (skip_nfs | bool) }}"
-  gather_subset: [mounts]
+  gather_facts: false
   vars:
     skip_nfs: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/B-nfs"
+    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
+  pre_tasks:
+    - name: Load board configs (consumed by pxelinux_render + auto_bootstrap_if_needed)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
   tasks:
     - name: "Phase B — block"
       when: not (skip_nfs | bool)
@@ -208,13 +241,38 @@
           ansible.builtin.set_fact:
             _t_phase_b_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
+        # Phase B owns the NFS converge now (slow-nvme rec #3): Phase A
+        # used to do "verify SD + revert to NFS"; the revert step is gone
+        # so Phase B drives the SD → NFS transition end-to-end. The
+        # lifecycle helper writes pxelinux default=nfs, PoE-cycles via
+        # cold_boot_with_retry, waits for SSH, and asserts the rootfs
+        # matches via board_boot_verify — all with retry on SD flake.
+        - name: "Phase B — set + verify nfs"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: nfs
+            on_failure_revert_to: sd
+
+        # NFS rootfs identity reset on first boot of a per-host clone may
+        # leave the inventory user un-provisioned. auto_bootstrap_if_needed
+        # is idempotent — fast no-op on bootstrapped clones, full bootstrap
+        # on freshly-cloned ones.
+        - name: "Phase B — auto-bootstrap if needed (per-host NFS rootfs may be fresh)"
+          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+          vars:
+            _phase_label: "Phase B"
+
+        - name: "Phase B — gather facts (mounts + kernel)"
+          ansible.builtin.setup:
+            gather_subset: ['!all', '!min', mounts, kernel]
+
         - name: "Phase B — assert / is on NFS"
           ansible.builtin.assert:
             that: >-
               ansible_mounts | selectattr('mount', 'equalto', '/')
                 | map(attribute='fstype') | first in ['nfs', 'nfs4']
             fail_msg: >-
-              {{ inventory_hostname }} is not on NFS after Phase A revert.
+              {{ inventory_hostname }} is not on NFS after Phase B converge.
               Found: {{ ansible_mounts | selectattr('mount', 'equalto', '/') | first }}
 
         - name: "Phase B — write evidence"
@@ -222,8 +280,8 @@
             content: |
               === Phase B (NFS) — {{ inventory_hostname }} ===
               findmnt /: {{ ansible_mounts | selectattr('mount', 'equalto', '/') | first }}
-              uname -r: {{ ansible_facts.kernel | default('?') }}
-              hostname: {{ inventory_hostname }}
+              uname -r:  {{ ansible_kernel | default('?') }}
+              hostname:  {{ inventory_hostname }}
             dest: "{{ fleet_artifact_dir }}/nfs-boot-evidence.txt"
           delegate_to: localhost
           vars:
@@ -240,13 +298,21 @@
             ansible_connection: local
           delegate_to: localhost
 
-- name: "Phase C — reprovision NVMe (SERIAL — NFS rsync contention guard)"
+- name: "Phase C — reprovision NVMe (throttled — NFS rsync contention guard)"
   hosts: "{{ target_hosts | default('boards') }}"
-  serial: 1
+  # slow-nvme rec #1: throttle 2 lets two boards run Phase C in parallel
+  # while keeping the NFS-server-side rsync contention below the floor
+  # that hangs systemd-repart (observed: 4+ concurrent rsyncs from the
+  # same TrueNAS dataset stall on mds/dnlc cache + 1 GbE saturation).
+  # Operators on a faster network or with per-host ZFS datasets can dial
+  # up via -e fleet_phase_c_throttle=N; fully-serial behaviour returns
+  # at fleet_phase_c_throttle=1.
+  throttle: "{{ fleet_phase_c_throttle | default(2) | int }}"
   gather_facts: true
   gather_subset: [mounts]
   vars:
     skip_reprovision: false
+    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
     - name: Load board configs
       ansible.builtin.include_vars:
@@ -322,6 +388,7 @@
   vars:
     skip_local_kernel: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/C2-localkernel"
+    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
     - name: Load board configs
       ansible.builtin.include_vars:
@@ -398,8 +465,14 @@
     skip_kernel_update: false
     kernel_pkg: linux-image-edge-rockchip64
     kernel_dtb_pkg: linux-dtb-edge-rockchip64
-    kernel_update_pin: ""     # empty = "latest from apt", non-empty = "pin to this version"
+    # Precedence (slow-nvme rec #2):
+    #   1. per-host `armbian_netboot_kernel_target` hostvar (deterministic
+    #      per-board pin — set in inventory/host_vars for fleet homogeneity)
+    #   2. `-e kernel_update_pin=<version>` (run-time override)
+    #   3. "" → state: latest from apt repo (default mechanism check)
+    kernel_update_pin: ""
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/D-kupdate"
+    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   tasks:
     - name: "Phase D — guard"
       when: not (skip_kernel_update | bool)
@@ -407,6 +480,11 @@
         - name: "Phase D — start timer"
           ansible.builtin.set_fact:
             _t_phase_d_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        - name: "Phase D — resolve effective kernel target (hostvar > -e > latest)"
+          ansible.builtin.set_fact:
+            _kernel_target: "{{ armbian_netboot_kernel_target
+                                | default(kernel_update_pin, true) }}"
 
         - name: "Phase D — record uname -r BEFORE"
           ansible.builtin.command: uname -r
@@ -422,11 +500,11 @@
         - name: "Phase D — install/upgrade kernel package"
           ansible.builtin.apt:
             name: >-
-              {{ [kernel_pkg, kernel_dtb_pkg] if kernel_update_pin == ''
-                 else [kernel_pkg + '=' + kernel_update_pin,
-                       kernel_dtb_pkg + '=' + kernel_update_pin] }}
-            state: "{{ 'latest' if kernel_update_pin == '' else 'present' }}"
-            allow_downgrade: "{{ kernel_update_pin != '' }}"
+              {{ [kernel_pkg, kernel_dtb_pkg] if _kernel_target == ''
+                 else [kernel_pkg + '=' + _kernel_target,
+                       kernel_dtb_pkg + '=' + _kernel_target] }}
+            state: "{{ 'latest' if _kernel_target == '' else 'present' }}"
+            allow_downgrade: "{{ _kernel_target != '' }}"
             install_recommends: false
           become: true
           register: _apt_kernel
@@ -456,6 +534,10 @@
           ansible.builtin.copy:
             content: |
               === Phase D (kernel update) — {{ inventory_hostname }} ===
+              target: {{ _kernel_target if _kernel_target != '' else '(latest)' }}
+              source: {{ 'inventory hostvar armbian_netboot_kernel_target' if armbian_netboot_kernel_target is defined
+                         else '-e kernel_update_pin' if kernel_update_pin != ''
+                         else 'apt latest' }}
               before: {{ _uname_before.stdout | trim }}
               after:  {{ _uname_after.stdout | trim }}
               apt changed: {{ _apt_kernel.changed | default(false) }}

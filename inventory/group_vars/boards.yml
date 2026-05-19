@@ -28,6 +28,11 @@ armbian_netboot_router: rb5009
 # combinations (healthy / flaky-PoE / max-consistency / fast-iter /
 # fresh-rootfs).
 #
+# NB: test_fleet_e2e.yml defaults armbian_netboot_boot_retry_attempts
+# to 1 at play scope (one auto-retry per phase) so a single SD
+# voltage-select flake doesn't drop a host from the fleet run. Set it
+# explicitly here to override that default fleet-wide.
+#
 # armbian_netboot_boot_retry_attempts: 0
 # armbian_netboot_boot_attempt_timeout: 180
 # armbian_netboot_ssh_wait_timeout: 90
@@ -38,3 +43,17 @@ armbian_netboot_router: rb5009
 # Example: production flaky-HAT setup — retries with 60 s cap drain.
 # armbian_netboot_boot_retry_attempts: 2
 # armbian_netboot_poe_cycle_delay: 60
+
+# ── Phase D kernel-update target (slow-nvme rec #2) ──────────────────
+# Per-host `armbian_netboot_kernel_target` is read by Phase D of
+# test_fleet_e2e.yml to deterministically install a specific kernel
+# version (`state: present`, `allow_downgrade: true`). Precedence:
+#   1. per-host `armbian_netboot_kernel_target` (deterministic; pins
+#      Phase D to the same version every run for fleet homogeneity)
+#   2. `-e kernel_update_pin=<version>` (run-time override of all hosts)
+#   3. unset / "" → state: latest from apt repo (default mechanism test)
+#
+# Set per-host in host_vars/<board>.yml or per-model in
+# group_vars/<model-group>.yml. Example:
+#
+# armbian_netboot_kernel_target: "26.05.0-trunk"
