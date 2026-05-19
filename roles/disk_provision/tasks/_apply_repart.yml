@@ -56,6 +56,28 @@
     _dp_repart_empty: >-
       {{ 'refuse' if _dp_preserve_ids | length > 0 else 'force' }}
 
+# Fast-wipe path: pre-discard the whole device directly using the
+# storage's native chunk size (NVMe = 2 TiB chunks; one ioctl wipes
+# the whole disk in ~seconds). After this, both systemd-repart's
+# --discard=yes and mkfs.ext4's -E discard become no-ops. Without
+# this, the slow path runs through systemd-repart's loop-device
+# view of the disk whose BLKDISCARD chunk is hard-capped at 128 KiB
+# — for a 477 GiB NVMe that's ~3.7M ioctls × wbt_wait throttling,
+# clocking ~30 min instead of ~2 min. See
+# docs/end-to-end-fleet-test.html §6 deep-dive.
+- name: "Apply repart: pre-discard whole disk (fast_wipe)"
+  ansible.builtin.command:
+    cmd: "blkdiscard {{ disk_binding.device }}"
+  become: true
+  when:
+    - _dp_preserve_ids | length == 0     # only safe when nothing to preserve
+    - (disk_binding.fast_wipe | default(true)) | bool
+  register: _dp_blkdiscard
+  changed_when: true
+  failed_when:
+    - _dp_blkdiscard.rc != 0
+    - _dp_blkdiscard.rc != 2    # rc=2 = device doesn't support discard; not fatal
+
 - name: "Apply repart: run systemd-repart"
   ansible.builtin.command:
     cmd: >-
@@ -65,6 +87,10 @@
       --dry-run=no
       --discard=yes
       {{ disk_binding.device }}
+  environment:
+    # -K = skip mkfs's per-block discard. Paired with the pre-blkdiscard
+    # above, eliminates the 30-min mkfs.ext4 stall on large NVMes.
+    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-K' if (disk_binding.fast_wipe | default(true)) | bool else '' }}"
   become: true
   register: _dp_repart_run
   changed_when: true
