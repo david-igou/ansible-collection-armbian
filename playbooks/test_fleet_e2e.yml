@@ -169,6 +169,79 @@
             ansible_connection: local
           delegate_to: localhost
 
+- name: "Phase 1 — Force-refresh NFS templates + per-host clones (netboot_server)"
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  vars:
+    skip_phase_1: false
+    _target_boards: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
+    _target_models: >-
+      {{ _target_boards
+         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | list | unique }}
+  pre_tasks:
+    - name: "Phase 1 — load board configs (consumed by image_extract dtb lookup)"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+
+  tasks:
+    - name: "Phase 1 — block"
+      when: not (skip_phase_1 | bool)
+      block:
+        - name: "Phase 1 — start timer (per-board, delegated)"
+          ansible.builtin.set_fact:
+            _t_phase_1_start: "{{ lookup('pipe', 'date +%s') | int }}"
+          run_once: true
+
+        - name: "Phase 1 — extract per-model templates (force_refresh)"
+          ansible.builtin.include_role:
+            name: image_extract
+          vars:
+            armbian_image_src: "{{ armbian_netboot_image_urls[item] }}"
+            model_name: "{{ item }}"
+            template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ item }}"
+            tftp_dir: "{{ armbian_netboot_image_cache | default('/var/lib/armbian_netboot/cache') }}/sbc-tftp/{{ item }}"
+            board_dtb: "{{ armbian_netboot_board_configs[item].dtb }}"
+            force_refresh: true
+          loop: "{{ _target_models }}"
+
+        - name: "Phase 1 — clone per-host rootfs (force_refresh)"
+          ansible.builtin.include_role:
+            name: rootfs_clone
+          vars:
+            template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[_board].armbian_netboot_board_model }}"
+            target_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ _board }}"
+            hostname: "{{ _board }}"
+            force_refresh: true
+          loop: "{{ _target_boards }}"
+          loop_control:
+            loop_var: _board
+
+        - name: "Phase 1 — per-board evidence + timing"
+          ansible.builtin.shell: |
+            set -euo pipefail
+            HOST={{ board }}
+            DIR=/tmp/iter-FLEET-${HOST}/1-nfs-reset
+            mkdir -p "${DIR}"
+            cat > "${DIR}/nfs-reset-evidence.txt" <<EOF
+            === Phase 1 (NFS reset) — ${HOST} ===
+            template: {{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[board].armbian_netboot_board_model }}
+            target:   {{ armbian_netboot_nfs_rootfs_path }}/${HOST}
+            force_refresh: true
+            EOF
+            T_END=$(date +%s)
+            T_START={{ _t_phase_1_start }}
+            DUR=$(( T_END - T_START ))
+            echo -e "1\t${T_START}\t${T_END}\t${DUR}" >> /tmp/iter-FLEET-${HOST}/timing.tsv
+          args:
+            executable: /bin/bash
+          loop: "{{ _target_boards }}"
+          loop_control:
+            loop_var: board
+          delegate_to: localhost
+          changed_when: false
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
