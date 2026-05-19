@@ -1,0 +1,35 @@
+---
+argument_specs:
+  main:
+    short_description: "Stream a defined image to a defined block device."
+    description:
+      - >-
+        Accepts an http(s):// URL or an absolute path to an .img.xz or .img,
+        and a target block device (e.g. /dev/mmcblk0). Streams the image
+        to the device via curl/xz -dc/dd with set -o pipefail. Refuses if
+        the target device, or any of its partitions, currently backs a
+        mounted filesystem.
+      - >-
+        Runs on the board (or any host with root) that owns the target
+        device. Caller is responsible for ensuring the running rootfs is
+        NOT on the target device — the mount-aware guard enforces this.
+        Always writes; no idempotency cache.
+
+    options:
+      image_source:
+        type: str
+        required: true
+        description: >-
+          Either an http(s):// URL or an absolute path on the running host.
+          Auto-dispatch by extension: .img.xz → xz -dc | dd; .img → dd direct.
+          Mismatched extension is a hard failure (no content sniffing).
+      target_device:
+        type: path
+        required: true
+        description: >-
+          Absolute path to a block device (e.g. /dev/mmcblk0, /dev/nvme0n1).
+          Must be a real block device (S_ISBLK), not a partition node.
+      dd_bs:
+        type: str
+        default: "4M"
+        description: "dd block size. Default tuned for SD/NVMe throughput."
