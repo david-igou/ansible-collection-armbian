@@ -134,3 +134,8 @@ armbian_netboot_image_cache: /var/lib/armbian_netboot/cache
 #             == spi_flash.
 #   always  — run step 3.5 unconditionally (no-op on NOWHERE hosts).
 #   never   — skip step 3.5 entirely.
+
+# Default block device for SD-card reimaging (test_fleet_e2e.yml Phase 0).
+# Override per-host in inventory if a future board's SD slot enumerates
+# differently (see CLAUDE.md "MMC controller index varies per board").
+armbian_netboot_sd_device: /dev/mmcblk0

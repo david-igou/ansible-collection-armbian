@@ -2,6 +2,8 @@
 # Multi-board fleet end-to-end test.
 #
 # Runs the full per-board lifecycle on every host in the target group:
+#   Phase 0 — converge to NFS, then dd canonical SD image to /dev/mmcblk0
+#             (cross-iteration state reset). Skip with -e skip_dd_sd=true.
 #   Phase A — set boot_mode=sd, cycle, auto-bootstrap inventory user if
 #             needed, gather facts, assert rootfs is a local block device
 #   Phase B — set boot_mode=nfs (lifecycle_set_and_verify), auto-bootstrap
@@ -29,8 +31,9 @@
 #   - Inventory's `armbian_netboot_poe_switch` + `armbian_netboot_poe_port`
 #     set per board.
 #
-# Per-board artefacts: /tmp/iter-FLEET-<host>/{A-sd,B-nfs,C-reprovision,
-# C2-localkernel,D-kupdate}/. Final play emits a summary table.
+# Per-board artefacts: /tmp/iter-FLEET-<host>/{0-dd-sd,A-sd,B-nfs,
+# C-reprovision,C2-localkernel,D-kupdate}/. Final play emits a summary
+# table.
 #
 # Usage:
 #   # Full fleet, default target group:
@@ -61,12 +64,12 @@
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   tasks:
-    - name: "Create /tmp/iter-FLEET-<host>/{A-sd,B-nfs,C-reprovision,C2-localkernel,D-kupdate}"
+    - name: "Create /tmp/iter-FLEET-<host>/{0-dd-sd,A-sd,B-nfs,C-reprovision,C2-localkernel,D-kupdate}"
       ansible.builtin.file:
         path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/{{ item }}"
         state: directory
         mode: '0755'
-      loop: [A-sd, B-nfs, C-reprovision, C2-localkernel, D-kupdate]
+      loop: [0-dd-sd, A-sd, B-nfs, C-reprovision, C2-localkernel, D-kupdate]
       delegate_to: localhost
       vars:
         ansible_connection: local
@@ -164,6 +167,68 @@
       vars:
         _bootstrap_pubkey: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
       changed_when: false
+
+- name: "Phase 0 — dd canonical image to SD (state reset, parallel)"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_dd_sd: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/0-dd-sd"
+  pre_tasks:
+    - name: Load board configs (consumed by pxelinux_render via _converge_boot_mode)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+  tasks:
+    - name: "Phase 0 — block"
+      when: not (skip_dd_sd | bool)
+      block:
+        - name: "Phase 0 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_0_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        # The dd target is /dev/mmcblk0. The role's mount-aware guard
+        # will refuse if we're booted off SD — converge to NFS first.
+        - name: "Phase 0 — set + verify nfs"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: nfs
+            on_failure_revert_to: sd
+
+        - name: "Phase 0 — auto-bootstrap if needed (NFS rootfs may be fresh)"
+          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+          vars:
+            _phase_label: "Phase 0"
+
+        - name: "Phase 0 — dd canonical image to SD"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
+            target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
+
+        - name: "Phase 0 — write evidence"
+          ansible.builtin.copy:
+            content: |
+              === Phase 0 (dd SD) — {{ inventory_hostname }} ===
+              date:    {{ ansible_date_time.iso8601 | default('') }}
+              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
+              target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
+              From-state: NFS rootfs (Phase 0 always re-converges nfs before dd)
+            dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
+          delegate_to: localhost
+          vars:
+            ansible_connection: local
+
+        - name: "Phase 0 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "0\t{{ _t_phase_0_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_0_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
 
 - name: "Phase A — boot from SD card (parallel)"
   hosts: "{{ target_hosts | default('boards') }}"
@@ -633,14 +698,15 @@
         msg: |
           === Fleet test per-phase wall times (seconds) ===
 
-          Board                            A      B      C      C2     D     Total
-          ──────────────────────────────  ────   ────   ─────  ─────  ─────  ─────
+          Board                            0      A      B      C      C2     D     Total
+          ──────────────────────────────  ────   ────   ────   ─────  ─────  ─────  ─────
           {% for h in ansible_play_hosts -%}
           {%- set rows = lookup('file', '/tmp/iter-FLEET-' + (h | regex_replace('\\..*', '')) + '/timing.tsv', errors='ignore') | default('', true) -%}
-          {%- set ns = namespace(A='-', B='-', C='-', C2='-', D='-', total=0) -%}
+          {%- set ns = namespace(P0='-', A='-', B='-', C='-', C2='-', D='-', total=0) -%}
           {%- for line in rows.split('\n') -%}
             {%- set f = line.split('\t') -%}
-            {%- if f | length >= 4 and f[0] in ['A','B','C','C2','D'] -%}
+            {%- if f | length >= 4 and f[0] in ['0','A','B','C','C2','D'] -%}
+              {%- if f[0] == '0' %}{% set ns.P0 = f[3] %}{% endif -%}
               {%- if f[0] == 'A' %}{% set ns.A = f[3] %}{% endif -%}
               {%- if f[0] == 'B' %}{% set ns.B = f[3] %}{% endif -%}
               {%- if f[0] == 'C' %}{% set ns.C = f[3] %}{% endif -%}
@@ -649,7 +715,7 @@
               {%- set ns.total = ns.total + (f[3] | int) -%}
             {%- endif -%}
           {%- endfor %}
-          {{ '%-30s' | format(h) }}  {{ '%-5s' | format(ns.A) }}  {{ '%-5s' | format(ns.B) }}  {{ '%-5s' | format(ns.C) }}  {{ '%-5s' | format(ns.C2) }}  {{ '%-5s' | format(ns.D) }}  {{ ns.total }}
+          {{ '%-30s' | format(h) }}  {{ '%-5s' | format(ns.P0) }}  {{ '%-5s' | format(ns.A) }}  {{ '%-5s' | format(ns.B) }}  {{ '%-5s' | format(ns.C) }}  {{ '%-5s' | format(ns.C2) }}  {{ '%-5s' | format(ns.D) }}  {{ ns.total }}
           {% endfor %}
           (Phase C is serial across hosts; the others run in parallel.
            Per-host artefacts: /tmp/iter-FLEET-<host>/timing.tsv)
