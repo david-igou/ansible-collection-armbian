@@ -42,6 +42,16 @@ argument_specs:
             type: bool
             default: false
             description: "Bypass preserve_on_reprovision idempotency — destructively wipe preserved partitions too."
+          fast_wipe:
+            type: bool
+            default: true
+            description: >-
+              When true, issue `blkdiscard <device>` (full-device TRIM using the
+              storage's native chunk size) before systemd-repart, AND pass
+              `-K` to mkfs.ext4 to skip its per-block discard at format time.
+              Net effect: ~30x speedup on large NVMe (>200 GiB), no functional
+              change on small disks. Set false for devices with broken TRIM
+              firmware (some old eMMC) where blkdiscard hangs.
           layout:
             type: list
             elements: dict

@@ -1147,18 +1147,178 @@ all:
 
 <div class="gotcha">
   <strong>rock-5b-01&rsquo;s 477 GB NVMe outliers the rest of the fleet.</strong>
-  <code>systemd-repart --empty=force</code> followed by
-  <code>mkfs.ext4</code> on a 477 GB partition writes inode tables at
-  the NVMe&rsquo;s sustained write bandwidth (~165 MB/s on this RK3588
-  PCIe Gen2 x1). Total wall time ~30-45 min vs ~7 min for the 119-238
-  GB siblings. The campaign aborted Phase C for rock-5b after ~10 min
-  to keep the fleet test bounded. Recovery path: re-run
-  <code>reprovision_to_local.yml --limit rock-5b-01</code> with a long
-  wait timeout, OR enhance <code>disk_provision</code> to pass
-  <code>-E lazy_itable_init=1,lazy_journal_init=1</code> to mkfs.ext4
-  so the on-disk init happens lazily at runtime.
+  <code>reprovision_to_local.yml</code> takes ~28 min in Phase C on
+  rock-5b vs ~7 min on opi5pro (119 GB), ~14 min on the 238 GB
+  boards. This is <em>not</em> hardware-bound &mdash; see the
+  <a href="#systemd-repart-loop-discard">deep-dive</a> below for the
+  root cause (loop-device discard chunking) and the recommended
+  mitigations.
 </p>
 </div>
+
+<h3 id="systemd-repart-loop-discard">Deep-dive: why Phase C is slow on large NVMes</h3>
+
+<p>
+  <code>systemd-repart</code> sets up a <strong>loop device</strong>
+  view of the target NVMe (with a 1 MiB offset for the partition
+  table) so it can write the GPT atomically. <code>mkfs.ext4</code>
+  then runs against that loop device. The loop device&rsquo;s
+  per-ioctl discard chunk is hard-capped at <strong>128 KiB</strong>,
+  while the NVMe itself natively supports <strong>2 TiB</strong>
+  discard chunks:
+</p>
+
+<pre><code># on the running rock-5b
+$ cat /sys/block/loop0/queue/discard_max_bytes
+131072                  # 128 KiB — loop driver default
+
+$ cat /sys/block/nvme0n1/queue/discard_max_bytes
+2199023255040           # 2 TiB — NVMe native
+</code></pre>
+
+<p>
+  When <code>mkfs.ext4</code> defaults invoke
+  <code>BLKDISCARD</code> on the whole device, the kernel breaks the
+  request into 128 KiB chunks. For a 477 GiB partition that&rsquo;s
+  <strong>~3.7 million individual ioctls</strong> &mdash; each one a
+  syscall round-trip with writeback-throttle (<code>wbt_wait</code>)
+  bookkeeping. The kernel stack trace from our run confirms this:
+</p>
+
+<pre><code># pid 1349 = mkfs.ext4 (child of systemd-repart pid 1348)
+$ cat /proc/1349/stack
+[&lt;0&gt;] wbt_wait+0xbc/0x130             # writeback throttle
+[&lt;0&gt;] __rq_qos_throttle+0x38/0x58
+[&lt;0&gt;] blk_mq_submit_bio+0x59c/0x848
+[&lt;0&gt;] __submit_bio+0x8c/0x238
+[&lt;0&gt;] submit_bio_wait+0x5c/0xa8
+[&lt;0&gt;] blkdev_common_ioctl+0xde8/0xf18  # ← BLKDISCARD ioctl
+
+# its I/O stats — userspace has barely written anything
+$ cat /proc/1349/io
+rchar: 11397
+wchar: 2257
+write_bytes: 0
+</code></pre>
+
+<p>
+  The ~7 GiB/min throughput we observe is the kernel chewing through
+  millions of 128 KiB discard ioctls. The NVMe itself can do
+  effectively-instant TRIM at its native chunk size; the loop driver
+  is the throttle. The same overhead exists on the smaller boards
+  &mdash; it just stays under 15 min there.
+</p>
+
+<h3 id="discard-mitigations">Mitigations</h3>
+
+<table>
+  <thead><tr><th>Approach</th><th>Effort</th><th>Speedup</th><th>Trade-off</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Pre-discard NVMe directly</strong>
+          <br><code>blkdiscard /dev/nvme0n1</code> as a one-time
+          pre-task before <code>disk_provision</code></td>
+      <td>add 1 task to role</td>
+      <td>~minutes → seconds on 477 GB</td>
+      <td>None for fresh disks. <code>blkdiscard</code> talks to
+          the NVMe directly using its native 2 TiB chunk size, so the
+          whole device is TRIM&rsquo;ed in 1-2 ioctls. After that,
+          both <code>systemd-repart --discard=yes</code> and
+          <code>mkfs.ext4 -E discard</code> become no-ops.</td>
+    </tr>
+    <tr>
+      <td><strong>Disable systemd-repart&rsquo;s discard</strong>
+          <br>Pass <code>--discard=no</code> in
+          <code>_apply_repart.yml</code></td>
+      <td>1-line role change</td>
+      <td>halves the time</td>
+      <td>mkfs.ext4&rsquo;s own <code>-E discard</code> still fires
+          &mdash; needs to be paired with the next row.</td>
+    </tr>
+    <tr>
+      <td><strong>Disable mkfs.ext4&rsquo;s discard</strong>
+          <br><code>SYSTEMD_REPART_MKFS_OPTIONS_EXT4="-K"</code>
+          env var to systemd-repart</td>
+      <td>1-line role change</td>
+      <td>removes the long path</td>
+      <td>Disk is left with stale data in unused blocks. Fine for
+          ext4 (LBA contents only matter for written blocks). On a
+          freshly-allocated NVMe it makes zero practical difference.</td>
+    </tr>
+    <tr>
+      <td><strong>Skip <code>--empty=force</code></strong>
+          <br>Pre-wipe the partition table with <code>wipefs -a</code>
+          + <code>sgdisk -Z</code>, run repart with
+          <code>--empty=allow</code></td>
+      <td>moderate role change</td>
+      <td>bypasses the loop device entirely</td>
+      <td>Loses systemd-repart&rsquo;s atomic-GPT-write guarantee.
+          Risk of half-written partition table on power loss
+          mid-wipe. Not recommended for production fleets.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Recommended combination</strong>: pre-discard with
+  <code>blkdiscard</code> (best speedup, lowest risk), <em>and</em>
+  set <code>SYSTEMD_REPART_MKFS_OPTIONS_EXT4="-K"</code> in the
+  systemd-repart invocation env (so even a re-run on a non-fresh
+  disk doesn&rsquo;t re-pay the cost). Leave
+  <code>--discard=yes</code> on systemd-repart as a safety net so
+  any partition-boundary blocks the wipe missed still get TRIM&rsquo;ed.
+</p>
+
+<div class="snippet">
+  <header><strong>Proposed patch to <code>roles/disk_provision/tasks/_apply_repart.yml</code></strong></header>
+<pre><code># Before the existing "Apply repart: run systemd-repart" task, add:
+- name: "Apply repart: pre-discard whole disk for fast wipe (NVMe native chunk size)"
+  ansible.builtin.command:
+    cmd: "blkdiscard {{ disk_binding.device }}"
+  become: true
+  when: (disk_binding.fast_wipe | default(true)) | bool
+  changed_when: true
+  # Optional: failed_when: false  — devices without discard support
+  # (some eMMC, some USB SSDs) exit 2 here; mkfs would silently skip
+  # discard too, so failure isn't fatal.
+
+# Then change the existing systemd-repart command to set the mkfs env:
+- name: "Apply repart: run systemd-repart"
+  ansible.builtin.command:
+    cmd: >-
+      systemd-repart
+      --definitions={{ _dp_repart_defs }}
+      --empty={{ _dp_repart_empty }}
+      --dry-run=no
+      --discard=yes
+      {{ disk_binding.device }}
+  environment:
+    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "-K"   # skip per-block discard at mkfs time
+</code></pre>
+</div>
+
+<p>
+  The per-host opt-out (<code>fast_wipe: false</code> on a disk
+  binding) leaves the door open for boards that need the slow path
+  (e.g. SD cards with broken TRIM firmware), but defaults to fast for
+  the common NVMe case.
+</p>
+
+<p>
+  Expected result on rock-5b&rsquo;s 477 GB NVMe with both
+  mitigations: <strong>Phase C drops from ~28 min to ~2 min</strong>
+  (the rsync source-to-NVMe copy and the converge cycles, both of
+  which are I/O-bound on actual data, not on discard overhead).
+</p>
+
+<p>
+  Sources reviewed for this analysis:
+  <a href="https://man7.org/linux/man-pages/man8/blkdiscard.8.html">blkdiscard(8)</a>,
+  <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-repart.html">systemd-repart(8)</a>,
+  <a href="https://man.archlinux.org/man/repart.d.5.en">repart.d(5)</a>,
+  <a href="https://bugzilla.redhat.com/show_bug.cgi?id=637753">RHBZ#637753 (mkfs.extN slow discard)</a>,
+  <a href="https://www.spinics.net/lists/raid/msg62884.html">slow BLKDISCARD on RAID10 loop devices</a>.
+</p>
 
 <details>
 <summary>opi5pro-01 — Phase A (SD) evidence</summary>
