@@ -81,6 +81,61 @@
       vars:
         ansible_connection: local
 
+    # Materialize armbian_netboot_boot_retry_attempts as a host_fact so
+    # later Phases get one auto-retry on SD voltage-select flake without
+    # the play-vars self-reference trap. set_fact renders the RHS once
+    # against the current scope (no role default visible here — fleet
+    # e2e uses include_tasks, not include_role — so | default(1) wins
+    # when nothing else is set, and inventory overrides are honoured if
+    # they exist). host_facts persist for the rest of the run, so every
+    # Phase's include_tasks chain reads the resolved literal.
+    - name: "Pre-flight — resolve fleet SD-flake retry default"
+      ansible.builtin.set_fact:
+        armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) | int }}"
+
+    # Same self-reference rationale as armbian_netboot_boot_retry_attempts
+    # above: the Phase D PoE cycle used to override this var with
+    # `{{ armbian_netboot_poe_cycle_delay | default(30) }}` at include
+    # scope, and that recurses when no inventory override exists. 30 s is
+    # the conservative default for RK3588 voltage-select reliability on
+    # the fleet — operators with stable PoE-HAT firmware can drop to 10 s
+    # via inventory (slow-nvme rec #3).
+    - name: "Pre-flight — resolve fleet PoE cycle delay default"
+      ansible.builtin.set_fact:
+        armbian_netboot_poe_cycle_delay: "{{ armbian_netboot_poe_cycle_delay | default(30) | int }}"
+
+    # Stale ~/.ssh/known_hosts entries from prior runs trip
+    # wait_for_connection with "REMOTE HOST IDENTIFICATION HAS CHANGED" —
+    # each Phase boots from a different rootfs (SD card → NFS → NVMe
+    # local), and each carries its own host keys. host_key_checking=False
+    # in ansible.cfg only sets StrictHostKeyChecking=no, which does NOT
+    # cover an existing-but-mismatched key in known_hosts (ssh's
+    # "REMOTE HOST IDENTIFICATION HAS CHANGED" path).
+    #
+    # Two-step fix:
+    #   1. ssh-keygen -R per-board: clear stale entries from the
+    #      controller's known_hosts so the operator gets a clean slate
+    #      after the fleet run too (same pattern test_hardware_e2e
+    #      lines 183-191).
+    #   2. set_fact ansible_ssh_common_args to UserKnownHostsFile=/dev/null
+    #      + StrictHostKeyChecking=no for the rest of the fleet run.
+    #      Each Phase's boot-mode transition swaps host keys without
+    #      ansible noticing. Same pattern auto_bootstrap_if_needed.yml
+    #      already uses.
+    - name: "Pre-flight — clear stale known_hosts entries on controller"
+      ansible.builtin.command:
+        cmd: "ssh-keygen -R {{ item }}"
+      delegate_to: localhost
+      connection: local
+      become: false
+      loop: "{{ [inventory_hostname, ansible_host | default(inventory_hostname)] | unique }}"
+      changed_when: false
+      failed_when: false
+
+    - name: "Pre-flight — bypass known_hosts for the fleet run (boot-mode transitions swap host keys)"
+      ansible.builtin.set_fact:
+        ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR"
+
 - name: "Pre-flight: ensure igou user + key on each per-host NFS rootfs"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -116,10 +171,10 @@
   vars:
     skip_sd: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/A-sd"
-    # Default to one retry at the fleet-play scope so a single SD
-    # voltage-select flake (rock-5b tracker #38 style) doesn't drop the
-    # host from the run. Operators can override via -e or inventory.
-    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
+    # SD-flake retry default lives in the pre-flight set_fact (host fact
+    # armbian_netboot_boot_retry_attempts). The play-vars layer can't
+    # shadow it without a self-reference trap; consume the host fact via
+    # the | int call in _boot_max_attempts below.
   pre_tasks:
     - name: Load board configs (consumed by pxelinux_render + auto_bootstrap_if_needed)
       ansible.builtin.include_vars:
@@ -141,11 +196,19 @@
             armbian_netboot_boot_mode: sd
             armbian_netboot_cycle_board: false
 
+        # _skip_ssh_stability_check: the SD card may be at stock-Armbian
+        # state with only the root account (no inventory user yet). Skip
+        # cold_boot_single_attempt's wait_for_connection (it would fail
+        # with publickey/password permission denied), retry the loop on
+        # TCP/22 only, and let auto_bootstrap_if_needed below establish
+        # the inventory user via the root+password path before any
+        # subsequent SSH-as-igou calls fire.
         - name: "Phase A — PoE cycle + wait for TCP/22 (with retries)"
           ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase A"
             _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
+            _skip_ssh_stability_check: true
 
         # SD card user state may be either:
         #   (a) freshly flashed → only Armbian default `root` exists, or
@@ -228,7 +291,6 @@
   vars:
     skip_nfs: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/B-nfs"
-    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
     - name: Load board configs (consumed by pxelinux_render + auto_bootstrap_if_needed)
       ansible.builtin.include_vars:
@@ -312,7 +374,6 @@
   gather_subset: [mounts]
   vars:
     skip_reprovision: false
-    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
     - name: Load board configs
       ansible.builtin.include_vars:
@@ -388,7 +449,6 @@
   vars:
     skip_local_kernel: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/C2-localkernel"
-    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   pre_tasks:
     - name: Load board configs
       ansible.builtin.include_vars:
@@ -472,7 +532,6 @@
     #   3. "" → state: latest from apt repo (default mechanism check)
     kernel_update_pin: ""
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/D-kupdate"
-    armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) }}"
   tasks:
     - name: "Phase D — guard"
       when: not (skip_kernel_update | bool)
@@ -510,10 +569,12 @@
           register: _apt_kernel
           failed_when: false   # mechanism-test: even no-op is OK
 
+        # Pre-flight set_fact materialized armbian_netboot_poe_cycle_delay
+        # to 30 (or the inventory override) as a host fact; no vars-block
+        # override needed here — the inner pause: seconds template reads
+        # the host fact directly without recursion.
         - name: "Phase D — PoE cycle"
           ansible.builtin.include_tasks: routeros/tasks/poe_cycle.yml
-          vars:
-            armbian_netboot_poe_cycle_delay: "{{ armbian_netboot_poe_cycle_delay | default(30) }}"
 
         - name: "Phase D — wait for TCP/22"
           ansible.builtin.wait_for:
