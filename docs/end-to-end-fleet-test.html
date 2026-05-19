@@ -1138,12 +1138,23 @@ all:
     <tr><td>rock-5b-01</td><td>rock-5b</td><td>spi</td><td>onboard GMAC</td><td>477 GB</td>
       <td><span class="pill ok">pass</span></td>
       <td><span class="pill ok">pass</span></td>
-      <td><span class="pill warn">aborted at systemd-repart (large disk)</span></td>
-      <td><span class="pill">n/a (blocked on C)</span></td>
-      <td><span class="pill">n/a (blocked on C)</span></td>
+      <td><span class="pill ok">pass (8.74 s repart w/ fast_wipe)</span></td>
+      <td><span class="pill ok">pass (HITS flat at 61)</span></td>
+      <td><span class="pill ok">mech pass; no-op</span></td>
     </tr>
   </tbody>
 </table>
+
+<p>
+  <strong>rock-5b row updated after fast_wipe validation</strong> &mdash;
+  the initial campaign run on the un-patched path aborted at
+  ~10 min into Phase C; after committing the <code>fast_wipe</code>
+  knob to <code>roles/disk_provision</code>, a re-run completed
+  Phase C in &lt; 1 minute total and the full C/C2/D sequence in
+  8 min 58 s. See &sect;6&rsquo;s deep-dive for the throughput
+  comparison and the kernel stack trace that pinpointed the
+  loop-device chunk-size bottleneck.
+</p>
 
 <div class="gotcha">
   <strong>rock-5b-01&rsquo;s 477 GB NVMe outliers the rest of the fleet.</strong>
@@ -1305,11 +1316,48 @@ write_bytes: 0
 </p>
 
 <p>
-  Expected result on rock-5b&rsquo;s 477 GB NVMe with both
-  mitigations: <strong>Phase C drops from ~28 min to ~2 min</strong>
-  (the rsync source-to-NVMe copy and the converge cycles, both of
-  which are I/O-bound on actual data, not on discard overhead).
+  <strong>Empirical result on rock-5b&rsquo;s 477 GB NVMe with
+  <code>fast_wipe: true</code></strong> (the default after this
+  patch):
 </p>
+
+<table>
+  <thead><tr><th>Step</th><th>Slow path</th><th>fast_wipe</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>blkdiscard /dev/nvme0n1</code></td>
+        <td>n/a (not run)</td>
+        <td>&lt; 1 s</td>
+        <td>Single ioctl using NVMe&rsquo;s native 2 TiB chunk size.</td></tr>
+    <tr><td><code>systemd-repart --discard=yes</code></td>
+        <td>~28 min</td>
+        <td>n/a (set to <code>--discard=no</code>)</td>
+        <td>Skipped: the device is already TRIM&rsquo;ed by the
+            blkdiscard above.</td></tr>
+    <tr><td><code>systemd-repart --discard=no</code></td>
+        <td>n/a</td>
+        <td>8.74 s</td>
+        <td>Writes the partition table + creates the filesystems.
+            Does <em>not</em> issue BLKDISCARD on the new partition
+            slots.</td></tr>
+    <tr><td>rsync source rootfs → NVMe</td>
+        <td>~2 min</td>
+        <td>39.16 s</td>
+        <td>I/O-bound on actual data (~2 GB Armbian rootfs).</td></tr>
+    <tr><td>Converge cycles + waits (NFS → local → local_kernel)</td>
+        <td>~4 min</td>
+        <td>~4 min</td>
+        <td>Same; bounded by board boot time, not disk I/O.</td></tr>
+    <tr><td>Phase D apt install + cycle</td>
+        <td>~4 min</td>
+        <td>~4 min</td>
+        <td>Same.</td></tr>
+    <tr><td><strong>Total fleet-playbook wall time</strong></td>
+        <td><strong>~70 min projected</strong></td>
+        <td><strong>8 min 58 s measured</strong></td>
+        <td>~87 % reduction. PLAY RECAP: <code>ok=189 changed=31
+            failed=0</code>.</td></tr>
+  </tbody>
+</table>
 
 <p>
   Sources reviewed for this analysis:

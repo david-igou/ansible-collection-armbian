@@ -85,12 +85,19 @@
       --definitions={{ _dp_repart_defs }}
       --empty={{ _dp_repart_empty }}
       --dry-run=no
-      --discard=yes
+      --discard={{ 'no' if _dp_fast_wipe else 'yes' }}
       {{ disk_binding.device }}
   environment:
-    # -K = skip mkfs's per-block discard. Paired with the pre-blkdiscard
-    # above, eliminates the 30-min mkfs.ext4 stall on large NVMes.
-    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-K' if (disk_binding.fast_wipe | default(true)) | bool else '' }}"
+    # SYSTEMD_REPART_MKFS_OPTIONS_EXT4 is appended AFTER the device
+    # in mkfs.ext4's argv. With glibc getopt's default permutation
+    # this normally works, but in practice we still observed
+    # per-partition BLKDISCARD when --discard=yes was kept — the
+    # call comes from systemd-repart itself, not from mkfs. So we
+    # turn --discard=no above and leave the env var as a belt-and-
+    # suspenders override for the mkfs side.
+    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-E nodiscard' if _dp_fast_wipe else '' }}"
+  vars:
+    _dp_fast_wipe: "{{ (_dp_preserve_ids | length == 0) and (disk_binding.fast_wipe | default(true)) | bool }}"
   become: true
   register: _dp_repart_run
   changed_when: true
