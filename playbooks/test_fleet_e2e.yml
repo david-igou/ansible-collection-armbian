@@ -221,10 +221,18 @@
           loop_control:
             loop_var: _board
 
+        # Per-board evidence + timing, written on the CONTROLLER (the
+        # iter-FLEET dirs live there). Phase 1's play targets
+        # netboot_server with become: true; the delegate must override
+        # to local connection + no-become so we don't try SSH-as-igou
+        # back to the controller (and don't try to sudo locally).
+        # The HOST variable strips the FQDN to match the dir naming
+        # convention the pre-flight play established
+        # (/tmp/iter-FLEET-<short-host>/, not <fqdn>).
         - name: "Phase 1 — per-board evidence + timing"
           ansible.builtin.shell: |
             set -euo pipefail
-            HOST={{ board }}
+            HOST={{ board | regex_replace('\..*', '') }}
             DIR=/tmp/iter-FLEET-${HOST}/1-nfs-reset
             mkdir -p "${DIR}"
             cat > "${DIR}/nfs-reset-evidence.txt" <<EOF
@@ -243,6 +251,9 @@
           loop_control:
             loop_var: board
           delegate_to: localhost
+          vars:
+            ansible_connection: local
+          become: false
           changed_when: false
 
 - name: "Phase 2a — NFS boot + bootstrap_armbian + verify"
