@@ -94,9 +94,14 @@
 
 - name: "Block A — classify format by extension"
   ansible.builtin.set_fact:
+    # Single backslash, not double: Jinja's single-quoted-string parser
+    # collapses `\\` to `\`, so '\\.img\\.xz$' delivers a regex of
+    # "literal-backslash + any-char + img + literal-backslash + any-char
+    # + xz" which never matches a real path/URL. Verified empirically
+    # against actual disk_image invocations.
     _fmt: >-
-      {{ 'xz'  if image_source | regex_search('\\.img\\.xz$')
-         else 'raw' if image_source | regex_search('\\.img$')
+      {{ 'xz'  if image_source | regex_search('\.img\.xz$')
+         else 'raw' if image_source | regex_search('\.img$')
          else 'unknown' }}
 
 - name: "Block A — fail on unsupported format"
