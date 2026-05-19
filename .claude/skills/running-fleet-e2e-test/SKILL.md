@@ -1,6 +1,6 @@
 ---
 name: running-fleet-e2e-test
-description: Use when running the deterministic six-phase fleet e2e (`playbooks/test_fleet_e2e.yml`) — validating cross-iteration determinism after image rebuilds, `disk_image`/`disk_provision`/`bootstrap_armbian` changes, new-board bring-up, or SPI recovery. Covers pre-flight probes, the `playbooks/scripts/run-fleet-e2e.sh` wrapper, Summary-table interpretation, and per-phase recovery routes.
+description: Use when running the deterministic six-phase fleet e2e (`playbooks/test_fleet_e2e.yml`) — validating cross-iteration determinism after image rebuilds, `disk_image`/`disk_provision`/`bootstrap_armbian` changes, new-board bring-up, or SPI recovery. Covers pre-flight probes, the `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` wrapper, Summary-table interpretation, and per-phase recovery routes.
 ---
 
 # Running the Fleet E2E Test
@@ -150,7 +150,7 @@ stale and the network path to be alive).
 
 ## Phase B — Running the fleet test
 
-The wrapper is `playbooks/scripts/run-fleet-e2e.sh`. It creates a per-run
+The wrapper is `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh`. It creates a per-run
 artifact directory, tees ansible output, archives the per-board
 `/tmp/iter-FLEET-<host>/` dirs, and saves the Summary table. The plain
 playbook works too — the wrapper just adds artifact bookkeeping.
@@ -158,7 +158,7 @@ playbook works too — the wrapper just adds artifact bookkeeping.
 ### B.1 — Full fleet, default target group
 
 ```bash
-playbooks/scripts/run-fleet-e2e.sh
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh
 ```
 
 That's it. Expect 25-45 min wall time for a 5-board fleet (Phase 5 is
@@ -168,7 +168,7 @@ the long pole — NVMe rsync at `throttle: 2`). Artifacts land at
 ### B.2 — Subset of boards
 
 ```bash
-playbooks/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
 ```
 
 **Always use `--target-hosts`, not `--limit`.** The playbook delegates
@@ -179,7 +179,7 @@ those plays. The wrapper translates `--target-hosts` to
 ### B.3 — Single-board first run (recommended after any major change)
 
 ```bash
-playbooks/scripts/run-fleet-e2e.sh --target-hosts <one-board>
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts <one-board>
 ```
 
 8-12 min. Use this to validate `disk_image` / `disk_provision` changes
@@ -188,7 +188,7 @@ before sweeping the whole fleet.
 ### B.4 — Skip phases (resume / partial re-run)
 
 ```bash
-playbooks/scripts/run-fleet-e2e.sh --skip 0,1
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --skip 0,1
 ```
 
 Translates each phase number to `-e skip_phase_<N>=true`. Useful when
@@ -212,13 +212,13 @@ After `--`, extra `-e` args go straight to ansible-playbook:
 
 ```bash
 # Bump per-phase SSH wait timeout
-playbooks/scripts/run-fleet-e2e.sh -- -e armbian_netboot_post_boot_wait_timeout=600
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh -- -e armbian_netboot_post_boot_wait_timeout=600
 
 # Reduce throttle to fully serial for Phase 5
-playbooks/scripts/run-fleet-e2e.sh -- -e fleet_phase_5_throttle=1
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh -- -e fleet_phase_5_throttle=1
 
 # Bump PoE drain (rock-5b SD voltage-select reliability)
-playbooks/scripts/run-fleet-e2e.sh -- -e armbian_netboot_poe_cycle_delay=45
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh -- -e armbian_netboot_poe_cycle_delay=45
 ```
 
 ## Phase C — Interpreting the run
@@ -468,16 +468,16 @@ ansible <armbian_netboot_router> -m community.routeros.command -a 'commands="/ip
 ansible boards:netboot_server:routeros_switches:routeros_routers -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 
 # Full fleet
-playbooks/scripts/run-fleet-e2e.sh
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh
 
 # Single board first
-playbooks/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01
 
 # Two boards
-playbooks/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
 
 # Skip already-proven phases
-playbooks/scripts/run-fleet-e2e.sh --skip 0,1
+.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --skip 0,1
 
 # Bypass the wrapper (full control)
 ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01
@@ -500,7 +500,7 @@ grep "delta=" /tmp/iter-FLEET-<host>/5-nvme-localkernel/nvme-localkernel-evidenc
 ## Cross-references
 
 - `playbooks/test_fleet_e2e.yml` — the six-phase deterministic fleet test orchestrated by this skill.
-- `playbooks/scripts/run-fleet-e2e.sh` — wrapper that creates per-run artifact dirs + archives per-board state + saves the Summary.
+- `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` — wrapper that creates per-run artifact dirs + archives per-board state + saves the Summary.
 - `playbooks/persist_uboot_env.yml` — imported as Phase 2b; idempotent SPI env converge (no-op for non-SPI boards).
 - `playbooks/stage_router.yml` — pre-requisite; populates rb5009's `/ip tftp` rows.
 - `playbooks/stage_netboot_assets.yml` — pre-requisite; runs `image_extract` + `rootfs_clone` initially (Phase 1 is the deterministic re-run with force_refresh).

@@ -13,7 +13,7 @@
 # six months later when someone asks "did this board pass on 2026-05-19?"
 #
 # Usage:
-#   playbooks/scripts/run-fleet-e2e.sh [options] [-- ansible-playbook extras...]
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh [options] [-- ansible-playbook extras...]
 #
 # Options:
 #   --target-hosts <csv>    Comma-separated inventory hostnames or group
@@ -31,19 +31,19 @@
 #
 # Examples:
 #   # Full fleet
-#   playbooks/scripts/run-fleet-e2e.sh
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh
 #
 #   # Subset of boards
-#   playbooks/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01,rock-5b-01
 #
 #   # Single-board first run
-#   playbooks/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --target-hosts opi5pro-01
 #
 #   # Skip Phase 0 (PoE-down) and Phase 1 (NFS reset) — already proven
-#   playbooks/scripts/run-fleet-e2e.sh --skip 0,1
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --skip 0,1
 #
 #   # Pass extra knobs through to ansible-playbook
-#   playbooks/scripts/run-fleet-e2e.sh -- -e fleet_phase_5_throttle=1 \
+#   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh -- -e fleet_phase_5_throttle=1 \
 #                                       -e armbian_netboot_poe_cycle_delay=45
 #
 # Artifact layout (per run):
@@ -94,7 +94,9 @@ done
 # Resolve repo root from this script's location so we can run from
 # anywhere (collection root, deeper subdir, an external symlink, ...).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# Script lives at .claude/skills/running-fleet-e2e-test/scripts/ — repo
+# root is four levels up (scripts/ → skill-dir/ → skills/ → .claude/ → repo).
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 PLAYBOOK="${REPO_ROOT}/playbooks/test_fleet_e2e.yml"
 
 if [[ ! -f "${PLAYBOOK}" ]]; then
