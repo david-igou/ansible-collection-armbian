@@ -1222,6 +1222,145 @@ all:
   fast_wipe shipped <strong>~478&times; speedup</strong> on that step.
 </p>
 
+<h4 id="instrumented-timing-run">Instrumented all-fleet timing run</h4>
+
+<p>
+  After the first run, <code>test_fleet_e2e.yml</code> was further
+  instrumented to record per-phase per-host start/end epoch timestamps
+  into <code>/tmp/iter-FLEET-&lt;host&gt;/timing.tsv</code> and emit a
+  summary table in the final Summary play. A fresh full-fleet run on
+  the instrumented playbook captured the following numbers:
+</p>
+
+<table>
+  <thead><tr><th>Board</th><th>A (SD probe + revert)</th><th>B (NFS verify)</th><th>C (reprovision)</th><th>C2 (local_kernel)</th><th>D (kernel update)</th><th>Phase sum</th></tr></thead>
+  <tbody>
+    <tr><td>opi5pro-01 (119 GB NVMe)</td>
+        <td>538 s</td><td>0 s</td><td><strong>422 s</strong></td><td>222 s</td><td>158 s</td>
+        <td>1 340 s</td></tr>
+    <tr><td>orange-pi-5-01 (238 GB)</td>
+        <td>538 s</td><td>0 s</td><td><strong>499 s</strong></td><td>222 s</td><td>158 s</td>
+        <td>1 417 s</td></tr>
+    <tr><td>rock-5a-01 (238 GB)</td>
+        <td>538 s</td><td>0 s</td><td><strong>490 s</strong></td><td>222 s</td><td>158 s</td>
+        <td>1 408 s</td></tr>
+    <tr><td>orange-pi-5-max-01 (119 GB)</td>
+        <td>538 s</td><td>0 s</td><td><strong>340 s</strong></td><td>222 s</td><td>158 s</td>
+        <td>1 258 s</td></tr>
+    <tr><td>rock-5b-01 (477 GB)</td>
+        <td colspan="6"><span class="pill warn">Phase A SD wait_for timed out at 240 s (SD-controller voltage-select flake; tracker #38) — dropped from subsequent phases.</span></td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Full-fleet wall time: 44 min 48 s</strong>
+  (2026-05-19 03:54:42 → 04:39:30).
+  PLAY RECAP per healthy host: <code>ok=258-272 changed=45-46 failed=0</code>;
+  rock-5b: <code>ok=27 failed=1</code> (Phase A SD timeout).
+  &ldquo;HITS unchanged&rdquo; assertion passed for all 4 healthy boards (156, 28, 40, 42 — different counters because each board accumulates its own PXE history).
+</p>
+
+<h4>Reading the table</h4>
+
+<p>
+  Per-host wall times are interpretable phase-by-phase but the
+  &ldquo;Phase sum&rdquo; column is <strong>not</strong> the
+  fleet wall time — it&rsquo;s a synthetic per-host accounting that
+  double-counts the parallel phases. The actual fleet wall time
+  is bounded by the slowest contribution of each phase plus the serial
+  Phase C total:
+</p>
+
+<pre><code>fleet_wall = max(A) + max(B) + sum(C) + max(C2) + max(D) + overhead
+           = 538  + 0     + 1751   + 222     + 158    + ~180
+           = 2849 s ≈ 47 min                            (matches the 44m 48s observed wall time within timer slack)
+</code></pre>
+
+<p>
+  Where the time goes:
+</p>
+
+<ul>
+  <li>
+    <strong>Phase A (538 s = 9 min)</strong>: dominated by the
+    <code>wait_for TCP/22</code> 240 s timeout on rock-5b&rsquo;s SD
+    flake. The other 4 boards came up much faster (typically
+    ~60 s) but parallel ansible holds the play open until the slowest
+    finishes. <em>Without the flake, Phase A would have been ~4-5 min.</em>
+  </li>
+  <li>
+    <strong>Phase B (0 s)</strong>: just an <code>assert</code> + a
+    delegated <code>copy</code>. The cost is dwarfed by the time-stamping
+    granularity.
+  </li>
+  <li>
+    <strong>Phase C (1 751 s = 29 min)</strong>: <code>serial: 1</code>
+    × 4 boards × ~7 min each. <em>Even with the fast_wipe
+    speedup on the disk step itself, each board still spends ~6 min on
+    the 4 PoE cycles + waits that bracket the wipe and the rsync.</em>
+    This is the #1 candidate for the <a href="#improve-parallel-phase-c">throttled
+    parallel improvement</a>: switching to <code>throttle: 2</code>
+    drops Phase C wall to ~15 min, throttle 4 to ~8 min.
+  </li>
+  <li>
+    <strong>Phase C2 (222 s = 3 m 42 s)</strong>: one full PoE cycle
+    + waits + the TFTP-flat assertion check. Parallel across all 4
+    healthy boards.
+  </li>
+  <li>
+    <strong>Phase D (158 s = 2 m 38 s)</strong>: one
+    <code>apt update</code> + <code>apt install</code> (no-op because
+    the unofficial-build version is newer than the apt repo&rsquo;s
+    latest) + PoE cycle + wait. Parallel.
+  </li>
+</ul>
+
+<h4>Per-board Phase C variance (the fast_wipe diff)</h4>
+
+<p>
+  Phase C wall times vary by board even after the fast_wipe patch:
+</p>
+
+<ul>
+  <li>orange-pi-5-max-01 (119 GB NVMe): <strong>340 s</strong> — fastest</li>
+  <li>opi5pro-01 (119 GB): 422 s</li>
+  <li>rock-5a-01 (238 GB): 490 s</li>
+  <li>orange-pi-5-01 (238 GB): 499 s</li>
+</ul>
+
+<p>
+  The ~80-160 s spread between same-size NVMes is dominated by
+  ssh-stability waits and PoE cycle variance, not by the disk operations
+  themselves (which are bounded by <code>fast_wipe</code> at &lt; 10 s
+  per board). NVMe size is no longer the primary cost; PoE-cycle wall
+  time is. The
+  <a href="#improve-poe-budget">PoE cycle budget improvement</a> targets
+  this directly.
+</p>
+
+<h4>How to re-capture this data</h4>
+
+<div class="snippet">
+  <header><strong>Re-running the instrumented timing capture</strong></header>
+<pre><code># Run the full fleet (writes per-host TSVs as a side-effect)
+env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
+  ansible-playbook playbooks/test_fleet_e2e.yml \
+    -e armbian_netboot_poe_cycle_delay=30
+
+# Format the per-board per-phase table:
+printf '%-30s  %5s  %5s  %5s  %5s  %5s  %s\n' Board A B C C2 D Total
+for h in opi5pro-01 orange-pi-5-01 rock-5a-01 orange-pi-5-max-01 rock-5b-01; do
+  declare -A T=( [A]=- [B]=- [C]=- [C2]=- [D]=- ); total=0
+  while IFS=$'\t' read -r phase _ _ dur; do
+    [[ "$phase" == "phase" || -z "$phase" ]] &amp;&amp; continue
+    T[$phase]="${dur}s"; total=$((total + dur))
+  done &lt; /tmp/iter-FLEET-$h/timing.tsv
+  printf '%-30s  %5s  %5s  %5s  %5s  %5s  %ss\n' "$h" \
+    "${T[A]}" "${T[B]}" "${T[C]}" "${T[C2]}" "${T[D]}" "$total"
+done
+</code></pre>
+</div>
+
 <h4>What the first run surfaced</h4>
 
 <p>

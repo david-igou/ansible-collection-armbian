@@ -61,6 +61,16 @@
       vars:
         ansible_connection: local
 
+    # Reset per-host timing file so the Summary play parses only this run.
+    - name: "Reset per-host phase-timing TSV"
+      ansible.builtin.copy:
+        content: "phase\tstart_epoch\tend_epoch\tduration_s\n"
+        dest: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+        mode: '0644'
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
+
 - name: "Pre-flight: ensure igou user + key on each per-host NFS rootfs"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -104,6 +114,10 @@
     - name: "Phase A — skip block"
       when: not (skip_sd | bool)
       block:
+        - name: "Phase A — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_a_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
         - name: "Phase A — set boot_mode=sd (no cycle)"
           ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
           vars:
@@ -168,6 +182,17 @@
           vars:
             armbian_netboot_boot_mode: nfs
 
+        - name: "Phase A — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "A\t{{ _t_phase_a_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_a_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Phase B — boot from NFS (parallel)"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: "{{ not (skip_nfs | bool) }}"
@@ -179,6 +204,10 @@
     - name: "Phase B — block"
       when: not (skip_nfs | bool)
       block:
+        - name: "Phase B — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_b_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
         - name: "Phase B — assert / is on NFS"
           ansible.builtin.assert:
             that: >-
@@ -200,6 +229,17 @@
           vars:
             ansible_connection: local
 
+        - name: "Phase B — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "B\t{{ _t_phase_b_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_b_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Phase C — reprovision NVMe (SERIAL — NFS rsync contention guard)"
   hosts: "{{ target_hosts | default('boards') }}"
   serial: 1
@@ -215,6 +255,10 @@
     - name: "Phase C — block"
       when: not (skip_reprovision | bool)
       block:
+        - name: "Phase C — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_c_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
         - name: "Phase C — set + verify nfs (Phase 1 of reprovision_to_local)"
           ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
           vars:
@@ -261,6 +305,17 @@
             target_boot_mode: local
             on_failure_revert_to: nfs
 
+        - name: "Phase C — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "C\t{{ _t_phase_c_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_c_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Phase C2 — converge to local_kernel + verify TFTP-flat (parallel)"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -275,6 +330,10 @@
     - name: "Phase C2 — guard"
       when: not (skip_local_kernel | bool)
       block:
+        - name: "Phase C2 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_c2_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
         - name: "Phase C2 — record TFTP HITS BEFORE cycle"
           community.routeros.command:
             commands:
@@ -321,6 +380,17 @@
           vars:
             ansible_connection: local
 
+        - name: "Phase C2 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "C2\t{{ _t_phase_c2_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_c2_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Phase D — in-place kernel update (parallel; mechanism-only)"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: true
@@ -334,6 +404,10 @@
     - name: "Phase D — guard"
       when: not (skip_kernel_update | bool)
       block:
+        - name: "Phase D — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_d_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
         - name: "Phase D — record uname -r BEFORE"
           ansible.builtin.command: uname -r
           register: _uname_before
@@ -395,16 +469,44 @@
           vars:
             ansible_connection: local
 
+        - name: "Phase D — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "D\t{{ _t_phase_d_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_d_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   tasks:
-    - name: "Summary — list per-board artifact directories"
+    - name: "Summary — per-board per-phase wall-time table"
+      run_once: true
       ansible.builtin.debug:
         msg: |
-          Fleet test complete for {{ inventory_hostname }}.
-          Per-board artefacts: /tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/
-            ├── A-sd/sd-boot-evidence.txt
-            ├── B-nfs/nfs-boot-evidence.txt
-            ├── C2-localkernel/local-kernel-evidence.txt
-            └── D-kupdate/kernel-update-evidence.txt
+          === Fleet test per-phase wall times (seconds) ===
+
+          Board                            A      B      C      C2     D     Total
+          ──────────────────────────────  ────   ────   ─────  ─────  ─────  ─────
+          {% for h in ansible_play_hosts -%}
+          {%- set rows = lookup('file', '/tmp/iter-FLEET-' + (h | regex_replace('\\..*', '')) + '/timing.tsv', errors='ignore') | default('', true) -%}
+          {%- set ns = namespace(A='-', B='-', C='-', C2='-', D='-', total=0) -%}
+          {%- for line in rows.split('\n') -%}
+            {%- set f = line.split('\t') -%}
+            {%- if f | length >= 4 and f[0] in ['A','B','C','C2','D'] -%}
+              {%- if f[0] == 'A' %}{% set ns.A = f[3] %}{% endif -%}
+              {%- if f[0] == 'B' %}{% set ns.B = f[3] %}{% endif -%}
+              {%- if f[0] == 'C' %}{% set ns.C = f[3] %}{% endif -%}
+              {%- if f[0] == 'C2' %}{% set ns.C2 = f[3] %}{% endif -%}
+              {%- if f[0] == 'D' %}{% set ns.D = f[3] %}{% endif -%}
+              {%- set ns.total = ns.total + (f[3] | int) -%}
+            {%- endif -%}
+          {%- endfor %}
+          {{ '%-30s' | format(h) }}  {{ '%-5s' | format(ns.A) }}  {{ '%-5s' | format(ns.B) }}  {{ '%-5s' | format(ns.C) }}  {{ '%-5s' | format(ns.C2) }}  {{ '%-5s' | format(ns.D) }}  {{ ns.total }}
+          {% endfor %}
+          (Phase C is serial across hosts; the others run in parallel.
+           Per-host artefacts: /tmp/iter-FLEET-<host>/timing.tsv)
