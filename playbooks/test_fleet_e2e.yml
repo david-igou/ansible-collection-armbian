@@ -563,4 +563,28 @@
     - name: "Summary — per-board per-phase wall-time table"
       run_once: true
       ansible.builtin.debug:
-        msg: "Summary Jinja completed in Task 8."
+        msg: |
+          === Deterministic fleet test per-phase wall times (seconds) ===
+
+          Board                            0      1      2      3      4      5     Total
+          ──────────────────────────────  ────   ────   ────   ────   ────   ─────  ─────
+          {% for h in ansible_play_hosts -%}
+          {%- set rows = lookup('file', '/tmp/iter-FLEET-' + (h | regex_replace('\\..*', '')) + '/timing.tsv', errors='ignore') | default('', true) -%}
+          {%- set ns = namespace(P0='-', P1='-', P2='-', P3='-', P4='-', P5='-', total=0) -%}
+          {%- for line in rows.split('\n') -%}
+            {%- set f = line.split('\t') -%}
+            {%- if f | length >= 4 and f[0] in ['0','1','2','3','4','5'] -%}
+              {%- if f[0] == '0' %}{% set ns.P0 = f[3] %}{% endif -%}
+              {%- if f[0] == '1' %}{% set ns.P1 = f[3] %}{% endif -%}
+              {%- if f[0] == '2' %}{% set ns.P2 = f[3] %}{% endif -%}
+              {%- if f[0] == '3' %}{% set ns.P3 = f[3] %}{% endif -%}
+              {%- if f[0] == '4' %}{% set ns.P4 = f[3] %}{% endif -%}
+              {%- if f[0] == '5' %}{% set ns.P5 = f[3] %}{% endif -%}
+              {%- set ns.total = ns.total + (f[3] | int) -%}
+            {%- endif -%}
+          {%- endfor %}
+          {{ '%-30s' | format(h) }}  {{ '%-5s' | format(ns.P0) }}  {{ '%-5s' | format(ns.P1) }}  {{ '%-5s' | format(ns.P2) }}  {{ '%-5s' | format(ns.P3) }}  {{ '%-5s' | format(ns.P4) }}  {{ '%-5s' | format(ns.P5) }}  {{ ns.total }}
+          {% endfor %}
+          (Phase 5 throttled to {{ fleet_phase_5_throttle | default(2) }} hosts in parallel;
+           the others run in parallel across all hosts.
+           Per-host artefacts: /tmp/iter-FLEET-<host>/timing.tsv)
