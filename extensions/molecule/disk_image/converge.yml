@@ -11,7 +11,7 @@
       ansible.builtin.set_fact:
         _target_loop: "{{ (_target_b64.content | b64decode).strip() }}"
 
-    - name: "Converge: invoke role on a clean (unmounted) target — Block A only for now"
+    - name: "Converge: invoke full role on a clean (unmounted) target"
       ansible.builtin.include_role:
         name: disk_image
       vars:

@@ -45,6 +45,8 @@
 #
 #   # Skip phases you've already proven on a previous run:
 #   ansible-playbook playbooks/test_fleet_e2e.yml -e skip_sd=true -e skip_kernel_update=true
+#   # (Phase 0 dd-to-SD is the most expensive; skip with -e skip_dd_sd=true
+#   # when the SD state from a prior run is known good.)
 #
 #   # Override kernel update target (precedence: per-host
 #   # `armbian_netboot_kernel_target` hostvar > -e kernel_update_pin >

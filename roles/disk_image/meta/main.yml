@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: disk_image
   author: david-igou
-  description: "Stream an .img.xz or .img to a block device via xzcat | dd."
+  description: "Stream an .img.xz or .img to a block device via xz -dc | dd."
   license: MIT
   min_ansible_version: "2.15"
   platforms:
