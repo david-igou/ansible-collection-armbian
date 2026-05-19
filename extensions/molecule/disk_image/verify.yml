@@ -247,3 +247,28 @@
             fail_msg: >-
               Expected non-zero exit from a 404; got:
               {{ ansible_failed_result | default({}) }}
+
+    # --- Block C — partition node must exist after settle ---
+    - name: "Block C — wipe target loop and reimage one last time"
+      ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+      changed_when: true
+
+    - name: "Block C — invoke role to write image"
+      ansible.builtin.include_role:
+        name: disk_image
+      vars:
+        image_source: "/tmp/test.img"
+        target_device: "{{ _target_loop }}"
+
+    - name: "Block C — stat the first partition node"
+      ansible.builtin.stat:
+        path: "{{ _target_loop }}p1"
+      register: _part_node
+
+    - name: "Block C — assert partprobe published the partition node"
+      ansible.builtin.assert:
+        that:
+          - _part_node.stat.exists
+        fail_msg: >-
+          Expected {{ _target_loop }}p1 to exist after Block C settle;
+          partprobe did not publish the partition node.

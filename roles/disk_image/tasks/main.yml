@@ -7,3 +7,6 @@
 
 - name: "Block B — stream and write"
   ansible.builtin.import_tasks: _write.yml
+
+- name: "Block C — settle (sync + partprobe + udev settle)"
+  ansible.builtin.import_tasks: _settle.yml
