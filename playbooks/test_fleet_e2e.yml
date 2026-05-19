@@ -242,6 +242,90 @@
           delegate_to: localhost
           changed_when: false
 
+- name: "Phase 2a — NFS boot + bootstrap_armbian + verify"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_phase_2: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/2-nfs-bootstrap"
+  pre_tasks:
+    - name: "Phase 2a — load board configs"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+  tasks:
+    - name: "Phase 2a — block"
+      when: not (skip_phase_2 | bool)
+      block:
+        - name: "Phase 2a — start timer (host fact; read in Phase 2 evidence play)"
+          ansible.builtin.set_fact:
+            _t_phase_2_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        - name: "Phase 2a — set + verify nfs"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: nfs
+            on_failure_revert_to: nfs
+
+        # Fresh NFS clone has only root+default-password. Run
+        # bootstrap_armbian unconditionally to install igou. No
+        # auto_bootstrap_if_needed probe — we know the answer.
+        - name: "Phase 2a — bootstrap_armbian (unconditional; fresh NFS clone)"
+          ansible.builtin.include_role:
+            name: bootstrap_armbian
+          vars:
+            ansible_user: root
+            ansible_password: "{{ armbian_netboot_default_password }}"
+            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            ansible_become: false
+
+        - name: "Phase 2a — reset connection (so subsequent tasks use igou identity)"
+          ansible.builtin.meta: reset_connection
+
+        - name: "Phase 2a — verify rootfs is on NFS"
+          ansible.builtin.include_role:
+            name: board_boot_verify
+          vars:
+            boot_mode: nfs
+
+# Phase 2a's `vars: skip_phase_2: false` is play-scoped and does NOT
+# propagate into this imported playbook. The `| default(false)` guard
+# is load-bearing for the no-skip (normal-run) case. To skip Phase 2,
+# pass `-e skip_phase_2=true` — extra-vars are global scope.
+- name: "Phase 2b — Persist SPI U-Boot env (no-op for non-SPI boards)"
+  ansible.builtin.import_playbook: persist_uboot_env.yml
+  vars:
+    armbian_netboot_persist_uboot_env_cycle: false
+  when: not (skip_phase_2 | default(false) | bool)
+
+- name: "Phase 2 — evidence + timing"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Phase 2 — write evidence (igou + SPI persist done)"
+      when: not (skip_phase_2 | default(false) | bool)
+      ansible.builtin.copy:
+        content: |
+          === Phase 2 (NFS boot + bootstrap + SPI persist) — {{ inventory_hostname }} ===
+          rootfs:  NFS ({{ armbian_netboot_nfs_rootfs_path }}/{{ inventory_hostname }})
+          igou:    bootstrapped via bootstrap_armbian
+          SPI:     persist_uboot_env.yml ran (no-op when uboot_env.storage != spi_flash)
+        dest: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/2-nfs-bootstrap/nfs-bootstrap-evidence.txt"
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
+
+    - name: "Phase 2 — record timing (covers Phase 2a + Phase 2b)"
+      when: not (skip_phase_2 | default(false) | bool)
+      ansible.builtin.lineinfile:
+        path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+        line: "2\t{{ _t_phase_2_start | default(0) }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_2_start | default(0) | int) }}"
+        create: true
+        mode: '0644'
+      vars:
+        _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+        ansible_connection: local
+      delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
