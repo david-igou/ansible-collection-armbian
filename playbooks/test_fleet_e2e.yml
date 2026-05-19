@@ -435,6 +435,127 @@
             ansible_connection: local
           delegate_to: localhost
 
+- name: "Phase 5 — NVMe reprovision + local_kernel verify (throttled)"
+  hosts: "{{ target_hosts | default('boards') }}"
+  throttle: "{{ fleet_phase_5_throttle | default(2) | int }}"
+  gather_facts: true
+  gather_subset: [mounts]
+  vars:
+    skip_phase_5: false
+    fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/5-nvme-localkernel"
+  pre_tasks:
+    - name: "Phase 5 — load board configs"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+  tasks:
+    - name: "Phase 5 — block"
+      when: not (skip_phase_5 | bool)
+      block:
+        - name: "Phase 5 — start timer"
+          ansible.builtin.set_fact:
+            _t_phase_5_start: "{{ lookup('pipe', 'date +%s') | int }}"
+
+        - name: "Phase 5 — set + verify nfs (rsync source for disk_provision)"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: nfs
+            on_failure_revert_to: nfs
+
+        - name: "Phase 5 — re-gather mount facts after NFS converge"
+          ansible.builtin.setup:
+            gather_subset: [mounts]
+
+        - name: "Phase 5 — guard: must be on NFS before wiping local disks"
+          ansible.builtin.assert:
+            that: >-
+              ansible_mounts | selectattr('mount', 'equalto', '/')
+                | map(attribute='fstype') | first in ['nfs', 'nfs4']
+            fail_msg: "{{ inventory_hostname }} is not on NFS — refusing to wipe NVMe."
+
+        - name: "Phase 5 — cross-binding validate (no duplicate mount paths, exactly one '/')"
+          ansible.builtin.assert:
+            that:
+              - >-
+                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                 | selectattr('mount', 'defined') | map(attribute='mount') | list | length)
+                ==
+                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                 | selectattr('mount', 'defined') | map(attribute='mount') | list | unique | length)
+              - >-
+                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                 | selectattr('mount', 'defined') | selectattr('mount', 'equalto', '/')
+                 | list | length) == 1
+
+        - name: "Phase 5 — provision each declared local disk"
+          ansible.builtin.include_role:
+            name: disk_provision
+          vars:
+            disk_binding: "{{ item }}"
+          loop: "{{ armbian_netboot_local_disks | default([]) }}"
+          loop_control:
+            label: "{{ item.device }}"
+
+        - name: "Phase 5 — record TFTP HITS BEFORE local_kernel cycle"
+          community.routeros.command:
+            commands:
+              - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
+          delegate_to: "{{ armbian_netboot_router }}"
+          register: _hits_before
+          changed_when: false
+
+        - name: "Phase 5 — set + verify local_kernel"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          vars:
+            target_boot_mode: local_kernel
+            on_failure_revert_to: nfs
+
+        - name: "Phase 5 — record TFTP HITS AFTER local_kernel cycle"
+          community.routeros.command:
+            commands:
+              - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
+          delegate_to: "{{ armbian_netboot_router }}"
+          register: _hits_after
+          changed_when: false
+
+        - name: "Phase 5 — extract HITS counts"
+          ansible.builtin.set_fact:
+            _hits_before_n: "{{ (_hits_before.stdout[0] | default('') | regex_findall('[0-9]+\\s*$', multiline=True) | first | default('0')) | int }}"
+            _hits_after_n: "{{ (_hits_after.stdout[0] | default('') | regex_findall('[0-9]+\\s*$', multiline=True) | first | default('0')) | int }}"
+
+        - name: "Phase 5 — assert TFTP-flat (local_kernel = U-Boot baked localcmd, no TFTP fetch)"
+          ansible.builtin.assert:
+            that: (_hits_after_n | int) == (_hits_before_n | int)
+            fail_msg: >-
+              local_kernel mode incremented vmlinuz TFTP HITS by
+              {{ (_hits_after_n | int) - (_hits_before_n | int) }} — U-Boot
+              is still PXE-fetching the kernel. Check that the baked
+              localcmd is present in the U-Boot binary (image_build hook)
+              or in SPI env (persist_uboot_env).
+            success_msg: "vmlinuz HITS unchanged across cycle ({{ _hits_before_n }}) — local_kernel proven"
+
+        - name: "Phase 5 — write evidence"
+          ansible.builtin.copy:
+            content: |
+              === Phase 5 (NVMe reprovision + local_kernel) — {{ inventory_hostname }} ===
+              NVMe layout: {{ armbian_netboot_local_disks | default([]) | length }} disk(s) declared
+              TFTP vmlinuz HITS: before={{ _hits_before_n }} after={{ _hits_after_n }} delta={{ (_hits_after_n | int) - (_hits_before_n | int) }}
+              U-Boot baked localcmd (or SPI env) loaded kernel from NVMe.
+            dest: "{{ fleet_artifact_dir }}/nvme-localkernel-evidence.txt"
+          delegate_to: localhost
+          vars:
+            ansible_connection: local
+
+        - name: "Phase 5 — record timing"
+          ansible.builtin.lineinfile:
+            path: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/timing.tsv"
+            line: "5\t{{ _t_phase_5_start }}\t{{ _t_end }}\t{{ (_t_end | int) - (_t_phase_5_start | int) }}"
+            create: true
+            mode: '0644'
+          vars:
+            _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
+            ansible_connection: local
+          delegate_to: localhost
+
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
