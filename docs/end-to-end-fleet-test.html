@@ -1862,10 +1862,21 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   This section catalogues optimisations beyond the
   <code>fast_wipe</code> mitigation already shipped. Each entry
   estimates implementation effort, expected speedup or consistency
-  gain, and trade-offs. Sorted by impact-to-effort ratio.
+  gain, and trade-offs. Sorted by impact-to-effort ratio. Entries
+  marked <strong>shipped</strong> have landed in
+  <code>playbooks/test_fleet_e2e.yml</code>; the rest remain open.
 </p>
 
-<h3 id="improve-parallel-phase-c">Parallelise Phase C (NFS rsync contention)</h3>
+<h3 id="improve-parallel-phase-c">Parallelise Phase C (NFS rsync contention) &mdash; <strong>shipped (throttle: 2)</strong></h3>
+
+<p>
+  <strong>Status:</strong> Phase C now defaults to
+  <code>throttle: 2</code> (was <code>serial: 1</code>). Dial via
+  <code>-e fleet_phase_c_throttle=N</code>;
+  <code>fleet_phase_c_throttle=1</code> restores pure-serial behaviour
+  for operators on under-provisioned NFS servers. ZFS-per-host +
+  vmtouch pinning remain open (would unlock fully-parallel).
+</p>
 
 <p>
   Phase C is currently <code>serial: 1</code> because four simultaneous
@@ -1935,25 +1946,27 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   tweaked per-host NFS rootfses.
 </p>
 
-<h3 id="improve-pin-kernel">Pin Phase D&rsquo;s kernel target for deterministic upgrades</h3>
+<h3 id="improve-pin-kernel">Pin Phase D&rsquo;s kernel target for deterministic upgrades &mdash; <strong>partly shipped</strong></h3>
 
 <p>
-  Phase D currently runs <code>apt install
-  linux-image-edge-rockchip64</code> with <code>state: latest</code>.
-  This produces &ldquo;no-op&rdquo; results when the locally-installed
-  unofficial-build version is newer than the apt repo&rsquo;s latest,
-  which is the dominant case in our fleet today (the
-  <code>26.05.0-trunk</code> build vs the repo&rsquo;s
-  <code>26.2.1</code>). Three improvements:
+  Phase D used to run <code>apt install linux-image-edge-rockchip64</code>
+  with <code>state: latest</code> unconditionally. This produces
+  &ldquo;no-op&rdquo; results when the locally-installed unofficial-build
+  version is newer than the apt repo&rsquo;s latest, which is the
+  dominant case in our fleet today (the <code>26.05.0-trunk</code>
+  build vs the repo&rsquo;s <code>26.2.1</code>). Three improvements:
 </p>
 
 <ul>
   <li>
-    <strong>Per-board kernel pin in inventory</strong>: add
-    <code>armbian_netboot_kernel_target: "26.05.0-trunk"</code>
-    hostvar. Phase D installs exactly that version. Deterministic
-    across re-runs; flags drift if the inventory pin and the
-    installed version disagree.
+    <strong>Per-board kernel pin in inventory</strong> &mdash;
+    <strong>shipped</strong>: a per-host
+    <code>armbian_netboot_kernel_target: "26.05.0-trunk"</code> hostvar
+    pins Phase D to a specific version
+    (<code>state: present</code>, <code>allow_downgrade: true</code>).
+    Precedence: hostvar &gt; <code>-e kernel_update_pin</code> &gt;
+    apt latest. Phase D&rsquo;s evidence file records the effective
+    target and which precedence rung it came from.
   </li>
   <li>
     <strong>Two-step Phase D</strong>: (1) downgrade to a known-old
@@ -1971,7 +1984,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   </li>
 </ul>
 
-<h3 id="improve-poe-budget">Tighter PoE-cycle budget</h3>
+<h3 id="improve-poe-budget">Tighter PoE-cycle budget &mdash; <strong>partly shipped</strong></h3>
 
 <p>
   Each phase pays a fixed cost: 30 s capacitor drain + ~30 s TCP/22
@@ -1985,27 +1998,117 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
     <code>armbian_netboot_poe_cycle_delay</code>: 30 s is conservative
     for RK3588 voltage-select reliability. Boards on stable PoE-HAT
     firmware can drop to 10 s without regressions; halves
-    cycle-related wait.
+    cycle-related wait. <em>Inventory knob &mdash; tune per fleet.</em>
   </li>
   <li>
     <code>wait_for_connection delay: 30</code> in
     <code>wait_for_ssh_with_cycle_retry.yml</code> is a pre-poll
     sleep. For boards that consistently come up in &lt; 20 s, drop to
     <code>delay: 10</code>; the polling loop catches the same TCP/22
-    open without the upfront waste.
+    open without the upfront waste. <em>Open &mdash; in-tree task file.</em>
   </li>
   <li>
-    <strong>Skip Phase A&rsquo;s revert-to-NFS</strong> if Phase B
-    will set NFS immediately anyway. Today both write the pxelinux.cfg
-    to <code>default nfs</code> + cycle; the second cycle is
-    redundant. Refactor merges Phase A&rsquo;s revert into Phase B&rsquo;s
-    converge.
+    <strong>Skip Phase A&rsquo;s revert-to-NFS</strong> &mdash;
+    <strong>shipped</strong>: Phase A&rsquo;s second cycle is gone.
+    Phase B now owns the SD&nbsp;&rarr;&nbsp;NFS transition end-to-end via
+    <code>_lifecycle_set_and_verify</code> (writes
+    <code>default nfs</code> + PoE-cycles + verifies). Net result:
+    ~30&nbsp;s capacitor drain + ~30&nbsp;s TCP/22 wait per board off
+    the run.
   </li>
 </ul>
 
 <p>
   Together: ~3-5 min off the per-board lifecycle without changing
   what&rsquo;s tested.
+</p>
+
+<h3 id="improve-phase-a-native">Phase A &mdash; replace <code>sshpass</code> raw-SSH with ansible-native &mdash; <strong>shipped</strong></h3>
+
+<p>
+  The Phase A probe used to be a delegated <code>shell:</code> task that
+  invoked <code>sshpass -p 1234 ssh ... root@&lt;host&gt;</code> with
+  <code>SSH_AUTH_SOCK=""</code> set in the task environment to bypass
+  the controller&rsquo;s ssh-agent. It worked, but it baked an
+  assumption (SD is at the pre-bootstrap stock-Armbian state with a
+  password-auth root account) and bypassed Ansible&rsquo;s connection
+  layer entirely.
+</p>
+
+<p>
+  Phase A now uses the same in-tree primitives as
+  <code>test_hardware_e2e.yml</code> Phase 1:
+</p>
+
+<ol>
+  <li>
+    <code>cold_boot_with_retry.yml</code> &mdash; PoE cycle + TCP/22
+    + sustained ssh-ping, with
+    <code>armbian_netboot_boot_retry_attempts</code> retries on flake
+    (defaults to 1 at fleet-play scope &mdash; one rock-5b SD
+    voltage-select flake survives).
+  </li>
+  <li>
+    <code>auto_bootstrap_if_needed.yml</code> &mdash; probes as the
+    inventory user. Fast no-op on a previously-bootstrapped SD card;
+    runs <code>bootstrap_armbian</code> inline against
+    <code>root</code> + <code>armbian_netboot_default_password</code>
+    on a fresh-flashed SD card. <strong>Phase A is now agnostic to
+    whether the SD card carries the <code>igou</code> user or
+    not.</strong>
+  </li>
+  <li>
+    <code>wait_for_ssh_with_cycle_retry.yml</code> + <code>setup</code>
+    + assert on <code>ansible_mounts['/']</code> (rootfs not in
+    <code>['nfs', 'nfs4']</code> and device starts with
+    <code>/dev/</code>). No more <code>'mmcblk' in stdout</code> regex
+    &mdash; the SD slot enumeration is per-board, so local-block + non-NFS
+    is the durable invariant across the fleet.
+  </li>
+</ol>
+
+<h3 id="improve-dd-preflight">Open: dd a known image to SD as a pre-flight (full state reset)</h3>
+
+<p>
+  The <code>auto_bootstrap_if_needed</code> approach handles the
+  &ldquo;has the SD card been bootstrapped yet?&rdquo; question
+  <em>reactively</em>: probe-then-bootstrap. An alternative considered
+  during this refactor is <em>proactive</em>: kick off the fleet test
+  with an early netboot phase that <code>dd</code>&rsquo;s the public
+  Armbian image to <code>/dev/mmcblkN</code> on every board, so every
+  board starts the run in the same known (stock-Armbian,
+  un-bootstrapped) state.
+</p>
+
+<p>
+  Trade-offs:
+</p>
+
+<ul>
+  <li>
+    <strong>Pros</strong>: explicit per-run reset &mdash; no
+    cross-iteration state drift on the SD card (machine-id, host
+    keys, manually-installed packages, mid-bootstrap remnants);
+    Phase A&rsquo;s probe-then-bootstrap path becomes
+    deterministic-bootstrap; surfaces SD card hardware failures
+    (write errors) immediately rather than during a later phase.
+  </li>
+  <li>
+    <strong>Cons</strong>: adds a heavy step (download + decompress
+    + dd ~2 GB) to every fleet run; the current approach already
+    converges on the same end state via Phase C (NVMe reprovision
+    from the canonical NFS template); doesn&rsquo;t buy anything for
+    boards that <em>only</em> boot from NVMe (Phase A is the only
+    SD-using phase).
+  </li>
+</ul>
+
+<p>
+  Not implemented. Would slot in as a new
+  <code>Phase 0 &mdash; dd canonical image to SD</code> play that runs
+  while the board is on NFS (so the SD card is unmounted), using
+  the existing per-host NFS rootfs as the dd host. Punt on this until
+  there&rsquo;s evidence the reactive approach drifts.
 </p>
 
 <h3 id="improve-skip-empty-discard">Skip <code>--empty=force</code> on already-discarded disks</h3>
@@ -2129,29 +2232,52 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 <h3 id="improve-summary">Summary of recommended priorities</h3>
 
 <table>
-  <thead><tr><th>Improvement</th><th>Effort</th><th>Speedup / consistency gain</th></tr></thead>
+  <thead><tr><th>Improvement</th><th>Effort</th><th>Status</th><th>Speedup / consistency gain</th></tr></thead>
   <tbody>
     <tr><td>Throttled parallel Phase C (<code>throttle: 2</code>)</td>
         <td>1-line playbook change</td>
+        <td><strong>shipped</strong></td>
         <td>~2&times; faster full-fleet runs</td></tr>
-    <tr><td>Per-host kernel pin + 2-step Phase D</td>
-        <td>~30-line inventory + playbook change</td>
-        <td>Phase D goes from &ldquo;mech check&rdquo; to &ldquo;deterministic upgrade&rdquo;</td></tr>
-    <tr><td>PoE cycle delay tuning + skip Phase A revert</td>
-        <td>~10-line playbook refactor</td>
+    <tr><td>Per-host kernel pin (<code>armbian_netboot_kernel_target</code>)</td>
+        <td>~20-line inventory + playbook change</td>
+        <td><strong>shipped</strong></td>
+        <td>Phase D goes from &ldquo;mech check&rdquo; to deterministic per-host pin</td></tr>
+    <tr><td>2-step Phase D (downgrade-then-restore)</td>
+        <td>~20-line playbook addition on top of pin</td>
+        <td>open</td>
+        <td>Phase D verifies an actual swap even when fleet pin == repo latest</td></tr>
+    <tr><td>Skip Phase A revert-to-NFS (Phase B owns SD&nbsp;&rarr;&nbsp;NFS)</td>
+        <td>refactor</td>
+        <td><strong>shipped</strong></td>
+        <td>~30 s off Phase A per board (~2.5 min off fleet)</td></tr>
+    <tr><td>Phase A ansible-native rewrite + auto_bootstrap_if_needed</td>
+        <td>~50-line playbook rewrite</td>
+        <td><strong>shipped</strong></td>
+        <td>SD-state-agnostic; SD-flake retry via cold_boot_with_retry</td></tr>
+    <tr><td>PoE <code>poe_cycle_delay</code> + <code>wait_for_connection delay</code> tuning</td>
+        <td>inventory knobs</td>
+        <td>open</td>
         <td>~3-5 min off per board (~25 min off fleet)</td></tr>
     <tr><td>Failure-isolation + summary table</td>
         <td>~20-line playbook addition</td>
+        <td>open</td>
         <td>Same speed, much better signal</td></tr>
     <tr><td>CopyBlocks=raw-image replacement for rsync</td>
         <td>~100-line role change + new image_build artefact</td>
+        <td>open</td>
         <td>Phase C rsync drops from 40 s to ~2 s; ~30 min off fleet over 5 boards</td></tr>
     <tr><td>ZFS dataset-per-host + vmtouch pinning</td>
         <td>TrueNAS reorganisation + 1 task</td>
+        <td>open</td>
         <td>Enables full-parallel Phase C; ~3&times; vs serial</td></tr>
     <tr><td>Image-build SHA pinning + SBOM</td>
         <td>Image-build pipeline change</td>
+        <td>open</td>
         <td>Reproducible campaigns, drift detection</td></tr>
+    <tr><td>dd canonical image to SD as Phase 0 (full state reset)</td>
+        <td>new play + per-host NFS dd</td>
+        <td>open (alternative to auto_bootstrap)</td>
+        <td>Deterministic SD state per run; cost: ~30 s + bandwidth per board</td></tr>
   </tbody>
 </table>
 
