@@ -1,10 +1,19 @@
 ---
-# Converge is intentionally empty in Task 2.
-# Tasks 3/4/5/6 add include_role calls here as the role's behaviour
-# is implemented.
 - hosts: all
   gather_facts: true
   tasks:
-    - name: "Placeholder converge — role-skeleton scenario boot test"
-      ansible.builtin.debug:
-        msg: "disk_image molecule scaffolding works; behaviour added in later tasks."
+    - name: "Read target loop device path"
+      ansible.builtin.slurp:
+        src: /tmp/target_loop
+      register: _target_b64
+
+    - name: "Set target loop fact"
+      ansible.builtin.set_fact:
+        _target_loop: "{{ (_target_b64.content | b64decode).strip() }}"
+
+    - name: "Converge: invoke role on a clean (unmounted) target — Block A only for now"
+      ansible.builtin.include_role:
+        name: disk_image
+      vars:
+        image_source: "/tmp/test.img"
+        target_device: "{{ _target_loop }}"
