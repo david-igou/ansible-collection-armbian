@@ -2253,7 +2253,7 @@ with <code>-e skip_phase_3=true</code>.</p>
   approach &mdash; <em>reactive</em> probe-then-bootstrap &mdash; as the
   primary path. Phase 3 takes the complementary <em>proactive</em> stance:
   every board starts each run in the same known (stock-Armbian,
-  un-bootstrapped) state, making Phase A&rsquo;s bootstrap path
+  un-bootstrapped) state, making Phase 4&rsquo;s bootstrap path
   deterministic.</p>
 
 <p>
@@ -2265,7 +2265,7 @@ with <code>-e skip_phase_3=true</code>.</p>
     <strong>Pros</strong>: explicit per-run reset &mdash; no
     cross-iteration state drift on the SD card (machine-id, host
     keys, manually-installed packages, mid-bootstrap remnants);
-    Phase A&rsquo;s probe-then-bootstrap path becomes
+    Phase 4&rsquo;s probe-then-bootstrap path becomes
     deterministic-bootstrap; surfaces SD card hardware failures
     (write errors) immediately rather than during a later phase.
   </li>
@@ -2274,8 +2274,8 @@ with <code>-e skip_phase_3=true</code>.</p>
     + dd ~2 GB) to every fleet run; the current approach already
     converges on the same end state via Phase C (NVMe reprovision
     from the canonical NFS template); doesn&rsquo;t buy anything for
-    boards that <em>only</em> boot from NVMe (Phase A is the only
-    SD-using phase).
+    boards that <em>only</em> boot from NVMe (Phase 4 is the only
+    SD-using phase in the deterministic flow).
   </li>
 </ul>
 

@@ -113,9 +113,6 @@
       ansible.builtin.set_fact:
         ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR"
 
-# Phase plays (0, 1, 2a, 2b, 3, 4, 5) are appended by subsequent tasks
-# in this implementation plan.
-
 - name: "Phase 0 — PoE down all target boards"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -260,6 +257,11 @@
           ansible.builtin.set_fact:
             _t_phase_2_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
+        # Self-revert to nfs (not sd) is deliberate: Phase 3 hasn't
+        # dd'd SD yet, so reverting to sd would land on whatever stale
+        # prior-run state is there. A clean diagnostic-bundle + fail is
+        # more useful to the operator than a silent fallback to unknown
+        # SD state. Spec accepted this caveat.
         - name: "Phase 2a — set + verify nfs"
           ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
           vars:
