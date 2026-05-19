@@ -27,6 +27,7 @@ parameters, in what order.
 |---|---|---|
 | `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; optional SCP publish gated by `armbian_netboot_publish_target` |
 | `image_extract` | netboot server (host with sudo+losetup) | One rootfs template + per-model TFTP artifacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
+| `disk_image` | a board (or any host owning the target) | One block device imaged via streaming `xz \| dd`; mount-aware refusal |
 | `rootfs_clone` | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset |
 | `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
 | `board_boot_wait` | a board | wait_for TCP/22 + SSH (no power knowledge) |
@@ -72,6 +73,7 @@ david_igou/armbian_netboot/   (this repo root)
 ├── roles/                    # All single-host, single-purpose, transport-agnostic
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
 │   ├── image_extract/             # Extract one .img.xz → template rootfs + TFTP files
+│   ├── disk_image/                # Stream an .img.xz/.img to a block device (dd-style)
 │   ├── rootfs_clone/              # Reflink-clone a template into a per-host rootfs
 │   ├── pxelinux_render/           # Render one per-board pxelinux.cfg to a local dir
 │   ├── board_boot_wait/           # Wait for TCP/22 + SSH on a board
@@ -443,6 +445,9 @@ filtering.
 
 - `vars/boards.yml` — authoritative per-board metadata (`armbian_netboot_board_configs`)
 - `roles/image_extract/tasks/main.yml` — single-image extraction (URL or local path) → template + TFTP files
+- `roles/disk_image/tasks/main.yml` — orchestrate validate → write → settle for the new disk-imaging role
+- `roles/disk_image/tasks/_validate.yml` — mount-aware guard + extension classify (pre-flight)
+- `roles/disk_image/tasks/_write.yml` — four-branch streaming write with pipefail propagation
 - `roles/rootfs_clone/tasks/main.yml` — reflink-clone template into per-host rootfs + identity reset
 - `roles/pxelinux_render/tasks/main.yml` — render one per-board pxelinux.cfg locally
 - `roles/pxelinux_render/templates/pxelinux_cfg.j2` — multi-label, default-driven PXE config

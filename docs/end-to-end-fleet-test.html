@@ -2237,18 +2237,24 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   <code>igou</code> was already present.
 </p>
 
-<h3 id="improve-dd-preflight">Open: dd a known image to SD as a pre-flight (full state reset)</h3>
+<h3 id="improve-dd-preflight">Shipped: dd a known image to SD as a pre-flight (full state reset)</h3>
 
 <p>
-  The <code>auto_bootstrap_if_needed</code> approach handles the
-  &ldquo;has the SD card been bootstrapped yet?&rdquo; question
-  <em>reactively</em>: probe-then-bootstrap. An alternative considered
-  during this refactor is <em>proactive</em>: kick off the fleet test
-  with an early netboot phase that <code>dd</code>&rsquo;s the public
-  Armbian image to <code>/dev/mmcblkN</code> on every board, so every
-  board starts the run in the same known (stock-Armbian,
-  un-bootstrapped) state.
+  Shipped in <code>playbooks/test_fleet_e2e.yml</code> Phase 0,
+  backed by the <code>disk_image</code> role. Phase 0 converges every
+  board to NFS first, then streams the canonical image from
+  <code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
+  <code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
+  with <code>-e skip_dd_sd=true</code>.
 </p>
+
+<p>
+  The original design considered the <code>auto_bootstrap_if_needed</code>
+  approach &mdash; <em>reactive</em> probe-then-bootstrap &mdash; as the
+  primary path. Phase 0 takes the complementary <em>proactive</em> stance:
+  every board starts each run in the same known (stock-Armbian,
+  un-bootstrapped) state, making Phase A&rsquo;s bootstrap path
+  deterministic.</p>
 
 <p>
   Trade-offs:
@@ -2274,11 +2280,12 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 </ul>
 
 <p>
-  Not implemented. Would slot in as a new
-  <code>Phase 0 &mdash; dd canonical image to SD</code> play that runs
-  while the board is on NFS (so the SD card is unmounted), using
-  the existing per-host NFS rootfs as the dd host. Punt on this until
-  there&rsquo;s evidence the reactive approach drifts.
+  Implemented as
+  <code>Phase 0 &mdash; dd canonical image to SD</code>, running
+  while each board is on NFS (SD card unmounted), using the
+  existing per-host NFS rootfs as the imaging host. The
+  <code>disk_image</code> role&rsquo;s mount-aware guard enforces
+  this constraint at runtime.
 </p>
 
 <h3 id="improve-skip-empty-discard">Skip <code>--empty=force</code> on already-discarded disks</h3>
@@ -2446,7 +2453,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
         <td>Reproducible campaigns, drift detection</td></tr>
     <tr><td>dd canonical image to SD as Phase 0 (full state reset)</td>
         <td>new play + per-host NFS dd</td>
-        <td>open (alternative to auto_bootstrap)</td>
+        <td>shipped (<code>disk_image</code> role + Phase 0)</td>
         <td>Deterministic SD state per run; cost: ~30 s + bandwidth per board</td></tr>
   </tbody>
 </table>
