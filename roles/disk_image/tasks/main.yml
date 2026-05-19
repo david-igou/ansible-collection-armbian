@@ -4,3 +4,6 @@
 
 - name: "Block A — validate inputs (no side effects)"
   ansible.builtin.import_tasks: _validate.yml
+
+- name: "Block B — stream and write"
+  ansible.builtin.import_tasks: _write.yml

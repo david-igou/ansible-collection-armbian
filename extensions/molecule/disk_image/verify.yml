@@ -124,3 +124,126 @@
           args:
             executable: /bin/bash
           changed_when: false
+
+    # --- Positive tests for Block B (4 dispatch branches) ---
+    # Each test wipes the target, invokes the role with a different
+    # (source-classify, format-classify) combination, then asserts the
+    # ext4 partition + sentinel from the test image landed on the target.
+
+    - name: "Block B — exercise: path + raw .img"
+      block:
+        - name: "Wipe target loop"
+          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+          changed_when: true
+
+        - name: "Invoke role: path + .img"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "/tmp/test.img"
+            target_device: "{{ _target_loop }}"
+
+        - name: "Read written bytes from target (whole-disk)"
+          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
+          register: _lsblk_after_path_raw
+          changed_when: false
+
+        - name: "Assert target now carries the test image's labelled partition"
+          ansible.builtin.assert:
+            that:
+              - "'diskimg_test' in _lsblk_after_path_raw.stdout"
+              - "'ext4' in _lsblk_after_path_raw.stdout"
+
+    - name: "Block B — exercise: path + .img.xz"
+      block:
+        - name: "Wipe target loop"
+          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+          changed_when: true
+
+        - name: "Invoke role: path + .img.xz"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "/tmp/test.img.xz"
+            target_device: "{{ _target_loop }}"
+
+        - name: "lsblk shows partition + label"
+          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
+          register: _lsblk_after_path_xz
+          changed_when: false
+
+        - name: "Assert"
+          ansible.builtin.assert:
+            that:
+              - "'diskimg_test' in _lsblk_after_path_xz.stdout"
+              - "'ext4' in _lsblk_after_path_xz.stdout"
+
+    - name: "Block B — exercise: URL + raw .img"
+      block:
+        - name: "Wipe target loop"
+          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+          changed_when: true
+
+        - name: "Invoke role: URL + .img"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "http://127.0.0.1:8765/test.img"
+            target_device: "{{ _target_loop }}"
+
+        - name: "lsblk shows partition + label"
+          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
+          register: _lsblk_after_url_raw
+          changed_when: false
+
+        - name: "Assert"
+          ansible.builtin.assert:
+            that:
+              - "'diskimg_test' in _lsblk_after_url_raw.stdout"
+              - "'ext4' in _lsblk_after_url_raw.stdout"
+
+    - name: "Block B — exercise: URL + .img.xz"
+      block:
+        - name: "Wipe target loop"
+          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+          changed_when: true
+
+        - name: "Invoke role: URL + .img.xz"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "http://127.0.0.1:8765/test.img.xz"
+            target_device: "{{ _target_loop }}"
+
+        - name: "lsblk shows partition + label"
+          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
+          register: _lsblk_after_url_xz
+          changed_when: false
+
+        - name: "Assert"
+          ansible.builtin.assert:
+            that:
+              - "'diskimg_test' in _lsblk_after_url_xz.stdout"
+              - "'ext4' in _lsblk_after_url_xz.stdout"
+
+    - name: "Block B — failure propagation: curl 404 must fail the task"
+      block:
+        - name: "Wipe target loop"
+          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
+          changed_when: true
+
+        - name: "Invoke role with a URL that 404s"
+          ansible.builtin.include_role:
+            name: disk_image
+          vars:
+            image_source: "http://127.0.0.1:8765/nonexistent.img.xz"
+            target_device: "{{ _target_loop }}"
+      rescue:
+        - name: "Confirm role failed (pipefail propagated curl's exit)"
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.rc is defined
+              - ansible_failed_result.rc != 0
+            fail_msg: >-
+              Expected non-zero exit from a 404; got:
+              {{ ansible_failed_result | default({}) }}
