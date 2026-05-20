@@ -1,0 +1,99 @@
+---
+# Prune stale .img.xz files (and their .sha sidecars) from the netboot
+# server's published images tree. The current image, per each board's
+# manifest.json, is preserved; everything else is deleted.
+#
+# Default: deletes stale files.
+# Dry-run: ansible-playbook playbooks/cleanup_boot_files.yml --check
+
+- name: Prune stale .img.xz files from boot-files/images/
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  vars:
+    _images_root: "{{ armbian_netboot_nfs_assets_export }}/images"
+  tasks:
+    - name: List per-board image directories
+      ansible.builtin.find:
+        paths: "{{ _images_root }}"
+        file_type: directory
+        recurse: false
+      register: _board_dirs
+
+    - name: Read each manifest.json
+      ansible.builtin.slurp:
+        src: "{{ item }}/manifest.json"
+      register: _manifests
+      loop: "{{ _board_dirs.files | map(attribute='path') | list }}"
+      loop_control:
+        label: "{{ item | basename }}"
+      failed_when: false
+
+    - name: Build per-board keep filename from manifest
+      ansible.builtin.set_fact:
+        _keep_map: >-
+          {{ _keep_map | default({}) | combine({
+               (item.item | basename):
+                 (item.content | b64decode | from_json).image_filename
+             }) }}
+      loop: "{{ _manifests.results }}"
+      loop_control:
+        label: "{{ item.item | basename }}"
+      when:
+        - item.content is defined
+        - (item.content | b64decode | from_json).image_filename | default('') | length > 0
+
+    - name: Warn about board directories with missing or unparseable manifests
+      ansible.builtin.debug:
+        msg: "Skipping {{ item.item }} — no usable manifest.json (will not touch its .img.xz files)"
+      loop: "{{ _manifests.results }}"
+      loop_control:
+        label: "{{ item.item | basename }}"
+      when:
+        - item.content is not defined
+          or ((item.content | b64decode | from_json).image_filename | default('') | length == 0)
+
+    - name: Find .img.xz files in each board directory with a manifest
+      ansible.builtin.find:
+        paths: "{{ _images_root }}/{{ item.key }}"
+        patterns: "*.img.xz"
+        file_type: file
+        recurse: false
+      register: _img_xz_per_board
+      loop: "{{ (_keep_map | default({})) | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Assemble list of stale .img.xz files to delete
+      ansible.builtin.set_fact:
+        _stale_paths: >-
+          {{ _img_xz_per_board.results
+             | map(attribute='files') | flatten
+             | map(attribute='path')
+             | reject('match', '.*/(' ~ (_keep_map.values() | map('regex_escape') | join('|')) ~ ')$')
+             | list }}
+      when: (_keep_map | default({})) | length > 0
+
+    - name: Default stale-paths to empty when no manifests were readable
+      ansible.builtin.set_fact:
+        _stale_paths: []
+      when: (_keep_map | default({})) | length == 0
+
+    - name: Report stale .img.xz candidates
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Would delete' if ansible_check_mode else 'Deleting' }}
+          {{ _stale_paths | length }} stale .img.xz file(s):
+          {{ _stale_paths }}
+
+    - name: Delete stale .img.xz files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ _stale_paths }}"
+
+    - name: Delete companion .sha sidecars
+      ansible.builtin.file:
+        path: "{{ item }}.sha"
+        state: absent
+      loop: "{{ _stale_paths }}"
