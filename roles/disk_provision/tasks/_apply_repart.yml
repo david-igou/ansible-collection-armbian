@@ -12,11 +12,17 @@
 # package. Install it idempotently so this role works on both.
 # failed_when:false here because the package doesn't exist on
 # Bookworm — the next assert catches the real "binary missing" case.
+# update_cache:true is load-bearing: on a freshly-cloned NFS rootfs
+# (test_fleet_e2e.yml Phase 1 force_refresh state), the apt list is
+# the source image's stale cache and doesn't know about the package.
+# Without a refresh the install silently no-ops here and Phase 5
+# fails at the next task's "systemd-repart binary missing" assert.
 - name: "Apply repart: ensure systemd-repart package is installed"
   ansible.builtin.apt:
     name: systemd-repart
     state: present
-    update_cache: false
+    update_cache: true
+    cache_valid_time: 3600
   become: true
   failed_when: false
 
