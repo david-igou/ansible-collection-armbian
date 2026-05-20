@@ -1,0 +1,63 @@
+---
+# Block B — stream and write.
+#
+# Four shell dispatch branches by (_src_is_url, _fmt). The three pipe
+# branches use `set -o pipefail` so a curl 404 / xz CRC error / partial
+# read is propagated to the task's rc, not swallowed by dd's zero exit.
+# The path+raw branch has no pipe so pipefail is omitted there.
+# become: true is required for dd-to-block-device.
+
+- name: "Block B — path + raw .img → dd direct"
+  ansible.builtin.shell:
+    cmd: >-
+      dd if={{ image_source | quote }} of={{ target_device | quote }}
+      bs={{ dd_bs | quote }} conv=fsync status=progress
+    executable: /bin/bash
+  become: true
+  when:
+    - _src_is_path
+    - _fmt == 'raw'
+  changed_when: true
+
+- name: "Block B — path + .img.xz → xz -dc | dd"
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      xz -dc {{ image_source | quote }}
+      | dd of={{ target_device | quote }}
+      bs={{ dd_bs | quote }} conv=fsync status=progress
+    executable: /bin/bash
+  become: true
+  when:
+    - _src_is_path
+    - _fmt == 'xz'
+  changed_when: true
+
+- name: "Block B — URL + raw .img → curl | dd"
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      curl -fsSL {{ image_source | quote }}
+      | dd of={{ target_device | quote }}
+      bs={{ dd_bs | quote }} conv=fsync status=progress
+    executable: /bin/bash
+  become: true
+  when:
+    - _src_is_url
+    - _fmt == 'raw'
+  changed_when: true
+
+- name: "Block B — URL + .img.xz → curl | xz -dc | dd"
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      curl -fsSL {{ image_source | quote }}
+      | xz -dc
+      | dd of={{ target_device | quote }}
+      bs={{ dd_bs | quote }} conv=fsync status=progress
+    executable: /bin/bash
+  become: true
+  when:
+    - _src_is_url
+    - _fmt == 'xz'
+  changed_when: true

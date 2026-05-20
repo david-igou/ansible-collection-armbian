@@ -1,3 +1,29 @@
+# Deterministic Fleet E2E Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace the Phase 0/A/B/C/C2/D structure of `playbooks/test_fleet_e2e.yml` with a six-phase deterministic flow (0 PoE down → 1 NFS reset → 2 NFS boot + bootstrap + SPI persist → 3 dd SD → 4 SD boot + bootstrap → 5 NVMe reprovision + local_kernel verify) so every state layer is force-recreated before the test exercises it.
+
+**Architecture:** Single playbook with eight plays (pre-flight; Phase 0; Phase 1; Phase 2a; Phase 2b; Phase 3; Phase 4; Phase 5; Summary). Pre-flight resolves retry knobs and clears stale known_hosts. Phase 0 runs against boards (PoE-off only). Phase 1 runs on `netboot_server` (force_refresh `image_extract` + `rootfs_clone`). Phases 2-5 run against boards. Phase 2 splits into 2a (lifecycle + bootstrap_armbian + verify) and 2b (`import_playbook: persist_uboot_env.yml`), recorded as one row "2" in the timing table. `bootstrap_armbian` is the single source of truth for the igou user — no manual NFS-rootfs injection, no `auto_bootstrap_if_needed` probe.
+
+**Tech Stack:** Ansible 2.15+, existing collection roles (`image_extract`, `rootfs_clone`, `disk_image`, `bootstrap_armbian`, `board_boot_verify`, `disk_provision`), existing tasks (`_lifecycle_set_and_verify.yml`, `cold_boot_with_retry.yml`), existing playbook (`persist_uboot_env.yml`).
+
+**Spec:** [`docs/superpowers/specs/2026-05-19-deterministic-fleet-e2e-design.md`](../specs/2026-05-19-deterministic-fleet-e2e-design.md)
+
+**Branch:** `deterministic-fleet-e2e` (cut from `disk-image-role`, which has the `disk_image` role this plan consumes in Phase 3)
+
+---
+
+## Task 1: Skeleton — docstring + pre-flight + empty Summary
+
+Replace the entire `playbooks/test_fleet_e2e.yml` content with the new docstring, the trimmed pre-flight play (no igou-injection play), and a placeholder Summary play. After this task the playbook has only the pre-flight + Summary plays — no phases yet. Lint and syntax-check must pass.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml` (full rewrite)
+
+- [ ] **Step 1: Replace `playbooks/test_fleet_e2e.yml` entirely**
+
+```yaml
 ---
 # Multi-board deterministic fleet end-to-end test.
 #
@@ -30,15 +56,9 @@
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `netboot_server`,
 #     `rb5009`, and each PoE switch.
-#   - Inventory's `armbian_netboot_image_urls[<model>]` set per model
-#     (path or URL the netboot_server can read; Phase 1 image_extract).
-#   - Inventory's `armbian_netboot_image_urls_http[<model>]` set per
-#     model (http(s):// URL the boards can stream from; Phase 3
-#     disk_image). These two vars are split because the netboot_server
-#     and the boards typically need different addressing for the same
-#     image (e.g. netboot_server reads a local NFS path; boards stream
-#     from an HTTP endpoint that the netboot_server itself can't reach
-#     when the URL points at the netboot_server's own macvlan address).
+#   - Inventory's `armbian_netboot_image_urls[<model>]` published
+#     somewhere reachable from netboot_server (Phase 1) and from the
+#     board (Phase 3 dd-from-URL).
 #   - stage_router.yml has been run (per-model TFTP rows on rb5009).
 #   - Inventory's `armbian_netboot_local_disks` set per board (Phase 5).
 #   - Inventory's `armbian_netboot_poe_switch` + `armbian_netboot_poe_port`
@@ -119,6 +139,64 @@
       ansible.builtin.set_fact:
         ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR"
 
+# Phase plays (0, 1, 2a, 2b, 3, 4, 5) are appended by subsequent tasks
+# in this implementation plan.
+
+- name: "Summary"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Summary — per-board per-phase wall-time table"
+      run_once: true
+      ansible.builtin.debug:
+        msg: "Summary Jinja completed in Task 8."
+```
+
+- [ ] **Step 2: Run lint**
+
+Run: `cd /workspace/ansible-collection-armbian_netboot && make lint`
+Expected: PASS (0 failures from ansible-lint).
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `cd /workspace/ansible-collection-armbian_netboot && ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Verify the old phases are gone**
+
+Run: `grep -E "Phase [A-D]|skip_dd_sd|skip_sd|skip_nfs|skip_reprovision|skip_local_kernel|skip_kernel_update" /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Expected: no output (no stale phase letter references).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: skeleton — pre-flight + Summary placeholder (no phases yet)
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 2: Phase 0 — PoE down all target boards
+
+Insert the Phase 0 play between the pre-flight play and the Summary play. PoE-off + drain (no PoE-on), no SSH wait. Each board's PoE control is delegated to its `armbian_netboot_poe_switch`.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert the Phase 0 play immediately before the `Summary` play**
+
+Find the comment line:
+
+```yaml
+# Phase plays (0, 1, 2a, 2b, 3, 4, 5) are appended by subsequent tasks
+# in this implementation plan.
+```
+
+Immediately after it (still before the Summary play), insert:
+
+```yaml
 - name: "Phase 0 — PoE down all target boards"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -171,7 +249,39 @@
             _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
             ansible_connection: local
           delegate_to: localhost
+```
 
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 0 — PoE-off all target boards (clean slate)
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 3: Phase 1 — NFS reset (force_refresh on netboot_server)
+
+Insert the Phase 1 play between Phase 0 and Summary. Runs on `netboot_server` with `become: true`. Loops `image_extract` over unique models from `target_hosts`, then loops `rootfs_clone` over `target_hosts`. Both with `force_refresh: true`.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert Phase 1 immediately after Phase 0, before the Summary play**
+
+```yaml
 - name: "Phase 1 — Force-refresh NFS templates + per-host clones (netboot_server)"
   hosts: netboot_server
   become: true
@@ -221,18 +331,10 @@
           loop_control:
             loop_var: _board
 
-        # Per-board evidence + timing, written on the CONTROLLER (the
-        # iter-FLEET dirs live there). Phase 1's play targets
-        # netboot_server with become: true; the delegate must override
-        # to local connection + no-become so we don't try SSH-as-igou
-        # back to the controller (and don't try to sudo locally).
-        # The HOST variable strips the FQDN to match the dir naming
-        # convention the pre-flight play established
-        # (/tmp/iter-FLEET-<short-host>/, not <fqdn>).
         - name: "Phase 1 — per-board evidence + timing"
           ansible.builtin.shell: |
             set -euo pipefail
-            HOST={{ board | regex_replace('\..*', '') }}
+            HOST={{ board }}
             DIR=/tmp/iter-FLEET-${HOST}/1-nfs-reset
             mkdir -p "${DIR}"
             cat > "${DIR}/nfs-reset-evidence.txt" <<EOF
@@ -251,11 +353,40 @@
           loop_control:
             loop_var: board
           delegate_to: localhost
-          vars:
-            ansible_connection: local
-          become: false
           changed_when: false
+```
 
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 1 — force-refresh NFS templates + per-host clones
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 4: Phase 2 — NFS boot + bootstrap_armbian + SPI persist
+
+Two plays: 2a runs `_lifecycle_set_and_verify` + `bootstrap_armbian` (inline-include with root+password override) + `board_boot_verify`. 2b imports `persist_uboot_env.yml` so it can use `import_playbook` (which only works at play level). The Summary play treats them as one phase row (`2`); timing covers both.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert Phase 2a after Phase 1**
+
+```yaml
 - name: "Phase 2a — NFS boot + bootstrap_armbian + verify"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -270,38 +401,19 @@
     - name: "Phase 2a — block"
       when: not (skip_phase_2 | bool)
       block:
-        - name: "Phase 2a — start timer (host fact; read in Phase 2 evidence play)"
+        - name: "Phase 2 — start timer"
           ansible.builtin.set_fact:
             _t_phase_2_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # Cannot use `_lifecycle_set_and_verify` here: its internal
-        # `cold_boot_with_retry` runs `wait_for_connection` as the
-        # inventory user, and the freshly-cloned NFS rootfs has no igou
-        # yet — bootstrap_armbian (below) is what creates it. Same
-        # constraint as the old playbook's Phase A. Sequence the
-        # lower-level primitives manually instead, with
-        # `_skip_ssh_stability_check: true` for the cycle step.
-
-        # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
-        - name: "Phase 2a — render+upload pxelinux for nfs (no cycle)"
-          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+        - name: "Phase 2a — set + verify nfs"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
           vars:
-            armbian_netboot_boot_mode: nfs
-            armbian_netboot_cycle_board: false
-            armbian_netboot_verify_state: false
+            target_boot_mode: nfs
+            on_failure_revert_to: nfs
 
-        # Step 2 — PoE cycle + TCP/22 wait. _skip_ssh_stability_check
-        # skips the wait_for_connection-as-igou check that would
-        # otherwise fail on the bootstrap-less rootfs.
-        - name: "Phase 2a — PoE cycle + TCP/22 wait (no SSH-as-igou)"
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
-          vars:
-            _phase_label: "Phase 2a"
-            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
-            _skip_ssh_stability_check: true
-
-        # Step 3 — bootstrap_armbian as root+password creates igou.
-        # Fresh NFS clone is guaranteed to have only the default user.
+        # Fresh NFS clone has only root+default-password. Run
+        # bootstrap_armbian unconditionally to install igou. No
+        # auto_bootstrap_if_needed probe — we know the answer.
         - name: "Phase 2a — bootstrap_armbian (unconditional; fresh NFS clone)"
           ansible.builtin.include_role:
             name: bootstrap_armbian
@@ -311,34 +423,31 @@
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
-        - name: "Phase 2a — reset connection (subsequent tasks use igou)"
+        - name: "Phase 2a — reset connection (so subsequent tasks use igou identity)"
           ansible.builtin.meta: reset_connection
 
-        # Step 4 — now that igou exists, wait for SSH-as-igou.
-        - name: "Phase 2a — wait for SSH as igou (post-bootstrap)"
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
-          vars:
-            _phase_label: "Phase 2a"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
-
-        # Step 5 — verify rootfs is on NFS (board_boot_verify gathers
-        # facts under the hood, which now works because igou is up).
         - name: "Phase 2a — verify rootfs is on NFS"
           ansible.builtin.include_role:
             name: board_boot_verify
           vars:
             boot_mode: nfs
+```
 
-# Phase 2a's `vars: skip_phase_2: false` is play-scoped and does NOT
-# propagate into this imported playbook. The `| default(false)` guard
-# is load-bearing for the no-skip (normal-run) case. To skip Phase 2,
-# pass `-e skip_phase_2=true` — extra-vars are global scope.
+- [ ] **Step 2: Insert Phase 2b after Phase 2a**
+
+```yaml
 - name: "Phase 2b — Persist SPI U-Boot env (no-op for non-SPI boards)"
   ansible.builtin.import_playbook: persist_uboot_env.yml
   vars:
     armbian_netboot_persist_uboot_env_cycle: false
   when: not (skip_phase_2 | default(false) | bool)
+```
 
+- [ ] **Step 3: Append Phase 2 evidence + timing as a third play (since Phase 2b is import_playbook, we close out timing in a small follow-up play)**
+
+After Phase 2b, insert:
+
+```yaml
 - name: "Phase 2 — evidence + timing"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -367,7 +476,41 @@
         _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
         ansible_connection: local
       delegate_to: localhost
+```
 
+Note: `_t_phase_2_start` was set in Phase 2a's host facts. Across play boundaries within a single playbook run, host facts persist — so this read works. Default to 0 if Phase 2a was skipped so the timing math doesn't blow up.
+
+- [ ] **Step 4: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 5: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 2 — NFS boot + bootstrap_armbian + SPI persist
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 5: Phase 3 — dd canonical SD image via `disk_image` role
+
+Single play targeting boards (now on NFS as igou). Invokes the `disk_image` role with `image_source` from `armbian_netboot_image_urls[<model>]` and `target_device` from `armbian_netboot_sd_device`.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert Phase 3 after the Phase 2 evidence-and-timing play**
+
+```yaml
 - name: "Phase 3 — dd canonical SD image via disk_image role"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -382,24 +525,18 @@
           ansible.builtin.set_fact:
             _t_phase_3_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # disk_image runs on the board and must reach the image
-        # itself. armbian_netboot_image_urls_http is the per-model
-        # http(s):// URL the boards stream from; distinct from
-        # armbian_netboot_image_urls (Phase 1 image_extract on
-        # netboot_server consumes that one — typically a local NFS
-        # path the netboot_server can't reach via its own macvlan IP).
         - name: "Phase 3 — dd canonical image to SD"
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_netboot_image_urls_http[armbian_netboot_board_model] }}"
+            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
             target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 3 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 3 (dd SD) — {{ inventory_hostname }} ===
-              source:  {{ armbian_netboot_image_urls_http[armbian_netboot_board_model] }}
+              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
               target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
               From-state: NFS rootfs (board was bootstrapped + verified NFS in Phase 2)
             dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
@@ -417,7 +554,39 @@
             _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
             ansible_connection: local
           delegate_to: localhost
+```
 
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 3 — dd canonical SD image via disk_image role
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 6: Phase 4 — SD boot + bootstrap_armbian
+
+Mirrors Phase 2a but for SD boot mode. Same unconditional `bootstrap_armbian` pattern (freshly dd'd SD has only root+password).
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert Phase 4 after Phase 3**
+
+```yaml
 - name: "Phase 4 — SD boot + bootstrap_armbian + verify"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -436,28 +605,12 @@
           ansible.builtin.set_fact:
             _t_phase_4_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # Same constraint as Phase 2a: freshly-dd'd SD has only root +
-        # default-password, no igou yet. bootstrap_armbian (below)
-        # creates it. Manual sequencing avoids the SSH-as-igou check
-        # that _lifecycle_set_and_verify would otherwise run.
-
-        # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
-        - name: "Phase 4 — render+upload pxelinux for sd (no cycle)"
-          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+        - name: "Phase 4 — set + verify sd"
+          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
           vars:
-            armbian_netboot_boot_mode: sd
-            armbian_netboot_cycle_board: false
-            armbian_netboot_verify_state: false
+            target_boot_mode: sd
+            on_failure_revert_to: nfs
 
-        # Step 2 — PoE cycle + TCP/22 wait, skipping SSH-as-igou.
-        - name: "Phase 4 — PoE cycle + TCP/22 wait (no SSH-as-igou)"
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
-          vars:
-            _phase_label: "Phase 4"
-            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | int + 1 }}"
-            _skip_ssh_stability_check: true
-
-        # Step 3 — bootstrap_armbian as root+password creates igou on SD.
         - name: "Phase 4 — bootstrap_armbian (unconditional; freshly dd'd SD)"
           ansible.builtin.include_role:
             name: bootstrap_armbian
@@ -467,17 +620,9 @@
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
-        - name: "Phase 4 — reset connection (subsequent tasks use igou)"
+        - name: "Phase 4 — reset connection"
           ansible.builtin.meta: reset_connection
 
-        # Step 4 — wait for SSH as igou now that bootstrap created it.
-        - name: "Phase 4 — wait for SSH as igou (post-bootstrap)"
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
-          vars:
-            _phase_label: "Phase 4"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
-
-        # Step 5 — verify rootfs is on a local block device (SD).
         - name: "Phase 4 — verify rootfs is on a local block device"
           ansible.builtin.include_role:
             name: board_boot_verify
@@ -506,7 +651,39 @@
             _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
             ansible_connection: local
           delegate_to: localhost
+```
 
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 4 — SD boot + bootstrap_armbian (unconditional)
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 7: Phase 5 — NVMe reprovision + local_kernel verify
+
+Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `armbian_netboot_local_disks`, then converges to `local_kernel` mode and asserts TFTP HITS for vmlinuz remain flat across the cycle (proof U-Boot used baked localcmd, not PXE). `throttle: 2` for NVMe rsync contention.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Insert Phase 5 after Phase 4**
+
+```yaml
 - name: "Phase 5 — NVMe reprovision + local_kernel verify (throttled)"
   hosts: "{{ target_hosts | default('boards') }}"
   throttle: "{{ fleet_phase_5_throttle | default(2) | int }}"
@@ -573,7 +750,6 @@
               - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
           delegate_to: "{{ armbian_netboot_router }}"
           register: _hits_before
-          changed_when: false
 
         - name: "Phase 5 — set + verify local_kernel"
           ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
@@ -587,7 +763,6 @@
               - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
           delegate_to: "{{ armbian_netboot_router }}"
           register: _hits_after
-          changed_when: false
 
         - name: "Phase 5 — extract HITS counts"
           ansible.builtin.set_fact:
@@ -610,7 +785,7 @@
             content: |
               === Phase 5 (NVMe reprovision + local_kernel) — {{ inventory_hostname }} ===
               NVMe layout: {{ armbian_netboot_local_disks | default([]) | length }} disk(s) declared
-              TFTP vmlinuz HITS: before={{ _hits_before_n }} after={{ _hits_after_n }} delta={{ (_hits_after_n | int) - (_hits_before_n | int) }}
+              TFTP vmlinuz HITS: before={{ _hits_before_n }} after={{ _hits_after_n }} delta=0
               U-Boot baked localcmd (or SPI env) loaded kernel from NVMe.
             dest: "{{ fleet_artifact_dir }}/nvme-localkernel-evidence.txt"
           delegate_to: localhost
@@ -627,7 +802,54 @@
             _t_end: "{{ lookup('pipe', 'date +%s') | int }}"
             ansible_connection: local
           delegate_to: localhost
+```
 
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Phase 5 — NVMe reprovision + local_kernel TFTP-flat verify
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 8: Summary play — render six-phase timing table
+
+Replace the placeholder Summary `debug` task with the real Jinja-rendered per-board per-phase timing table.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+
+- [ ] **Step 1: Replace the Summary play's placeholder task**
+
+Find:
+
+```yaml
+- name: "Summary"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: "Summary — per-board per-phase wall-time table"
+      run_once: true
+      ansible.builtin.debug:
+        msg: "Summary Jinja completed in Task 8."
+```
+
+Replace with:
+
+```yaml
 - name: "Summary"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
@@ -660,3 +882,143 @@
           (Phase 5 throttled to {{ fleet_phase_5_throttle | default(2) }} hosts in parallel;
            the others run in parallel across all hosts.
            Per-host artefacts: /tmp/iter-FLEET-<host>/timing.tsv)
+```
+
+- [ ] **Step 2: Run lint**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 3: Run syntax-check**
+
+Run: `ansible-playbook --syntax-check playbooks/test_fleet_e2e.yml`
+Expected: PASS.
+
+- [ ] **Step 4: Sanity-check play count**
+
+Run: `grep -c '^- name:' /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Expected: `10`.
+
+Run: `grep '^- name:' /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Expected output (order matters):
+1. `Pre-flight: ensure all per-board artifact dirs exist on controller`
+2. `Phase 0 — PoE down all target boards`
+3. `Phase 1 — Force-refresh NFS templates + per-host clones (netboot_server)`
+4. `Phase 2a — NFS boot + bootstrap_armbian + verify`
+5. `Phase 2b — Persist SPI U-Boot env (no-op for non-SPI boards)` (this is the `import_playbook` line)
+6. `Phase 2 — evidence + timing`
+7. `Phase 3 — dd canonical SD image via disk_image role`
+8. `Phase 4 — SD boot + bootstrap_armbian + verify`
+9. `Phase 5 — NVMe reprovision + local_kernel verify (throttled)`
+10. `Summary`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add playbooks/test_fleet_e2e.yml
+git commit -m "test_fleet_e2e: Summary play — six-phase wall-time table
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 9: Docs updates
+
+Update CLAUDE.md and `docs/end-to-end-fleet-test.html` to reflect the new deterministic structure. CLAUDE.md's "Running playbooks" section currently mentions `test_hardware_e2e.yml` and may reference `test_fleet_e2e` indirectly — skim for stale phase letters. The HTML doc has a "Shipped: dd a known image to SD" section that references Phase 0 of the old structure; update to point at Phase 3.
+
+**Files:**
+- Modify: `/workspace/ansible-collection-armbian_netboot/CLAUDE.md`
+- Modify: `/workspace/ansible-collection-armbian_netboot/docs/end-to-end-fleet-test.html`
+
+- [ ] **Step 1: Find existing CLAUDE.md mentions of test_fleet_e2e or old phases**
+
+Run: `grep -n "Phase [A-D]\|skip_dd_sd\|test_fleet_e2e\|Phase 0/A/B" /workspace/ansible-collection-armbian_netboot/CLAUDE.md`
+
+For each match, decide whether the line refers to the *new* deterministic flow (leave as-is) or to the *old* Phase 0/A/B/C/D framing (rewrite). If a line says `Phase A/B/C/D` or `skip_dd_sd`, update it.
+
+The most likely match is the playbook ASCII tree under `## Collection structure` — if it lists `test_fleet_e2e.yml` with a comment describing the old phases, update the comment to:
+
+```
+│   ├── test_fleet_e2e.yml         # Deterministic 6-phase fleet test (0 PoE-down → 1 NFS reset → 2 NFS boot+bootstrap+SPI → 3 dd SD → 4 SD boot+bootstrap → 5 NVMe local_kernel)
+```
+
+- [ ] **Step 2: Update `docs/end-to-end-fleet-test.html` "Shipped: dd a known image to SD" section**
+
+The section currently says the dd preflight is implemented as Phase 0 of test_fleet_e2e.yml. Replace the reference to `Phase 0` with `Phase 3` and adjust the surrounding prose to note the new deterministic flow:
+
+Find the `<h3 id="improve-dd-preflight">` heading and its first `<p>`. Update the `<p>` to read approximately:
+
+```html
+<p>Shipped in <code>playbooks/test_fleet_e2e.yml</code> Phase 3 of
+the deterministic six-phase flow, backed by the <code>disk_image</code>
+role. Phase 3 runs after Phase 2 has booted every target board on a
+freshly-refreshed NFS rootfs (Phase 1) and bootstrapped igou, then
+streams the canonical image from
+<code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
+<code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
+with <code>-e skip_phase_3=true</code>.</p>
+```
+
+If there's a second/third paragraph referring to the dd preflight as a stand-alone Phase 0, rewrite to past tense + cite the deterministic flow as the canonical location.
+
+Search for any remaining `skip_dd_sd` mentions in the file (`grep -n "skip_dd_sd" /workspace/ansible-collection-armbian_netboot/docs/end-to-end-fleet-test.html`) and replace each with `skip_phase_3`.
+
+- [ ] **Step 3: Run lint (HTML is unaffected; yamllint+ansible-lint validate YAML only)**
+
+Run: `make lint`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CLAUDE.md docs/end-to-end-fleet-test.html
+git commit -m "docs: update for deterministic fleet e2e (Phase 0 dd → Phase 3 of new flow)
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 10: Final verification
+
+End-to-end sanity sweep. No code changes unless something surfaces.
+
+**Files:** none modified unless lint/syntax-check surfaces an issue.
+
+- [ ] **Step 1: Full lint pass**
+
+Run: `cd /workspace/ansible-collection-armbian_netboot && make lint`
+Expected: PASS.
+
+- [ ] **Step 2: Syntax-check every playbook (sanity sweep — guarantees the new test_fleet_e2e.yml didn't break other playbooks via shared task imports)**
+
+Run: `for p in playbooks/*.yml; do ansible-playbook --syntax-check "$p" >/dev/null 2>&1 || echo "FAIL: $p"; done; echo DONE`
+Expected: `DONE` with no `FAIL:` lines.
+
+- [ ] **Step 3: Confirm the playbook structure is what we expect**
+
+Run: `grep '^- name:' /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Expected: lists 10 `- name:` lines matching the structure described in Task 8 step 4.
+
+- [ ] **Step 4: Confirm no stale references to old phase letters**
+
+Run: `grep -nE "Phase [A-D]|Phase C2|skip_dd_sd|skip_sd|skip_nfs|skip_reprovision|skip_local_kernel|skip_kernel_update|kernel_update_pin|kernel_pkg|armbian_netboot_kernel_target|fleet_phase_c_throttle" /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Expected: no output. (If there ARE matches, decide whether each is stale and fix.)
+
+- [ ] **Step 5: Confirm the collection still builds**
+
+Run: `cd /workspace/ansible-collection-armbian_netboot && make collection-build`
+Expected: PASS, produces `david_igou-armbian_netboot-<version>.tar.gz`.
+
+Run: `make clean`
+
+- [ ] **Step 6: No commit unless step 1-5 surfaced something to fix.** Report done.
+
+Tell the operator: deterministic fleet e2e implementation complete. Hardware validation is a follow-up:
+
+```bash
+ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=<one-board>
+```
+
+Expected behavior on hardware: all six phases complete; final Summary shows per-phase timing; board ends up booted on NVMe in `local_kernel` mode with TFTP HITS unchanged across the Phase 5 cycle.

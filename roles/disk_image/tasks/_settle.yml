@@ -1,0 +1,22 @@
+---
+# Block C — settle the kernel's view of the new partition table.
+#
+# `conv=fsync` in Block B flushed dd's own buffer. The explicit sync
+# below is belt-and-braces against page-cache writes from other
+# processes. partprobe asks the kernel to re-read the partition table
+# so udev can materialise <target>p1, p2, ... nodes for downstream
+# mounts.
+
+- name: "Block C — sync filesystem buffers"
+  ansible.builtin.command: sync
+  become: true
+  changed_when: false
+
+- name: "Block C — partprobe target_device (re-read partition table)"
+  ansible.builtin.command: "partprobe {{ target_device }}"
+  become: true
+  changed_when: false
+
+- name: "Block C — give udev a moment to materialise partition nodes"
+  ansible.builtin.pause:
+    seconds: 1

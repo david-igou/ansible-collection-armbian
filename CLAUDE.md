@@ -27,6 +27,7 @@ parameters, in what order.
 |---|---|---|
 | `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; optional SCP publish gated by `armbian_netboot_publish_target` |
 | `image_extract` | netboot server (host with sudo+losetup) | One rootfs template + per-model TFTP artifacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
+| `disk_image` | a board (or any host owning the target) | One block device imaged via streaming `xz \| dd`; mount-aware refusal |
 | `rootfs_clone` | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset |
 | `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
 | `board_boot_wait` | a board | wait_for TCP/22 + SSH (no power knowledge) |
@@ -72,6 +73,7 @@ david_igou/armbian_netboot/   (this repo root)
 ├── roles/                    # All single-host, single-purpose, transport-agnostic
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
 │   ├── image_extract/             # Extract one .img.xz → template rootfs + TFTP files
+│   ├── disk_image/                # Stream an .img.xz/.img to a block device (dd-style)
 │   ├── rootfs_clone/              # Reflink-clone a template into a per-host rootfs
 │   ├── pxelinux_render/           # Render one per-board pxelinux.cfg to a local dir
 │   ├── board_boot_wait/           # Wait for TCP/22 + SSH on a board
@@ -205,7 +207,15 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   `/mnt/ssd/netboot/rootfs`.
 - `armbian_netboot_default_password` — Armbian NFS root SSH password (default `1234`);
   encrypt with vault.
-- `armbian_netboot_image_urls` — full `.img.xz` URL per board model.
+- `armbian_netboot_image_urls` — per-model `.img.xz` source consumed by
+  `image_extract` on the netboot_server (Phase 1 of `test_fleet_e2e.yml`,
+  plus `stage_netboot_assets.yml`). Typically a local NFS path on the
+  server.
+- `armbian_netboot_image_urls_http` — per-model http(s):// URL consumed
+  by the `disk_image` role on each board (Phase 3 of `test_fleet_e2e.yml`).
+  Must resolve to the SAME `.img.xz` as `armbian_netboot_image_urls` but
+  via a URL the boards can reach (the netboot_server often can't reach
+  its own macvlan-fronted HTTP address, hence the split).
 - `armbian_netboot_nfs_assets_export` — netboot-owned subtree on the HTTP host.
   Default `/mnt/ssd/public/boot-files`.
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
@@ -387,7 +397,9 @@ Minimum touched files for a new board:
    `armbian_board_name`, `armbian_support`, `dtb`, `console`, `earlycon`.
 3. `inventory/group_vars/all.yml`: add an
    `armbian_netboot_image_urls[<model>]` entry pointing at the
-   locally-published custom build.
+   locally-published custom build (consumed on the netboot_server),
+   AND an `armbian_netboot_image_urls_http[<model>]` entry with the
+   http(s):// URL the boards stream from for the Phase 3 dd-to-SD step.
 4. `playbooks/build_image.yml` `build_branches:` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
    boards need `edge` for mainline U-Boot).
@@ -443,6 +455,9 @@ filtering.
 
 - `vars/boards.yml` — authoritative per-board metadata (`armbian_netboot_board_configs`)
 - `roles/image_extract/tasks/main.yml` — single-image extraction (URL or local path) → template + TFTP files
+- `roles/disk_image/tasks/main.yml` — orchestrate validate → write → settle for the new disk-imaging role
+- `roles/disk_image/tasks/_validate.yml` — mount-aware guard + extension classify (pre-flight)
+- `roles/disk_image/tasks/_write.yml` — four-branch streaming write with pipefail propagation
 - `roles/rootfs_clone/tasks/main.yml` — reflink-clone template into per-host rootfs + identity reset
 - `roles/pxelinux_render/tasks/main.yml` — render one per-board pxelinux.cfg locally
 - `roles/pxelinux_render/templates/pxelinux_cfg.j2` — multi-label, default-driven PXE config

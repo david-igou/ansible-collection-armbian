@@ -1,0 +1,12 @@
+---
+# disk_image — stream an image to a block device.
+# See meta/argument_specs.yml for the contract.
+
+- name: "Block A — validate inputs (no side effects)"
+  ansible.builtin.import_tasks: _validate.yml
+
+- name: "Block B — stream and write"
+  ansible.builtin.import_tasks: _write.yml
+
+- name: "Block C — settle (sync + partprobe + udev settle)"
+  ansible.builtin.import_tasks: _settle.yml
