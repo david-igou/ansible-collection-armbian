@@ -1,11 +1,17 @@
 ---
 # Block B — stream and write.
 #
-# Four shell dispatch branches by (_src_is_url, _fmt). The three pipe
+# Four shell dispatch branches by (__disk_image_src_is_url, __disk_image_fmt). The three pipe
 # branches use `set -o pipefail` so a curl 404 / xz CRC error / partial
 # read is propagated to the task's rc, not swallowed by dd's zero exit.
 # The path+raw branch has no pipe so pipefail is omitted there.
 # become: true is required for dd-to-block-device.
+#
+# changed_when is derived from dd's stderr: dd writes a "<in>+<out>
+# records in / <in>+<out> records out" pair. A genuine write reports
+# non-zero counts; "0+0 records out" means dd ran but wrote nothing
+# (no real change). This is a strict improvement over `changed_when:
+# true`, which fired even on a degenerate zero-byte source.
 
 - name: "Block B — path + raw .img → dd direct"
   ansible.builtin.shell:
@@ -15,9 +21,12 @@
     executable: /bin/bash
   become: true
   when:
-    - _src_is_path
-    - _fmt == 'raw'
-  changed_when: true
+    - __disk_image_src_is_path
+    - __disk_image_fmt == 'raw'
+  register: __disk_image_dd
+  changed_when: >-
+    'records out' in (__disk_image_dd.stderr | default(''))
+    and '0+0 records out' not in (__disk_image_dd.stderr | default(''))
 
 - name: "Block B — path + .img.xz → xz -dc | dd"
   ansible.builtin.shell:
@@ -29,9 +38,12 @@
     executable: /bin/bash
   become: true
   when:
-    - _src_is_path
-    - _fmt == 'xz'
-  changed_when: true
+    - __disk_image_src_is_path
+    - __disk_image_fmt == 'xz'
+  register: __disk_image_xz_dd
+  changed_when: >-
+    'records out' in (__disk_image_xz_dd.stderr | default(''))
+    and '0+0 records out' not in (__disk_image_xz_dd.stderr | default(''))
 
 - name: "Block B — URL + raw .img → curl | dd"
   ansible.builtin.shell:
@@ -43,9 +55,12 @@
     executable: /bin/bash
   become: true
   when:
-    - _src_is_url
-    - _fmt == 'raw'
-  changed_when: true
+    - __disk_image_src_is_url
+    - __disk_image_fmt == 'raw'
+  register: __disk_image_curl_dd
+  changed_when: >-
+    'records out' in (__disk_image_curl_dd.stderr | default(''))
+    and '0+0 records out' not in (__disk_image_curl_dd.stderr | default(''))
 
 - name: "Block B — URL + .img.xz → curl | xz -dc | dd"
   ansible.builtin.shell:
@@ -58,6 +73,9 @@
     executable: /bin/bash
   become: true
   when:
-    - _src_is_url
-    - _fmt == 'xz'
-  changed_when: true
+    - __disk_image_src_is_url
+    - __disk_image_fmt == 'xz'
+  register: __disk_image_curl_xz_dd
+  changed_when: >-
+    'records out' in (__disk_image_curl_xz_dd.stderr | default(''))
+    and '0+0 records out' not in (__disk_image_curl_xz_dd.stderr | default(''))

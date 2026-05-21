@@ -5,18 +5,18 @@
 
 - name: "Populate: define per-device mount root"
   ansible.builtin.set_fact:
-    _dp_mount_root: "{{ mount_dir_base }}/{{ _dp_device_basename }}"
+    __disk_provision_mount_root: "{{ mount_dir_base }}/{{ __disk_provision_device_basename }}"
 
 - name: "Populate: ensure mount root exists"
   ansible.builtin.file:
-    path: "{{ _dp_mount_root }}"
+    path: "{{ __disk_provision_mount_root }}"
     state: directory
     mode: "0755"
   become: true
 
 - name: "Populate: build ordered mount list (by path depth)"
   ansible.builtin.set_fact:
-    _dp_mount_order: >-
+    __disk_provision_mount_order: >-
       {{ disk_binding.layout
          | selectattr('mount', 'defined')
          | sort(attribute='mount')
@@ -26,10 +26,10 @@
   block:
     - name: "Populate: ensure each mount point exists under mount_root"
       ansible.builtin.file:
-        path: "{{ _dp_mount_root }}{{ p.mount }}"
+        path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
         state: directory
         mode: "0755"
-      loop: "{{ _dp_mount_order }}"
+      loop: "{{ __disk_provision_mount_order }}"
       loop_control:
         loop_var: p
         label: "{{ p.id }}"
@@ -37,20 +37,20 @@
 
     - name: "Populate: mount each partition by label"
       ansible.posix.mount:
-        path: "{{ _dp_mount_root }}{{ p.mount }}"
+        path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
         src: "LABEL={{ p.label }}"
         fstype: "{{ p.format }}"
         state: ephemeral
-      loop: "{{ _dp_mount_order }}"
+      loop: "{{ __disk_provision_mount_order }}"
       loop_control:
         loop_var: p
         label: "{{ p.id }}"
-      when: p.id not in _dp_preserve_ids
+      when: p.id not in __disk_provision_preserve_ids
       become: true
 
     - name: "Populate: write rsync exclude file"
       ansible.builtin.copy:
-        dest: "{{ _dp_mount_root }}.excludes"
+        dest: "{{ __disk_provision_mount_root }}.excludes"
         content: |
           /dev/*
           /proc/*
@@ -60,23 +60,37 @@
           /mnt/*
           /media/*
           /var/log/journal
-          {% for p in _dp_mount_order %}{% if p.id in _dp_preserve_ids %}{{ p.mount }}/*
+          {% for p in __disk_provision_mount_order %}{% if p.id in __disk_provision_preserve_ids %}{{ p.mount }}/*
           {% endif %}{% endfor %}
         mode: "0644"
       become: true
 
     - name: "Populate: rsync source into mounted root"
+      # ansible.posix.synchronize has known --rsh splitting bugs in this
+      # collection (see playbooks/build_image.yml:525), so we keep
+      # command: rsync but use argv form (declarative tokenisation) and
+      # --itemize-changes so changed_when reflects whether any file
+      # actually transferred.
       ansible.builtin.command:
-        cmd: >-
-          rsync -aAX --numeric-ids --one-file-system --delete
-          --exclude-from={{ _dp_mount_root }}.excludes
-          {{ source }}/ {{ _dp_mount_root }}/
-      changed_when: true
+        argv:
+          - rsync
+          - --archive
+          - --xattrs
+          - --acls
+          - --numeric-ids
+          - --one-file-system
+          - --delete
+          - --itemize-changes
+          - "--exclude-from={{ __disk_provision_mount_root }}.excludes"
+          - "{{ source }}/"
+          - "{{ __disk_provision_mount_root }}/"
+      register: __disk_provision_rsync
+      changed_when: (__disk_provision_rsync.stdout_lines | length) > 0
       become: true
 
     - name: "Populate: recreate virtual mount-point directories on target"
       ansible.builtin.file:
-        path: "{{ _dp_mount_root }}/{{ item }}"
+        path: "{{ __disk_provision_mount_root }}/{{ item }}"
         state: directory
         mode: "{{ '1777' if item == 'tmp' else '0755' }}"
       loop:
@@ -92,23 +106,23 @@
     - name: "Populate: write generated /etc/fstab on target root"
       ansible.builtin.template:
         src: fstab.j2
-        dest: "{{ _dp_mount_root }}/etc/fstab"
+        dest: "{{ __disk_provision_mount_root }}/etc/fstab"
         mode: "0644"
       become: true
 
     - name: "Populate: rewrite /boot/extlinux/extlinux.conf root= if present"
       ansible.builtin.replace:
-        path: "{{ _dp_mount_root }}/boot/extlinux/extlinux.conf"
+        path: "{{ __disk_provision_mount_root }}/boot/extlinux/extlinux.conf"
         regexp: 'root=\S+'
-        replace: "root=LABEL={{ _dp_root_label }}"
+        replace: "root=LABEL={{ __disk_provision_root_label }}"
       vars:
-        _dp_root_label: "{{ disk_binding.layout | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
+        __disk_provision_root_label: "{{ disk_binding.layout | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
       failed_when: false  # extlinux.conf may not exist; not on boot path under passthrough model
       become: true
 
     - name: "Populate: write INSTALLED=true marker on target"
       ansible.builtin.lineinfile:
-        path: "{{ _dp_mount_root }}/etc/armbian-image-release"
+        path: "{{ __disk_provision_mount_root }}/etc/armbian-image-release"
         regexp: "^INSTALLED="
         line: "INSTALLED=true"
         create: false
@@ -118,7 +132,7 @@
 
     - name: "Populate: reset machine-id files if requested"
       ansible.builtin.copy:
-        dest: "{{ _dp_mount_root }}/{{ item }}"
+        dest: "{{ __disk_provision_mount_root }}/{{ item }}"
         content: ""
         mode: "0444"
         force: true
@@ -136,18 +150,18 @@
   always:
     - name: "Populate: unmount in reverse order"
       ansible.posix.mount:
-        path: "{{ _dp_mount_root }}{{ p.mount }}"
+        path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
         state: unmounted
-      loop: "{{ _dp_mount_order | reverse | list }}"
+      loop: "{{ __disk_provision_mount_order | reverse | list }}"
       loop_control:
         loop_var: p
         label: "{{ p.id }}"
-      when: p.id not in _dp_preserve_ids
+      when: p.id not in __disk_provision_preserve_ids
       failed_when: false
       become: true
 
     - name: "Populate: remove excludes file"
       ansible.builtin.file:
-        path: "{{ _dp_mount_root }}.excludes"
+        path: "{{ __disk_provision_mount_root }}.excludes"
         state: absent
       become: true

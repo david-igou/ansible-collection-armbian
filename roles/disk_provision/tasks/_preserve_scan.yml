@@ -7,7 +7,7 @@
 
 - name: "Preserve scan: list existing partitions on device"
   ansible.builtin.command: "lsblk -no NAME,LABEL --pairs {{ disk_binding.device }}"
-  register: _dp_lsblk
+  register: __disk_provision_lsblk
   changed_when: false
   become: true
 
@@ -18,8 +18,8 @@
     # non-empty match. The `first` filter does NOT accept a `default`
     # kwarg — that was the original plan's bug, caught by the first
     # hardware run that exercised this scan.
-    _dp_existing_labels: >-
-      {{ _dp_lsblk.stdout_lines
+    __disk_provision_existing_labels: >-
+      {{ __disk_provision_lsblk.stdout_lines
          | map('regex_findall', 'NAME="([^"]+)"\s+LABEL="([^"]*)"')
          | reject('equalto', [])
          | map('first')
@@ -27,11 +27,11 @@
 
 - name: "Preserve scan: build skip set of partition ids to preserve"
   ansible.builtin.set_fact:
-    _dp_preserve_ids: >-
+    __disk_provision_preserve_ids: >-
       {{ disk_binding.layout
          | selectattr('preserve_on_reprovision', 'defined')
          | selectattr('preserve_on_reprovision')
-         | selectattr('label', 'in', _dp_existing_labels | map('last') | list)
+         | selectattr('label', 'in', __disk_provision_existing_labels | map('last') | list)
          | map(attribute='id')
          | list }}
 
@@ -39,10 +39,10 @@
   ansible.builtin.debug:
     msg: >-
       Preserve scan: existing labels on {{ disk_binding.device }}:
-      {{ _dp_existing_labels }}; partitions to preserve (skip wipe):
-      {{ _dp_preserve_ids }}; force={{ disk_binding.force | default(false) }}
+      {{ __disk_provision_existing_labels }}; partitions to preserve (skip wipe):
+      {{ __disk_provision_preserve_ids }}; force={{ disk_binding.force | default(false) }}
 
 - name: "Preserve scan: when force=true, clear preserve list (operator escape hatch)"
   ansible.builtin.set_fact:
-    _dp_preserve_ids: []
+    __disk_provision_preserve_ids: []
   when: disk_binding.force | default(false) | bool

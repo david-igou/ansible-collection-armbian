@@ -30,11 +30,16 @@
   when: not _target_stat.stat.exists
 
 - name: Reflink-clone template into target_dir
-  ansible.builtin.shell: |
-    set -o pipefail
-    cp -a --reflink=auto "{{ template_dir }}/." "{{ target_dir }}/"
-  args:
-    executable: /bin/bash
+  # `cp -a --reflink=auto` is a zero-cost CoW snapshot on XFS/btrfs/ZFS
+  # and a full copy on ext4. argv form is COP-preferred over shell here
+  # because no shell features (pipes, globs, redirects) are needed.
+  ansible.builtin.command:
+    argv:
+      - cp
+      - -a
+      - --reflink=auto
+      - "{{ template_dir }}/."
+      - "{{ target_dir }}/"
   when: not _target_stat.stat.exists
   changed_when: true
 

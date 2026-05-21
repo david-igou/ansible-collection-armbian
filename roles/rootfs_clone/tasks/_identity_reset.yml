@@ -37,12 +37,20 @@
 # even with an empty machine-id at boot start; sshd-keygen is skipped;
 # no host keys ever exist; sshd accepts TCP but resets every connection
 # during kex_exchange_identification.
+- name: Find stale SSH host keys before regeneration
+  ansible.builtin.find:
+    paths: "{{ target_dir }}/etc/ssh"
+    patterns: "ssh_host_*"
+    file_type: any
+  register: __rootfs_clone_stale_hostkeys
+
 - name: Remove stale SSH host keys before regeneration
-  ansible.builtin.shell: |
-    rm -f "{{ target_dir }}"/etc/ssh/ssh_host_*
-  args:
-    executable: /bin/bash
-  changed_when: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ __rootfs_clone_stale_hostkeys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
 
 - name: Generate per-host SSH host keys
   ansible.builtin.command: >-

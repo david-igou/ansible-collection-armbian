@@ -12,13 +12,13 @@
 - name: "Block A — stat target_device"
   ansible.builtin.stat:
     path: "{{ target_device }}"
-  register: _target_stat
+  register: __disk_image_target_stat
 
 - name: "Block A — assert target_device is a block device"
   ansible.builtin.assert:
     that:
-      - _target_stat.stat.exists
-      - _target_stat.stat.isblk | default(false)
+      - __disk_image_target_stat.stat.exists
+      - __disk_image_target_stat.stat.isblk | default(false)
     fail_msg: "not a block device: {{ target_device }}"
 
 - name: "Block A — check /sys/class/block/<basename>/partition (whole-disk discriminator)"
@@ -67,18 +67,18 @@
 
 - name: "Block A — classify image_source (URL vs path)"
   ansible.builtin.set_fact:
-    _src_is_url: "{{ image_source is match('^https?://') }}"
-    _src_is_path: "{{ image_source is match('^/') }}"
+    __disk_image_src_is_url: "{{ image_source is match('^https?://') }}"
+    __disk_image_src_is_path: "{{ image_source is match('^/') }}"
 
 - name: "Block A — fail when image_source is neither URL nor abs path"
   ansible.builtin.fail:
     msg: "image_source must be http(s):// URL or absolute path, got: {{ image_source }}"
   when:
-    - not _src_is_url
-    - not _src_is_path
+    - not __disk_image_src_is_url
+    - not __disk_image_src_is_path
 
 - name: "Block A — for path source, stat it and assert regular file"
-  when: _src_is_path
+  when: __disk_image_src_is_path
   block:
     - name: "Block A — stat image_source path"
       ansible.builtin.stat:
@@ -99,7 +99,7 @@
     # "literal-backslash + any-char + img + literal-backslash + any-char
     # + xz" which never matches a real path/URL. Verified empirically
     # against actual disk_image invocations.
-    _fmt: >-
+    __disk_image_fmt: >-
       {{ 'xz'  if image_source | regex_search('\.img\.xz$')
          else 'raw' if image_source | regex_search('\.img$')
          else 'unknown' }}
@@ -107,4 +107,4 @@
 - name: "Block A — fail on unsupported format"
   ansible.builtin.fail:
     msg: "unsupported format; only .img and .img.xz: {{ image_source }}"
-  when: _fmt == 'unknown'
+  when: __disk_image_fmt == 'unknown'

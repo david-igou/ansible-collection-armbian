@@ -9,7 +9,7 @@ render_only: false
 
 # Default mount_opts per fstype, used by the fstab template when a
 # layout entry does not specify mount_opts explicitly.
-_disk_provision_default_mount_opts:
+__disk_provision_default_mount_opts:
   ext4: "defaults,noatime"
   vfat: "defaults,noatime"
   xfs: "defaults,noatime"

@@ -1,0 +1,38 @@
+---
+# Molecule scenario for pxelinux_render.
+#
+# Unprivileged, runs the role against a fixture board on the local
+# controller (no containers, no privilege required). Asserts the
+# rendered pxelinux.cfg matches the golden file under files/.
+#
+# Invoke: cd roles/pxelinux_render && molecule test
+
+dependency:
+  name: galaxy
+driver:
+  name: default
+platforms:
+  - name: localhost
+    groups:
+      - boards
+provisioner:
+  name: ansible
+  env:
+    # Make the role-under-test resolvable as `pxelinux_render` (not
+    # the collection FQCN, which would require building+installing
+    # the collection just to run molecule).
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - verify
+    - cleanup

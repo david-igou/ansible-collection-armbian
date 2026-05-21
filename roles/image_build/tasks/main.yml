@@ -29,8 +29,8 @@
 
 - name: Invoke armbian/build (skipped when manifest matches)
   ansible.builtin.include_tasks: invoke_build.yml
-  when: not (_skip_build | bool)
+  when: not (__image_build_skip_build | bool)
 
 - name: Write manifest
   ansible.builtin.include_tasks: write_manifest.yml
-  when: not (_skip_build | bool)
+  when: not (__image_build_skip_build | bool)

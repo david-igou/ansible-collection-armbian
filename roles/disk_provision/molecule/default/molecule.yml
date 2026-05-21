@@ -1,0 +1,42 @@
+---
+# Molecule scenario for disk_provision (render-only mode).
+#
+# Exercises the role's `render_only: true` path against a fixture
+# disk_binding: validates the layout and emits the .repart.d/*.conf
+# files into /run/disk_provision/, then verify.yml asserts the
+# generated configs are well-formed.
+#
+# Requires passwordless sudo on the host that runs molecule (the
+# role's render_repart sub-task uses become:true to write under
+# /run). Privileged containers (--privileged) work. The role's
+# render_only flag short-circuits before any disk-mutating step, so
+# no loop device or block device is touched.
+#
+# Invoke: cd roles/disk_provision && molecule test
+
+dependency:
+  name: galaxy
+driver:
+  name: default
+platforms:
+  - name: localhost
+    groups:
+      - all
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - verify
+    - cleanup

@@ -5,7 +5,7 @@
 # <file system>	<mount point>	<type>	<options>	<dump>	<pass>
 tmpfs	/tmp	tmpfs	defaults,nosuid	0	0
 {% for p in disk_binding.layout | selectattr('mount', 'defined') | sort(attribute='mount') %}
-{% set opts = p.mount_opts | default(_disk_provision_default_mount_opts[p.format]) %}
+{% set opts = p.mount_opts | default(__disk_provision_default_mount_opts[p.format]) %}
 {% set passno = '1' if p.mount == '/' else '2' %}
 LABEL={{ p.label }}	{{ p.mount }}	{{ p.format }}	{{ opts }}	0	{{ passno }}
 {% endfor %}

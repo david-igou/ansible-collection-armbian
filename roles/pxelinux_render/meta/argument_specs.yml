@@ -12,59 +12,67 @@ argument_specs:
         Typically reached via `delegate_to: localhost` inside a
         `hosts: boards` play, so per-board hostvars are in scope and
         one invocation per board renders one file.
+      - >-
+        v4.0.0 breaking change: every external input is now
+        `pxelinux_render_*`-prefixed (was unprefixed in v3.x). See the
+        role README for the full rename table.
 
     options:
-      board_mac:
+      pxelinux_render_board_mac:
         type: str
         required: true
         description: "Board MAC address; used to compute the 01-<mac> filename."
-      boot_mode:
+      pxelinux_render_boot_mode:
         type: str
         required: true
         description: >-
           Which label the rendered pxelinux.cfg's `default` directive
           points at. Built-in choices: nfs, sd, local, local_kernel.
-          May also be any key in extra_modes. Validated at task level
-          against the union {nfs, sd, local, local_kernel}
-          ∪ keys(extra_modes). `local_kernel` selects a localboot-only
-          label whose body is `localboot 0`; the U-Boot environment's
-          `localcmd` decides what runs (typically a `bootflow scan -b`
-          that hands off to the extlinux bootmeth on a local disk).
-      extra_modes:
+          May also be any key in pxelinux_render_extra_modes. Validated
+          at task level against the union {nfs, sd, local, local_kernel}
+          ∪ keys(pxelinux_render_extra_modes). `local_kernel` selects a
+          localboot-only label whose body is `localboot 0`; the U-Boot
+          environment's `localcmd` decides what runs (typically a
+          `bootflow scan -b` that hands off to the extlinux bootmeth on
+          a local disk).
+      pxelinux_render_extra_modes:
         type: dict
         default: {}
         description: >-
           User-defined named boot modes. Each entry adds a label to the
           rendered pxelinux.cfg with the supplied root= and rootfstype.
-          Keys become label names and valid boot_mode values.
+          Keys become label names and valid pxelinux_render_boot_mode
+          values.
       board_console:
         type: str
         required: true
         description: "console= kernel argument value (e.g. ttyS2,1500000)."
-      model_name:
+      pxelinux_render_model_name:
         type: str
         required: true
         description: "Board model identifier — used to compose default TFTP paths."
-      nfs_server_ip:
+      pxelinux_render_nfs_server_ip:
         type: str
         required: true
         description: "Server IP written into nfsroot=."
-      nfs_root_path:
+      pxelinux_render_nfs_root_path:
         type: path
         required: true
-        description: "NFS export root path (per-host directory is composed as <nfs_root_path>/<hostname>)."
-      hostname:
+        description: >-
+          NFS export root path. Per-host directory is composed as
+          <pxelinux_render_nfs_root_path>/<pxelinux_render_hostname>.
+      pxelinux_render_hostname:
         type: str
         required: true
         description: "Inventory hostname — used as both the per-host NFS subdir and the menu-label suffix."
-      output_dir:
+      pxelinux_render_output_dir:
         type: path
         required: true
         description: "Local directory where 01-<mac> is written."
-      sd_root:
+      pxelinux_render_sd_root:
         type: str
         default: "LABEL=armbi_root"
-      local_root:
+      pxelinux_render_local_root:
         type: str
         default: "LABEL=armbi_root_local"
         description: >-
@@ -73,19 +81,19 @@ argument_specs:
           armbi_root_local). Override per-host when the board has
           multiple local disks carrying that label or when you want
           to refer to the partition by UUID / PARTUUID / PARTLABEL.
-      pxe_verbose:
+      pxelinux_render_pxe_verbose:
         type: bool
         default: false
-      earlycon:
+      pxelinux_render_earlycon:
         type: str
         default: ""
-        description: "Required when pxe_verbose=true. Format <driver>,<bus>,<mmio_addr>."
-      tftp_kernel:
+        description: "Required when pxelinux_render_pxe_verbose=true. Format <driver>,<bus>,<mmio_addr>."
+      pxelinux_render_tftp_kernel:
         type: str
-        default: "armbian/{{ model_name }}/vmlinuz"
-      tftp_initrd:
+        default: "armbian/{{ pxelinux_render_model_name }}/vmlinuz"
+      pxelinux_render_tftp_initrd:
         type: str
-        default: "armbian/{{ model_name }}/initrd.img"
-      tftp_dtb:
+        default: "armbian/{{ pxelinux_render_model_name }}/initrd.img"
+      pxelinux_render_tftp_dtb:
         type: str
-        default: "armbian/{{ model_name }}/board.dtb"
+        default: "armbian/{{ pxelinux_render_model_name }}/board.dtb"
