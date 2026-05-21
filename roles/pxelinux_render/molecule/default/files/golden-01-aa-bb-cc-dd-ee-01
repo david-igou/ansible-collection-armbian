@@ -1,0 +1,34 @@
+# Ansible managed: PLACEHOLDER (verify.yml strips this line before comparison)
+# pxelinux.cfg for test-board-01 (orange-pi-5-pro)
+# MAC: aa:bb:cc:dd:ee:01
+# Active mode: nfs
+
+default nfs
+timeout 50
+prompt  0
+
+label nfs
+  menu label Armbian NFS root (test-board-01)
+  kernel armbian/orange-pi-5-pro/vmlinuz
+  initrd armbian/orange-pi-5-pro/initrd.img
+  fdt    armbian/orange-pi-5-pro/board.dtb
+  append root=/dev/nfs nfsroot=192.0.2.10:/mnt/ssd/netboot/rootfs/test-board-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000 rootwait rw
+
+label sd
+  menu label Armbian on SD (test-board-01)
+  kernel armbian/orange-pi-5-pro/vmlinuz
+  initrd armbian/orange-pi-5-pro/initrd.img
+  fdt    armbian/orange-pi-5-pro/board.dtb
+  append root=LABEL=armbi_root rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local
+  menu label Armbian on local disk (test-board-01)
+  kernel armbian/orange-pi-5-pro/vmlinuz
+  initrd armbian/orange-pi-5-pro/initrd.img
+  fdt    armbian/orange-pi-5-pro/board.dtb
+  append root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local_kernel
+  menu label Boot local kernel from NVMe (test-board-01)
+  localboot 0
+

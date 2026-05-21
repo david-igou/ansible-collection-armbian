@@ -9,12 +9,12 @@
 
 - name: Compute patch_hash from userpatches
   ansible.builtin.set_fact:
-    _patch_hash: "sha256:{{ armbian_build_userpatches | to_json(sort_keys=true) | hash('sha256') }}"
+    __image_build_patch_hash: "sha256:{{ armbian_build_userpatches | to_json(sort_keys=true) | hash('sha256') }}"
 
 - name: Assemble manifest decision-fields fact
   ansible.builtin.set_fact:
-    _manifest_inputs:
-      patch_hash: "{{ _patch_hash }}"
+    __image_build_manifest_inputs:
+      patch_hash: "{{ __image_build_patch_hash }}"
       armbian_build_ref: "{{ armbian_build_ref }}"
       board: "{{ armbian_build_board }}"
       branch: "{{ armbian_build_branch }}"

@@ -1,0 +1,37 @@
+---
+- name: Verify rendered pxelinux.cfg matches the golden file
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Read the rendered file
+      ansible.builtin.slurp:
+        src: /tmp/molecule_pxelinux_render_out/01-aa-bb-cc-dd-ee-01
+      register: __rendered
+
+    - name: Read the golden file
+      ansible.builtin.slurp:
+        src: "{{ playbook_dir }}/files/golden-01-aa-bb-cc-dd-ee-01"
+      register: __golden
+
+    - name: Decode + strip ansible_managed timestamp lines (vary per run)
+      ansible.builtin.set_fact:
+        __rendered_lines: >-
+          {{ (__rendered.content | b64decode).splitlines()
+             | reject('match', '^# Ansible managed')
+             | list }}
+        __golden_lines: >-
+          {{ (__golden.content | b64decode).splitlines()
+             | reject('match', '^# Ansible managed')
+             | list }}
+
+    - name: Assert rendered content matches the golden file
+      ansible.builtin.assert:
+        that:
+          - __rendered_lines == __golden_lines
+        fail_msg: |
+          Rendered pxelinux.cfg drift from golden file.
+          Rendered:
+          {{ __rendered_lines | join('\n') }}
+
+          Expected:
+          {{ __golden_lines | join('\n') }}

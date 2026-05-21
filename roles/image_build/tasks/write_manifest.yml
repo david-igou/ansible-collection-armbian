@@ -11,11 +11,11 @@
 - name: Assemble final manifest
   ansible.builtin.set_fact:
     _manifest:
-      patch_hash: "{{ _manifest_inputs.patch_hash }}"
-      armbian_build_ref: "{{ _manifest_inputs.armbian_build_ref }}"
-      board: "{{ _manifest_inputs.board }}"
-      branch: "{{ _manifest_inputs.branch }}"
-      release: "{{ _manifest_inputs.release }}"
+      patch_hash: "{{ __image_build_manifest_inputs.patch_hash }}"
+      armbian_build_ref: "{{ __image_build_manifest_inputs.armbian_build_ref }}"
+      board: "{{ __image_build_manifest_inputs.board }}"
+      branch: "{{ __image_build_manifest_inputs.branch }}"
+      release: "{{ __image_build_manifest_inputs.release }}"
       image_filename: "{{ _image_filename }}"
       built_at: "{{ _built_at }}"
 

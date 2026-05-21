@@ -28,22 +28,22 @@
 
 - name: "Apply repart: assert systemd-repart binary is available"
   ansible.builtin.command: "systemd-repart --version"
-  register: _dp_repart_version
+  register: __disk_provision_repart_version
   changed_when: false
-  failed_when: _dp_repart_version.rc != 0
+  failed_when: __disk_provision_repart_version.rc != 0
 
 - name: "Apply repart: build filtered definitions dir (excludes preserved ids)"
   ansible.builtin.file:
-    path: "{{ _dp_repart_dir }}.filtered"
+    path: "{{ __disk_provision_repart_dir }}.filtered"
     state: directory
     mode: "0755"
   become: true
-  when: _dp_preserve_ids | length > 0
+  when: __disk_provision_preserve_ids | length > 0
 
 - name: "Apply repart: symlink non-preserved configs into filtered dir"
   ansible.builtin.file:
-    src: "{{ _dp_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
-    dest: "{{ _dp_repart_dir }}.filtered/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
+    src: "{{ __disk_provision_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
+    dest: "{{ __disk_provision_repart_dir }}.filtered/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
     state: link
   loop: "{{ disk_binding.layout }}"
   loop_control:
@@ -51,16 +51,16 @@
     label: "{{ partition.id }}"
     index_var: idx
   when:
-    - _dp_preserve_ids | length > 0
-    - partition.id not in _dp_preserve_ids
+    - __disk_provision_preserve_ids | length > 0
+    - partition.id not in __disk_provision_preserve_ids
   become: true
 
 - name: "Apply repart: determine effective definitions dir and empty mode"
   ansible.builtin.set_fact:
-    _dp_repart_defs: >-
-      {{ _dp_repart_dir + '.filtered' if _dp_preserve_ids | length > 0 else _dp_repart_dir }}
-    _dp_repart_empty: >-
-      {{ 'refuse' if _dp_preserve_ids | length > 0 else 'force' }}
+    __disk_provision_repart_defs: >-
+      {{ __disk_provision_repart_dir + '.filtered' if __disk_provision_preserve_ids | length > 0 else __disk_provision_repart_dir }}
+    __disk_provision_repart_empty: >-
+      {{ 'refuse' if __disk_provision_preserve_ids | length > 0 else 'force' }}
 
 # Fast-wipe path: pre-discard the whole device directly using the
 # storage's native chunk size (NVMe = 2 TiB chunks; one ioctl wipes
@@ -76,22 +76,23 @@
     cmd: "blkdiscard {{ disk_binding.device }}"
   become: true
   when:
-    - _dp_preserve_ids | length == 0     # only safe when nothing to preserve
+    - __disk_provision_preserve_ids | length == 0     # only safe when nothing to preserve
     - (disk_binding.fast_wipe | default(true)) | bool
-  register: _dp_blkdiscard
+  register: __disk_provision_blkdiscard
   changed_when: true
   failed_when:
-    - _dp_blkdiscard.rc != 0
-    - _dp_blkdiscard.rc != 2    # rc=2 = device doesn't support discard; not fatal
+    - __disk_provision_blkdiscard.rc != 0
+    - __disk_provision_blkdiscard.rc != 2    # rc=2 = device doesn't support discard; not fatal
 
 - name: "Apply repart: run systemd-repart"
   ansible.builtin.command:
     cmd: >-
       systemd-repart
-      --definitions={{ _dp_repart_defs }}
-      --empty={{ _dp_repart_empty }}
+      --definitions={{ __disk_provision_repart_defs }}
+      --empty={{ __disk_provision_repart_empty }}
       --dry-run=no
-      --discard={{ 'no' if _dp_fast_wipe else 'yes' }}
+      --json=pretty
+      --discard={{ 'no' if __disk_provision_fast_wipe else 'yes' }}
       {{ disk_binding.device }}
   environment:
     # SYSTEMD_REPART_MKFS_OPTIONS_EXT4 is appended AFTER the device
@@ -101,16 +102,19 @@
     # call comes from systemd-repart itself, not from mkfs. So we
     # turn --discard=no above and leave the env var as a belt-and-
     # suspenders override for the mkfs side.
-    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-E nodiscard' if _dp_fast_wipe else '' }}"
+    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-E nodiscard' if __disk_provision_fast_wipe else '' }}"
   vars:
-    _dp_fast_wipe: "{{ (_dp_preserve_ids | length == 0) and (disk_binding.fast_wipe | default(true)) | bool }}"
+    __disk_provision_fast_wipe: "{{ (__disk_provision_preserve_ids | length == 0) and (disk_binding.fast_wipe | default(true)) | bool }}"
   become: true
-  register: _dp_repart_run
-  changed_when: true
+  register: __disk_provision_repart_run
+  # systemd-repart --json=pretty emits a JSON array listing every
+  # partition it touched; an empty array means the live layout
+  # already matched the definitions and nothing was done.
+  changed_when: (__disk_provision_repart_run.stdout | from_json) | length > 0
 
 - name: "Apply repart: report what repart did"
   ansible.builtin.debug:
-    msg: "{{ _dp_repart_run.stdout_lines | join('\n') }}"
+    msg: "{{ __disk_provision_repart_run.stdout_lines | join('\n') }}"
 
 - name: "Apply repart: force partition-table re-read"
   ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"
@@ -120,10 +124,10 @@
 
 - name: "Apply repart: wait for all expected partitions to appear by label"
   ansible.builtin.command: "blkid -L {{ partition.label }}"
-  register: _dp_blkid
+  register: __disk_provision_blkid
   retries: 5
   delay: 1
-  until: _dp_blkid.rc == 0
+  until: __disk_provision_blkid.rc == 0
   loop: "{{ disk_binding.layout }}"
   loop_control:
     loop_var: partition

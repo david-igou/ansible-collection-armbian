@@ -1,11 +1,42 @@
 ---
+# Cleanup runs in the `always` block, so umount + losetup -d MUST NOT
+# crash an otherwise-successful extraction. But silently swallowing
+# the failure was hiding loop-device leaks; surface them as warnings
+# instead so the operator at least sees the leak in playbook output.
+
 - name: Unmount image
-  ansible.builtin.shell: umount "{{ image_mount_dir }}"
-  changed_when: true
+  ansible.builtin.command:
+    cmd: "umount {{ image_mount_dir }}"
+  register: __image_extract_umount
+  changed_when: __image_extract_umount.rc == 0
   failed_when: false
 
+- name: Warn when umount failed (loop teardown may leak)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: umount {{ image_mount_dir }} returned rc={{ __image_extract_umount.rc }}.
+      stderr: {{ __image_extract_umount.stderr | default('') | trim }}.
+      The loop device may not detach cleanly below. Inspect `losetup -a`
+      after the run.
+  when: __image_extract_umount.rc != 0
+
 - name: Detach loop device
-  ansible.builtin.shell: losetup -d "{{ _loop_dev.stdout }}"
-  when: _loop_dev is defined and _loop_dev.stdout is defined
-  changed_when: true
+  ansible.builtin.command:
+    cmd: "losetup -d {{ __image_extract_loop_dev.stdout }}"
+  when: __image_extract_loop_dev is defined and __image_extract_loop_dev.stdout is defined
+  register: __image_extract_losetup
+  changed_when: __image_extract_losetup.rc == 0
   failed_when: false
+
+- name: Warn when losetup -d failed (loop device leaked)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: losetup -d {{ __image_extract_loop_dev.stdout }} returned
+      rc={{ __image_extract_losetup.rc }}. stderr:
+      {{ __image_extract_losetup.stderr | default('') | trim }}.
+      The loop device is still attached; subsequent runs may fail
+      or the kernel may run out of /dev/loop* slots. Run
+      `losetup -d {{ __image_extract_loop_dev.stdout }}` manually to recover.
+  when:
+    - __image_extract_loop_dev is defined and __image_extract_loop_dev.stdout is defined
+    - __image_extract_losetup.rc | default(0) != 0

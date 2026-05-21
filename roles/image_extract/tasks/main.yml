@@ -4,8 +4,8 @@
 
 - name: Compute per-invocation paths
   ansible.builtin.set_fact:
-    _img_cache: "{{ image_cache_dir }}/{{ model_name }}.img.xz"
-    _img_raw: "{{ image_cache_dir }}/{{ model_name }}.img"
+    __image_extract_img_cache: "{{ image_cache_dir }}/{{ model_name }}.img.xz"
+    __image_extract_img_raw: "{{ image_cache_dir }}/{{ model_name }}.img"
 
 - name: Force-refresh — remove stale state when requested
   ansible.builtin.file:
@@ -14,8 +14,8 @@
   loop:
     - "{{ template_dir }}"
     - "{{ tftp_dir }}"
-    - "{{ _img_cache }}"
-    - "{{ _img_raw }}"
+    - "{{ __image_extract_img_cache }}"
+    - "{{ __image_extract_img_raw }}"
   when: force_refresh | bool
 
 - name: Ensure working directories exist
@@ -29,21 +29,17 @@
     - "{{ template_dir }}"
     - "{{ tftp_dir }}"
 
-- name: Check whether template + TFTP artifacts are already populated
+- name: Probe sentinel file written at end of a previous successful run
   ansible.builtin.stat:
-    path: "{{ item }}"
-  register: _populated_stats
-  loop:
-    - "{{ template_dir }}/bin/bash"
-    - "{{ tftp_dir }}/vmlinuz"
+    path: "{{ template_dir }}/.armbian_extract_complete"
+  register: __image_extract_sentinel
 
-- name: Skip extraction when both template and TFTP are populated
+- name: Skip extraction when the sentinel exists
   ansible.builtin.set_fact:
-    _already_extracted: >-
-      {{ _populated_stats.results | map(attribute='stat.exists') | min }}
+    __image_extract_already_extracted: "{{ __image_extract_sentinel.stat.exists }}"
 
 - name: Extract image when needed
-  when: not _already_extracted
+  when: not __image_extract_already_extracted
   block:
     - name: Acquire .img.xz (download or copy)
       ansible.builtin.include_tasks: _download_or_copy.yml
@@ -63,4 +59,11 @@
     path: "{{ template_dir }}/etc/fstab"
     regexp: "^/dev/"
     state: absent
-  when: not _already_extracted
+  when: not __image_extract_already_extracted
+
+- name: Write sentinel file marking a complete extraction
+  ansible.builtin.copy:
+    dest: "{{ template_dir }}/.armbian_extract_complete"
+    content: "model={{ model_name }}\n"
+    mode: "0644"
+  when: not __image_extract_already_extracted

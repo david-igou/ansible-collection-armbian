@@ -1,6 +1,6 @@
 ---
 # Read any existing per-board manifest and decide whether a rebuild is
-# needed. _skip_build is true only when ALL five decision fields match.
+# needed. __image_build_skip_build is true only when ALL five decision fields match.
 # Anything else (file missing, parse error, partial match,
 # armbian_build_force) → rebuild.
 
@@ -45,17 +45,17 @@
 
 - name: Decide whether to skip the build
   ansible.builtin.set_fact:
-    _skip_build: >-
+    __image_build_skip_build: >-
       {{ (not (armbian_build_force | bool))
-         and (_existing_manifest.patch_hash | default('') == _manifest_inputs.patch_hash)
-         and (_existing_manifest.armbian_build_ref | default('') == _manifest_inputs.armbian_build_ref)
-         and (_existing_manifest.board | default('') == _manifest_inputs.board)
-         and (_existing_manifest.branch | default('') == _manifest_inputs.branch)
-         and (_existing_manifest.release | default('') == _manifest_inputs.release)
+         and (_existing_manifest.patch_hash | default('') == __image_build_manifest_inputs.patch_hash)
+         and (_existing_manifest.armbian_build_ref | default('') == __image_build_manifest_inputs.armbian_build_ref)
+         and (_existing_manifest.board | default('') == __image_build_manifest_inputs.board)
+         and (_existing_manifest.branch | default('') == __image_build_manifest_inputs.branch)
+         and (_existing_manifest.release | default('') == __image_build_manifest_inputs.release)
          and (_existing_image_stat.stat.exists | default(false)) }}
 
 - name: Report skip-build decision
   ansible.builtin.debug:
     msg: >-
       armbian_build for {{ armbian_build_board }}:
-      {{ 'skipping (manifest matches)' if _skip_build else 'will build (manifest mismatch or forced)' }}
+      {{ 'skipping (manifest matches)' if __image_build_skip_build else 'will build (manifest mismatch or forced)' }}
