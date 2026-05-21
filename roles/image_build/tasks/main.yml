@@ -34,7 +34,3 @@
 - name: Write manifest
   ansible.builtin.include_tasks: write_manifest.yml
   when: not (_skip_build | bool)
-
-- name: Publish .img.xz to remote (opt-in via armbian_netboot_publish_target)
-  ansible.builtin.include_tasks: publish_scp.yml
-  when: armbian_netboot_publish_target | default('') | length > 0

@@ -4,14 +4,6 @@
 # a deliberate role-level change.
 armbian_build_ref: "v26.2.0-trunk.844"
 
-# Optional publish: SCP the built .img.xz to a remote target after build.
-# Format: "<ssh-host>:<absolute-path-on-remote>". Empty (default) =
-# no publish; the artifact stays on the builder. Users who orchestrate
-# publish via a separate playbook (the default in build_image.yml,
-# which does a 2-host controller→builder→netboot_server rsync) can
-# leave this empty.
-armbian_netboot_publish_target: ""
-
 # Filesystem layout on the builder host
 armbian_build_cache_dir: "/var/lib/armbian_build"            # armbian/build checkout + cache + userpatches
 armbian_build_output_dir: "/var/lib/armbian_build/output"    # final .img.xz + manifest.json land here
