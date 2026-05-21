@@ -7,7 +7,7 @@ name: "armbian_netboot"
 version: 3.1.0
 readme: README.md
 authors:
-  - david-igou
+  - David Igou <igou.david@gmail.com>
 
 description: >-
   Ansible collection for end-to-end management of Armbian-based ARM SBCs:
