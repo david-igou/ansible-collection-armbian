@@ -1,7 +1,7 @@
 # Best-practices fixes — collection hardening pass
 
 Status: design 2026-05-20. Target releases: `david_igou.armbian_netboot`
-3.1.1 (security + specs), 3.2.0 (docs / idempotency / style), 4.0.0
+3.1.1 (specs), 3.2.0 (docs / idempotency / style), 4.0.0
 (variable rename — single breaking change).
 
 Companion review: [`docs/ansible-best-practices-review.html`](../../ansible-best-practices-review.html).
@@ -13,11 +13,6 @@ against Red Hat COP automation good practices and the Ansible
 developing-modules best-practices guide turned up a small set of real issues
 hidden by the otherwise-clean structure:
 
-- **Credentials in the README and sample inventory.** `bootstrap_armbian`
-  documents the Armbian default password (`"1234"`) verbatim and the sample
-  `group_vars/all.yml` persists it. The `authorized_key` task has no
-  `no_log`. Together they leak credentials into any CI artefact that ever
-  runs against this collection.
 - **Missing argument contract.** Eight of nine roles ship
   `meta/argument_specs.yml`; `bootstrap_armbian` does not. A caller that
   forgets to define `armbian_netboot_bootstrap_ssh_keys` gets a board with no
@@ -40,18 +35,16 @@ maintenance pass plus one coordinated rename.
 
 ## Goals
 
-1. **Stop leaking credentials.** No plaintext passwords in any tracked file;
-   `no_log: true` on every task that handles credentials.
-2. **Make every role's input contract machine-readable.** Nine of nine roles
+1. **Make every role's input contract machine-readable.** Nine of nine roles
    ship a complete, accurate `meta/argument_specs.yml`.
-3. **Make every role discoverable.** Nine of nine roles ship a README with
+2. **Make every role discoverable.** Nine of nine roles ship a README with
    the same section structure.
-4. **Make `changed:` mean changed.** Output-derived `changed_when` on every
+3. **Make `changed:` mean changed.** Output-derived `changed_when` on every
    long-running shell pipeline; sentinel-file idempotency probe in
    `image_extract`.
-5. **Document the variable-prefix rule once.** Apply it consistently and
+4. **Document the variable-prefix rule once.** Apply it consistently and
    surface the breaking renames in a single 4.0.0 bump.
-6. **Add a thin per-role test layer.** Molecule scenarios for
+5. **Add a thin per-role test layer.** Molecule scenarios for
    `pxelinux_render` (golden-file diff, no privilege) and `disk_provision`
    (256 MiB sparse loop file) cover ~70 % of role logic at near-zero CI
    cost.
@@ -125,48 +118,32 @@ more than ~1 second. Either:
 - the task is a shell pipeline — derive `changed_when` from `register`ed
   output (a stderr line, a JSON length, an exit code).
 
-### `no_log` rule
-
-Any task whose arguments, environment, or output can plausibly contain a
-credential, SSH key, or credentialed URL gets `no_log: true`. The cost of
-being wrong is asymmetric.
-
 ## Workstreams
 
-Eight workstreams, grouped by which release they ship in.
+Seven workstreams, grouped by which release they ship in.
 
-### Release 3.1.1 — security + specs (non-breaking, ship as a patch)
+### Release 3.1.1 — specs (non-breaking, ship as a patch)
 
-#### WS-1: Security hygiene
-
-| Item | File | Change |
-|---|---|---|
-| 1.1 | `roles/bootstrap_armbian/README.md` | Remove the plaintext `"1234"`; replace with instructions to pass `ansible_password` via `--ask-pass` / vault / CLI. |
-| 1.2 | `inventory/group_vars/all.yml` (sample) | Remove the `armbian_netboot_default_password: "1234"` default; leave the variable documented but unset. |
-| 1.3 | `roles/bootstrap_armbian/tasks/main.yml` (authorized_key task) | Add `no_log: true`. |
-| 1.4 | `roles/image_build/tasks/publish_scp.yml` (both shell tasks) | Add `no_log: true`. |
-| 1.5 | `playbooks/bootstrap_armbian.yml` | Audit for any inline `vars:` block that names `ansible_password`; ensure `no_log` is set on every task within. |
-
-#### WS-2: Argument specs
+#### WS-1: Argument specs
 
 | Item | File | Change |
 |---|---|---|
-| 2.1 | `roles/bootstrap_armbian/meta/argument_specs.yml` (new) | Declare both required vars; assert `length > 0` on `ssh_keys`. |
-| 2.2 | `roles/board_boot_wait/` (defaults vs specs reconcile) | Delete unused `armbian_netboot_boot_retry_attempts`, `armbian_netboot_ssh_wait_timeout`, `armbian_netboot_ssh_wait_retry_attempts` from `defaults/main.yml` (the retry logic lives in `playbooks/tasks/cold_boot_with_retry.yml`, not this role). |
+| 1.1 | `roles/bootstrap_armbian/meta/argument_specs.yml` (new) | Declare both required vars; assert `length > 0` on `ssh_keys`. |
+| 1.2 | `roles/board_boot_wait/` (defaults vs specs reconcile) | Delete unused `armbian_netboot_boot_retry_attempts`, `armbian_netboot_ssh_wait_timeout`, `armbian_netboot_ssh_wait_retry_attempts` from `defaults/main.yml` (the retry logic lives in `playbooks/tasks/cold_boot_with_retry.yml`, not this role). |
 
 ### Release 3.2.0 — docs, idempotency, style (non-breaking, ship as a minor)
 
-#### WS-3: Metadata consistency
+#### WS-2: Metadata consistency
 
 | Item | File | Change |
 |---|---|---|
-| 3.1 | All `roles/*/meta/main.yml` | Standardise `author: David Igou`, add `author_email: igou.david@gmail.com`, align `license: MIT`. |
-| 3.2 | All `roles/*/meta/main.yml` | Add `galaxy_tags:` (minimum: `armbian`, `netboot`, one role-specific). |
-| 3.3 | `galaxy.yml` | Update `authors:` to `David Igou <igou.david@gmail.com>`. |
-| 3.4 | `ansible.cfg` | `host_key_checking = False` → `host_key_checking = false`. |
-| 3.5 | `vars/boards.yml` | Add a header comment explaining why this lives under `vars/` instead of `defaults/`. |
+| 2.1 | All `roles/*/meta/main.yml` | Standardise `author: David Igou`, add `author_email: igou.david@gmail.com`, align `license: MIT`. |
+| 2.2 | All `roles/*/meta/main.yml` | Add `galaxy_tags:` (minimum: `armbian`, `netboot`, one role-specific). |
+| 2.3 | `galaxy.yml` | Update `authors:` to `David Igou <igou.david@gmail.com>`. |
+| 2.4 | `ansible.cfg` | `host_key_checking = False` → `host_key_checking = false`. |
+| 2.5 | `vars/boards.yml` | Add a header comment explaining why this lives under `vars/` instead of `defaults/`. |
 
-#### WS-4: Documentation
+#### WS-3: Documentation
 
 For each of the six roles missing a README — `board_boot_wait`,
 `board_boot_verify`, `image_extract`, `pxelinux_render`, `rootfs_clone`,
@@ -180,32 +157,33 @@ the conventions section. Order by priority (highest user cost first):
 5. `board_boot_wait`
 6. `board_boot_verify`
 
-#### WS-5: Idempotency
+#### WS-4: Idempotency
 
 | Item | File | Change |
 |---|---|---|
-| 5.1 | `roles/image_extract/tasks/main.yml` | Replace single-file existence probe with sentinel-file probe; write `.armbian_extract_complete` at end of success path. |
-| 5.2 | `roles/disk_image/tasks/_write.yml` | All four streaming branches: `register` + derive `changed_when` from `"records out"` in stderr (exclude `"0+0"`). |
-| 5.3 | `roles/disk_provision/tasks/_apply_repart.yml` | `systemd-repart` invocation: derive `changed_when` from JSON output length. |
-| 5.4 | `roles/disk_provision/tasks/_populate.yml` | Add `--itemize-changes` to rsync; derive `changed_when` from non-empty change list. |
-| 5.5 | `roles/image_extract/tasks/_cleanup.yml` | Replace `failed_when: false` silent swallow with `failed_when: false` + warning `debug` task. |
+| 4.1 | `roles/image_extract/tasks/main.yml` | Replace single-file existence probe with sentinel-file probe; write `.armbian_extract_complete` at end of success path. |
+| 4.2 | `roles/disk_image/tasks/_write.yml` | All four streaming branches: `register` + derive `changed_when` from `"records out"` in stderr (exclude `"0+0"`). |
+| 4.3 | `roles/disk_provision/tasks/_apply_repart.yml` | `systemd-repart` invocation: derive `changed_when` from JSON output length. |
+| 4.4 | `roles/disk_provision/tasks/_populate.yml` | Add `--itemize-changes` to rsync; derive `changed_when` from non-empty change list. |
+| 4.5 | `roles/image_extract/tasks/_cleanup.yml` | Replace `failed_when: false` silent swallow with `failed_when: false` + warning `debug` task. |
 
-#### WS-6: Style
+#### WS-5: Style
 
 | Item | File | Change |
 |---|---|---|
-| 6.1 | `roles/disk_provision/tasks/_populate.yml` | Replace `command: rsync ...` with `ansible.posix.synchronize:`. |
-| 6.2 | `roles/rootfs_clone/tasks/main.yml` | Replace `shell: cp -a --reflink=auto` with `command: argv:` form. |
-| 6.3 | `roles/rootfs_clone/tasks/_identity_reset.yml` | Replace `shell rm "{{ target_dir }}"/etc/ssh/ssh_host_*` with `find` + `file` loop. |
-| 6.4 | `roles/bootstrap_armbian/handlers/main.yml` | `ansible.builtin.service` → `ansible.builtin.systemd_service`. |
-| 6.5 | `roles/pxelinux_render/templates/pxelinux_cfg.j2` | Prepend `# {{ ansible_managed }}` line to header. |
-| 6.6 | `roles/disk_image/tasks/_validate.yml` | Audit + standardise to FQCN throughout. |
+| 5.1 | `roles/disk_provision/tasks/_populate.yml` | Replace `command: rsync ...` with `ansible.posix.synchronize:`. |
+| 5.2 | `roles/image_build/tasks/publish_scp.yml`, `roles/image_build/tasks/main.yml`, `roles/image_build/defaults/main.yml`, `roles/image_build/meta/argument_specs.yml`, `roles/image_build/README.md` | Delete dead `publish_scp.yml` + its `main.yml` include + the `armbian_netboot_publish_target` default and argspec entry. `armbian_netboot_publish_target` is set nowhere in the repo, and `playbooks/build_image.yml` already publishes the build artefact via `ansible.posix.synchronize` — the role builds, the workflow publishes. |
+| 5.3 | `roles/rootfs_clone/tasks/main.yml` | Replace `shell: cp -a --reflink=auto` with `command: argv:` form. |
+| 5.4 | `roles/rootfs_clone/tasks/_identity_reset.yml` | Replace `shell rm "{{ target_dir }}"/etc/ssh/ssh_host_*` with `find` + `file` loop. |
+| 5.5 | `roles/bootstrap_armbian/handlers/main.yml` | `ansible.builtin.service` → `ansible.builtin.systemd_service`. |
+| 5.6 | `roles/pxelinux_render/templates/pxelinux_cfg.j2` | Prepend `# {{ ansible_managed }}` line to header. |
+| 5.7 | `roles/disk_image/tasks/_validate.yml` | Audit + standardise to FQCN throughout. |
 
 ### Release 4.0.0 — variable rename (single breaking change)
 
-#### WS-7: Variable prefix rename
+#### WS-6: Variable prefix rename
 
-7.1 Rename `pxelinux_render` role variables to `pxelinux_render_*` (the most
+6.1 Rename `pxelinux_render` role variables to `pxelinux_render_*` (the most
 exposed unprefixed names):
 
 | Old | New |
@@ -232,7 +210,7 @@ caller (`playbooks/converge_boot_mode.yml`,
 `playbooks/test_fleet_e2e.yml`, the routeros upload task), and the role
 README.
 
-7.2 Rename internal facts (non-breaking; do it under cover of 4.0.0 so the
+6.2 Rename internal facts (non-breaking; do it under cover of 4.0.0 so the
 diff is small):
 
 | Old | New |
@@ -252,15 +230,15 @@ diff is small):
 
 ### Release-independent
 
-#### WS-8: Per-role molecule tests
+#### WS-7: Per-role molecule tests
 
 Two scenarios; ship whenever convenient.
 
-8.1 `roles/pxelinux_render/molecule/default/` — render against a fixture
+7.1 `roles/pxelinux_render/molecule/default/` — render against a fixture
 inventory of two boards; golden-file diff the rendered `01-<mac>` files.
 Runs unprivileged in `python:3.12-slim`. Target CI time: &lt;10s.
 
-8.2 `roles/disk_provision/molecule/default/` — create a 256 MiB sparse loop
+7.2 `roles/disk_provision/molecule/default/` — create a 256 MiB sparse loop
 file in a privileged container, run the role with a 2-partition
 `disk_binding`, assert the partition table (`sgdisk -p`) and rendered fstab.
 Target CI time: ~30s.
@@ -269,10 +247,10 @@ Target CI time: ~30s.
 
 | Bump | Trigger | User impact |
 |---|---|---|
-| 3.1.1 | WS-1 + WS-2 ship | None on tracked variables; **action required for ops**: rotate any board where the default password leaked into CI logs. |
-| 3.2.0 | WS-3 + WS-4 + WS-5 + WS-6 ship | Possible `changed:` count delta in operator reports (previously always-changed steps will now sometimes report `ok`). Document this prominently in the release note. |
-| 4.0.0 | WS-7 ships | All `pxelinux_render` callers must rename variables. Migration guide ships in the release note; the rename is a `git grep` away from mechanical for every consumer. |
-| (any) | WS-8 ships | None. |
+| 3.1.1 | WS-1 ships | None. New `bootstrap_armbian` argument_specs fail-fast if `armbian_netboot_bootstrap_ssh_keys` is empty, which is a strict improvement on the previous silent footgun. |
+| 3.2.0 | WS-2 + WS-3 + WS-4 + WS-5 ship | Possible `changed:` count delta in operator reports (previously always-changed steps will now sometimes report `ok`). Document this prominently in the release note. |
+| 4.0.0 | WS-6 ships | All `pxelinux_render` callers must rename variables. Migration guide ships in the release note; the rename is a `git grep` away from mechanical for every consumer. |
+| (any) | WS-7 ships | None. |
 
 ## Non-goals
 
@@ -289,12 +267,11 @@ Target CI time: ~30s.
 
 The pass is done when:
 
-- `grep -rn '1234' inventory/ roles/` returns no credential matches.
 - `ls roles/*/meta/argument_specs.yml | wc -l` == 9.
 - `ls roles/*/README.md | wc -l` == 9.
 - `grep -l 'license: MIT' roles/*/meta/main.yml | wc -l` == 9.
 - `grep -rn 'changed_when: true' roles/*/tasks/` returns only tasks that are
-  genuinely always-changed (the audit list lives in the WS-5 PR description).
+  genuinely always-changed (the audit list lives in the WS-4 PR description).
 - `ansible-lint roles/` passes with no FQCN or `risky-shell-pipe` findings.
 - For 4.0.0 only: `grep -rEn '\b(sd_root|tftp_kernel|tftp_initrd|tftp_dtb|earlycon|pxe_verbose)\b' roles/ playbooks/`
   returns no matches outside the rename PR itself.

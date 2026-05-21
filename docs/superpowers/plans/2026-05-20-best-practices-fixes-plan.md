@@ -6,14 +6,14 @@
 [`docs/ansible-best-practices-review.html`](../../ansible-best-practices-review.html)
 in three coordinated releases (3.1.1, 3.2.0, 4.0.0).
 
-**Architecture:** Eight workstreams grouped by release. WS-1/2 ship as a
-patch (no API change). WS-3/4/5/6 ship as a minor (docs + idempotency
-behaviour change but no input rename). WS-7 ships as a major (single
-breaking rename of `pxelinux_render` variables). WS-8 (molecule) is
+**Architecture:** Seven workstreams grouped by release. WS-1 ships as a
+patch (no API change). WS-2/3/4/5 ship as a minor (docs + idempotency
+behaviour change but no input rename). WS-6 ships as a major (single
+breaking rename of `pxelinux_render` variables). WS-7 (molecule) is
 plumbing and can ship in any release.
 
 **Tech stack:** Ansible 2.15+, `ansible-lint`, `yamllint`, `molecule`
-(for WS-8), `ansible-playbook --syntax-check`, `playbooks/test_fleet_e2e.yml`
+(for WS-7), `ansible-playbook --syntax-check`, `playbooks/test_fleet_e2e.yml`
 for the integration smoke at release boundaries.
 
 **Spec:** [`docs/superpowers/specs/2026-05-20-best-practices-fixes-design.md`](../specs/2026-05-20-best-practices-fixes-design.md)
@@ -31,183 +31,14 @@ for the integration smoke at release boundaries.
   output, and a green run of `ansible-lint roles/<changed-role>/` for any
   task that touched a role.
 - **Don't run `test_fleet_e2e.yml` per task.** It costs ~25 minutes against
-  real hardware; only run it at release checkpoints (after WS-2, WS-6,
-  WS-7).
+  real hardware; only run it at release checkpoints (after WS-1, WS-5,
+  WS-6).
 
 ---
 
-# Release 3.1.1 — security + specs
+# Release 3.1.1 — specs
 
-## Task 1: Strip the default password from the bootstrap_armbian README
-
-**Files:**
-- Modify: `roles/bootstrap_armbian/README.md`
-
-- [ ] **Step 1: Confirm the leak**
-
-Run: `grep -n '1234' roles/bootstrap_armbian/README.md`
-Expected: matches on the lines that mention `armbian_netboot_default_password` and the `"1234"` default.
-
-- [ ] **Step 2: Replace the password discussion**
-
-Open `roles/bootstrap_armbian/README.md`. Locate the sentence /
-paragraph that names `"1234"`. Replace the whole credential block with:
-
-```markdown
-## Connecting credentials
-
-The role connects as `root` with `armbian_password` supplied by the caller.
-**Do not commit this password to version control.** Pass it via one of:
-
-- `--ask-pass` on the `ansible-playbook` command line,
-- a vault-encrypted variable file referenced with `--vault-id`,
-- the environment, via `ANSIBLE_PASSWORD` consumed by an `ansible_password`
-  hostvar set in a non-tracked inventory file.
-
-The Armbian stock password for a freshly flashed image is documented in
-upstream Armbian release notes; the collection deliberately does not encode
-it.
-```
-
-- [ ] **Step 3: Re-grep**
-
-Run: `grep -n '1234' roles/bootstrap_armbian/README.md`
-Expected: no matches.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add roles/bootstrap_armbian/README.md
-git commit -m "bootstrap_armbian: strip plaintext default password from README"
-```
-
-## Task 2: Remove the password default from sample group_vars
-
-**Files:**
-- Modify: `inventory/group_vars/all.yml`
-
-- [ ] **Step 1: Confirm the leak**
-
-Run: `grep -n 'armbian_netboot_default_password' inventory/group_vars/all.yml`
-Expected: a line setting it to `"1234"`.
-
-- [ ] **Step 2: Replace the line with a documented-but-unset variable**
-
-Locate the line and replace with:
-
-```yaml
-# armbian_netboot_default_password: ""   # SET ONLY VIA VAULT OR --extra-vars.
-                                         # See roles/bootstrap_armbian/README.md.
-```
-
-- [ ] **Step 3: Re-grep + sample-inventory smoke**
-
-Run: `grep -n '1234' inventory/group_vars/all.yml`
-Expected: no matches.
-
-Run: `ansible-playbook --syntax-check -i inventory playbooks/bootstrap_armbian.yml`
-Expected: `playbook: playbooks/bootstrap_armbian.yml` — no error about undefined `armbian_netboot_default_password` (the var is referenced at runtime, not at parse time).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add inventory/group_vars/all.yml
-git commit -m "inventory: stop shipping a default password in sample group_vars"
-```
-
-## Task 3: Add no_log to bootstrap_armbian authorized_key task
-
-**Files:**
-- Modify: `roles/bootstrap_armbian/tasks/main.yml`
-
-- [ ] **Step 1: Find the task**
-
-Run: `grep -n 'authorized_key' roles/bootstrap_armbian/tasks/main.yml`
-Expected: one match for `ansible.posix.authorized_key:`.
-
-- [ ] **Step 2: Add no_log**
-
-In that task block, add `no_log: true` as the last key at task scope (sibling of `loop:`/`loop_control:`). The block should read:
-
-```yaml
-- name: Authorise SSH keys for {{ armbian_netboot_bootstrap_user }}
-  ansible.posix.authorized_key:
-    user: "{{ armbian_netboot_bootstrap_user }}"
-    state: present
-    key: "{{ item }}"
-    exclusive: false
-  loop: "{{ armbian_netboot_bootstrap_ssh_keys }}"
-  loop_control:
-    label: "{{ item.split() | last | default('(no comment)') }}"
-  no_log: true
-```
-
-- [ ] **Step 3: Lint**
-
-Run: `ansible-lint roles/bootstrap_armbian/`
-Expected: PASS (no new findings).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add roles/bootstrap_armbian/tasks/main.yml
-git commit -m "bootstrap_armbian: no_log on authorized_key task"
-```
-
-## Task 4: Add no_log to image_build publish_scp tasks
-
-**Files:**
-- Modify: `roles/image_build/tasks/publish_scp.yml`
-
-- [ ] **Step 1: Identify the shell tasks**
-
-Run: `grep -nE '^- (name|  ansible\.builtin\.shell)' roles/image_build/tasks/publish_scp.yml`
-Expected: two shell tasks (mkdir-on-remote, scp).
-
-- [ ] **Step 2: Add no_log: true to both**
-
-For each of the two `ansible.builtin.shell:` task blocks in that file, add `no_log: true` as a sibling key.
-
-- [ ] **Step 3: Lint**
-
-Run: `ansible-lint roles/image_build/`
-Expected: PASS.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add roles/image_build/tasks/publish_scp.yml
-git commit -m "image_build: no_log on publish_scp tasks"
-```
-
-## Task 5: Audit bootstrap_armbian.yml for inline password vars
-
-**Files:**
-- Read: `playbooks/bootstrap_armbian.yml`
-- Modify (if found): `playbooks/bootstrap_armbian.yml`
-
-- [ ] **Step 1: Scan**
-
-Run: `grep -n 'ansible_password\|armbian_netboot_default_password' playbooks/bootstrap_armbian.yml`
-
-- [ ] **Step 2: For every task that references either, ensure `no_log: true`**
-
-If a task references the password and has no `no_log: true`, add it.
-If no task does, this Task is a no-op — proceed to Step 3.
-
-- [ ] **Step 3: Verify**
-
-Run: `ansible-playbook --syntax-check -i inventory playbooks/bootstrap_armbian.yml`
-Expected: parse-OK.
-
-- [ ] **Step 4: Commit (only if file changed)**
-
-```bash
-git add playbooks/bootstrap_armbian.yml
-git commit -m "bootstrap_armbian playbook: no_log on credential-bearing tasks"
-```
-
-## Task 6: Add meta/argument_specs.yml to bootstrap_armbian
+## Task 1: Add meta/argument_specs.yml to bootstrap_armbian
 
 **Files:**
 - Create: `roles/bootstrap_armbian/meta/argument_specs.yml`
@@ -279,7 +110,7 @@ git add roles/bootstrap_armbian/meta/argument_specs.yml roles/bootstrap_armbian/
 git commit -m "bootstrap_armbian: add argument_specs + assert non-empty ssh_keys"
 ```
 
-## Task 7: Reconcile board_boot_wait defaults vs argument_specs
+## Task 2: Reconcile board_boot_wait defaults vs argument_specs
 
 **Files:**
 - Modify: `roles/board_boot_wait/defaults/main.yml`
@@ -318,7 +149,7 @@ git add roles/board_boot_wait/defaults/main.yml
 git commit -m "board_boot_wait: drop unused retry knobs from role defaults"
 ```
 
-## Task 8: Cut release 3.1.1
+## Task 3: Cut release 3.1.1
 
 **Files:**
 - Modify: `galaxy.yml`
@@ -328,11 +159,10 @@ git commit -m "board_boot_wait: drop unused retry knobs from role defaults"
 
 Run:
 ```bash
-grep -rn '1234' inventory/ roles/ | grep -v '^Binary'
 ls roles/bootstrap_armbian/meta/argument_specs.yml
 ls roles/*/meta/argument_specs.yml | wc -l
 ```
-Expected: zero `1234` matches; `argument_specs.yml` listed; count == 9.
+Expected: `argument_specs.yml` listed; count == 9.
 
 - [ ] **Step 2: Bump version**
 
@@ -347,7 +177,7 @@ Expected: 5/5 PASS Summary table (this is the release gate).
 
 ```bash
 git add galaxy.yml
-git commit -m "release: 3.1.1 (security + bootstrap_armbian argument_specs)"
+git commit -m "release: 3.1.1 (bootstrap_armbian argument_specs)"
 git tag v3.1.1
 ```
 
@@ -357,7 +187,7 @@ Do NOT push the tag automatically. Confirm with the user first.
 
 # Release 3.2.0 — docs + idempotency + style
 
-## Task 9: Standardise meta/main.yml across all nine roles
+## Task 4: Standardise meta/main.yml across all nine roles
 
 **Files:**
 - Modify: `roles/*/meta/main.yml` (all 9)
@@ -427,7 +257,7 @@ git add roles/*/meta/main.yml
 git commit -m "roles: standardise author/license/galaxy_tags across all meta/main.yml"
 ```
 
-## Task 10: Update galaxy.yml authors + ansible.cfg booleans
+## Task 5: Update galaxy.yml authors + ansible.cfg booleans
 
 **Files:**
 - Modify: `galaxy.yml`
@@ -461,7 +291,7 @@ git add galaxy.yml ansible.cfg
 git commit -m "metadata: human-name in galaxy.yml authors, lowercase boolean in ansible.cfg"
 ```
 
-## Task 11: Annotate vars/boards.yml placement decision
+## Task 6: Annotate vars/boards.yml placement decision
 
 **Files:**
 - Modify: `vars/boards.yml`
@@ -491,7 +321,7 @@ git add vars/boards.yml
 git commit -m "vars/boards: document why this lives under vars/ not defaults/"
 ```
 
-## Task 12: Write README for disk_provision
+## Task 7: Write README for disk_provision
 
 **Files:**
 - Create: `roles/disk_provision/README.md`
@@ -523,19 +353,19 @@ git add roles/disk_provision/README.md
 git commit -m "disk_provision: add README"
 ```
 
-## Task 13: Write README for image_extract
+## Task 8: Write README for image_extract
 
 **Files:**
 - Create: `roles/image_extract/README.md`
 
 - [ ] **Step 1: Write the five sections**
 
-Same five-section structure as Task 12. Cover specifically:
+Same five-section structure as Task 7. Cover specifically:
 
 - The URL-or-local-path source flexibility.
 - The loop-device + mount lifecycle and the `block/rescue/always` cleanup guarantee.
 - The on-server output layout (`<template_dir>/`, `<tftp_dir>/{vmlinuz,initrd.img,board.dtb}`).
-- The idempotency probe (after Task 17 lands, this will become a sentinel file).
+- The idempotency probe (after Task 12 lands, this will become a sentinel file).
 
 - [ ] **Step 2: Commit**
 
@@ -544,7 +374,7 @@ git add roles/image_extract/README.md
 git commit -m "image_extract: add README"
 ```
 
-## Task 14: Write READMEs for rootfs_clone, pxelinux_render, board_boot_wait, board_boot_verify
+## Task 9: Write READMEs for rootfs_clone, pxelinux_render, board_boot_wait, board_boot_verify
 
 **Files:**
 - Create: `roles/rootfs_clone/README.md`
@@ -581,7 +411,7 @@ git add roles/board_boot_verify/README.md
 git commit -m "board_boot_verify: add README"
 ```
 
-## Task 15: Fix changed_when on disk_image streaming branches
+## Task 10: Fix changed_when on disk_image streaming branches
 
 **Files:**
 - Modify: `roles/disk_image/tasks/_write.yml`
@@ -616,7 +446,7 @@ git add roles/disk_image/tasks/_write.yml
 git commit -m "disk_image: derive changed_when from dd records-out for each write branch"
 ```
 
-## Task 16: Fix changed_when on disk_provision systemd-repart + rsync
+## Task 11: Fix changed_when on disk_provision systemd-repart + rsync
 
 **Files:**
 - Modify: `roles/disk_provision/tasks/_apply_repart.yml`
@@ -631,7 +461,7 @@ In `_apply_repart.yml`, find the `systemd-repart` command. Add `--json=short` to
   changed_when: (__disk_provision_repart.stdout | default('[]') | from_json | length) > 0
 ```
 
-- [ ] **Step 2: rsync (still using `command`, will be replaced in Task 19)**
+- [ ] **Step 2: rsync (still using `command`, will be replaced in Task 14)**
 
 In `_populate.yml`, add `--itemize-changes` to the rsync flags. Then:
 
@@ -652,7 +482,7 @@ git add roles/disk_provision/tasks/_apply_repart.yml roles/disk_provision/tasks/
 git commit -m "disk_provision: derive changed_when from systemd-repart JSON and rsync itemize"
 ```
 
-## Task 17: image_extract sentinel-file idempotency
+## Task 12: image_extract sentinel-file idempotency
 
 **Files:**
 - Modify: `roles/image_extract/tasks/main.yml`
@@ -710,7 +540,7 @@ git add roles/image_extract/tasks/main.yml
 git commit -m "image_extract: switch idempotency probe to .armbian_extract_complete sentinel"
 ```
 
-## Task 18: image_extract cleanup warning instead of silent swallow
+## Task 13: image_extract cleanup warning instead of silent swallow
 
 **Files:**
 - Modify: `roles/image_extract/tasks/_cleanup.yml`
@@ -748,7 +578,7 @@ git add roles/image_extract/tasks/_cleanup.yml
 git commit -m "image_extract: warn on cleanup failures instead of silent swallow"
 ```
 
-## Task 19: Replace disk_provision rsync command with synchronize
+## Task 14: Replace disk_provision rsync command with synchronize
 
 **Files:**
 - Modify: `roles/disk_provision/tasks/_populate.yml`
@@ -793,7 +623,79 @@ git add roles/disk_provision/tasks/_populate.yml
 git commit -m "disk_provision: switch populate from rsync command to synchronize module"
 ```
 
-## Task 20: Replace rootfs_clone shell cp with command argv
+## Task 15: Delete dead publish_scp.yml from image_build
+
+**Files:**
+- Delete: `roles/image_build/tasks/publish_scp.yml`
+- Modify: `roles/image_build/tasks/main.yml`
+- Modify: `roles/image_build/defaults/main.yml`
+- Modify: `roles/image_build/meta/argument_specs.yml`
+- Modify: `roles/image_build/README.md`
+
+- [ ] **Step 1: Confirm `armbian_netboot_publish_target` is set nowhere**
+
+Run:
+```bash
+grep -rn 'armbian_netboot_publish_target\|publish_scp' playbooks/ inventory/ vars/
+```
+Expected: zero matches in `playbooks/`, `inventory/`, and `vars/`. The only matches across the repo should be inside `roles/image_build/` (the dead-code self-references).
+
+If the grep finds a setter, STOP — the file is not orphaned and this Task needs rescoping. Otherwise, proceed.
+
+- [ ] **Step 2: Remove the include + guard**
+
+In `roles/image_build/tasks/main.yml`, delete the three lines:
+
+```yaml
+- name: Publish .img.xz to remote (opt-in via armbian_netboot_publish_target)
+  ansible.builtin.include_tasks: publish_scp.yml
+  when: armbian_netboot_publish_target | default('') | length > 0
+```
+
+- [ ] **Step 3: Delete the sub-task file**
+
+```bash
+git rm roles/image_build/tasks/publish_scp.yml
+```
+
+- [ ] **Step 4: Delete the default and the argspec entry**
+
+In `roles/image_build/defaults/main.yml`, delete the line:
+
+```yaml
+armbian_netboot_publish_target: ""
+```
+
+In `roles/image_build/meta/argument_specs.yml`, delete the `armbian_netboot_publish_target:` option block.
+
+- [ ] **Step 5: Update the README**
+
+In `roles/image_build/README.md`, delete any paragraph or table row that references `armbian_netboot_publish_target` or "optional SCP publish". Point readers at `playbooks/build_image.yml` (which already does the publish via `ansible.posix.synchronize`).
+
+- [ ] **Step 6: Verify no dangling references**
+
+Run:
+```bash
+grep -rn 'publish_scp\|armbian_netboot_publish_target' roles/ playbooks/ inventory/ vars/
+```
+Expected: zero matches.
+
+- [ ] **Step 7: Lint + syntax**
+
+Run: `ansible-lint roles/image_build/`
+Expected: PASS.
+
+Run: `ansible-playbook --syntax-check -i inventory playbooks/build_image.yml`
+Expected: parse-OK.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A roles/image_build/
+git commit -m "image_build: delete dead publish_scp.yml (publish lives in build_image.yml)"
+```
+
+## Task 16: Replace rootfs_clone shell cp with command argv
 
 **Files:**
 - Modify: `roles/rootfs_clone/tasks/main.yml`
@@ -831,7 +733,7 @@ git add roles/rootfs_clone/tasks/main.yml
 git commit -m "rootfs_clone: use command:argv for the reflink clone"
 ```
 
-## Task 21: Replace rootfs_clone shell rm glob with find+file
+## Task 17: Replace rootfs_clone shell rm glob with find+file
 
 **Files:**
 - Modify: `roles/rootfs_clone/tasks/_identity_reset.yml`
@@ -872,7 +774,7 @@ git add roles/rootfs_clone/tasks/_identity_reset.yml
 git commit -m "rootfs_clone: replace shell-rm-glob with find+file loop for stale ssh keys"
 ```
 
-## Task 22: Switch bootstrap_armbian handler to systemd_service
+## Task 18: Switch bootstrap_armbian handler to systemd_service
 
 **Files:**
 - Modify: `roles/bootstrap_armbian/handlers/main.yml`
@@ -893,7 +795,7 @@ git add roles/bootstrap_armbian/handlers/main.yml
 git commit -m "bootstrap_armbian: use systemd_service for sshd restart handler"
 ```
 
-## Task 23: Add ansible_managed header to pxelinux_cfg template
+## Task 19: Add ansible_managed header to pxelinux_cfg template
 
 **Files:**
 - Modify: `roles/pxelinux_render/templates/pxelinux_cfg.j2`
@@ -921,7 +823,7 @@ git add roles/pxelinux_render/templates/pxelinux_cfg.j2
 git commit -m "pxelinux_render: add ansible_managed marker to template header"
 ```
 
-## Task 24: FQCN audit in disk_image/_validate.yml
+## Task 20: FQCN audit in disk_image/_validate.yml
 
 **Files:**
 - Modify: `roles/disk_image/tasks/_validate.yml` (if any short-form module names found)
@@ -950,7 +852,7 @@ git add roles/disk_image/tasks/_validate.yml
 git commit -m "disk_image: standardise FQCN in _validate.yml"
 ```
 
-## Task 25: Cut release 3.2.0
+## Task 21: Cut release 3.2.0
 
 **Files:**
 - Modify: `galaxy.yml`
@@ -988,7 +890,7 @@ Do NOT push the tag automatically. Confirm with the user first.
 
 # Release 4.0.0 — variable prefix rename
 
-## Task 26: Rename pxelinux_render external variables (breaking)
+## Task 22: Rename pxelinux_render external variables (breaking)
 
 **Files:**
 - Modify: `roles/pxelinux_render/defaults/main.yml`
@@ -1011,7 +913,7 @@ Caveat: some of these names (`boot_mode`, `hostname`, etc.) are also Ansible fac
 
 - [ ] **Step 2: Apply the rename in defaults/main.yml**
 
-For each variable in the spec's WS-7.1 table (old → new), rename in `roles/pxelinux_render/defaults/main.yml`.
+For each variable in the spec's WS-6.1 table (old → new), rename in `roles/pxelinux_render/defaults/main.yml`.
 
 - [ ] **Step 3: Apply the rename in meta/argument_specs.yml**
 
@@ -1055,10 +957,10 @@ git add roles/pxelinux_render/ playbooks/
 git commit -m "pxelinux_render: rename all role variables to pxelinux_render_* prefix"
 ```
 
-## Task 27: Rename internal facts to __<role>_* prefix
+## Task 23: Rename internal facts to __<role>_* prefix
 
 **Files:**
-- Modify: each role's tasks (per the WS-7.2 table in the spec).
+- Modify: each role's tasks (per the WS-6.2 table in the spec).
 
 - [ ] **Step 1: For each role, identify the existing internal facts**
 
@@ -1069,7 +971,7 @@ for r in image_build image_extract disk_image disk_provision pxelinux_render roo
 done
 ```
 
-- [ ] **Step 2: For each role, apply the WS-7.2 renames**
+- [ ] **Step 2: For each role, apply the WS-6.2 renames**
 
 Use sed for batches, e.g.:
 
@@ -1082,7 +984,7 @@ find roles/image_build/tasks -type f -name '*.yml' -print0 | xargs -0 \
     -e 's/\b_skip_build\b/__image_build_skip_build/g'
 ```
 
-Repeat per role per the WS-7.2 table. Be careful with `_dp_*` → `__disk_provision_*`: do **not** match `_dp_` if it appears in a non-fact context. Inspect each match before committing.
+Repeat per role per the WS-6.2 table. Be careful with `_dp_*` → `__disk_provision_*`: do **not** match `_dp_` if it appears in a non-fact context. Inspect each match before committing.
 
 - [ ] **Step 3: Lint everything**
 
@@ -1103,7 +1005,7 @@ git commit -m "image_build: rename internal facts to __image_build_* prefix"
 # ... repeat per role
 ```
 
-## Task 28: Cut release 4.0.0
+## Task 24: Cut release 4.0.0
 
 **Files:**
 - Modify: `galaxy.yml`
@@ -1114,7 +1016,7 @@ git commit -m "image_build: rename internal facts to __image_build_* prefix"
 Create `docs/migration-3.x-to-4.0.md` with:
 
 - One paragraph framing the rename and why it happened (link to this plan).
-- A table mapping every old → new variable name (copy from spec WS-7.1).
+- A table mapping every old → new variable name (copy from spec WS-6.1).
 - A `git grep` recipe for finding callers.
 - A note that internal-fact renames don't affect callers.
 
@@ -1141,7 +1043,7 @@ Do NOT push the tag automatically. Confirm with the user.
 
 # Release-independent
 
-## Task 29: Add molecule scenario for pxelinux_render
+## Task 25: Add molecule scenario for pxelinux_render
 
 **Files:**
 - Create: `roles/pxelinux_render/molecule/default/molecule.yml`
@@ -1232,7 +1134,7 @@ git add roles/pxelinux_render/molecule/
 git commit -m "pxelinux_render: add molecule golden-file scenario"
 ```
 
-## Task 30: Add molecule scenario for disk_provision
+## Task 26: Add molecule scenario for disk_provision
 
 **Files:**
 - Create: `roles/disk_provision/molecule/default/molecule.yml`

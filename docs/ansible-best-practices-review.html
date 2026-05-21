@@ -211,35 +211,31 @@ The shortlist of issues that warrant immediate attention is small but real:</p>
 
 <table>
   <tr><th>#</th><th>Severity</th><th>Issue</th><th>Roles / files</th></tr>
-  <tr><td>1</td><td><span class="sev crit">Critical</span></td>
-    <td>Plaintext default password (<code>"1234"</code>) documented in role README and
-    <code>group_vars/all.yml</code>; <code>authorized_key</code> task has no <code>no_log</code>.</td>
-    <td><code>bootstrap_armbian</code></td></tr>
-  <tr><td>2</td><td><span class="sev high">High</span></td>
+  <tr><td>1</td><td><span class="sev high">High</span></td>
     <td>Missing <code>meta/argument_specs.yml</code> &mdash; the only role without one.</td>
     <td><code>bootstrap_armbian</code></td></tr>
-  <tr><td>3</td><td><span class="sev high">High</span></td>
+  <tr><td>2</td><td><span class="sev high">High</span></td>
     <td>Six of nine roles ship no <code>README.md</code>.</td>
     <td><code>board_boot_verify</code>, <code>board_boot_wait</code>, <code>disk_provision</code>, <code>image_extract</code>, <code>pxelinux_render</code>, <code>rootfs_clone</code></td></tr>
-  <tr><td>4</td><td><span class="sev high">High</span></td>
+  <tr><td>3</td><td><span class="sev high">High</span></td>
     <td>License mismatch: collection-level LICENSE is unset/unknown to the audit, while
     role meta files split 7&times;MIT vs 2&times;GPL-3.0-or-later. Pick one.</td>
     <td>All <code>roles/*/meta/main.yml</code></td></tr>
-  <tr><td>5</td><td><span class="sev high">High</span></td>
+  <tr><td>4</td><td><span class="sev high">High</span></td>
     <td><code>changed_when: true</code> applied unconditionally to long-running streaming /
     extraction / repart commands &mdash; defeats idempotency reporting and audit trails.</td>
     <td><code>image_extract</code>, <code>disk_image</code>, <code>disk_provision</code></td></tr>
-  <tr><td>6</td><td><span class="sev med">Medium</span></td>
+  <tr><td>5</td><td><span class="sev med">Medium</span></td>
     <td>Inconsistent variable-prefix convention: collection-prefixed
     (<code>armbian_netboot_*</code>) for some roles, role-prefixed
     (<code>image_build_*</code>, <code>_dp_*</code>) for others, and unprefixed
     (<code>sd_root</code>, <code>tftp_kernel</code>) for <code>pxelinux_render</code>.</td>
     <td>All roles &mdash; needs a documented convention.</td></tr>
-  <tr><td>7</td><td><span class="sev med">Medium</span></td>
+  <tr><td>6</td><td><span class="sev med">Medium</span></td>
     <td>Author casing inconsistent across roles (<code>David Igou</code> vs <code>david-igou</code>),
     galaxy_tags present on only two of nine roles.</td>
     <td>All <code>roles/*/meta/main.yml</code></td></tr>
-  <tr><td>8</td><td><span class="sev low">Low</span></td>
+  <tr><td>7</td><td><span class="sev low">Low</span></td>
     <td><code>ansible.cfg</code> uses string <code>False</code> instead of <code>no</code> /
     <code>true</code>/<code>false</code> per COP style.</td>
     <td><code>ansible.cfg</code></td></tr>
@@ -454,39 +450,53 @@ fixed below in §5.8.</p>
 <!-- ===================== image_build ====================== -->
 <h3 id="image_build">5.1 <code>image_build</code></h3>
 
-<p><strong>Purpose:</strong> Build a custom Armbian <code>.img.xz</code> on a builder host with PXE-first U-Boot baked in; optionally publish via SCP.</p>
+<p><strong>Purpose:</strong> Build a custom Armbian <code>.img.xz</code> on a builder host with PXE-first U-Boot baked in.</p>
 
 <div class="pos-box"><strong>Strong points.</strong> Manifest-based skip logic (five decision
 fields → skip rebuild); clearly separated sub-task files
 (<code>preflight</code> / <code>manage_checkout</code> / <code>compute_inputs</code> /
 <code>apply_userpatches</code> / <code>invoke_build</code> / <code>write_manifest</code> /
-<code>publish_scp</code> / <code>check_manifest</code>); thorough README with input table,
+<code>check_manifest</code>); thorough README with input table,
 output schema and idempotency notes; cleanly documents the
 <code>local_kernel_dispatch_table</code> pre-task contract in the spec.</div>
 
 <div class="finding">
-  <h4><span class="sev crit">Critical</span> &mdash; SCP publish task lacks <code>no_log</code> on credential-bearing destinations</h4>
-  <div class="meta"><span class="filepath">roles/image_build/tasks/publish_scp.yml</span></div>
-  <p>The publish target is supplied as a free-form rsync/scp URL via
-  <code>armbian_netboot_publish_target</code>. If the operator ever embeds credentials
-  (e.g. <code>user:pass@host:/path</code>) for ad-hoc testing, the literal value lands in
-  task logs and in any CI artifact. Costless mitigation:</p>
-  <div class="twocol">
-    <div><div class="colhdr">Now</div><pre><code>- name: SCP the built .img.xz to the publish target
-  ansible.builtin.shell: |
-    scp "{{ armbian_build_output_dir }}/.../*.img.xz" \
-        "{{ armbian_netboot_publish_target }}/"
-  changed_when: true</code></pre></div>
-    <div><div class="colhdr">Recommended</div><pre><code>- name: Publish the built .img.xz to the configured target
-  ansible.builtin.shell: |
-    scp "{{ armbian_build_output_dir }}/.../*.img.xz" \
-        "{{ armbian_netboot_publish_target }}/"
-  changed_when: true
-  no_log: true</code></pre></div>
-  </div>
-  <div class="why"><strong>Why:</strong> COP &ldquo;Use <code>no_log: true</code> on tasks that
-  output credentials, hostnames, or sensitive paths.&rdquo; The cost of being wrong here is
-  permanent credential exposure in CI logs; the cost of <code>no_log</code> being right is zero.</div>
+  <h4><span class="sev high">High</span> &mdash; <code>publish_scp.yml</code> is dead code and breaks role scope</h4>
+  <div class="meta"><span class="filepath">roles/image_build/tasks/publish_scp.yml</span>,
+  <span class="filepath">roles/image_build/tasks/main.yml:38-40</span>,
+  <span class="filepath">roles/image_build/defaults/main.yml</span>,
+  <span class="filepath">roles/image_build/meta/argument_specs.yml</span></div>
+  <p>The <code>publish_scp.yml</code> sub-task file is included from
+  <code>main.yml</code> only when <code>armbian_netboot_publish_target</code> is non-empty;
+  the role default is the empty string and no inventory, group_vars, or playbook in
+  this collection sets it. The runner playbook
+  <code>playbooks/build_image.yml</code> already publishes the build artefact to the
+  netboot server using <code>ansible.posix.synchronize</code> (mode pull, delegated to the
+  builder), which is the right architectural shape — the role builds, the workflow
+  publishes.</p>
+  <p>Two problems compound: the file is unreachable in current configurations
+  (verified by <code>grep -rn armbian_netboot_publish_target playbooks/ inventory/</code>
+  returning no setter), and <em>even if it were reachable</em>, an in-role
+  <code>shell: scp ...</code> step violates the role&rsquo;s &ldquo;build only&rdquo;
+  scope. The COP rule &ldquo;single-responsibility&rdquo; and this collection&rsquo;s
+  own role/playbook split both argue for deleting it.</p>
+  <p><strong>Fix:</strong></p>
+  <ol>
+    <li>Delete <code>roles/image_build/tasks/publish_scp.yml</code>.</li>
+    <li>Delete the <code>include_tasks: publish_scp.yml</code> + <code>when:</code> guard
+      in <code>roles/image_build/tasks/main.yml</code> (lines 38-40).</li>
+    <li>Delete <code>armbian_netboot_publish_target: ""</code> from
+      <code>roles/image_build/defaults/main.yml</code>.</li>
+    <li>Delete the <code>armbian_netboot_publish_target</code> entry from
+      <code>roles/image_build/meta/argument_specs.yml</code>.</li>
+    <li>Update <code>roles/image_build/README.md</code> to drop the optional-publish
+      paragraph; point readers at <code>playbooks/build_image.yml</code> as the
+      authoritative publish path.</li>
+  </ol>
+  <div class="why"><strong>Why:</strong> Removing dead code is a strict improvement —
+  no caller breaks (because there is no caller). It also removes the
+  <code>shell: scp</code> wart that prompted the original (now obsolete)
+  <code>no_log</code> finding in this section.</div>
 </div>
 
 <div class="finding">
@@ -533,8 +543,8 @@ _skip_build                      __image_build_skip_build</code></pre>
 
 <h4>Top 5 fixes &mdash; <code>image_build</code></h4>
 <ol>
-  <li><span class="sev crit">C1</span> &mdash; add <code>no_log: true</code> to publish_scp tasks.</li>
-  <li><span class="sev high">H1</span> &mdash; make <code>changed_when</code> on compile.sh content-derived.</li>
+  <li><span class="sev high">H1</span> &mdash; delete dead <code>publish_scp.yml</code> + its include + the orphaned <code>armbian_netboot_publish_target</code> input.</li>
+  <li><span class="sev high">H2</span> &mdash; make <code>changed_when</code> on compile.sh content-derived.</li>
   <li><span class="sev med">M1</span> &mdash; rename internal facts to <code>__image_build_*</code>.</li>
   <li><span class="sev med">M2</span> &mdash; resolve license mismatch (currently GPL-3.0-or-later, mismatches the MIT majority).</li>
   <li><span class="sev low">L1</span> &mdash; expand README example with a compile_args override.</li>
@@ -796,50 +806,11 @@ references; preserve scan enables true re-run idempotency; clear comment on the
 lifecycle.</div>
 
 <div class="finding">
-  <h4><span class="sev crit">Critical</span> &mdash; default credential <code>"1234"</code> documented in README and committed in <code>group_vars/all.yml</code></h4>
-  <div class="meta"><span class="filepath">roles/bootstrap_armbian/README.md</span>, <span class="filepath">inventory/group_vars/all.yml</span></div>
-  <p>The role explicitly documents the Armbian default password (<code>"1234"</code>) and the
-  sample <code>group_vars/all.yml</code> in the docs directory persists it as a fallback. While
-  this is &ldquo;just&rdquo; the well-known Armbian default, having it in a versioned file teaches
-  consumers a bad habit and ensures the value appears verbatim in CI logs.</p>
-  <p><strong>Fix:</strong></p>
-  <ol>
-    <li>Replace README text with: &ldquo;Supply <code>ansible_password</code> on the command
-      line, via vault, or via <code>--ask-pass</code>. Do not commit it to version control.&rdquo;</li>
-    <li>Remove the <code>armbian_netboot_default_password</code> default from sample
-      <code>group_vars/all.yml</code>; document the variable but leave it unset.</li>
-    <li>Add <code>no_log: true</code> to any task in this role and in
-      <code>bootstrap_armbian.yml</code> that could log the password (the
-      <code>ansible_password</code> connection var is masked by Ansible, but inline
-      <code>vars:</code> blocks aren&rsquo;t).</li>
-  </ol>
-  <div class="why"><strong>Why:</strong> Module-dev guide rule &ldquo;Mark sensitive parameters
-  with <code>no_log=True</code>&rdquo;; COP &ldquo;Variable Management &mdash; secrets&rdquo;. The cost
-  of being wrong (credentials in CI artifacts that may be world-readable) is asymmetric.</div>
-</div>
-
-<div class="finding">
   <h4><span class="sev high">High</span> &mdash; no <code>meta/argument_specs.yml</code></h4>
   <p>See §4.8. The role consumes <code>armbian_netboot_bootstrap_user</code> and
   <code>_ssh_keys</code> with no validation; supplying an empty key list silently leaves the
   board permanently unreachable as soon as password auth is disabled in the same play.
   This is the single most consequential missing spec in the collection.</p>
-</div>
-
-<div class="finding">
-  <h4><span class="sev med">Medium</span> &mdash; <code>authorized_key</code> task has no <code>no_log</code></h4>
-  <p>SSH public keys are not secret, but the comment field often identifies operators and
-  hostnames. Add <code>no_log: true</code> in addition to the existing <code>loop_control: label</code>:</p>
-  <pre><code>- name: Authorise SSH keys for {{ armbian_netboot_bootstrap_user }}
-  ansible.posix.authorized_key:
-    user: "{{ armbian_netboot_bootstrap_user }}"
-    state: present
-    key: "{{ item }}"
-    exclusive: false
-  loop: "{{ armbian_netboot_bootstrap_ssh_keys }}"
-  loop_control:
-    label: "{{ item.split() | last | default('(no comment)') }}"
-  no_log: true</code></pre>
 </div>
 
 <div class="finding">
@@ -859,13 +830,11 @@ lifecycle.</div>
   the deferred review of that rule lands in the spec.</p>
 </div>
 
-<h4>Top 5 fixes &mdash; <code>bootstrap_armbian</code></h4>
+<h4>Top fixes &mdash; <code>bootstrap_armbian</code></h4>
 <ol>
-  <li><span class="sev crit">C1</span> &mdash; remove plaintext default password from README and sample <code>group_vars/all.yml</code>.</li>
   <li><span class="sev high">H1</span> &mdash; add <code>meta/argument_specs.yml</code> declaring both required vars + non-empty list assertion in tasks.</li>
-  <li><span class="sev med">M1</span> &mdash; add <code>no_log: true</code> to the authorized_key task.</li>
-  <li><span class="sev med">M2</span> &mdash; switch handler to <code>ansible.builtin.systemd_service</code>.</li>
-  <li><span class="sev med">M3</span> &mdash; align <code>license</code> with the rest of the collection.</li>
+  <li><span class="sev med">M1</span> &mdash; switch handler to <code>ansible.builtin.systemd_service</code>.</li>
+  <li><span class="sev med">M2</span> &mdash; align <code>license</code> with the rest of the collection.</li>
 </ol>
 
 <!-- ===================== rootfs_clone ====================== -->
@@ -1142,60 +1111,60 @@ companion plan.</p>
 
 <table>
   <tr><th>#</th><th>Sev</th><th>Item</th><th>Effort</th><th>Workstream</th></tr>
-  <tr><td>1</td><td><span class="sev crit">Crit</span></td>
-    <td>Strip plaintext default password from <code>bootstrap_armbian/README.md</code> and
-    sample <code>group_vars/all.yml</code>; add <code>no_log: true</code> to credential
-    paths.</td>
-    <td>S</td><td>WS-1 Security</td></tr>
-  <tr><td>2</td><td><span class="sev high">High</span></td>
+  <tr><td>1</td><td><span class="sev high">High</span></td>
     <td>Add <code>roles/bootstrap_armbian/meta/argument_specs.yml</code>.</td>
-    <td>S</td><td>WS-2 Specs</td></tr>
-  <tr><td>3</td><td><span class="sev high">High</span></td>
+    <td>S</td><td>WS-1 Specs</td></tr>
+  <tr><td>2</td><td><span class="sev high">High</span></td>
     <td>Resolve license split (pick MIT or GPL-3.0-or-later collection-wide and align).</td>
-    <td>S</td><td>WS-3 Metadata</td></tr>
-  <tr><td>4</td><td><span class="sev high">High</span></td>
+    <td>S</td><td>WS-2 Metadata</td></tr>
+  <tr><td>3</td><td><span class="sev high">High</span></td>
     <td>Author / galaxy_tags consistency across nine roles.</td>
-    <td>S</td><td>WS-3 Metadata</td></tr>
-  <tr><td>5</td><td><span class="sev high">High</span></td>
+    <td>S</td><td>WS-2 Metadata</td></tr>
+  <tr><td>4</td><td><span class="sev high">High</span></td>
     <td>Write READMEs for six roles (<code>disk_provision</code> first &mdash; highest user
     cost).</td>
-    <td>L</td><td>WS-4 Docs</td></tr>
-  <tr><td>6</td><td><span class="sev high">High</span></td>
+    <td>L</td><td>WS-3 Docs</td></tr>
+  <tr><td>5</td><td><span class="sev high">High</span></td>
     <td>Output-derived <code>changed_when</code> on long-running shell tasks
     (<code>disk_image</code>, <code>disk_provision</code>, <code>image_extract</code>).</td>
-    <td>M</td><td>WS-5 Idempotency</td></tr>
-  <tr><td>7</td><td><span class="sev high">High</span></td>
+    <td>M</td><td>WS-4 Idempotency</td></tr>
+  <tr><td>6</td><td><span class="sev high">High</span></td>
     <td><code>image_extract</code> sentinel-file idempotency probe.</td>
-    <td>S</td><td>WS-5 Idempotency</td></tr>
+    <td>S</td><td>WS-4 Idempotency</td></tr>
+  <tr><td>7</td><td><span class="sev high">High</span></td>
+    <td>Delete dead <code>publish_scp.yml</code> + its include + orphaned
+    <code>armbian_netboot_publish_target</code> input; publish lives in the runner
+    playbook (<code>build_image.yml</code>) via <code>ansible.posix.synchronize</code>.</td>
+    <td>S</td><td>WS-5 Style</td></tr>
   <tr><td>8</td><td><span class="sev med">Med</span></td>
     <td>Reconcile <code>board_boot_wait</code> defaults vs argument_specs (delete unused).</td>
-    <td>S</td><td>WS-2 Specs</td></tr>
+    <td>S</td><td>WS-1 Specs</td></tr>
   <tr><td>9</td><td><span class="sev med">Med</span></td>
     <td>Switch <code>disk_provision</code> rsync to <code>ansible.posix.synchronize</code>.</td>
-    <td>S</td><td>WS-6 Style</td></tr>
+    <td>S</td><td>WS-5 Style</td></tr>
   <tr><td>10</td><td><span class="sev med">Med</span></td>
     <td>Convert <code>rootfs_clone</code> shell tasks (<code>cp</code>, <code>rm glob</code>) to
     declarative module forms.</td>
-    <td>S</td><td>WS-6 Style</td></tr>
+    <td>S</td><td>WS-5 Style</td></tr>
   <tr><td>11</td><td><span class="sev med">Med</span></td>
     <td>Switch <code>bootstrap_armbian</code> handler to <code>systemd_service</code>.</td>
-    <td>XS</td><td>WS-6 Style</td></tr>
+    <td>XS</td><td>WS-5 Style</td></tr>
   <tr><td>12</td><td><span class="sev med">Med</span></td>
     <td>Rename <code>pxelinux_render</code> variables to <code>pxelinux_render_*</code> (breaking;
     coordinate via semver minor bump + release note).</td>
-    <td>M</td><td>WS-7 Naming</td></tr>
+    <td>M</td><td>WS-6 Naming</td></tr>
   <tr><td>13</td><td><span class="sev low">Low</span></td>
     <td>Internal-fact <code>__rolename_*</code> rename across all roles.</td>
-    <td>M</td><td>WS-7 Naming</td></tr>
+    <td>M</td><td>WS-6 Naming</td></tr>
   <tr><td>14</td><td><span class="sev low">Low</span></td>
     <td><code>ansible.cfg</code> boolean style (<code>False</code> → <code>false</code>).</td>
-    <td>XS</td><td>WS-3 Metadata</td></tr>
+    <td>XS</td><td>WS-2 Metadata</td></tr>
   <tr><td>15</td><td><span class="sev low">Low</span></td>
     <td>Two molecule scenarios (<code>pxelinux_render</code>, <code>disk_provision</code>).</td>
-    <td>L</td><td>WS-8 Testing</td></tr>
+    <td>L</td><td>WS-7 Testing</td></tr>
   <tr><td>16</td><td><span class="sev low">Low</span></td>
     <td><code>{{ ansible_managed }}</code> header in <code>pxelinux_cfg.j2</code>.</td>
-    <td>XS</td><td>WS-6 Style</td></tr>
+    <td>XS</td><td>WS-5 Style</td></tr>
 </table>
 
 <!-- ============================================================= -->
@@ -1206,7 +1175,7 @@ companion plan.</p>
 <ul>
   <li><strong>Spec:</strong>
     <a href="superpowers/specs/2026-05-20-best-practices-fixes-design.md"><code>docs/superpowers/specs/2026-05-20-best-practices-fixes-design.md</code></a> &mdash;
-    eight numbered workstreams, the conventions they establish, and the agreed-upon
+    seven numbered workstreams, the conventions they establish, and the agreed-upon
     variable-prefix rule.</li>
   <li><strong>Plan:</strong>
     <a href="superpowers/plans/2026-05-20-best-practices-fixes-plan.md"><code>docs/superpowers/plans/2026-05-20-best-practices-fixes-plan.md</code></a> &mdash;
@@ -1214,10 +1183,10 @@ companion plan.</p>
     verification commands, and explicit non-goals.</li>
 </ul>
 
-<p>The recommended order: WS-1 (security) and WS-2 (specs) ship in a single non-breaking
-patch release (3.1.1); WS-3 / WS-4 / WS-5 / WS-6 ship as 3.2.0 with new docs and
-behavioural-but-not-API changes; WS-7 (variable rename) ships as 4.0.0 because it&rsquo;s the
-one user-facing breaking change. WS-8 (molecule) is plumbing and can ship any time.</p>
+<p>The recommended order: WS-1 (specs) ships as a non-breaking patch release (3.1.1);
+WS-2 / WS-3 / WS-4 / WS-5 ship as 3.2.0 with new docs and
+behavioural-but-not-API changes; WS-6 (variable rename) ships as 4.0.0 because it&rsquo;s the
+one user-facing breaking change. WS-7 (molecule) is plumbing and can ship any time.</p>
 
 <p style="margin-top: 3rem; color: var(--muted); font-size: 0.9rem;">&mdash; End of review.</p>
 
