@@ -1,11 +1,16 @@
 ---
 galaxy_info:
   role_name: board_boot_verify
-  author: david-igou
+  author: David Igou
+  author_email: igou.david@gmail.com
   description: "Assert a board's rootfs matches the declared boot mode."
   license: MIT
   min_ansible_version: "2.15"
   platforms:
     - name: Generic
       versions: [all]
+  galaxy_tags:
+    - armbian
+    - netboot
+    - verify
 dependencies: []

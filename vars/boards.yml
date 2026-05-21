@@ -1,4 +1,10 @@
 ---
+# This file intentionally lives under vars/ (not defaults/) because the
+# board catalogue is authoritative collection knowledge: the entries
+# below are facts about the hardware, not per-host knobs. Per-host
+# overrides should patch *specific* fields via group_vars / host_vars
+# rather than replacing whole entries.
+#
 # Per-board metadata. Keyed by armbian_netboot_board_model (matches
 # inventory host_vars and pxelinux/TFTP paths).
 #

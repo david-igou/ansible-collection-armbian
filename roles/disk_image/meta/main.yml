@@ -1,11 +1,16 @@
 ---
 galaxy_info:
   role_name: disk_image
-  author: david-igou
+  author: David Igou
+  author_email: igou.david@gmail.com
   description: "Stream an .img.xz or .img to a block device via xz -dc | dd."
   license: MIT
   min_ansible_version: "2.15"
   platforms:
     - name: Generic
       versions: [all]
+  galaxy_tags:
+    - armbian
+    - netboot
+    - imaging
 dependencies: []

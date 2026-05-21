@@ -1,11 +1,16 @@
 ---
 galaxy_info:
   role_name: board_boot_wait
-  author: david-igou
+  author: David Igou
+  author_email: igou.david@gmail.com
   description: "Wait for a board to come up over TCP/22 + SSH."
   license: MIT
   min_ansible_version: "2.15"
   platforms:
     - name: Generic
       versions: [all]
+  galaxy_tags:
+    - armbian
+    - netboot
+    - ssh
 dependencies: []
