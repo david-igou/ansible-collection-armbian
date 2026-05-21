@@ -1,0 +1,39 @@
+---
+argument_specs:
+  main:
+    short_description: "Provision an SSH-key user with passwordless sudo on a flashed Armbian board."
+    description:
+      - >-
+        Connects as the Armbian default user (root) using the supplied
+        password, creates an unprivileged user, authorises a fixed set
+        of SSH keys for it, grants passwordless sudo via a
+        visudo-validated drop-in, removes Armbian's first-login TUI
+        sentinel, and disables PasswordAuthentication in sshd (handler
+        restarts sshd).
+      - >-
+        Idempotent: re-running against an already-bootstrapped board
+        reconciles authorized_keys and is otherwise a no-op.
+      - >-
+        Fail-fasts when armbian_netboot_bootstrap_ssh_keys is empty —
+        otherwise the role would create a user with no authorised keys
+        and then disable password auth, leaving the board permanently
+        unreachable.
+
+    options:
+      armbian_netboot_bootstrap_user:
+        type: str
+        required: true
+        description: >-
+          Username to create on the board. Should match the
+          ansible_user the rest of the inventory connects as so
+          subsequent plays land as this user.
+      armbian_netboot_bootstrap_ssh_keys:
+        type: list
+        elements: str
+        required: true
+        description: >-
+          Public SSH keys to authorise for the new user. MUST be
+          non-empty — an empty list combined with the role's
+          PasswordAuthentication=no step would render the board
+          permanently unreachable. The runtime assertion in
+          tasks/main.yml enforces this.
