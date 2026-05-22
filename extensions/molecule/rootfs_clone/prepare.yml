@@ -1,4 +1,7 @@
 ---
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
+
 - name: Prepare — build a synthetic rootfs template in the container
   hosts: all
   gather_facts: false
