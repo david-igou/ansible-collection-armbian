@@ -74,15 +74,50 @@ covered by molecule.
 
 | # | Scenario dir | Backend | Image | Tests |
 |---|---|---|---|---|
-| 1 | `bootstrap_armbian` | qemu | Trixie cloud-minimal | Role on fresh Armbian VM |
-| 2 | `disk_image` | qemu | Trixie cloud-minimal | Streaming write to loop device |
-| 3 | `disk_provision` | qemu | Trixie cloud-minimal | systemd-repart + preserve + populate |
-| 4 | `image_extract` | qemu | Trixie cloud-minimal | losetup + mount + rsync + artifact copy |
+| 1 | `bootstrap_armbian` | qemu (UEFI) | Armbian Trixie cloud_minimal | Role on fresh Armbian VM (root/1234) |
+| 2 | `disk_image` | qemu | Debian Trixie genericcloud | Streaming write to loop device |
+| 3 | `disk_provision` | qemu | Debian Trixie genericcloud | systemd-repart + preserve + populate |
+| 4 | `image_extract` | qemu | Debian Trixie genericcloud | losetup + mount + rsync + artifact copy |
 | 5 | `rootfs_clone` | podman | debian:13 | Reflink fallback + identity reset |
 | 6 | `pxelinux_render` | podman | debian:13 | Template rendering (nfs/sd/verbose/local_kernel/extra_modes) |
-| 7 | `image_build` | kubevirt | (containerdisk) | Real Armbian build — slow, gated |
-| 8 | `local_kernel_render` | podman | debian:13 | `render_localcmd_chain.j2` macro output |
-| 9 | `persist_uboot_env` | podman | debian:13 | `compose_uboot_env_vars.yml` precedence |
+| 7 | `image_build` | qemu (heavy) | Debian Trixie genericcloud | Real Armbian build — slow, gated/manual (was kubevirt before user redirect on 2026-05-22) |
+| 8 | `local_kernel_render` | podman | docker.io/geerlingguy/docker-ubuntu2404-ansible | `render_localcmd_chain.j2` macro output |
+| 9 | `persist_uboot_env` | podman | docker.io/geerlingguy/docker-ubuntu2404-ansible | `compose_uboot_env_vars.yml` precedence |
+
+### Image source rationale (added 2026-05-22)
+
+The original spec called for "Armbian UEFI x86 Trixie cloud_minimal qcow2"
+across all qemu scenarios. Implementation surfaced a hard incompatibility:
+
+- The Armbian `cloud_minimal` image variant **does not ship cloud-init**
+  (the "cloud" refers to the cloud kernel, not cloud-init enablement).
+- `david_igou.molecule_provisioners.qemu` v1.1 provisions VMs exclusively
+  via cloud-init NoCloud seed ISOs for SSH-key + user injection.
+- Without cloud-init, there is no mechanism for the provisioner's prepare
+  phase to authenticate.
+
+**Resolution**: Debian Trixie (`debian-13-genericcloud-amd64.qcow2`) for
+all qemu scenarios except `bootstrap_armbian`. The role logic under test
+in disk_image / disk_provision / image_extract / image_build is
+distro-agnostic — Debian or Armbian userland makes no difference to xz
+streaming, systemd-repart, loop-mount, or armbian/build's Docker host
+requirements.
+
+`bootstrap_armbian` is the exception: its whole purpose is bootstrapping
+the Armbian fresh-flash workflow (root SSH with password `1234`, remove
+`/root/.not_logged_in_yet`, etc.). Testing it against a non-Armbian image
+would test nothing. To make Armbian work, two molecule_provisioners
+enhancements were required:
+
+1. **UEFI firmware support** (already landed: commits `549a7b5` + `10c8aa1`
+   on molecule_provisioners main). The `mp.qemu.firmware: uefi` per-host
+   option launches the VM with OVMF pflash drives — required since the
+   Armbian image is UEFI-only.
+2. **Cloud-init bypass** (still to be added). Provide a per-host
+   `mp.qemu.skip_cloud_init: true` option that omits the seed-ISO mount
+   and writes the runtime inventory with password auth + the consumer's
+   declared user. The bootstrap_armbian scenario then connects as
+   `root:1234` directly. See Task 3.4 for implementation.
 
 Not covered (with rationale in `extensions/molecule/README.md`):
 
