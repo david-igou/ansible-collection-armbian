@@ -1,46 +1,16 @@
 ---
-# Privileged Debian 12 container + loop device.
-# Mirrors disk_provision_loopback. Same SYS_ADMIN + /dev:/dev mount
-# pattern so losetup + partprobe work.
-
-dependency:
-  name: galaxy
-  options:
-    requirements-file: extensions/molecule/provisioners/${PROVISIONER:-podman}/requirements.yml
-    force: true
-
-driver:
-  name: default
-  options:
-    managed: true
-    ansible_connection_options:
-      connection: local
-
-platforms:
-  - name: disk-image
-    podman:
-      image: docker.io/library/debian:12
-      command: sleep 1d
-      privileged: true
-      capabilities:
-        - SYS_ADMIN
-      volumes:
-        - /dev:/dev
-
-provisioner:
-  name: ansible
+ansible:
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=inventory/
+        - --inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/
   playbooks:
-    converge: converge.yml
-    create: ../provisioners/${PROVISIONER:-podman}/create.yml
-    destroy: ../provisioners/${PROVISIONER:-podman}/destroy.yml
+    create: create.yml
+    destroy: destroy.yml
     prepare: prepare.yml
+    converge: converge.yml
     verify: verify.yml
-  inventory:
-    links:
-      group_vars: ../provisioners/${PROVISIONER:-podman}/group_vars/
-
-verifier:
-  name: ansible
 
 scenario:
   name: disk_image
@@ -52,3 +22,6 @@ scenario:
     - converge
     - verify
     - destroy
+
+verifier:
+  name: ansible
