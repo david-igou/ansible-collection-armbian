@@ -1,0 +1,5 @@
+---
+mp_defaults:
+  podman:
+    command: sleep 1d
+    privileged: false
