@@ -1,0 +1,84 @@
+---
+- hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Template /bin/bash exists (rootfs rsync ran)
+      ansible.builtin.stat:
+        path: /var/lib/molecule/template/bin/bash
+      register: _template_bash
+
+    - name: Assert /bin/bash in extracted template
+      ansible.builtin.assert:
+        that: _template_bash.stat.exists
+        fail_msg: "image_extract finished but template_dir is empty"
+
+    - name: Sentinel marker written at end of successful run
+      ansible.builtin.stat:
+        path: /var/lib/molecule/template/.armbian_extract_complete
+      register: _sentinel
+
+    - name: Assert sentinel exists
+      ansible.builtin.assert:
+        that: _sentinel.stat.exists
+        fail_msg: "image_extract sentinel missing — extraction likely failed mid-run"
+
+    - name: Stat the three TFTP artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _tftp_stats
+      loop:
+        - /var/lib/molecule/tftp/vmlinuz
+        - /var/lib/molecule/tftp/initrd.img
+        - /var/lib/molecule/tftp/board.dtb
+
+    - name: All three TFTP artifacts present
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "{{ item.item }} missing from tftp_dir"
+      loop: "{{ _tftp_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Re-run image_extract — sentinel must short-circuit (idempotent)"
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.image_extract
+      vars:
+        armbian_image_src: /tmp/orangepi5.img.xz
+        model_name: orangepi5
+        template_dir: /var/lib/molecule/template
+        tftp_dir: /var/lib/molecule/tftp
+        image_cache_dir: /var/lib/molecule/image_cache
+        image_mount_dir: /var/lib/molecule/image_mount
+        board_dtb: rockchip/rk3588s-orangepi-5.dtb
+
+    # The role short-circuits the main extraction block via the sentinel file.
+    # The directory-creation tasks above the block still run (and may report
+    # `changed`), but the decompression/losetup/rsync/copy steps are skipped.
+    # Assert we at least haven't lost the artifacts from the first run.
+    - name: Sentinel still present after idempotent re-run
+      ansible.builtin.stat:
+        path: /var/lib/molecule/template/.armbian_extract_complete
+      register: _sentinel_after
+
+    - name: Assert sentinel not removed by second run
+      ansible.builtin.assert:
+        that: _sentinel_after.stat.exists
+        fail_msg: "Second image_extract run removed the sentinel — idempotency broken"
+
+    - name: TFTP artifacts still present after idempotent re-run
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _tftp_after
+      loop:
+        - /var/lib/molecule/tftp/vmlinuz
+        - /var/lib/molecule/tftp/initrd.img
+        - /var/lib/molecule/tftp/board.dtb
+
+    - name: All three TFTP artifacts still present
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "{{ item.item }} missing after idempotent re-run"
+      loop: "{{ _tftp_after.results }}"
+      loop_control:
+        label: "{{ item.item }}"

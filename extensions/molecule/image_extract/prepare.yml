@@ -1,0 +1,55 @@
+---
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Cache the Armbian SBC fixture on the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Using orangepi5 (non-pro) from jevincanders mirror — a standard Rockchip
+    # rk3588s board with the same /boot/dtb/rockchip/ layout as orangepi5-pro.
+    # orangepi5-pro images are not reliably available on public mirrors.
+    _fixture_url: >-
+      https://mirrors.jevincanders.net/armbian/dl/orangepi5/archive/Armbian_25.5.1_Orangepi5_bookworm_current_6.12.28_minimal.img.xz
+    _fixture_cache: >-
+      {{ lookup('env', 'XDG_CACHE_HOME') | default(lookup('env', 'HOME') ~ '/.cache', true) }}/armbian-netboot-molecule
+    _fixture_dest: >-
+      {{ lookup('env', 'XDG_CACHE_HOME') | default(lookup('env', 'HOME') ~ '/.cache', true) }}/armbian-netboot-molecule/orangepi5.img.xz
+
+  tasks:
+    - name: Ensure the fixture cache dir exists
+      ansible.builtin.file:
+        path: "{{ _fixture_cache }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download the Armbian SBC fixture (idempotent — get_url caches)
+      ansible.builtin.get_url:
+        url: "{{ _fixture_url }}"
+        dest: "{{ _fixture_dest }}"
+        mode: "0644"
+
+- name: Install in-VM dependencies and push the Armbian fixture
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    # Mirror the same path formula from the localhost play so we know where
+    # the cached file lives without cross-play variable passing.
+    _fixture_dest: >-
+      {{ lookup('env', 'XDG_CACHE_HOME') | default(lookup('env', 'HOME') ~ '/.cache', true) }}/armbian-netboot-molecule/orangepi5.img.xz
+
+  tasks:
+    - name: Install xz, rsync, util-linux, parted, e2fsprogs (needed by image_extract role)
+      ansible.builtin.apt:
+        name: [xz-utils, rsync, util-linux, parted, e2fsprogs]
+        state: present
+        update_cache: true
+
+    - name: Synchronize the .img.xz into the VM
+      ansible.posix.synchronize:
+        src: "{{ _fixture_dest }}"
+        dest: /tmp/orangepi5.img.xz
