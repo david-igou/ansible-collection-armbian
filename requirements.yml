@@ -6,3 +6,6 @@ collections:
     version: ">=1.5.0"
   - name: ansible.netcommon
     version: ">=5.0.0"
+  - name: https://github.com/david-igou/ansible-collection-molecule_provisioners.git
+    type: git
+    version: main
