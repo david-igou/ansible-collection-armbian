@@ -1,0 +1,8 @@
+---
+mp_defaults:
+  qemu:
+    cpus: 2
+    memory: 2048
+    # ssh_user is irrelevant here — molecule_provisioners writes its runtime
+    # inventory using cloud-user but we override that in prepare.yml.
+    ssh_user: cloud-user
