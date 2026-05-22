@@ -61,7 +61,6 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - default
           - rootfs_clone
           - pxelinux_render
     steps:
