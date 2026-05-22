@@ -1,0 +1,6 @@
+---
+mp_defaults:
+  qemu:
+    cpus: 8
+    memory: 16384
+    ssh_user: debian

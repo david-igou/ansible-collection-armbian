@@ -1,138 +1,124 @@
 ---
 # Scenario-specific prepare. Two plays:
-#   1. Wait for SSH on the VM (mirrors provisioners/kubevirt/prepare.yml).
-#   2. Format the scratch disk, install docker-ce + xz/git on the CentOS
-#      Stream 10 builder VM, set SELinux permissive (so Docker bind mounts
-#      from the build container don't trip AVC denials), add cloud-user
-#      to the docker group, and verify Docker is reachable as cloud-user
-#      (the EUID compile.sh checks for Docker auto-delegation).
+#   1. Import the molecule_provisioners prepare (SSH wait + ephemeral inventory).
+#   2. Install Docker CE on Debian trixie, configure binfmt_misc cross-arch
+#      emulation, and verify Docker is reachable as the `debian` user.
+#
+# Notes on porting from the kubevirt/CentOS scenario:
+#   - No separate scratch disk: the single 100G qcow2 is the only disk.
+#     /var/lib/armbian_build lives on the root filesystem.
+#   - SELinux: not present on Debian; skip setenforce/lineinfile.
+#   - ext4 module: built into the Debian trixie kernel; no modprobe needed.
+#   - Docker CE apt repo: same as the kubevirt scenario but Debian-flavoured.
+#   - MTU: qemu SLIRP networking uses 1500-byte MTU on the guest interface
+#     (unlike OVN's 1400-byte MTU in KubeVirt). Still detect and configure
+#     docker daemon.json to match so the logic stays correct if the interface
+#     MTU changes (e.g. bridged networking in future).
+#   - binfmt_misc + tonistiigi/binfmt: preserved verbatim — required for
+#     armbian/build's cross-arch docker container to register aarch64 binfmts.
+#   - cloud-user → debian: Debian trixie cloud images use the `debian` user.
 
-- name: Wait for VM SSH
-  hosts: all
-  gather_facts: false
-  tasks:
-    - name: Wait for the host to be reachable
-      ansible.builtin.wait_for_connection:
-        timeout: 300
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
 
-- name: Prepare Armbian builder host
+- name: Install Docker and armbian/build prerequisites
   hosts: all
   gather_facts: true
   become: true
 
   tasks:
-    - name: Install dnf-plugins-core (provides config-manager)
-      ansible.builtin.dnf:
-        name: dnf-plugins-core
+    - name: Install Docker, git, make, build dependencies
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - git
+          - make
+          - rsync
+          - xz-utils
         state: present
+        update_cache: true
 
-    # armbian/build's check_filesystem_compatibility_on_host greps
-    # /proc/filesystems for ROOTFS_TYPE (default ext4). On CentOS Stream 10
-    # cloud images ext4 ships as a module and is not auto-loaded, so the
-    # build's docker container cannot modprobe it from inside (capability
-    # constraints inside the relaunched container) and the build aborts.
-    # Loading on the host first makes ext4 visible in /proc/filesystems
-    # before the container starts.
-    - name: Persist ext4 in /etc/modules-load.d (loads on every boot)
-      ansible.builtin.copy:
-        dest: /etc/modules-load.d/armbian-build.conf
-        content: |
-          ext4
+    - name: Add Docker apt repo key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
 
-    - name: Load ext4 kernel module now
-      ansible.builtin.command:
-        cmd: modprobe ext4
-      changed_when: false  # idempotent; modprobe is a no-op if already loaded
+    - name: Add Docker apt repository (Debian trixie)
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable"
+        state: present
+        filename: docker
+        update_cache: true
 
-    - name: Confirm ext4 is in /proc/filesystems
-      ansible.builtin.command:
-        cmd: grep -wq ext4 /proc/filesystems
-      changed_when: false
-
-    - name: Get current SELinux mode
-      ansible.builtin.command:
-        cmd: getenforce
-      changed_when: false
-      register: _selinux_mode
-
-    - name: Set SELinux to permissive at runtime
-      ansible.builtin.command:
-        cmd: setenforce 0
-      when: _selinux_mode.stdout == "Enforcing"
-      changed_when: _selinux_mode.stdout == "Enforcing"
-
-    - name: Persist SELinux permissive mode across reboots
-      ansible.builtin.lineinfile:
-        path: /etc/selinux/config
-        regexp: '^SELINUX='
-        line: 'SELINUX=permissive'
-
-    - name: Detect scratch disk filesystem
-      ansible.builtin.command:
-        cmd: blkid -s TYPE -o value /dev/vdb
-      changed_when: false
-      failed_when: false
-      register: _scratch_fstype
-
-    - name: Format scratch disk as XFS (only if unformatted)
-      ansible.builtin.command:
-        cmd: mkfs.xfs -L scratch /dev/vdb
-      when: _scratch_fstype.stdout != "xfs"
-      changed_when: true
-
-    - name: Read XFS UUID from the scratch disk
-      ansible.builtin.command:
-        cmd: blkid -s UUID -o value /dev/vdb
-      changed_when: false
-      register: _scratch_uuid
-
-    - name: Ensure scratch mount point exists
-      ansible.builtin.file:
-        path: /var/lib/armbian_build
-        state: directory
-        mode: "0755"
-
-    - name: Persist scratch disk in /etc/fstab and mount it
-      ansible.posix.mount:
-        path: /var/lib/armbian_build
-        src: "UUID={{ _scratch_uuid.stdout }}"
-        fstype: xfs
-        opts: defaults,nofail
-        state: mounted
-
-    - name: Add Docker CE repo
-      ansible.builtin.command:
-        cmd: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        creates: /etc/yum.repos.d/docker-ce.repo
-
-    - name: Install Docker CE and build prerequisites
-      ansible.builtin.dnf:
+    - name: Install Docker engine
+      ansible.builtin.apt:
         name:
           - docker-ce
           - docker-ce-cli
           - containerd.io
           - docker-buildx-plugin
           - docker-compose-plugin
-          - xz
-          - git
         state: present
 
-    # KubeVirt VMs run on OVN-Kubernetes with a 1400-byte MTU on the VM's
-    # uplink. Docker's default bridge MTU is 1500. When the build container
-    # sends a >1400-byte TCP segment it gets silently dropped at the OVN
-    # boundary (PMTUD black-hole), so HTTPS fetches to large responders
-    # like raw.githubusercontent.com hang and time out. Pinning Docker's
-    # bridge MTU to match enp1s0 prevents the fragmentation.
+    # armbian/build's check_filesystem_compatibility_on_host greps
+    # /proc/filesystems for ROOTFS_TYPE (default ext4). On Debian trixie
+    # ext4 is compiled in (not a module), so it is always present. No
+    # modprobe needed — but we assert it exists for early failure.
+    - name: Confirm ext4 is in /proc/filesystems
+      ansible.builtin.command:
+        cmd: grep -wq ext4 /proc/filesystems
+      changed_when: false
+
+    # armbian/build inside its build container calls
+    # update-binfmts --enable qemu-{arm,aarch64,riscv64,loongarch64} and
+    # then arch-test arm64. update-binfmts fails inside the container on
+    # this kernel (writes to /proc/sys/fs/binfmt_misc/register get rejected
+    # despite --privileged), so arch-test never finds a working aarch64
+    # interpreter and the build aborts. Standard fix: pre-register all
+    # qemu-* binfmts on the HOST kernel via the tonistiigi/binfmt image.
+    # Once registered (with the F flag, which embeds the qemu binary into
+    # the registration), the build container sees them already present
+    # and the per-arch update-binfmts calls become no-ops.
+    #
+    # binfmt_misc may not be mounted on cloud images — load + mount first
+    # so the tonistiigi/binfmt install survives container exit.
+    - name: Load binfmt_misc kernel module
+      ansible.builtin.command:
+        cmd: modprobe binfmt_misc
+      changed_when: false
+
+    - name: Mount binfmt_misc on /proc/sys/fs/binfmt_misc
+      ansible.posix.mount:
+        path: /proc/sys/fs/binfmt_misc
+        src: binfmt_misc
+        fstype: binfmt_misc
+        state: mounted
+
+    # Detect and configure Docker bridge MTU to match the VM's uplink.
+    # On qemu SLIRP the guest interface is typically enp*s0 at 1500 bytes;
+    # on some hypervisor-specific setups it may differ. We detect at runtime
+    # and write daemon.json so Docker's docker0 picks up the same MTU —
+    # preventing silent TCP fragmentation drops inside build containers.
+    - name: Detect VM uplink interface name (first non-loopback)
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          ip -o link show | awk -F': ' '$2 !~ /^lo$/ {print $2; exit}'
+      changed_when: false
+      register: _uplink_iface
+
     - name: Detect VM uplink MTU
       ansible.builtin.command:
-        cmd: ip -o link show enp1s0
+        cmd: "ip -o link show {{ _uplink_iface.stdout | trim }}"
       changed_when: false
-      register: _enp1s0_link
+      register: _uplink_link
 
     - name: Extract uplink MTU
       ansible.builtin.set_fact:
-        _vm_mtu: "{{ _enp1s0_link.stdout | regex_search('mtu (\\d+)', '\\1') | first | int }}"
+        _vm_mtu: "{{ _uplink_link.stdout | regex_search('mtu (\\d+)', '\\1') | first | int }}"
 
     - name: Configure docker bridge MTU to match VM uplink
       ansible.builtin.copy:
@@ -147,8 +133,8 @@
     - name: Enable and start docker.service
       ansible.builtin.systemd:
         name: docker
-        enabled: true
         state: started
+        enabled: true
 
     - name: Restart docker if daemon.json changed
       ansible.builtin.systemd:
@@ -170,43 +156,14 @@
           docker0 MTU did not pick up the daemon.json setting.
           Got: {{ _docker0_link.stdout }}, expected mtu={{ _vm_mtu }}
 
-    - name: Add cloud-user to docker group
+    - name: Add debian user to docker group
       ansible.builtin.user:
-        name: cloud-user
+        name: debian
         groups: docker
         append: true
 
-    - name: Reset SSH connection so cloud-user picks up the docker group
+    - name: Reset SSH connection so debian user picks up the docker group
       ansible.builtin.meta: reset_connection
-
-    # armbian/build inside its build container calls
-    # update-binfmts --enable qemu-{arm,aarch64,riscv64,loongarch64} and
-    # then arch-test arm64. update-binfmts fails inside the container on
-    # this kernel (writes to /proc/sys/fs/binfmt_misc/register get rejected
-    # despite --privileged), so arch-test never finds a working aarch64
-    # interpreter and the build aborts. Standard fix: pre-register all
-    # qemu-* binfmts on the HOST kernel via the tonistiigi/binfmt image.
-    # Once registered (with the F flag, which embeds the qemu binary into
-    # the registration), the build container sees them already present
-    # and the per-arch update-binfmts calls become no-ops.
-    #
-    # Some KubeVirt cluster nodes ship CentOS Stream 10 with the
-    # binfmt_misc kernel module unloaded and /proc/sys/fs/binfmt_misc
-    # unmounted. Without that, tonistiigi/binfmt's --install runs cleanly
-    # inside its privileged container but never persists to the host
-    # kernel — registrations vanish on container exit. Load + mount the
-    # filesystem explicitly first so the install survives.
-    - name: Load binfmt_misc kernel module
-      ansible.builtin.command:
-        cmd: modprobe binfmt_misc
-      changed_when: false
-
-    - name: Mount binfmt_misc on /proc/sys/fs/binfmt_misc
-      ansible.posix.mount:
-        path: /proc/sys/fs/binfmt_misc
-        src: binfmt_misc
-        fstype: binfmt_misc
-        state: mounted
 
     - name: Pre-register cross-architecture qemu binfmts on the host
       ansible.builtin.command:
@@ -227,7 +184,7 @@
           tonistiigi/binfmt stdout: {{ _binfmt_install.stdout | default('') }}
           stderr: {{ _binfmt_install.stderr | default('') }}
 
-    - name: Verify Docker reachability as cloud-user
+    - name: Verify Docker reachability as debian user
       ansible.builtin.command:
         cmd: docker info
       become: false
@@ -240,19 +197,11 @@
           - _docker_info.rc == 0
           - "'Server Version' in _docker_info.stdout"
         fail_msg: >-
-          docker info as cloud-user did not report a running daemon.
+          docker info as debian user did not report a running daemon.
           Got rc={{ _docker_info.rc }}, stdout={{ _docker_info.stdout | default('') }}
 
-    - name: Confirm scratch disk is mounted at /var/lib/armbian_build
-      ansible.builtin.command:
-        cmd: findmnt --noheadings --output SOURCE /var/lib/armbian_build
-      changed_when: false
-      register: _scratch_mount
-
-    - name: Assert /var/lib/armbian_build is on the scratch disk (vdb)
-      ansible.builtin.assert:
-        that:
-          - "'/dev/vdb' in _scratch_mount.stdout"
-        fail_msg: >-
-          /var/lib/armbian_build is not mounted from /dev/vdb.
-          findmnt: {{ _scratch_mount.stdout }}
+    - name: Ensure /var/lib/armbian_build exists
+      ansible.builtin.file:
+        path: /var/lib/armbian_build
+        state: directory
+        mode: "0755"
