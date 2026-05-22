@@ -21,20 +21,42 @@ implementations live in this collection.
 
 ## Non-goals
 
-- Modifying `david_igou.molecule_provisioners`. Its v1.1 qemu role
-  (`process` driver, SLIRP networking, single virtio disk) is the contract;
-  this collection consumes it as-is.
 - Multi-disk VM scenarios. Where a role needs a second block device
   (`disk_image`, `disk_provision`, `image_extract`), the scenario creates
   a sparse file inside the VM and binds it to a loop device. molecule_provisioners
-  exposes only one virtio disk per host (the cloud-init overlay) and adding
-  a second is a v1.2-or-later change in that collection.
+  exposes only one virtio disk per host (the cloud-init overlay), and the
+  in-VM loopfile is a proven workaround (current podman scenarios use it).
+  Adding multi-disk support to molecule_provisioners is a future enhancement
+  if a real per-device assertion becomes necessary.
 - Per-role hardware-equivalent assertions. Roles that need real PXE-booted
   board state (`board_boot_verify`) or that wrap Ansible's own modules
   with no role logic (`board_boot_wait`) are deliberately uncovered.
   `playbooks/test_hardware_e2e.yml` is their integration test.
 - Touching `playbooks/`, `roles/*/tasks/`, or `vars/`. This is a test-layer
-  change only.
+  change only on the armbian_netboot side.
+
+## molecule_provisioners is modifiable
+
+The companion collection (`david_igou.molecule_provisioners`) is privately
+used. If the implementation surfaces a gap, fix it there and push — same
+operator, same release cadence, no external consumers to break. The
+implementation plan flags places where a collection change may be needed
+versus places where the existing API suffices.
+
+Identified gap (resolved by existing escape hatch): the qemu role's
+`user-data.j2` template creates only the configured `ssh_user` and locks
+root. `bootstrap_armbian` needs root SSH with the default Armbian password
+to simulate a fresh-flash board. Resolution: ship a scenario-local
+`user-data.j2` and point at it via `mp_qemu_template_dir_override` (already
+supported by the role — see `_seed_iso.yml`). No provisioner change
+required.
+
+Other gaps (not currently blocking, listed for visibility):
+- No multi-disk per-VM. Worked around with in-VM loopfile. If a future
+  scenario must assert against a real second virtio disk, add
+  `extra_disks: [{size, format?}]` to the qemu schema.
+- No `cpu host` passthrough toggle. Comment in `_create_process.yml`
+  notes this is deferred; not needed for these scenarios.
 
 ## Why
 
@@ -75,30 +97,38 @@ The role's contract: connect as root with the Armbian default password, create
 an unprivileged user, authorise a fixture SSH key, drop a NOPASSWD sudoers
 file, remove `/root/.not_logged_in_yet`, set `PasswordAuthentication no`.
 
-**Prepare**: cloud-init must put the VM in the same state as a fresh Armbian
-flash — root must accept the configured password over SSH. The default
-Trixie cloud-minimal image's cloud-init creates `cloud-user` and locks root.
-The scenario overrides this by writing a `user-data` snippet that sets the
-root password and enables `PermitRootLogin yes` + `PasswordAuthentication yes`.
+**Prepare strategy** — clean version using the existing escape hatch:
 
-Since `david_igou.molecule_provisioners.qemu`'s `user-data.j2` template is
-fixed and only creates the `ssh_user` user, the scenario uses a
-`prepare.yml` that runs *after* the molecule_provisioners prepare (which
-sets up the unprivileged `cloud-user` over SSH) and reverts the VM to a
-"fresh Armbian" state: sets a root password, restores
-`PermitRootLogin`/`PasswordAuthentication yes`, restarts sshd, deletes
-`cloud-user` so the role doesn't run against a pre-bootstrapped host, and
-recreates `/root/.not_logged_in_yet` so the role has something to remove.
+The scenario ships its own `templates/user-data.j2` that diverges from
+molecule_provisioners' stock template by:
 
-**Converge**: runs against a re-targeted inventory (`ansible_user: root`,
-`ansible_password: 1234`, `ansible_ssh_pass: 1234`) — molecule_provisioners
-writes the runtime inventory under the SSH key, so converge re-points
-`hostvars` to the root-with-password path.
+- Setting a root password (`chpasswd: list: ['root:1234']`, `expire: false`)
+- `ssh_pwauth: true`
+- Sshd override to `PermitRootLogin yes`
+- Touching `/root/.not_logged_in_yet` so the role has the sentinel to remove
+- *Not* creating an unprivileged `cloud-user` (the role does that)
+
+The scenario sets `mp_qemu_template_dir_override:
+"{{ playbook_dir }}/templates"` in `inventory/group_vars/molecule.yml`,
+which `_seed_iso.yml` already honours.
+
+**Converge**: runs against an override inventory entry that points
+`ansible_user: root` + `ansible_password: 1234` + `ansible_connection: ssh`
++ `ansible_host: 127.0.0.1` + `ansible_port: <slirp port from runtime
+inventory>`. The scenario's `prepare.yml` writes this override file under
+`{{ molecule_ephemeral_directory }}/inventory/bootstrap_inventory.yml`
+after extracting the port from the molecule_provisioners runtime inventory.
 
 **Verify**: SSH in as the new user with the fixture key, run `sudo -n
 true`, read `/etc/sudoers.d/<user>`, read `/etc/ssh/sshd_config` and assert
 `PasswordAuthentication no`, stat `/root/.not_logged_in_yet` and assert
 absent.
+
+**If `mp_qemu_template_dir_override` proves awkward** (e.g., it resolves
+the wrong path relative to `playbook_dir` in a molecule context), fall back
+to adding `extra_user_data: <jinja-block>` schema to the qemu role and
+shipping the diff via that. Either way, no in-VM reverting of cloud-init
+state is needed.
 
 ### 2. `disk_image` (qemu)
 
@@ -295,13 +325,21 @@ backend (`image_build` only under kubevirt) ship only that backend's block.
 
 ### `requirements.yml`
 
-Add:
+Install from git, not Galaxy — the collection is privately published and
+git lets us iterate on it without a Galaxy release per change.
 
 ```yaml
 collections:
-  - name: david_igou.molecule_provisioners
-    version: ">=1.1.0,<2.0.0"
+  - name: https://github.com/david-igou/ansible-collection-molecule_provisioners.git
+    type: git
+    version: main
 ```
+
+Molecule's dependency phase consumes this via `ansible-galaxy collection
+install -r requirements.yml`. The scenario's `molecule.yml` does not
+need its own `dependency` block — relying on the collection being
+installed at the project root (where pytest / `molecule test` is invoked
+from) keeps the install step the same for both pre-commit and CI.
 
 ### Image cache
 
@@ -392,8 +430,8 @@ present in `/workspace/igou-devenv` per its CLAUDE.md.
 - **Placeholders**: none. All scenario names, backends, and image URLs are concrete.
 - **Internal consistency**: `disk_image` / `disk_provision` / `image_extract` need a second block device → addressed via in-VM loop file in each scenario's prepare. Same approach as the current podman scenarios, but now running on a real VM where losetup is reliable.
 - **Scope check**: one design doc, one implementation plan. No decomposition needed.
-- **Ambiguity check**: one explicit open question flagged in §4 (`image_extract` fixture image source — recommend option A, real SBC image). Resolved during user review.
-- **Out-of-scope reminders**: not touching `david_igou.molecule_provisioners`; not touching `roles/`/`playbooks/`/`vars/`; not adding multi-disk VM support; not covering `board_boot_wait` / `board_boot_verify`.
+- **Ambiguity check**: `image_extract` fixture image source resolved (option A: real SBC `.img.xz`). `bootstrap_armbian` cloud-init customisation resolved (use existing `mp_qemu_template_dir_override`; fall back to extending qemu schema only if that path proves awkward).
+- **Out-of-scope reminders**: not touching `roles/`/`playbooks/`/`vars/` in armbian_netboot; not adding multi-disk VM support to molecule_provisioners; not covering `board_boot_wait` / `board_boot_verify`. molecule_provisioners IS in scope for fixes if the implementation surfaces blockers.
 
 ## Implementation plan
 
