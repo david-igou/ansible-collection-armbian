@@ -1,0 +1,2 @@
+---
+mp_backend: "{{ lookup('env', 'PROVISIONER') | default('podman', true) }}"

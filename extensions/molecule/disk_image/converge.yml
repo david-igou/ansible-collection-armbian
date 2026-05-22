@@ -1,6 +1,7 @@
 ---
 - hosts: all
   gather_facts: true
+  become: true
   tasks:
     - name: "Read target loop device path"
       ansible.builtin.slurp:
@@ -13,7 +14,7 @@
 
     - name: "Converge: invoke full role on a clean (unmounted) target"
       ansible.builtin.include_role:
-        name: disk_image
+        name: david_igou.armbian_netboot.disk_image
       vars:
-        image_source: "/tmp/test.img"
+        image_source: "/tmp/test.img.xz"
         target_device: "{{ _target_loop }}"

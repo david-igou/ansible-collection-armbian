@@ -1,0 +1,96 @@
+---
+- hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Read loop device path
+      ansible.builtin.slurp:
+        src: /tmp/loop_device
+      register: _loop_b64
+
+    - name: Set loop device fact
+      ansible.builtin.set_fact:
+        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
+
+    - name: "Pass 1: initial provision — full layout, no preserves yet"
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.disk_provision
+      vars:
+        source: "/tmp/testroot"
+        disk_binding:
+          device: "{{ _loop }}"
+          wipe: true
+          layout:
+            - id: boot
+              size: 256MiB
+              type: linux
+              format: ext4
+              label: lp_boot
+              mount: /boot
+            - id: var
+              size: 512MiB
+              type: var
+              format: ext4
+              label: lp_var
+              mount: /var
+              preserve_on_reprovision: true
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: lp_root
+              mount: /
+
+    - name: Write a sentinel into /var on the loop disk
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mount LABEL=lp_var /mnt
+        echo SENTINEL > /mnt/preserve_test
+        sync
+        umount /mnt
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Pass 2: re-provision — preserve_on_reprovision=true keeps /var sentinel"
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.disk_provision
+      vars:
+        source: "/tmp/testroot"
+        disk_binding:
+          device: "{{ _loop }}"
+          wipe: true
+          layout:
+            - id: boot
+              size: 256MiB
+              type: linux
+              format: ext4
+              label: lp_boot
+              mount: /boot
+            - id: var
+              size: 512MiB
+              type: var
+              format: ext4
+              label: lp_var
+              mount: /var
+              preserve_on_reprovision: true
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: lp_root
+              mount: /
+
+    - name: "Pass 3: render-only mode — write .repart.d files but don't apply"
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.disk_provision
+      vars:
+        render_only: true
+        disk_binding:
+          device: /dev/loop1
+          wipe: true
+          layout:
+            - { id: esp,  size: 512MiB, type: esp,   format: vfat, label: ARMBI_ESP,         mount: /boot/efi }
+            - { id: boot, size: 1GiB,   type: linux, format: ext4, label: armbi_boot,       mount: /boot }
+            - { id: var,  size: 20GiB,  type: var,   format: ext4, label: armbi_var,        mount: /var, preserve_on_reprovision: true }
+            - { id: root, size: grow,   type: root,  format: ext4, label: armbi_root_local, mount: / }

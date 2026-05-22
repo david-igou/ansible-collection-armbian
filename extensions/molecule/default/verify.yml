@@ -1,9 +1,0 @@
----
-- name: Verify
-  hosts: all
-  gather_facts: false
-  become: false
-
-  tasks:
-    - name: Assert instance is reachable
-      ansible.builtin.ping:

@@ -1,0 +1,45 @@
+---
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Build the loop-device fixture inside the VM
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Install systemd-repart support tools (util-linux + rsync + fs tooling)
+      ansible.builtin.apt:
+        name: [systemd, util-linux, rsync, e2fsprogs, dosfstools, parted]
+        state: present
+        update_cache: true
+
+    - name: Create a 6 GiB sparse file
+      ansible.builtin.command: "truncate -s 6G /tmp/loopback.img"
+      changed_when: true
+
+    - name: Attach as a loop device
+      ansible.builtin.command: "losetup -f --show /tmp/loopback.img"
+      register: _loop
+      changed_when: true
+
+    - name: Persist the loop device path for converge + verify
+      ansible.builtin.copy:
+        dest: /tmp/loop_device
+        content: "{{ _loop.stdout }}\n"
+        mode: "0644"
+
+    - name: Create a minimal stub rootfs for rsync source
+      ansible.builtin.file:
+        path: "/tmp/testroot/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - etc
+        - usr
+        - usr/bin
+        - usr/lib
+        - bin
+        - lib
+        - var
+        - var/log

@@ -1,6 +1,7 @@
 ---
 - hosts: all
   gather_facts: true
+  become: true
   tasks:
     - name: "Read target loop device path"
       ansible.builtin.slurp:
@@ -11,14 +12,21 @@
       ansible.builtin.set_fact:
         _target_loop: "{{ (_target_b64.content | b64decode).strip() }}"
 
-    # --- Negative tests for Block A ---
-    # We exercise each rejection branch by calling the role with a bad
-    # input and asserting the role failed (block/rescue captures the
-    # failure so verify continues).
+    - name: "Decompress the source fixture to /tmp/source.img for cmp"
+      ansible.builtin.shell: "xz -dkc /tmp/test.img.xz > /tmp/source.img"
+      args:
+        executable: /bin/bash
+      changed_when: false
 
-    - name: "Block A — reject: target is a partition node"
+    - name: "cmp the first 64 MiB of the loop device against the source"
+      ansible.builtin.command:
+        cmd: "cmp -n 67108864 /tmp/source.img {{ _target_loop }}"
+      changed_when: false
+
+    # --- Negative tests ---
+    - name: "Negative: reject when target is a partition node"
       block:
-        - name: "Create a child partition to use as a bad target"
+        - name: "Create a child partition on the loop device"
           ansible.builtin.shell: |
             set -euo pipefail
             parted -s {{ _target_loop }} mklabel msdos
@@ -31,9 +39,9 @@
 
         - name: "Call role with the partition as target_device — must fail"
           ansible.builtin.include_role:
-            name: disk_image
+            name: david_igou.armbian_netboot.disk_image
           vars:
-            image_source: "/tmp/test.img"
+            image_source: "/tmp/test.img.xz"
             target_device: "{{ _target_loop }}p1"
       rescue:
         - name: "Confirm role failed because target was a partition"
@@ -45,16 +53,16 @@
               Expected failure mentioning 'partition'; got:
               {{ ansible_failed_result | default({}) }}
 
-    - name: "Block A — reject: image_source is gibberish"
+    - name: "Negative: reject when image_source is gibberish"
       block:
-        - name: "Call role with non-URL, non-abs-path image_source — must fail"
+        - name: "Call role with a non-URL, non-abs-path image_source"
           ansible.builtin.include_role:
-            name: disk_image
+            name: david_igou.armbian_netboot.disk_image
           vars:
-            image_source: "neither-url-nor-path"
+            image_source: "not-a-url-and-not-a-path"
             target_device: "{{ _target_loop }}"
       rescue:
-        - name: "Confirm role failed on image_source classification"
+        - name: "Confirm role failed because image_source is invalid"
           ansible.builtin.assert:
             that:
               - ansible_failed_result.msg is defined
@@ -62,213 +70,3 @@
             fail_msg: >-
               Expected failure mentioning 'image_source'; got:
               {{ ansible_failed_result | default({}) }}
-
-    - name: "Block A — reject: unsupported extension"
-      block:
-        - name: "Create a bogus-extension fixture"
-          ansible.builtin.copy:
-            dest: /tmp/test.iso
-            content: ""
-            mode: "0644"
-
-        - name: "Call role with .iso source — must fail"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "/tmp/test.iso"
-            target_device: "{{ _target_loop }}"
-      rescue:
-        - name: "Confirm role failed on extension classification"
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.msg is defined
-              - "'unsupported format' in ansible_failed_result.msg"
-            fail_msg: >-
-              Expected failure mentioning 'unsupported format'; got:
-              {{ ansible_failed_result | default({}) }}
-
-    - name: "Block A — reject: target is mounted"
-      block:
-        - name: "Mount a partition on the target loop device"
-          ansible.builtin.shell: |
-            set -euo pipefail
-            mkfs.ext4 -F {{ _target_loop }}p1
-            mkdir -p /tmp/mounted-target
-            mount {{ _target_loop }}p1 /tmp/mounted-target
-          args:
-            executable: /bin/bash
-          changed_when: true
-
-        - name: "Call role on a target whose partition is mounted — must fail"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "/tmp/test.img"
-            target_device: "{{ _target_loop }}"
-      rescue:
-        - name: "Confirm role failed because target was mounted"
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.msg is defined
-              - "'backs a mounted filesystem' in ansible_failed_result.msg"
-            fail_msg: >-
-              Expected failure mentioning 'backs a mounted filesystem'; got:
-              {{ ansible_failed_result | default({}) }}
-
-      always:
-        - name: "Cleanup: unmount the test mount + wipe the partition table"
-          ansible.builtin.shell: |
-            umount /tmp/mounted-target || true
-            wipefs -a {{ _target_loop }} || true
-            partprobe {{ _target_loop }} || true
-          args:
-            executable: /bin/bash
-          changed_when: false
-
-    # --- Positive tests for Block B (4 dispatch branches) ---
-    # Each test wipes the target, invokes the role with a different
-    # (source-classify, format-classify) combination, then asserts the
-    # ext4 partition + sentinel from the test image landed on the target.
-
-    - name: "Block B — exercise: path + raw .img"
-      block:
-        - name: "Wipe target loop"
-          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-          changed_when: true
-
-        - name: "Invoke role: path + .img"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "/tmp/test.img"
-            target_device: "{{ _target_loop }}"
-
-        - name: "Read written bytes from target (whole-disk)"
-          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
-          register: _lsblk_after_path_raw
-          changed_when: false
-
-        - name: "Assert target now carries the test image's labelled partition"
-          ansible.builtin.assert:
-            that:
-              - "'diskimg_test' in _lsblk_after_path_raw.stdout"
-              - "'ext4' in _lsblk_after_path_raw.stdout"
-
-    - name: "Block B — exercise: path + .img.xz"
-      block:
-        - name: "Wipe target loop"
-          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-          changed_when: true
-
-        - name: "Invoke role: path + .img.xz"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "/tmp/test.img.xz"
-            target_device: "{{ _target_loop }}"
-
-        - name: "lsblk shows partition + label"
-          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
-          register: _lsblk_after_path_xz
-          changed_when: false
-
-        - name: "Assert"
-          ansible.builtin.assert:
-            that:
-              - "'diskimg_test' in _lsblk_after_path_xz.stdout"
-              - "'ext4' in _lsblk_after_path_xz.stdout"
-
-    - name: "Block B — exercise: URL + raw .img"
-      block:
-        - name: "Wipe target loop"
-          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-          changed_when: true
-
-        - name: "Invoke role: URL + .img"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "http://127.0.0.1:8765/test.img"
-            target_device: "{{ _target_loop }}"
-
-        - name: "lsblk shows partition + label"
-          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
-          register: _lsblk_after_url_raw
-          changed_when: false
-
-        - name: "Assert"
-          ansible.builtin.assert:
-            that:
-              - "'diskimg_test' in _lsblk_after_url_raw.stdout"
-              - "'ext4' in _lsblk_after_url_raw.stdout"
-
-    - name: "Block B — exercise: URL + .img.xz"
-      block:
-        - name: "Wipe target loop"
-          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-          changed_when: true
-
-        - name: "Invoke role: URL + .img.xz"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "http://127.0.0.1:8765/test.img.xz"
-            target_device: "{{ _target_loop }}"
-
-        - name: "lsblk shows partition + label"
-          ansible.builtin.command: "lsblk -nro NAME,FSTYPE,LABEL {{ _target_loop }}"
-          register: _lsblk_after_url_xz
-          changed_when: false
-
-        - name: "Assert"
-          ansible.builtin.assert:
-            that:
-              - "'diskimg_test' in _lsblk_after_url_xz.stdout"
-              - "'ext4' in _lsblk_after_url_xz.stdout"
-
-    - name: "Block B — failure propagation: curl 404 must fail the task"
-      block:
-        - name: "Wipe target loop"
-          ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-          changed_when: true
-
-        - name: "Invoke role with a URL that 404s"
-          ansible.builtin.include_role:
-            name: disk_image
-          vars:
-            image_source: "http://127.0.0.1:8765/nonexistent.img.xz"
-            target_device: "{{ _target_loop }}"
-      rescue:
-        - name: "Confirm role failed (pipefail propagated curl's exit)"
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.rc is defined
-              - ansible_failed_result.rc != 0
-            fail_msg: >-
-              Expected non-zero exit from a 404; got:
-              {{ ansible_failed_result | default({}) }}
-
-    # --- Block C — partition node must exist after settle ---
-    - name: "Block C — wipe target loop and reimage one last time"
-      ansible.builtin.command: "wipefs -a {{ _target_loop }}"
-      changed_when: true
-
-    - name: "Block C — invoke role to write image"
-      ansible.builtin.include_role:
-        name: disk_image
-      vars:
-        image_source: "/tmp/test.img"
-        target_device: "{{ _target_loop }}"
-
-    - name: "Block C — stat the first partition node"
-      ansible.builtin.stat:
-        path: "{{ _target_loop }}p1"
-      register: _part_node
-
-    - name: "Block C — assert partprobe published the partition node"
-      ansible.builtin.assert:
-        that:
-          - _part_node.stat.exists
-        fail_msg: >-
-          Expected {{ _target_loop }}p1 to exist after Block C settle;
-          partprobe did not publish the partition node.

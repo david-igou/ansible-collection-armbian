@@ -12,69 +12,69 @@
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
       vars:
-        board_mac: "AA:BB:CC:DD:EE:FF"
+        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
-        model_name: orange-pi-5-pro
-        nfs_server_ip: "10.0.0.10"
-        nfs_root_path: /mnt/ssd/netboot/rootfs
-        hostname: smoke-host
-        boot_mode: nfs
-        output_dir: "{{ _output_base }}_nfs"
+        pxelinux_render_model_name: orange-pi-5-pro
+        pxelinux_render_nfs_server_ip: "10.0.0.10"
+        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
+        pxelinux_render_hostname: smoke-host
+        pxelinux_render_boot_mode: nfs
+        pxelinux_render_output_dir: "{{ _output_base }}_nfs"
 
     - name: Render in sd mode
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
       vars:
-        board_mac: "AA:BB:CC:DD:EE:FF"
+        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
-        model_name: orange-pi-5-pro
-        nfs_server_ip: "10.0.0.10"
-        nfs_root_path: /mnt/ssd/netboot/rootfs
-        hostname: smoke-host
-        boot_mode: sd
-        output_dir: "{{ _output_base }}_sd"
+        pxelinux_render_model_name: orange-pi-5-pro
+        pxelinux_render_nfs_server_ip: "10.0.0.10"
+        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
+        pxelinux_render_hostname: smoke-host
+        pxelinux_render_boot_mode: sd
+        pxelinux_render_output_dir: "{{ _output_base }}_sd"
 
     - name: Render in nfs verbose mode (requires earlycon)
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
       vars:
-        board_mac: "AA:BB:CC:DD:EE:FF"
+        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
-        model_name: orange-pi-5-pro
-        nfs_server_ip: "10.0.0.10"
-        nfs_root_path: /mnt/ssd/netboot/rootfs
-        hostname: smoke-host
-        boot_mode: nfs
-        output_dir: "{{ _output_base }}_verbose"
-        pxe_verbose: true
-        earlycon: "uart8250,mmio32,0xfeb50000"
+        pxelinux_render_model_name: orange-pi-5-pro
+        pxelinux_render_nfs_server_ip: "10.0.0.10"
+        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
+        pxelinux_render_hostname: smoke-host
+        pxelinux_render_boot_mode: nfs
+        pxelinux_render_output_dir: "{{ _output_base }}_verbose"
+        pxelinux_render_pxe_verbose: true
+        pxelinux_render_earlycon: "uart8250,mmio32,0xfeb50000"
 
     - name: Render in local_kernel mode (localboot-only label active)
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
       vars:
-        board_mac: "AA:BB:CC:DD:EE:FF"
+        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
-        model_name: orange-pi-5-max
-        nfs_server_ip: "10.0.0.10"
-        nfs_root_path: /mnt/ssd/netboot/rootfs
-        hostname: smoke-host
-        boot_mode: local_kernel
-        output_dir: "{{ _output_base }}_local_kernel"
+        pxelinux_render_model_name: orange-pi-5-max
+        pxelinux_render_nfs_server_ip: "10.0.0.10"
+        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
+        pxelinux_render_hostname: smoke-host
+        pxelinux_render_boot_mode: local_kernel
+        pxelinux_render_output_dir: "{{ _output_base }}_local_kernel"
 
     - name: Render with extra_modes (usb_rescue active)
       ansible.builtin.include_role:
         name: david_igou.armbian_netboot.pxelinux_render
       vars:
-        board_mac: "AA:BB:CC:DD:EE:FF"
+        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
-        model_name: test-model
-        nfs_server_ip: "10.10.9.213"
-        nfs_root_path: /srv/nfs
-        hostname: test-board
-        boot_mode: usb_rescue
-        output_dir: "{{ _output_base }}_extra"
-        extra_modes:
+        pxelinux_render_model_name: test-model
+        pxelinux_render_nfs_server_ip: "10.10.9.213"
+        pxelinux_render_nfs_root_path: /srv/nfs
+        pxelinux_render_hostname: test-board
+        pxelinux_render_boot_mode: usb_rescue
+        pxelinux_render_output_dir: "{{ _output_base }}_extra"
+        pxelinux_render_extra_modes:
           usb_rescue:
             menu_label: "USB rescue rootfs"
             root: "LABEL=rescue_root"
@@ -86,14 +86,14 @@
           ansible.builtin.include_role:
             name: david_igou.armbian_netboot.pxelinux_render
           vars:
-            board_mac: "11:22:33:44:55:66"
+            pxelinux_render_board_mac: "11:22:33:44:55:66"
             board_console: "ttyS2,1500000"
-            model_name: test-model
-            nfs_server_ip: "10.10.9.213"
-            nfs_root_path: /srv/nfs
-            hostname: test-board
-            boot_mode: nonexistent_mode
-            output_dir: /tmp/fixture/pxelinux.cfg_neg
+            pxelinux_render_model_name: test-model
+            pxelinux_render_nfs_server_ip: "10.10.9.213"
+            pxelinux_render_nfs_root_path: /srv/nfs
+            pxelinux_render_hostname: test-board
+            pxelinux_render_boot_mode: nonexistent_mode
+            pxelinux_render_output_dir: /tmp/fixture/pxelinux.cfg_neg
 
         - name: Sentinel — role did NOT fail; mark unexpected success
           ansible.builtin.set_fact:

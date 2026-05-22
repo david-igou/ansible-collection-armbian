@@ -1,0 +1,21 @@
+---
+- hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Extract the Armbian fixture into template + tftp dirs
+      ansible.builtin.include_role:
+        name: david_igou.armbian_netboot.image_extract
+      vars:
+        armbian_image_src: /tmp/orangepi5.img.xz
+        model_name: orangepi5
+        # Use disk-backed paths under /var/lib to avoid tmpfs size limits.
+        # The Debian genericcloud VM mounts /tmp as tmpfs (~1G) which is
+        # too small for the decompressed Armbian image (~2.5G).
+        template_dir: /var/lib/molecule/template
+        tftp_dir: /var/lib/molecule/tftp
+        image_cache_dir: /var/lib/molecule/image_cache
+        image_mount_dir: /var/lib/molecule/image_mount
+        # Armbian places DTBs at /boot/dtb/rockchip/<dtb> — pass the path
+        # relative to /boot/dtb/ so the role's candidate loop finds it.
+        board_dtb: rockchip/rk3588s-orangepi-5.dtb

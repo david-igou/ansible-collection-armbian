@@ -1,26 +1,52 @@
 # Molecule scenarios
 
 Each scenario lives in its own subdirectory and is invoked via
-`molecule test -s <scenario>`. The `podman` provisioner (default) drives a
-local container; `kubevirt` drives a VM through the cluster — see
-`provisioners/`.
+`cd extensions/molecule/<scenario> && molecule test`. Backends are
+provided by [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners)
+(installed via `requirements.yml` at the collection root).
 
-| Scenario | Purpose | Provisioner |
-|---|---|---|
-| `default` | Smoke scaffold — confirms a managed container starts. | podman |
-| `rootfs_clone` | Synthetic template + identity-reset verification. | podman |
-| `pxelinux_render` | Render in `nfs` / `sd` / verbose modes; assert template body. | podman |
-| `image_build` | Real Armbian image build on a KubeVirt VM (heavy). | kubevirt |
+| Scenario | Role exercised | Default backend | Image |
+|---|---|---|---|
+| `bootstrap_armbian` | `bootstrap_armbian` | qemu (UEFI) | Armbian Trixie UEFI x86 cloud_minimal |
+| `disk_image` | `disk_image` | qemu | Debian 13 (Trixie) genericcloud |
+| `disk_provision` | `disk_provision` | qemu | Debian 13 (Trixie) genericcloud |
+| `image_extract` | `image_extract` | qemu | Debian 13 (Trixie) genericcloud |
+| `image_build` | `image_build` | qemu (heavy, manual) | Debian 13 (Trixie) genericcloud |
+| `local_kernel_render` | `image_build` (template macro) | podman | `geerlingguy/docker-ubuntu2404-ansible` |
+| `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
+| `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
+| `rootfs_clone` | `rootfs_clone` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 
-## Not covered by molecule
+Switch backend per invocation (only meaningful when the scenario's
+inventory ships multiple `mp.<backend>` blocks):
 
-- **`image_extract`** — requires `losetup` + `mount` of a loop device. Even with
-  `privileged: true` on the podman container, nested-container loop access is
-  unreliable in CI environments and was observed failing with "failed to setup
-  loop device" on hardened UBI hosts. Verify against a real `netboot_server`
-  via `playbooks/stage_netboot_assets.yml --check` or a live run.
-- **`board_boot_wait`** — wraps `wait_for` (TCP/22) + `wait_for_connection`.
-  Testing the wrapper exercises Ansible's own modules rather than role logic.
-- **`board_boot_verify`** — gathers facts on a board and asserts
-  `ansible_mounts['/']` matches `boot_mode`. Verifies real PXE/NFS state on
-  hardware; exercised by `playbooks/test_hardware_e2e.yml`.
+```bash
+PROVISIONER=podman molecule test
+```
+
+## Backend prerequisites on the controller
+
+| Backend | Required tools |
+|---|---|
+| podman | `podman` |
+| qemu | `qemu-system-x86_64`, `qemu-img`, `cloud-localds` (or `genisoimage`), OVMF firmware (for UEFI scenarios); `/dev/kvm` strongly recommended — TCG works but is much slower |
+
+The devcontainer (`/workspace/igou-devenv`) ships all of the above plus
+`/dev/kvm` passthrough.
+
+## Why some roles aren't covered
+
+Two roles are deliberately not exercised by molecule:
+
+- **`board_boot_wait`** — a thin wrapper around `wait_for` + `wait_for_connection`. Asserting that the wrapper works asserts that Ansible's own modules work. `playbooks/test_hardware_e2e.yml` exercises the real concern (board comes up after a cold boot).
+- **`board_boot_verify`** — asserts `ansible_mounts['/']` matches the declared boot mode. Meaningful only against a real PXE-booted board; a stock cloud-image VM can't produce that state without standing up an NFS sidecar (and at that point we're testing the sidecar, not the role). `playbooks/test_hardware_e2e.yml` covers both NFS and local modes on real hardware.
+
+## Why `image_build` and `bootstrap_armbian` are special
+
+- **`image_build`** runs a real Armbian build inside the test VM (Docker + armbian/build). Wall time is hours on TCG, ~30 minutes on KVM. Resource needs are heavy: 8 vCPU, 16 GB RAM, 100 GB disk. The scenario is **not** in default CI — invoke manually when validating image_build role changes.
+- **`bootstrap_armbian`** is the only qemu scenario using the actual Armbian image. Other qemu scenarios use Debian Trixie genericcloud because the Armbian cloud_minimal variant ships **without** cloud-init, which molecule_provisioners' qemu role uses for SSH-key injection. The bootstrap_armbian scenario bypasses that injection and connects as `root` with the Armbian default password `1234` — exactly what the role is built to take over.
+
+## Spec & plan
+
+- Design: [`docs/superpowers/specs/2026-05-22-qemu-molecule-scenarios-design.md`](../../docs/superpowers/specs/2026-05-22-qemu-molecule-scenarios-design.md)
+- Implementation plan: [`docs/superpowers/plans/2026-05-22-qemu-molecule-scenarios.md`](../../docs/superpowers/plans/2026-05-22-qemu-molecule-scenarios.md)

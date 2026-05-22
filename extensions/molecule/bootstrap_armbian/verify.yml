@@ -1,0 +1,54 @@
+---
+- name: Verify the role made the expected changes
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: User ansibletest exists
+      ansible.builtin.command: id -un ansibletest
+      register: _id
+      changed_when: false
+
+    - name: Sudoers drop-in exists with NOPASSWD line
+      ansible.builtin.slurp:
+        src: /etc/sudoers.d/ansibletest
+      register: _sudoers
+
+    - name: Assert sudoers content
+      ansible.builtin.assert:
+        that:
+          - "(_sudoers.content | b64decode) is search('^ansibletest ALL=\\(ALL\\) NOPASSWD: ALL')"
+        fail_msg: "sudoers drop-in content unexpected:\n{{ _sudoers.content | b64decode }}"
+
+    - name: Read /etc/ssh/sshd_config
+      ansible.builtin.slurp:
+        src: /etc/ssh/sshd_config
+      register: _sshd
+
+    - name: Assert PasswordAuthentication is no
+      ansible.builtin.assert:
+        that:
+          - "(_sshd.content | b64decode) is search('(?m)^PasswordAuthentication no')"
+        fail_msg: "sshd_config does not have PasswordAuthentication no"
+
+    - name: First-login sentinel removed
+      ansible.builtin.stat:
+        path: /root/.not_logged_in_yet
+      register: _sentinel
+
+    - name: Assert sentinel gone
+      ansible.builtin.assert:
+        that: not _sentinel.stat.exists
+        fail_msg: "/root/.not_logged_in_yet still exists — role did not remove the Armbian first-login marker."
+
+    - name: Read /home/ansibletest/.ssh/authorized_keys
+      ansible.builtin.slurp:
+        src: /home/ansibletest/.ssh/authorized_keys
+      register: _auth_keys
+
+    - name: Assert fixture pubkey present
+      ansible.builtin.assert:
+        that:
+          - "(_auth_keys.content | b64decode) is search('fixture@bootstrap_armbian')"
+        fail_msg: "Fixture pubkey not authorised for ansibletest."

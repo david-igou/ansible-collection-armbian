@@ -1,0 +1,101 @@
+---
+# NOTE: deliberately NOT importing david_igou.molecule_provisioners.prepare —
+# its wait_for_connection assumes cloud-init-injected cloud-user, which doesn't
+# exist on the Armbian image. We connect as root with the Armbian default password,
+# plant the molecule SSH key into root's authorized_keys (so that subsequent
+# converge/verify phases can connect via key-based auth), then rewrite the
+# molecule_provisioners runtime inventory to target root (replacing cloud-user).
+
+- name: Read molecule_provisioners runtime inventory, extract SSH port and public key
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Slurp the molecule_provisioners runtime inventory
+      ansible.builtin.slurp:
+        src: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/inventory/molecule_runtime.yml"
+      register: _runtime_raw
+
+    - name: Parse runtime inventory
+      ansible.builtin.set_fact:
+        _runtime: "{{ _runtime_raw.content | b64decode | from_yaml }}"
+
+    - name: Extract instance's ansible_port (SLIRP host-forward)
+      ansible.builtin.set_fact:
+        _instance_port: "{{ _runtime.all.hosts.instance.ansible_port }}"
+
+    - name: Read the molecule SSH public key
+      ansible.builtin.slurp:
+        src: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/identity_file.pub"
+      register: _pubkey_raw
+
+    - name: Store SSH public key content
+      ansible.builtin.set_fact:
+        _molecule_pubkey: "{{ _pubkey_raw.content | b64decode | trim }}"
+
+- name: Wait for Armbian SSH to be reachable as root, plant SSH key
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_user: root
+    ansible_password: '1234'
+    ansible_connection: ssh
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      -o PreferredAuthentications=password
+      -o PubkeyAuthentication=no
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Wait for root SSH (Armbian default password)
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+        delay: 15
+        sleep: 5
+
+    - name: Ensure /root/.ssh exists
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        mode: "0700"
+
+    - name: Plant molecule SSH public key into root authorized_keys
+      # Enables converge/verify to connect as root via key-based auth,
+      # which remains valid even after bootstrap_armbian disables PasswordAuthentication.
+      ansible.posix.authorized_key:
+        user: root
+        state: present
+        key: "{{ hostvars['localhost']['_molecule_pubkey'] }}"
+
+    - name: Ensure Armbian's fresh-flash sentinel file exists (in case it was already cleared)
+      ansible.builtin.file:
+        path: /root/.not_logged_in_yet
+        state: touch
+        mode: "0644"
+
+- name: Rewrite molecule_provisioners runtime inventory to target root via SSH key
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Overwrite molecule_runtime.yml — switch ansible_user from cloud-user to root
+      # molecule_provisioners wrote cloud-user into the runtime inventory, but Armbian
+      # has no cloud-user. Now that the molecule SSH key is planted in root's
+      # authorized_keys, we repoint the inventory so converge/verify connect as root.
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/inventory/molecule_runtime.yml"
+        mode: "0600"
+        content: |
+          all:
+            hosts:
+              instance:
+                ansible_host: 127.0.0.1
+                ansible_port: {{ _instance_port }}
+                ansible_user: root
+                ansible_ssh_private_key_file: {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/identity_file
+                ansible_connection: ssh
+                ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+                ansible_python_interpreter: /usr/bin/python3

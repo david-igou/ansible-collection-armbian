@@ -1,0 +1,83 @@
+---
+- hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Read loop device path
+      ansible.builtin.slurp:
+        src: /tmp/loop_device
+      register: _loop_b64
+
+    - name: Set loop device fact
+      ansible.builtin.set_fact:
+        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
+
+    # Pass 1 + 2 assertions
+    - name: lsblk -no NAME,FSTYPE,LABEL on the loop device
+      ansible.builtin.command: "lsblk -no NAME,FSTYPE,LABEL {{ _loop }}"
+      register: _lsblk
+      changed_when: false
+
+    - name: Three labelled ext4 partitions exist
+      ansible.builtin.assert:
+        that:
+          - "'lp_boot' in _lsblk.stdout"
+          - "'lp_var'  in _lsblk.stdout"
+          - "'lp_root' in _lsblk.stdout"
+          - _lsblk.stdout.count('ext4') == 3
+        fail_msg: "Unexpected lsblk output:\n{{ _lsblk.stdout }}"
+
+    - name: Mount /var and verify the sentinel was preserved across the re-provision
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mount LABEL=lp_var /mnt
+        cat /mnt/preserve_test
+        umount /mnt
+      args:
+        executable: /bin/bash
+      register: _sentinel
+      changed_when: false
+
+    - name: Sentinel content matches what Pass 1 wrote
+      ansible.builtin.assert:
+        that: _sentinel.stdout.strip() == 'SENTINEL'
+        fail_msg: "/var was reformatted across passes; preserve_on_reprovision is broken."
+
+    # Pass 3 (render-only) assertions
+    - name: Render-only dropped four .repart.d files for /dev/loop1
+      ansible.builtin.find:
+        paths: "/run/disk_provision/loop1/repart.d"
+        patterns: "*.conf"
+      register: _confs
+
+    - name: Four ordered .conf files present
+      ansible.builtin.assert:
+        that:
+          - (_confs.files | map(attribute='path') | map('basename') | sort) ==
+              ['10-esp.conf', '20-boot.conf', '30-var.conf', '40-root.conf']
+        fail_msg: "Expected 10-esp / 20-boot / 30-var / 40-root, got: {{ _confs.files | map(attribute='path') | map('basename') | sort }}"
+
+    - name: Read 10-esp.conf for ESP-specific assertions
+      ansible.builtin.slurp:
+        src: "/run/disk_provision/loop1/repart.d/10-esp.conf"
+      register: _esp
+
+    - name: ESP config has Type=esp, Label=ARMBI_ESP, Format=vfat, 512M size
+      ansible.builtin.assert:
+        that:
+          - (_esp.content | b64decode) is search('Type=esp')
+          - (_esp.content | b64decode) is search('Label=ARMBI_ESP')
+          - (_esp.content | b64decode) is search('Format=vfat')
+          - (_esp.content | b64decode) is search('SizeMinBytes=512M')
+          - (_esp.content | b64decode) is search('SizeMaxBytes=512M')
+
+    - name: Read 40-root.conf for root-specific (grow) assertions
+      ansible.builtin.slurp:
+        src: "/run/disk_provision/loop1/repart.d/40-root.conf"
+      register: _root
+
+    - name: Root config has Type=root and no SizeMaxBytes (grow)
+      ansible.builtin.assert:
+        that:
+          - (_root.content | b64decode) is search('Type=root')
+          - (_root.content | b64decode) is not search('SizeMaxBytes=')

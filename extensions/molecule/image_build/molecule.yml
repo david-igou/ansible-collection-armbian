@@ -1,52 +1,28 @@
 ---
-# Real-build scenario for the armbian_build role on a KubeVirt VM.
+# Real-build scenario for the armbian_build role on a qemu VM.
 # Manual / not-CI by design — wall time is dominated by the upstream
 # Armbian kernel build and is measured in tens of minutes to hours.
 #
-# Run with:  make molecule-kubevirt SCENARIO=armbian_build
+# Run with:  MOLECULE_SCENARIO=image_build make molecule-qemu
+#   or:      cd extensions/molecule/image_build && molecule create
 #
-# Cluster constraints in the molecule namespace require the
-# containerDisk + emptyDisk strategy (no DataVolume / PVC perms);
-# emptyDisk lives on node ephemeral storage. See
-# docs/superpowers/specs/2026-05-05-molecule-kubevirt-design.md.
-dependency:
-  name: galaxy
-  options:
-    requirements-file: extensions/molecule/provisioners/kubevirt/requirements.yml
-    force: true
-driver:
-  name: default
-  options:
-    managed: true
-    ansible_connection_options:
-      connection: local
-platforms:
-  - name: armbian-builder
-    kubevirt:
-      image: quay.io/containerdisks/centos-stream:10
-      namespace: ${MOLECULE_NAMESPACE:-molecule}
-      ssh_service:
-        type: NodePort
-      ansible_user: cloud-user
-      memory: 16Gi
-      cpu_cores: 8
-      scratch_disk_size: 100Gi
-      scratch_mount: /var/lib/armbian_build
-provisioner:
-  name: ansible
+# Resources: 8 vCPUs, 16 GB RAM, 100 GB disk. Requires a host with
+# KVM acceleration — TCG will be impractically slow.
+ansible:
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=inventory/
+        - --inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/
   playbooks:
-    create: ../provisioners/kubevirt/create.yml
-    destroy: ../provisioners/kubevirt/destroy.yml
+    create: create.yml
+    destroy: destroy.yml
     prepare: prepare.yml
     converge: converge.yml
     verify: verify.yml
-  inventory:
-    links:
-      group_vars: ../provisioners/kubevirt/group_vars/
-verifier:
-  name: ansible
+
 scenario:
-  name: armbian_build
+  name: image_build
   test_sequence:
     - dependency
     - syntax
@@ -55,3 +31,6 @@ scenario:
     - converge
     - verify
     - destroy
+
+verifier:
+  name: ansible
