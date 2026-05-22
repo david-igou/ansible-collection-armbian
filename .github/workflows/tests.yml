@@ -55,7 +55,7 @@ jobs:
         run: ansible-lint playbooks/ roles/
   sanity:
     uses: ansible/ansible-content-actions/.github/workflows/sanity.yaml@46de405af31ba872a770a9b75c90121493c1cbe5 # main
-  molecule:
+  molecule-podman:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -63,6 +63,8 @@ jobs:
         scenario:
           - rootfs_clone
           - pxelinux_render
+          - local_kernel_render
+          - persist_uboot_env
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -76,9 +78,48 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ansible-core molecule
+          ansible-galaxy collection install -r requirements.yml --force
 
-      - name: Smoke test molecule ${{ matrix.scenario }}
-        run: molecule test -s ${{ matrix.scenario }}
+      - name: Run molecule ${{ matrix.scenario }}
+        run: cd extensions/molecule/${{ matrix.scenario }} && molecule test
+
+  molecule-qemu:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - disk_image
+          - disk_provision
+          - image_extract
+          - bootstrap_armbian
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install host qemu tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 \
+            qemu-utils \
+            cloud-image-utils \
+            ovmf \
+            sshpass
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core molecule
+          ansible-galaxy collection install -r requirements.yml --force
+
+      - name: Run molecule ${{ matrix.scenario }}
+        run: cd extensions/molecule/${{ matrix.scenario }} && molecule test
 
   all_green:
     if: ${{ always() }}
@@ -88,7 +129,8 @@ jobs:
       - sanity
       - yamllint
       - ansible-lint
-      - molecule
+      - molecule-podman
+      - molecule-qemu
     runs-on: ubuntu-latest
     steps:
       - run: >-
@@ -99,5 +141,6 @@ jobs:
           '${{ needs.sanity.result }}',
           '${{ needs.yamllint.result }}',
           '${{ needs.ansible-lint.result }}',
-          '${{ needs.molecule.result }}',
+          '${{ needs.molecule-podman.result }}',
+          '${{ needs.molecule-qemu.result }}',
           ])"
