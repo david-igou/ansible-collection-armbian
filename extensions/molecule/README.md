@@ -11,7 +11,7 @@ provided by [`david_igou.molecule_provisioners`](https://github.com/david-igou/a
 | `disk_image` | `disk_image` | qemu | Debian 13 (Trixie) genericcloud |
 | `disk_provision` | `disk_provision` | qemu | Debian 13 (Trixie) genericcloud |
 | `image_extract` | `image_extract` | qemu | Debian 13 (Trixie) genericcloud |
-| `image_build` | `image_build` | qemu (heavy, manual) | Debian 13 (Trixie) genericcloud |
+| `image_build` | `image_build` (skip-build short-circuit) | qemu | Debian 13 (Trixie) genericcloud |
 | `local_kernel_render` | `image_build` (template macro) | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
@@ -43,7 +43,7 @@ Two roles are deliberately not exercised by molecule:
 
 ## Why `image_build` and `bootstrap_armbian` are special
 
-- **`image_build`** runs a real Armbian build inside the test VM (Docker + armbian/build). Wall time is hours on TCG, ~30 minutes on KVM. Resource needs are heavy: 8 vCPU, 16 GB RAM, 100 GB disk. The scenario is **not** in default CI — invoke manually when validating image_build role changes.
+- **`image_build`** exercises the role's check_manifest short-circuit instead of running a real Armbian build. `prepare.yml` pre-seeds `manifest.json` plus a placeholder `.img.xz` with a `patch_hash` matching the userpatches list declared in `inventory/group_vars/molecule.yml`; the role then runs preflight + manage_checkout + apply_userpatches + compute_inputs + check_manifest and skips `invoke_build`. Real-image production is left to `playbooks/build_image.yml` against the `armbian_builders` inventory — that is where you validate changes that affect actual compile.sh output.
 - **`bootstrap_armbian`** is the only qemu scenario using the actual Armbian image. Other qemu scenarios use Debian Trixie genericcloud because the Armbian cloud_minimal variant ships **without** cloud-init, which molecule_provisioners' qemu role uses for SSH-key injection. The bootstrap_armbian scenario bypasses that injection and connects as `root` with the Armbian default password `1234` — exactly what the role is built to take over.
 
 ## Spec & plan

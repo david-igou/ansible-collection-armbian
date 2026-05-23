@@ -1,13 +1,16 @@
 ---
-# Real-build scenario for the armbian_build role on a qemu VM.
-# Manual / not-CI by design — wall time is dominated by the upstream
-# Armbian kernel build and is measured in tens of minutes to hours.
+# Skip-build scenario for the image_build role on a qemu VM. Exercises
+# preflight + manage_checkout + apply_userpatches + compute_inputs +
+# check_manifest (the skip-build short-circuit) without invoking
+# compile.sh. prepare.yml pre-seeds a manifest.json + placeholder .img.xz
+# so the role's check_manifest decides to skip invoke_build.
 #
-# Run with:  MOLECULE_SCENARIO=image_build make molecule-qemu
-#   or:      cd extensions/molecule/image_build && molecule create
+# Real-image production is intentionally out of scope; that belongs to
+# playbooks/build_image.yml against the armbian_builders inventory.
 #
-# Resources: 8 vCPUs, 16 GB RAM, 100 GB disk. Requires a host with
-# KVM acceleration — TCG will be impractically slow.
+# Run with:  molecule test --scenario-name image_build
+#
+# Wall time: ~5–7 minutes (Docker install + shallow armbian/build clone).
 ansible:
   executor:
     args:

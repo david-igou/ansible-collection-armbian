@@ -1,2 +1,17 @@
 ---
 mp_backend: "{{ lookup('env', 'PROVISIONER') | default('qemu', true) }}"
+
+# Shared between prepare.yml (pre-seeds manifest.json with a matching
+# patch_hash) and converge.yml (passes the same list to the image_build
+# role). MUST stay byte-identical in both places — patch_hash is sha256
+# of the canonical-JSON-encoded list, so any drift breaks the role's
+# check_manifest short-circuit and the scenario falls back to a real
+# (~30 min) Armbian build.
+scenario_userpatches:
+  - dest: "config/boards/orangepi5pro.conf"
+    content: |
+      function pre_config_uboot_target__orangepi5pro_pxe_first() {
+          declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+          sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+              include/configs/rockchip-common.h
+      }
