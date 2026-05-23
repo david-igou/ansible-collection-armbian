@@ -39,7 +39,9 @@ ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
 molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all; PROVISIONER=podman)
-	PROVISIONER=$(PROVISIONER) molecule test $(if $(SCENARIO),-s $(SCENARIO),--all)
+	PROVISIONER=$(PROVISIONER) molecule test \
+		$(if $(SCENARIO),-s $(SCENARIO),--all --continue-on-failure) \
+		--report
 
 molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
 	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)
