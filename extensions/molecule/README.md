@@ -19,10 +19,17 @@ invoked from collection root, not a scenario subdir).
 
 Backends come from [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners),
 which is **not** in the root `requirements.yml` — it is a test-only
-dependency listed in `extensions/molecule/requirements-test.yml` and
-installed automatically by molecule's `dependency` step (configured
-once in `extensions/molecule/config.yml` and deep-merged into every
-scenario). Strict consumers of the collection never auto-resolve it.
+dependency listed in `extensions/molecule/requirements-test.yml`.
+Install it once via `make install-test` (skip-if-present, respects a
+dev symlink at `~/.ansible/collections/.../david_igou/
+molecule_provisioners`) or via the CI workflow's `Install dependencies`
+step. Strict consumers of the collection never auto-resolve it.
+
+Molecule's own `dependency` action is disabled in the shared
+`extensions/molecule/config.yml`. (It would otherwise try to
+`ansible-galaxy collection install` the git-source provisioner on
+every scenario run, which `shutil.rmtree`s the destination first —
+that crashes if the local dev setup has the provisioner symlinked in.)
 
 | Scenario | Role exercised | Default backend | Image |
 |---|---|---|---|

@@ -26,7 +26,7 @@ export MOLECULE_GLOB := extensions/molecule/*/molecule.yml
 # in subtle ways. Strip it from any target that shells out to ansible.
 unexport ANSIBLE_INVENTORY
 
-.PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
+.PHONY: help install install-lint install-test lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -44,6 +44,19 @@ install: ## Install runtime collection dependencies (roles/ only)
 install-lint: install ## Install everything ansible-lint needs (runtime + routeros deps)
 	ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
+# Skip-if-present so a local-dev symlink at
+# ~/.ansible/collections/.../david_igou/molecule_provisioners isn't
+# blown away by ansible-galaxy's reinstall path (which `shutil.rmtree`s
+# the destination — refuses to traverse a symlink and crashes with
+# rc=250). On a fresh CI runner, no install is present → galaxy
+# install runs normally.
+install-test: ## Install molecule test deps (idempotent; respects symlinks)
+	@if ansible-galaxy collection list 2>/dev/null | grep -q '^david_igou\.molecule_provisioners'; then \
+		echo "david_igou.molecule_provisioners already installed — skipping"; \
+	else \
+		ansible-galaxy collection install -r extensions/molecule/requirements-test.yml; \
+	fi
+
 lint: yamllint ansible-lint ## Run yamllint and ansible-lint (installs collections first)
 
 yamllint: ## Run yamllint on roles/, playbooks/, inventory/
@@ -52,7 +65,7 @@ yamllint: ## Run yamllint on roles/, playbooks/, inventory/
 ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
-molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all)
+molecule: install-test ## Run molecule test (SCENARIO=<name> for one, omit for --all)
 	molecule test \
 		$(if $(SCENARIO),-s $(SCENARIO),--all --continue-on-failure) \
 		--report

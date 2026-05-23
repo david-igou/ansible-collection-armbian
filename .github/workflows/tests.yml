@@ -88,11 +88,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible-core molecule
           ansible-galaxy collection install -r requirements.yml --force
+          # Test-only deps live in extensions/molecule/requirements-test.yml
+          # so strict consumers of the collection don't auto-pull them.
+          ansible-galaxy collection install -r extensions/molecule/requirements-test.yml --force
           # Install the collection itself so molecule scenarios that
           # reference roles via FQCN (david_igou.armbian_netboot.<role>)
-          # can resolve them. molecule_provisioners (test-only) is
-          # installed at scenario start by molecule's dependency step
-          # via extensions/molecule/config.yml.
+          # can resolve them.
           ansible-galaxy collection install . --force
 
       - name: Run molecule ${{ matrix.scenario }}

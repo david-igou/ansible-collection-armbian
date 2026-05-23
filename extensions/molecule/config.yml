@@ -1,16 +1,20 @@
 ---
 # Shared base config — molecule auto-discovers this at
 # extensions/molecule/config.yml in collections and deep-merges it
-# into every scenario's molecule.yml. Keeps test-only dependencies
-# (molecule_provisioners) out of the root requirements.yml so strict
-# consumers of the collection don't auto-pull them.
+# into every scenario's molecule.yml.
+#
+# The `dependency` action is disabled here on purpose. Test-only
+# collections live in extensions/molecule/requirements-test.yml and
+# are installed once via the Makefile (`make install-test`) or the
+# CI workflow's `Install dependencies` step, never by molecule itself.
+#
+# Why: molecule's galaxy dependency action calls
+# `ansible-galaxy collection install -r <file>`, which for git-source
+# requirements unconditionally `shutil.rmtree`s the destination before
+# reinstalling. That blows up when a developer has the provisioner
+# checked out and symlinked into ~/.ansible/collections/... for local
+# iteration (Python's rmtree refuses to traverse a symlink, so the
+# install crashes with rc=250). External-install + skip-if-present
+# (see Makefile `install-test`) avoids the reinstall path entirely.
 dependency:
-  name: galaxy
-  options:
-    # Point both the collections requirements-file AND the legacy
-    # role-file at the same yaml — the file has only a `collections:`
-    # block, so ansible-galaxy role install is a no-op, but pointing
-    # role-file at an existing file suppresses molecule's "Missing
-    # roles requirements file" warning.
-    requirements-file: extensions/molecule/requirements-test.yml
-    role-file: extensions/molecule/requirements-test.yml
+  enabled: false
