@@ -1,42 +1,39 @@
 ---
 # Scenario-specific prepare. Two plays:
 #   1. Import the molecule_provisioners prepare (SSH wait + ephemeral inventory).
-#   2. Install Docker CE on Debian trixie, configure binfmt_misc cross-arch
-#      emulation, and verify Docker is reachable as the `debian` user.
+#   2. Install Docker CE, add the debian user to the docker group, and
+#      pre-seed manifest.json + a placeholder .img.xz so the image_build
+#      role's check_manifest step short-circuits invoke_build.
 #
-# Notes on porting from the kubevirt/CentOS scenario:
-#   - No separate scratch disk: the single 100G qcow2 is the only disk.
-#     /var/lib/armbian_build lives on the root filesystem.
-#   - SELinux: not present on Debian; skip setenforce/lineinfile.
-#   - ext4 module: built into the Debian trixie kernel; no modprobe needed.
-#   - Docker CE apt repo: same as the kubevirt scenario but Debian-flavoured.
-#   - MTU: qemu SLIRP networking uses 1500-byte MTU on the guest interface
-#     (unlike OVN's 1400-byte MTU in KubeVirt). Still detect and configure
-#     docker daemon.json to match so the logic stays correct if the interface
-#     MTU changes (e.g. bridged networking in future).
-#   - binfmt_misc + tonistiigi/binfmt: preserved verbatim — required for
-#     armbian/build's cross-arch docker container to register aarch64 binfmts.
-#   - cloud-user → debian: Debian trixie cloud images use the `debian` user.
+# This scenario does NOT run a real Armbian build. Its job is to exercise
+# preflight + manage_checkout + apply_userpatches + compute_inputs +
+# check_manifest (the skip path). compile.sh is never invoked, so this
+# prepare does not configure binfmt_misc, daemon MTU, ext4 checks, or any
+# of the other apparatus needed to launch armbian/build's container.
 
 - name: Prepare molecule instances
   import_playbook: david_igou.molecule_provisioners.prepare
 
-- name: Install Docker and armbian/build prerequisites
+- name: Install Docker and pre-seed manifest for skip-build short-circuit
   hosts: all
   gather_facts: true
   become: true
 
+  vars:
+    _output_dir: /var/lib/armbian_build/output/orangepi5pro
+    _placeholder_image: Armbian_PRESEED-orangepi5pro-bookworm-current.img.xz
+    # Default from roles/image_build/defaults/main.yml; must match what the
+    # role will compute in compute_inputs.yml so check_manifest accepts.
+    _armbian_build_ref: v26.2.0-trunk.844
+    _sentinel_built_at: 2026-01-01T00:00:00Z-PRESEED
+
   tasks:
-    - name: Install Docker, git, make, build dependencies
+    - name: Install Docker apt prerequisites
       ansible.builtin.apt:
         name:
           - ca-certificates
           - curl
           - gnupg
-          - git
-          - make
-          - rsync
-          - xz-utils
         state: present
         update_cache: true
 
@@ -59,102 +56,13 @@
           - docker-ce
           - docker-ce-cli
           - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
         state: present
-
-    # armbian/build's check_filesystem_compatibility_on_host greps
-    # /proc/filesystems for ROOTFS_TYPE (default ext4). On Debian trixie
-    # ext4 is compiled in (not a module), so it is always present. No
-    # modprobe needed — but we assert it exists for early failure.
-    - name: Confirm ext4 is in /proc/filesystems
-      ansible.builtin.command:
-        cmd: grep -wq ext4 /proc/filesystems
-      changed_when: false
-
-    # armbian/build inside its build container calls
-    # update-binfmts --enable qemu-{arm,aarch64,riscv64,loongarch64} and
-    # then arch-test arm64. update-binfmts fails inside the container on
-    # this kernel (writes to /proc/sys/fs/binfmt_misc/register get rejected
-    # despite --privileged), so arch-test never finds a working aarch64
-    # interpreter and the build aborts. Standard fix: pre-register all
-    # qemu-* binfmts on the HOST kernel via the tonistiigi/binfmt image.
-    # Once registered (with the F flag, which embeds the qemu binary into
-    # the registration), the build container sees them already present
-    # and the per-arch update-binfmts calls become no-ops.
-    #
-    # binfmt_misc may not be mounted on cloud images — load + mount first
-    # so the tonistiigi/binfmt install survives container exit.
-    - name: Load binfmt_misc kernel module
-      ansible.builtin.command:
-        cmd: modprobe binfmt_misc
-      changed_when: false
-
-    - name: Mount binfmt_misc on /proc/sys/fs/binfmt_misc
-      ansible.posix.mount:
-        path: /proc/sys/fs/binfmt_misc
-        src: binfmt_misc
-        fstype: binfmt_misc
-        state: mounted
-
-    # Detect and configure Docker bridge MTU to match the VM's uplink.
-    # On qemu SLIRP the guest interface is typically enp*s0 at 1500 bytes;
-    # on some hypervisor-specific setups it may differ. We detect at runtime
-    # and write daemon.json so Docker's docker0 picks up the same MTU —
-    # preventing silent TCP fragmentation drops inside build containers.
-    - name: Detect VM uplink interface name (first non-loopback)
-      ansible.builtin.shell:
-        cmd: |
-          set -o pipefail
-          ip -o link show | awk -F': ' '$2 !~ /^lo$/ {print $2; exit}'
-      changed_when: false
-      register: _uplink_iface
-
-    - name: Detect VM uplink MTU
-      ansible.builtin.command:
-        cmd: "ip -o link show {{ _uplink_iface.stdout | trim }}"
-      changed_when: false
-      register: _uplink_link
-
-    - name: Extract uplink MTU
-      ansible.builtin.set_fact:
-        _vm_mtu: "{{ _uplink_link.stdout | regex_search('mtu (\\d+)', '\\1') | first | int }}"
-
-    - name: Configure docker bridge MTU to match VM uplink
-      ansible.builtin.copy:
-        dest: /etc/docker/daemon.json
-        content: |
-          {
-            "mtu": {{ _vm_mtu }}
-          }
-        mode: "0644"
-      register: _daemon_json
 
     - name: Enable and start docker.service
       ansible.builtin.systemd:
         name: docker
         state: started
         enabled: true
-
-    - name: Restart docker if daemon.json changed
-      ansible.builtin.systemd:
-        name: docker
-        state: restarted
-      when: _daemon_json.changed
-
-    - name: Confirm docker0 picked up the new MTU
-      ansible.builtin.command:
-        cmd: ip -o link show docker0
-      changed_when: false
-      register: _docker0_link
-
-    - name: Assert docker0 MTU matches VM uplink
-      ansible.builtin.assert:
-        that:
-          - ('mtu ' ~ _vm_mtu) in _docker0_link.stdout
-        fail_msg: >-
-          docker0 MTU did not pick up the daemon.json setting.
-          Got: {{ _docker0_link.stdout }}, expected mtu={{ _vm_mtu }}
 
     - name: Add debian user to docker group
       ansible.builtin.user:
@@ -165,43 +73,45 @@
     - name: Reset SSH connection so debian user picks up the docker group
       ansible.builtin.meta: reset_connection
 
-    - name: Pre-register cross-architecture qemu binfmts on the host
-      ansible.builtin.command:
-        cmd: docker run --rm --privileged docker.io/tonistiigi/binfmt:latest --install all
-      changed_when: true
-      register: _binfmt_install
-
-    - name: Confirm aarch64 binfmt is registered
-      ansible.builtin.stat:
-        path: /proc/sys/fs/binfmt_misc/qemu-aarch64
-      register: _aarch64_binfmt
-
-    - name: Assert aarch64 binfmt registration
-      ansible.builtin.assert:
-        that: _aarch64_binfmt.stat.exists
-        fail_msg: >-
-          qemu-aarch64 binfmt is not registered on the host kernel — armbian/build's arch-test will fail.
-          tonistiigi/binfmt stdout: {{ _binfmt_install.stdout | default('') }}
-          stderr: {{ _binfmt_install.stderr | default('') }}
-
-    - name: Verify Docker reachability as debian user
-      ansible.builtin.command:
-        cmd: docker info
-      become: false
-      changed_when: false
-      register: _docker_info
-
-    - name: Assert Docker info reports a running daemon
-      ansible.builtin.assert:
-        that:
-          - _docker_info.rc == 0
-          - "'Server Version' in _docker_info.stdout"
-        fail_msg: >-
-          docker info as debian user did not report a running daemon.
-          Got rc={{ _docker_info.rc }}, stdout={{ _docker_info.stdout | default('') }}
-
-    - name: Ensure /var/lib/armbian_build exists
+    - name: Ensure per-board output directory exists (owned by debian)
       ansible.builtin.file:
-        path: /var/lib/armbian_build
+        path: "{{ _output_dir }}"
         state: directory
+        owner: debian
+        group: debian
         mode: "0755"
+
+    # check_manifest.yml does `stat` on the file referenced by
+    # manifest.image_filename — content is never read, so an empty
+    # placeholder satisfies the existence check.
+    - name: Pre-seed placeholder .img.xz
+      ansible.builtin.copy:
+        dest: "{{ _output_dir }}/{{ _placeholder_image }}"
+        content: ""
+        owner: debian
+        group: debian
+        mode: "0644"
+
+    # patch_hash matches compute_inputs.yml's formula exactly. The userpatches
+    # list comes from inventory/group_vars/molecule.yml so prepare and converge
+    # cannot drift.
+    - name: Compute matching patch_hash for the pre-seeded manifest
+      ansible.builtin.set_fact:
+        _preseed_patch_hash: "sha256:{{ scenario_userpatches | to_json(sort_keys=true) | hash('sha256') }}"
+
+    - name: Pre-seed manifest.json with matching decision fields
+      ansible.builtin.copy:
+        dest: "{{ _output_dir }}/manifest.json"
+        content: "{{ _manifest | to_nice_json(sort_keys=true) }}\n"
+        owner: debian
+        group: debian
+        mode: "0644"
+      vars:
+        _manifest:
+          patch_hash: "{{ _preseed_patch_hash }}"
+          armbian_build_ref: "{{ _armbian_build_ref }}"
+          board: orangepi5pro
+          branch: current
+          release: bookworm
+          image_filename: "{{ _placeholder_image }}"
+          built_at: "{{ _sentinel_built_at }}"

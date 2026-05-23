@@ -1,10 +1,16 @@
 ---
-# Smoke-test the converged builder. Asserts:
-#   - Exactly one .img.xz larger than 100 MiB landed in the per-board
-#     output directory and is a valid xz archive.
-#   - manifest.json parses and carries the expected schema fields.
-#   - The userpatch file lives at the documented path inside the build
-#     checkout and contains the expected hook function name.
+# Smoke-test the converged builder. Asserts the image_build role:
+#   - Wrote the userpatch into the build checkout at the documented path
+#     with the expected hook function name (apply_userpatches step).
+#   - Hit the check_manifest short-circuit (manifest.json's pre-seeded
+#     sentinel built_at is preserved — proving write_manifest did NOT run).
+#   - Skipped invoke_build (no compile.sh logfile exists under the build
+#     checkout's output/logs/).
+#   - Left manifest.json valid against the expected schema.
+#
+# This scenario deliberately does NOT assert a real .img.xz was produced;
+# real-image verification belongs to playbooks/build_image.yml on the
+# armbian_builders inventory.
 
 - name: Verify
   hosts: all
@@ -13,55 +19,17 @@
 
   vars:
     _output_dir: /var/lib/armbian_build/output/orangepi5pro
+    _build_logs_dir: /var/lib/armbian_build/build/output/logs
     _userpatch_path: /var/lib/armbian_build/build/userpatches/config/boards/orangepi5pro.conf
+    _sentinel_built_at: 2026-01-01T00:00:00Z-PRESEED
 
   tasks:
-    - name: Find the produced .img.xz
-      ansible.builtin.find:
-        paths: "{{ _output_dir }}"
-        patterns: "(?i)Armbian.*orangepi5pro.*\\.img\\.xz$"
-        use_regex: true
-      register: _image_files
-
-    - name: Assert exactly one .img.xz was produced and is non-trivially sized
-      ansible.builtin.assert:
-        that:
-          - _image_files.files | length == 1
-          - _image_files.files[0].size > (100 * 1024 * 1024)
-        fail_msg: >-
-          Expected exactly one .img.xz larger than 100 MiB in {{ _output_dir }};
-          found {{ _image_files.files | length }}
-          ({{ _image_files.files | map(attribute='path') | list }})
-
-    - name: Test image with `xz -t`
-      ansible.builtin.command:
-        cmd: "xz -t {{ _image_files.files[0].path }}"
-      changed_when: false
-
-    - name: Read manifest.json
-      ansible.builtin.slurp:
-        src: "{{ _output_dir }}/manifest.json"
-      register: _manifest_raw
-
-    - name: Parse manifest and assert schema
-      vars:
-        _manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
-      ansible.builtin.assert:
-        that:
-          - _manifest.image_filename is string
-          - _manifest.image_filename | length > 0
-          - _manifest.armbian_build_ref is string
-          - _manifest.armbian_build_ref | length > 0
-          - _manifest.patch_hash is string
-          - _manifest.patch_hash | length > 0
-        fail_msg: "manifest.json missing expected fields: {{ _manifest }}"
-
     - name: Stat the userpatch file
       ansible.builtin.stat:
         path: "{{ _userpatch_path }}"
       register: _userpatch_stat
 
-    - name: Assert userpatch file exists
+    - name: Assert userpatch file landed at the documented path
       ansible.builtin.assert:
         that:
           - _userpatch_stat.stat.exists
@@ -77,9 +45,51 @@
         that:
           - "'pre_config_uboot_target__orangepi5pro_pxe_first' in (_userpatch_raw.content | b64decode)"
 
+    - name: Read manifest.json
+      ansible.builtin.slurp:
+        src: "{{ _output_dir }}/manifest.json"
+      register: _manifest_raw
+
+    - name: Parse manifest and assert schema + skip-build sentinel
+      vars:
+        _manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - _manifest.image_filename is string
+          - _manifest.image_filename | length > 0
+          - _manifest.armbian_build_ref is string
+          - _manifest.armbian_build_ref | length > 0
+          - _manifest.patch_hash is string
+          - _manifest.patch_hash | length > 0
+          - _manifest.built_at == _sentinel_built_at
+        fail_msg: >-
+          manifest.json did not match the pre-seeded sentinel (built_at expected
+          {{ _sentinel_built_at }}). Either write_manifest ran (which means
+          check_manifest did NOT short-circuit), or the pre-seed never landed.
+          Got: {{ _manifest }}
+
+    - name: Look for any compile.sh log file (proof invoke_build was skipped)
+      ansible.builtin.find:
+        paths: "{{ _build_logs_dir }}"
+        patterns: "log-build-*.log.ans"
+        file_type: file
+      register: _build_logs
+      # The build/output/logs/ dir is created by compile.sh; missing dir is
+      # itself proof no build ran.
+      failed_when: false
+
+    - name: Assert no compile.sh log file was produced
+      ansible.builtin.assert:
+        that:
+          - (_build_logs.files | default([])) | length == 0
+        fail_msg: >-
+          Found {{ _build_logs.files | length }} compile.sh logfile(s) under
+          {{ _build_logs_dir }} — invoke_build ran when it should have been
+          skipped. Files: {{ _build_logs.files | map(attribute='path') | list }}
+
     - name: Print verification summary
       ansible.builtin.debug:
         msg:
-          - "Image: {{ _image_files.files[0].path }}"
-          - "Size: {{ (_image_files.files[0].size / 1024 / 1024) | round(1) }} MiB"
-          - "Manifest: {{ _manifest_raw.content | b64decode | from_json }}"
+          - "Userpatch: {{ _userpatch_path }} ({{ _userpatch_stat.stat.size }} bytes)"
+          - "Manifest built_at: {{ (_manifest_raw.content | b64decode | from_json).built_at }} (sentinel preserved → check_manifest skipped invoke_build)"
+          - "Skip-build short-circuit fired: no compile.sh log files under {{ _build_logs_dir }}"
