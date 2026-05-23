@@ -1,18 +1,21 @@
 # Molecule scenarios
 
-Each scenario lives in its own subdirectory. Invoke it via:
+Each scenario lives in its own subdirectory. Invoke from the
+collection root:
 
 ```bash
-cd extensions/molecule/<scenario>
-MOLECULE_GLOB=molecule.yml molecule -c ../config.yml test
+# All scenarios, sequentially:
+MOLECULE_GLOB="extensions/molecule/*/molecule.yml" molecule test --all
+
+# A single scenario:
+MOLECULE_GLOB="extensions/molecule/*/molecule.yml" molecule test -s <scenario>
 ```
 
-`MOLECULE_GLOB=molecule.yml` tells molecule to find `molecule.yml` in
-the cwd (instead of the default `molecule/<scenario>/` layout). `-c
-../config.yml` points at the shared base config — molecule's
-auto-discovery of `extensions/molecule/config.yml` works only when
-invoked from the collection root, not from a scenario subdir, so we
-pass it explicitly.
+`MOLECULE_GLOB` overrides molecule's default `molecule/<scenario>/`
+layout to point at this collection's `extensions/molecule/<scenario>/`
+layout. Running from the collection root also lets molecule
+auto-discover `extensions/molecule/config.yml` (which only fires when
+invoked from collection root, not a scenario subdir).
 
 Backends come from [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners),
 which is **not** in the root `requirements.yml` — it is a test-only

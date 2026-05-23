@@ -58,11 +58,14 @@ jobs:
     uses: ansible/ansible-content-actions/.github/workflows/sanity.yaml@46de405af31ba872a770a9b75c90121493c1cbe5 # main
   molecule-podman:
     runs-on: ubuntu-latest
-    # Scenarios live at extensions/molecule/<scenario>/molecule.yml (not
-    # the default molecule/<scenario>/ layout), so molecule needs to be
-    # told to look for molecule.yml in the cwd when we cd into a scenario.
+    # Scenarios live at extensions/molecule/<scenario>/molecule.yml.
+    # Invoke molecule from the collection root with a MOLECULE_GLOB
+    # that matches that layout — this is the conventional molecule
+    # + collection pattern, makes `molecule test --all` work, and
+    # lets molecule auto-discover extensions/molecule/config.yml
+    # (which only fires when invoked from collection root).
     env:
-      MOLECULE_GLOB: molecule.yml
+      MOLECULE_GLOB: extensions/molecule/*/molecule.yml
     strategy:
       fail-fast: false
       matrix:
@@ -93,19 +96,12 @@ jobs:
           ansible-galaxy collection install . --force
 
       - name: Run molecule ${{ matrix.scenario }}
-        # `-c ../config.yml` points at the shared base config that
-        # wires molecule's dependency step to
-        # extensions/molecule/requirements-test.yml (test-only deps,
-        # kept out of the runtime requirements.yml). molecule's
-        # auto-discovery of extensions/molecule/config.yml works only
-        # when invoked from the collection root, not from a scenario
-        # subdir — so we pass it explicitly here.
-        run: cd extensions/molecule/${{ matrix.scenario }} && molecule -c ../config.yml test
+        run: molecule test -s ${{ matrix.scenario }}
 
   molecule-qemu:
     runs-on: ubuntu-latest
     env:
-      MOLECULE_GLOB: molecule.yml
+      MOLECULE_GLOB: extensions/molecule/*/molecule.yml
     strategy:
       fail-fast: false
       matrix:
@@ -141,14 +137,7 @@ jobs:
           ansible-galaxy collection install . --force
 
       - name: Run molecule ${{ matrix.scenario }}
-        # `-c ../config.yml` points at the shared base config that
-        # wires molecule's dependency step to
-        # extensions/molecule/requirements-test.yml (test-only deps,
-        # kept out of the runtime requirements.yml). molecule's
-        # auto-discovery of extensions/molecule/config.yml works only
-        # when invoked from the collection root, not from a scenario
-        # subdir — so we pass it explicitly here.
-        run: cd extensions/molecule/${{ matrix.scenario }} && molecule -c ../config.yml test
+        run: molecule test -s ${{ matrix.scenario }}
 
   all_green:
     if: ${{ always() }}

@@ -3,8 +3,14 @@ COLLECTION_NAME      := armbian_netboot
 COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 
-MOLECULE_SCENARIOS := default rootfs_clone pxelinux_render image_build local_kernel_render persist_uboot_env
+MOLECULE_SCENARIOS := rootfs_clone pxelinux_render local_kernel_render persist_uboot_env disk_image disk_provision image_extract bootstrap_armbian image_build
 PROVISIONER ?= podman
+
+# Scenarios live at extensions/molecule/<scenario>/molecule.yml — point
+# molecule at that layout via MOLECULE_GLOB so the `molecule` target
+# works from the collection root and auto-discovers the shared base
+# config at extensions/molecule/config.yml.
+export MOLECULE_GLOB := extensions/molecule/*/molecule.yml
 
 .PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
 
@@ -32,8 +38,8 @@ yamllint: ## Run yamllint on roles/, playbooks/, inventory/
 ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
-molecule: ## Run molecule test (SCENARIO=default PROVISIONER=podman)
-	PROVISIONER=$(PROVISIONER) molecule test -s $(or $(SCENARIO),default)
+molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all; PROVISIONER=podman)
+	PROVISIONER=$(PROVISIONER) molecule test $(if $(SCENARIO),-s $(SCENARIO),--all)
 
 molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
 	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)

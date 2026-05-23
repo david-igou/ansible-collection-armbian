@@ -7,4 +7,10 @@
 dependency:
   name: galaxy
   options:
-    requirements-file: ../requirements-test.yml
+    # Point both the collections requirements-file AND the legacy
+    # role-file at the same yaml — the file has only a `collections:`
+    # block, so ansible-galaxy role install is a no-op, but pointing
+    # role-file at an existing file suppresses molecule's "Missing
+    # roles requirements file" warning.
+    requirements-file: extensions/molecule/requirements-test.yml
+    role-file: extensions/molecule/requirements-test.yml
