@@ -1,0 +1,10 @@
+---
+# Shared base config — molecule auto-discovers this at
+# extensions/molecule/config.yml in collections and deep-merges it
+# into every scenario's molecule.yml. Keeps test-only dependencies
+# (molecule_provisioners) out of the root requirements.yml so strict
+# consumers of the collection don't auto-pull them.
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ../requirements-test.yml

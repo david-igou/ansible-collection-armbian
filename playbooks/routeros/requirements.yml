@@ -1,0 +1,12 @@
+---
+# Optional collection dependencies for the RouterOS reference
+# playbooks under playbooks/routeros/. These playbooks are
+# illustrative orchestrations of the transport-agnostic primitives
+# in roles/ — only users who actually run them need these
+# collections, which is why they are deliberately not in the
+# root requirements.yml or galaxy.yml `dependencies:`.
+collections:
+  - name: community.routeros
+    version: ">=2.0.0"
+  - name: ansible.netcommon
+    version: ">=5.0.0"

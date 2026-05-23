@@ -1,0 +1,9 @@
+---
+# Test-only dependencies for the molecule scenarios under
+# extensions/molecule/. Installed by molecule's `dependency` step
+# (configured in extensions/molecule/config.yml). Not used outside
+# of testing.
+collections:
+  - name: https://github.com/david-igou/ansible-collection-molecule_provisioners.git
+    type: git
+    version: main

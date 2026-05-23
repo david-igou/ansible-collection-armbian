@@ -1,9 +1,25 @@
 # Molecule scenarios
 
-Each scenario lives in its own subdirectory and is invoked via
-`cd extensions/molecule/<scenario> && molecule test`. Backends are
-provided by [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners)
-(installed via `requirements.yml` at the collection root).
+Each scenario lives in its own subdirectory. Invoke it via:
+
+```bash
+cd extensions/molecule/<scenario>
+MOLECULE_GLOB=molecule.yml molecule -c ../config.yml test
+```
+
+`MOLECULE_GLOB=molecule.yml` tells molecule to find `molecule.yml` in
+the cwd (instead of the default `molecule/<scenario>/` layout). `-c
+../config.yml` points at the shared base config — molecule's
+auto-discovery of `extensions/molecule/config.yml` works only when
+invoked from the collection root, not from a scenario subdir, so we
+pass it explicitly.
+
+Backends come from [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners),
+which is **not** in the root `requirements.yml` — it is a test-only
+dependency listed in `extensions/molecule/requirements-test.yml` and
+installed automatically by molecule's `dependency` step (configured
+once in `extensions/molecule/config.yml` and deep-merged into every
+scenario). Strict consumers of the collection never auto-resolve it.
 
 | Scenario | Role exercised | Default backend | Image |
 |---|---|---|---|

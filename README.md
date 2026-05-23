@@ -266,10 +266,22 @@ Specs: [v3 design](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
 
 ### Collection dependencies
 
+Runtime dependencies — what `roles/` actually imports. Auto-resolved by
+Galaxy when you install the collection:
+
+| Collection | Version |
+|---|---|
+| `ansible.posix` | >= 1.5.0 |
+
+Optional dependencies — only needed if you run the RouterOS reference
+playbooks under `playbooks/routeros/` (or any orchestration playbook
+that delegates to a RouterOS device, e.g. `playbooks/stage_router.yml`,
+`playbooks/converge_boot_mode.yml`, `playbooks/poe_control.yml`).
+Install via `ansible-galaxy collection install -r playbooks/routeros/requirements.yml`:
+
 | Collection | Version |
 |---|---|
 | `community.routeros` | >= 2.0.0 |
-| `ansible.posix` | >= 1.5.0 |
 | `ansible.netcommon` | >= 5.0.0 |
 
 ## Included content

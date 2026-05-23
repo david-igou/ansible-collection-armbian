@@ -6,24 +6,30 @@ COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 MOLECULE_SCENARIOS := default rootfs_clone pxelinux_render image_build local_kernel_render persist_uboot_env
 PROVISIONER ?= podman
 
-.PHONY: help install lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
+.PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install external collection dependencies
+install: ## Install runtime collection dependencies (roles/ only)
 	ansible-galaxy collection install -r requirements.yml
+
+# Lint covers both roles/ and the top-level + reference playbooks
+# under playbooks/, which reference community.routeros and
+# ansible.netcommon (via diagnostic_bundle.yml, test_*_e2e.yml, etc.).
+# Those collections deliberately are not in the runtime requirements
+# — install them only at lint time. playbooks/routeros/ itself is
+# excluded via .ansible-lint exclude_paths.
+install-lint: install ## Install everything ansible-lint needs (runtime + routeros deps)
+	ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
 lint: yamllint ansible-lint ## Run yamllint and ansible-lint (installs collections first)
 
 yamllint: ## Run yamllint on roles/, playbooks/, inventory/
 	yamllint -c .yamllint.yml roles/ playbooks/ inventory/
 
-# ansible-lint depends on install: with mock_modules removed from
-# .ansible-lint (to stop it clobbering real modules), the collections
-# referenced by the playbooks must be present at lint time.
-ansible-lint: install ## Run ansible-lint on roles/ and playbooks/
+ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
 molecule: ## Run molecule test (SCENARIO=default PROVISIONER=podman)

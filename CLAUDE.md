@@ -66,7 +66,7 @@ Specs:
 david_igou/armbian_netboot/   (this repo root)
 ├── galaxy.yml                # Collection metadata (v3.0.0)
 ├── ansible.cfg               # Ansible config for direct-from-root runs
-├── requirements.yml          # External collection dependencies
+├── requirements.yml          # Runtime deps (roles/ only — ansible.posix)
 ├── meta/runtime.yml          # Minimum Ansible version (>=2.15)
 ├── vars/
 │   └── boards.yml            # Per-board metadata (armbian_netboot_board_configs)
@@ -90,6 +90,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── persist_uboot_env.yml        # Approach B: write rock-5b SPI env vars via fw_setenv
 │   ├── test_hardware_e2e.yml        # SD → NFS → SD assertion harness
 │   ├── routeros/                    # RouterOS-specific reference playbooks (swappable)
+│   │   ├── requirements.yml           # Optional deps: community.routeros + ansible.netcommon
 │   │   ├── bootstrap_user.yml         # Provision ansible-netboot user/group/SSH keys
 │   │   ├── upload_pxelinux_cfg.yml    # Per-board pxelinux.cfg upload + /ip tftp rows
 │   │   ├── upload_tftp_assets.yml     # Per-model kernel/initrd/dtb upload + rows
@@ -126,8 +127,12 @@ david_igou/armbian_netboot/   (this repo root)
 Run from the collection root:
 
 ```bash
-# Install required external collections first
+# Install runtime collection dependencies (roles/ only).
 ansible-galaxy collection install -r requirements.yml
+# If you use any orchestration that talks to RouterOS (stage_router.yml,
+# converge_boot_mode.yml, poe_control.yml, the routeros/ reference
+# playbooks, or the test_*_e2e.yml harnesses), also install:
+ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
 # (0) Build the custom Armbian image on a builder host. Publishes the
 # resulting .img.xz to the netboot server's HTTP assets directory.

@@ -5,6 +5,14 @@ exclude_paths:
   - extensions/molecule/provisioners/
   - tests/
   - changelogs/
+  # RouterOS reference playbooks are documentation-only — illustrative
+  # transport-specific orchestrations of the primitives in roles/.
+  # community.routeros + ansible.netcommon are not in the root
+  # requirements.yml (they live in playbooks/routeros/requirements.yml
+  # for users who actually run these playbooks), so lint without them
+  # installed would fail. Exclude the directory rather than carry the
+  # collections in the dev/lint install set.
+  - playbooks/routeros/
 
 warn_list:
   - command-instead-of-module
@@ -14,12 +22,12 @@ skip_list:
   # deliberately shared across roles and don't use per-role prefixes.
   - var-naming[no-role-prefix]
 
-# External collections from requirements.yml (community.routeros,
-# ansible.posix, ansible.netcommon) must be installed before lint —
-# `make install` does it. We do NOT use ansible-lint's `mock_modules`
-# directive: it writes stub modules into the discovered collections
-# path on every lint run, silently overwriting the real installed
-# modules and causing later playbook runs to fail with
-# "Unsupported parameters" because the stub's argument_spec is empty.
+# External collections from requirements.yml (ansible.posix) must be
+# installed before lint — `make install` does it. We do NOT use
+# ansible-lint's `mock_modules` directive: it writes stub modules into
+# the discovered collections path on every lint run, silently
+# overwriting the real installed modules and causing later playbook
+# runs to fail with "Unsupported parameters" because the stub's
+# argument_spec is empty.
 use_default_rules: true
 offline: true

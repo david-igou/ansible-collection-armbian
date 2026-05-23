@@ -30,9 +30,7 @@ tags:
   - allwinner
 
 dependencies:
-  "community.routeros": ">=2.0.0"
   "ansible.posix": ">=1.5.0"
-  "ansible.netcommon": ">=5.0.0"
 
 repository: https://github.com/david-igou/ansible-collection-armbian_netboot
 documentation: https://github.com/david-igou/ansible-collection-armbian_netboot/tree/main/docs
