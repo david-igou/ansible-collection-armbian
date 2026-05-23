@@ -4,13 +4,27 @@ COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 
 MOLECULE_SCENARIOS := rootfs_clone pxelinux_render local_kernel_render persist_uboot_env disk_image disk_provision image_extract bootstrap_armbian image_build
-PROVISIONER ?= podman
+
+# PROVISIONER picks which mp.<backend> block to use when a scenario's
+# inventory declares more than one. Most scenarios declare only one
+# backend, so leaving this unset is correct — molecule_provisioners
+# auto-selects. Override only for scenarios with multiple backends
+# (e.g. `PROVISIONER=podman make molecule SCENARIO=<dual-backend>`).
+# Do NOT default this to a single backend at the Makefile level:
+# forcing PROVISIONER=podman on a qemu-only scenario errors with
+# "Host 'instance' is missing mp.podman in inventory".
 
 # Scenarios live at extensions/molecule/<scenario>/molecule.yml — point
 # molecule at that layout via MOLECULE_GLOB so the `molecule` target
 # works from the collection root and auto-discovers the shared base
 # config at extensions/molecule/config.yml.
 export MOLECULE_GLOB := extensions/molecule/*/molecule.yml
+
+# The dev shell (igou-devenv) exports ANSIBLE_INVENTORY=.inventory so
+# ad-hoc ansible-playbook runs use the real inventory. That env var
+# leaks into molecule's subprocess and overrides per-scenario inventory
+# in subtle ways. Strip it from any target that shells out to ansible.
+unexport ANSIBLE_INVENTORY
 
 .PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
 
@@ -38,8 +52,8 @@ yamllint: ## Run yamllint on roles/, playbooks/, inventory/
 ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 	ansible-lint playbooks/ roles/
 
-molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all; PROVISIONER=podman)
-	PROVISIONER=$(PROVISIONER) molecule test \
+molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all)
+	molecule test \
 		$(if $(SCENARIO),-s $(SCENARIO),--all --continue-on-failure) \
 		--report
 
