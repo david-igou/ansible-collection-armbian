@@ -19,11 +19,17 @@
 #     publish task uses rsync_path: 'sudo rsync' so the receive side
 #     writes the root-owned per-board directories with --mkpath).
 #
-# The PXE-first userpatches table is playbook data, not role data —
-# the armbian_build role itself is intent-agnostic. Add a new board by
-# extending build_userpatches with another entry and adding the host(s)
-# under groups['boards'] in inventory with an armbian_netboot_board_model that exists in
-# vars/boards.yml.
+# The PXE-first userpatches family overlay is playbook data
+# (build_userpatches_common) — the armbian_build role itself is
+# intent-agnostic. Per-board userpatches and U-Boot branch live in
+# inventory group_vars at inventory/group_vars/<model_group>.yml as
+# armbian_netboot_board_userpatches and armbian_netboot_board_branch.
+# Add a new board by:
+#   1. Adding host(s) under groups['boards'] in inventory with an
+#      armbian_netboot_board_model that exists in vars/boards.yml.
+#   2. (Optional) Creating inventory/group_vars/<model_group>.yml with
+#      armbian_netboot_board_branch (default 'current') and any
+#      per-board armbian_netboot_board_userpatches.
 #
 # Usage:
 #   ansible-playbook playbooks/build_image.yml
@@ -59,7 +65,8 @@
     # the collection ships affected boards on the edge branch which
     # uses mainline u-boot v2026.04 with the legacy form (the
     # `__999_rock5b_uboot_v2026_04` hook below overrides armbian/build's
-    # v2026.01 pin on the rock-5b board config). See `build_branches`.
+    # v2026.01 pin on the rock-5b board config). See
+    # inventory/group_vars/rock_5b.yml for the branch declaration.
     build_userpatches_common:
       - dest: "config/sources/families/rockchip-rk3588.conf"
         content: |
@@ -343,101 +350,6 @@
               declare -g INSTALL_HEADERS="no"
           }
 
-    # Per-board userpatches — escape hatch keyed by armbian_board_name
-    # for genuinely board-specific source modifications. Most boards
-    # are fully covered by build_userpatches_common + build_branches.
-    build_userpatches:
-      # Orange Pi 5 Max: skip rockchip_setup_macaddr()'s env-set on
-      # this board so the RTL8125's hardware-stored MAC (read by the
-      # rtl8169 driver from the chip's MAC0 register at probe time)
-      # wins end-to-end. Without this patch:
-      #   1. rockchip_setup_macaddr() runs in misc_init_r and writes
-      #      SHA-of-cpuid MAC to env ethaddr (~ "da:bd:5f:..." — stable
-      #      per SoC but arbitrary).
-      #   2. eth_post_probe in net/eth-uclass.c reads the chip MAC
-      #      (~ "c0:74:2b:..." — Xunlong-programmed), sees env ethaddr
-      #      is non-zero, overrides chip MAC with env MAC, warns
-      #      "MAC addresses don't match".
-      #   3. U-Boot DHCP/PXE uses env MAC; kernel reads chip MAC
-      #      directly → two DHCP leases per cold boot, pxelinux.cfg/
-      #      01-<mac> lookup against a MAC the operator never sees in
-      #      Linux. End-to-end PXE→NFS+DNS workflow is broken.
-      # The patch gates on root /compatible "xunlong,orangepi-5-max"
-      # via of_machine_is_compatible() (declared in include/dm/device.h,
-      # already used in arch/arm/mach-apple/board.c), so it has zero
-      # effect on any other rk3588 board sharing arch/arm/mach-rockchip/
-      # board.c. Same family-default-Radxa-fork lacking RTL8169 driver
-      # is the reason this board needs build_branches: edge above —
-      # both fixes track the same chip-MAC reality.
-      # CONFIG_ENV_IS_NOWHERE=y on this board's defconfig, so env is
-      # volatile; the chip-MAC will be re-derived by eth_post_probe on
-      # every cold boot. No persistence path needed (unlike rock-5b).
-      orangepi5-max:
-        - dest: "u-boot/v2025.04/board_orangepi5-max/0099-prefer-chip-mac-over-cpuid.patch"
-          content: |
-            --- a/arch/arm/mach-rockchip/board.c
-            +++ b/arch/arm/mach-rockchip/board.c
-            @@ -329,6 +329,21 @@ int rockchip_setup_macaddr(void)
-             	int size = sizeof(hash);
-             	u8 mac_addr[6];
-
-            +	/*
-            +	 * Skip env-set on boards whose NIC has a hardware-stored MAC
-            +	 * (e.g. RTL8125 reads MAC from its own MAC0 register at probe
-            +	 * time). If we write a SHA-of-cpuid MAC to env here,
-            +	 * eth_post_probe in net/eth-uclass.c will override the chip
-            +	 * MAC with our env value, causing U-Boot DHCP/PXE to use a
-            +	 * different MAC than the Linux kernel uses (kernel reads
-            +	 * chip MAC directly). Symptom: two DHCP leases per cold
-            +	 * boot, pxelinux.cfg/01-<mac> miss against the MAC visible
-            +	 * from Linux. See david_igou.armbian_netboot's
-            +	 * playbooks/build_image.yml for rationale.
-            +	 */
-            +	if (of_machine_is_compatible("xunlong,orangepi-5-max"))
-            +		return 0;
-            +
-             	/* Only generate a MAC address, if none is set in the environment */
-             	if (env_get("ethaddr"))
-             		return 0;
-
-    # Per-board armbian/build BRANCH override. Most boards use 'current'
-    # (the armbian_build role default); a board opts into 'edge' here
-    # only when something downstream gates on BRANCH=edge:
-    #
-    #   rock-5b — armbian/build's
-    #     `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
-    #     swaps the Radxa next-dev-v2024.10 fork (which lacks the
-    #     RTL8125 PCIe NIC driver Rock 5B ships with) for mainline
-    #     u-boot. Our `__999_rock5b_uboot_v2026_04` then bumps that
-    #     upstream-hook's v2026.01 default to v2026.04.
-    #
-    #   rock-5a — armbian/build has NO mainline override for rock-5a
-    #     (upstream's `config/boards/rock-5a.conf` only carries a
-    #     vendor-branch hook), so we ship one in
-    #     build_userpatches_common:
-    #     `__999_rock5a_use_mainline_uboot`. That hook gates on
-    #     BRANCH=edge, so this entry is what activates it. Without it,
-    #     rock-5a would build against the Radxa fork's BOOT_TARGET_-
-    #     DEVICES X-macro form, which the `__999_pxe_first` sed
-    #     cannot patch.
-    build_branches:
-      rock-5b: edge
-      # orangepi5-max — armbian/build's
-      #   `post_family_config_branch_edge__orangepi5max_use_mainline_uboot`
-      #   (in upstream config/boards/orangepi5-max.csc) swaps the
-      #   rk3588 family-default Radxa next-dev-v2024.10 fork for
-      #   mainline u-boot v2025.04 + armbian/build's
-      #   patch/u-boot/v2025.04/board_orangepi5-max/ overlay. That
-      #   overlay is what adds CONFIG_RTL8169=y (covers the RTL8125
-      #   PCIe 2.5GbE NIC the board ships with — RTL8125 is in the
-      #   r8169 family in u-boot) and CONFIG_PCIE_DW_ROCKCHIP=y. The
-      #   family-default fork has no r8169 driver, so building this
-      #   board on `current` yields a u-boot binary that brings the
-      #   NIC up with no link / no LEDs.
-      orangepi5-max: edge
-      rock-5a: edge
-      orangepi5: edge
-      orangepi5pro: edge
 
   pre_tasks:
     - name: Load board configs for board name lookup
@@ -451,6 +363,100 @@
              | map('extract', hostvars, 'armbian_netboot_board_model')
              | unique
              | list }}
+
+    - name: Resolve a representative host per board model
+      # Per-model build vars (armbian_netboot_board_userpatches,
+      # armbian_netboot_board_branch) come from
+      # inventory/group_vars/<model_group>.yml. Hosts of the same model
+      # all inherit those group_vars, so picking any one host is
+      # sufficient — we use the first host listed in groups['boards']
+      # for each model. Used by the include_role vars: block below.
+      # `| first` is safe: _board_models is derived from groups['boards'],
+      # so every model is guaranteed at least one matching host.
+      ansible.builtin.set_fact:
+        _board_model_first_host: >-
+          {{
+            _board_model_first_host | default({})
+            | combine({
+                item: (
+                  groups['boards']
+                  | map('extract', hostvars)
+                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | map(attribute='inventory_hostname')
+                  | first
+                )
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+    - name: Resolve armbian_board_name → board_model reverse map
+      # _build_target_to_model maps from the armbian/build BOARD= value
+      # (the key used by _build_targets, e.g. 'orangepi5pro') back to
+      # the inventory's armbian_netboot_board_model value (e.g.
+      # 'orange-pi-5-pro'). The build loop iterates _build_targets;
+      # this map lets it resolve back to a representative host whose
+      # group_vars carry armbian_netboot_board_branch +
+      # armbian_netboot_board_userpatches.
+      ansible.builtin.set_fact:
+        _build_target_to_model: >-
+          {{
+            _build_target_to_model | default({})
+            | combine({
+                armbian_netboot_board_configs[item].armbian_board_name: item
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+      # build_image.yml builds one .img.xz per model — divergent
+      # branch declarations across hosts of the same model would
+      # silently use only the first host's value. Per-host build
+      # divergence would require keying builds by (model + patch-hash)
+      # and a host-keyed armbian_netboot_image_urls map; out of scope
+      # for v3. Fail loudly so the operator consolidates into
+      # inventory/group_vars/<model_group>.yml, or opens a follow-on
+      # spec for genuinely per-host builds.
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_branch', default='current')
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_branch values. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+      # Same per-model build rule as the branch assert above. The
+      # to_json(sort_keys=true) canonicalisation makes the comparison
+      # deterministic across dict-key ordering differences within each
+      # patch entry; it does NOT canonicalise list-item order, so two
+      # hosts declaring the same patches in different sequence would
+      # falsely diverge. Acceptable in practice because all hosts of a
+      # model inherit from the same group_vars YAML (identical parse
+      # order).
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | map('to_json', sort_keys=true)
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_userpatches. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
 
     - name: Render local_kernel dispatch table for the build hook
       # Macro inlined here because Jinja's set_fact context blocks
@@ -517,9 +523,14 @@
       ansible.builtin.include_role:
         name: image_build
       vars:
+        _first_host: "{{ _board_model_first_host[_build_target_to_model[item]] }}"
         armbian_build_board: "{{ item }}"
-        armbian_build_userpatches: "{{ build_userpatches_common + (build_userpatches[item] | default([])) }}"
-        armbian_build_branch: "{{ build_branches[item] | default('current') }}"
+        armbian_build_userpatches: >-
+          {{
+            build_userpatches_common
+            + (hostvars[_first_host].armbian_netboot_board_userpatches | default([]))
+          }}
+        armbian_build_branch: "{{ hostvars[_first_host].armbian_netboot_board_branch | default('current') }}"
       loop: "{{ _build_targets }}"
 
     # rsync invoked via command (not ansible.posix.synchronize) so it

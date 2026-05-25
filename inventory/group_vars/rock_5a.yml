@@ -1,0 +1,13 @@
+---
+# Per-model vars for the rock_5a group.
+
+# ── armbian/build BRANCH ─────────────────────────────────────────────
+# armbian/build has no mainline override for rock-5a (upstream's
+# config/boards/rock-5a.conf only carries a vendor-branch hook), so we
+# ship one in build_userpatches_common:
+# `__999_rock5a_use_mainline_uboot` (in playbooks/build_image.yml).
+# That hook gates on BRANCH=edge — this entry is what activates it.
+# Without it, rock-5a would build against the Radxa fork's
+# BOOT_TARGET_DEVICES X-macro form, which the `__999_pxe_first` sed
+# cannot patch (PXE stays at the end of the boot order, SD wins).
+armbian_netboot_board_branch: edge

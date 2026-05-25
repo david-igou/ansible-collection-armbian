@@ -384,7 +384,7 @@ The dimensions that vary in practice:
 For the full runbook, use the `adding-armbian-board` skill — it walks
 pre-flight decisions, inventory placeholders, `vars/boards.yml` fields
 (including `earlycon`), U-Boot branch selection (`current` vs `edge`
-via `build_branches`), post-build defconfig audits (CONFIG_PCI_INIT_R,
+via `armbian_netboot_board_branch` in inventory group_vars), post-build defconfig audits (CONFIG_PCI_INIT_R,
 PHY drivers, NIC driver presence), and ends at
 `stage_netboot_assets.yml` + `stage_router.yml`. It also encodes the
 decision rule for running Approach B (`persist_uboot_env.yml`) based on
@@ -405,12 +405,17 @@ Minimum touched files for a new board:
    locally-published custom build (consumed on the netboot_server),
    AND an `armbian_netboot_image_urls_http[<model>]` entry with the
    http(s):// URL the boards stream from for the Phase 3 dd-to-SD step.
-4. `playbooks/build_image.yml` `build_branches:` if the board's
+4. `inventory/group_vars/<model_group>.yml` (doc-only example +
+   real inventory): set `armbian_netboot_board_branch` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
-   boards need `edge` for mainline U-Boot).
-5. (Rare) `playbooks/build_image.yml` `build_userpatches:` if the
-   board needs source patches beyond what `build_userpatches_common`
-   already covers — most new boards won't.
+   boards need `edge` for mainline U-Boot). Default `current` if
+   omitted.
+5. (Rare) `inventory/group_vars/<model_group>.yml`
+   `armbian_netboot_board_userpatches`: list of `{dest, content}`
+   patches the image_build role drops into `userpatches/` for this
+   board's build. Add only after confirming `build_userpatches_common`
+   in `playbooks/build_image.yml` (the cross-board rk3588 family
+   overlay) doesn't already cover the case.
 
 ## rb5009 SBC TFTP layout
 

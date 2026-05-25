@@ -1,0 +1,131 @@
+---
+# Localhost-only test harness that exercises the same per-model
+# variable resolution build_image.yml uses, then asserts the resolved
+# values match what the example inventory should carry.
+#
+# This is a static check — no SSH, no Docker, no armbian/build clone.
+# It runs entirely against the documentation-only example inventory.
+#
+# Run with:
+#   unset ANSIBLE_INVENTORY
+#   ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
+#
+# Failures here indicate either (a) drift between the playbook's
+# expected variable contract and the example inventory's group_vars,
+# or (b) the resolver logic in build_image.yml needs the same update.
+
+- name: Resolve per-model build vars and assert expected values
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Resolve unique armbian_netboot_board_model values from groups['boards']
+      ansible.builtin.set_fact:
+        _board_models: >-
+          {{ groups['boards']
+             | map('extract', hostvars, 'armbian_netboot_board_model')
+             | unique
+             | list }}
+
+    - name: Resolve a representative host per board model
+      ansible.builtin.set_fact:
+        _board_model_first_host: >-
+          {{
+            _board_model_first_host | default({})
+            | combine({
+                item: (
+                  groups['boards']
+                  | map('extract', hostvars)
+                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | map(attribute='inventory_hostname')
+                  | first
+                )
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+  tasks:
+    - name: Assert every model declares armbian_netboot_board_branch
+      ansible.builtin.assert:
+        that:
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch is defined"
+        fail_msg: >-
+          Model '{{ item }}' (host '{{ _board_model_first_host[item] }}')
+          is missing armbian_netboot_board_branch in its inventory
+          group_vars. Define it in
+          inventory/group_vars/<model_group>.yml.
+      loop: "{{ _board_models }}"
+
+    - name: Assert every model's armbian_netboot_board_branch is a known value
+      ansible.builtin.assert:
+        that:
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch in ['current', 'edge', 'vendor', 'legacy']"
+        fail_msg: >-
+          Model '{{ item }}' has armbian_netboot_board_branch =
+          '{{ hostvars[_board_model_first_host[item]].armbian_netboot_board_branch }}',
+          which is not a known armbian/build BRANCH value.
+      loop: "{{ _board_models }}"
+
+    - name: Assert armbian_netboot_board_userpatches (when defined) is a well-formed list
+      ansible.builtin.assert:
+        that:
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is not string"
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is iterable"
+          - >-
+            hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches
+            | selectattr('dest', 'undefined') | list | length == 0
+          - >-
+            hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches
+            | selectattr('content', 'undefined') | list | length == 0
+        fail_msg: >-
+          Model '{{ item }}' has armbian_netboot_board_userpatches
+          defined but at least one entry is missing 'dest' or 'content'.
+      when:
+        - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is defined"
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+      # Mirrors the runtime assert in playbooks/build_image.yml so the
+      # example inventory contract documents the per-model rule even
+      # when each model currently has only one host.
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_branch', default='current')
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_branch values in the example inventory.
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | map('to_json', sort_keys=true)
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_userpatches in the example inventory.
+      loop: "{{ _board_models }}"
+
+    - name: Assert orange-pi-5-max ships the RTL8125 MAC userpatch
+      ansible.builtin.assert:
+        that:
+          - "(hostvars[_board_model_first_host['orange-pi-5-max']].armbian_netboot_board_userpatches | default([])) | length == 1"
+          - "'prefer-chip-mac' in (hostvars[_board_model_first_host['orange-pi-5-max']].armbian_netboot_board_userpatches | default([]))[0].dest"
+        fail_msg: >-
+          orange-pi-5-max group_vars is missing the
+          0099-prefer-chip-mac-over-cpuid.patch userpatch (needed for
+          RTL8125 chip MAC consistency). Add it to
+          inventory/group_vars/orange_pi_5_max.yml under
+          armbian_netboot_board_userpatches.
+      when: "'orange-pi-5-max' in _board_models"
