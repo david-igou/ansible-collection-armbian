@@ -51,9 +51,9 @@ Add `armbian_netboot_image_urls[<model>]` in your real `group_vars/all.yml` (and
 
 ## Phase 4 — U-Boot branch decision
 
-Default: `current` (no `build_branches` entry). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `build_branches: { <board>: edge }` in `playbooks/build_image.yml`. The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
+Default: `current` (no `armbian_netboot_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_netboot_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
 
-Per-board `build_userpatches` entries are rare — `build_userpatches_common`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board entry only after verifying the existing hooks don't cover the case.
+Per-board `armbian_netboot_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_netboot_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
 
 ## Phase 5 — Build + audit
 
