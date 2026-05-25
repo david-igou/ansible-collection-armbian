@@ -389,8 +389,8 @@
 
 <p>
   The asymmetry is why this collection sets
-  <code>build_branches: {rock-5b: edge}</code> in
-  <code>playbooks/build_image.yml</code>. <code>rock-5b</code> on the family
+  <code>armbian_netboot_board_branch: edge</code> in
+  <code>inventory/group_vars/rock_5b.yml</code>. <code>rock-5b</code> on the family
   default (<code>current</code> → Radxa fork) cannot do PXE because that fork
   has no RTL8125 source files. <code>edge</code> goes through rock-5b&rsquo;s
   branch hook and lands on mainline v2026.01 which does. OPi5Pro doesn&rsquo;t
