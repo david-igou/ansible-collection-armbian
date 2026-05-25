@@ -26,7 +26,7 @@ export MOLECULE_GLOB := extensions/molecule/*/molecule.yml
 # in subtle ways. Strip it from any target that shells out to ansible.
 unexport ANSIBLE_INVENTORY
 
-.PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test collection-build collection-install galaxy-import clean
+.PHONY: help install install-lint lint yamllint ansible-lint molecule molecule-kubevirt test test-build-image-vars collection-build collection-install galaxy-import clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -60,7 +60,10 @@ molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all)
 molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
 	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)
 
-test: lint molecule ## Run lint then molecule
+test-build-image-vars: ## Run the localhost-only build_image vars contract test
+	ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
+
+test: lint test-build-image-vars molecule ## Run lint, build_image vars contract test, and molecule
 
 collection-build: ## Build the collection tarball
 	ansible-galaxy collection build --force
