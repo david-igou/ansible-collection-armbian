@@ -477,6 +477,57 @@
           }}
       loop: "{{ _board_models }}"
 
+    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+      # build_image.yml builds one .img.xz per model — divergent
+      # branch declarations across hosts of the same model would
+      # silently use only the first host's value. Per-host build
+      # divergence would require keying builds by (model + patch-hash)
+      # and a host-keyed armbian_netboot_image_urls map; out of scope
+      # for v3. Fail loudly so the operator consolidates into
+      # inventory/group_vars/<model_group>.yml, or opens a follow-on
+      # spec for genuinely per-host builds.
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_branch', default='current')
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_branch values. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+      # Same per-model build rule as the branch assert above. The
+      # to_json(sort_keys=true) canonicalisation makes the comparison
+      # deterministic across dict-key ordering differences within each
+      # patch entry; it does NOT canonicalise list-item order, so two
+      # hosts declaring the same patches in different sequence would
+      # falsely diverge. Acceptable in practice because all hosts of a
+      # model inherit from the same group_vars YAML (identical parse
+      # order).
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_netboot_board_model', 'equalto', item)
+             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | map('to_json', sort_keys=true)
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_netboot_board_userpatches. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
+
     - name: Render local_kernel dispatch table for the build hook
       # Macro inlined here because Jinja's set_fact context blocks
       # absolute-path imports via {%- from ... -%}. The canonical macro
