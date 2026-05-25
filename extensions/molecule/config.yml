@@ -3,18 +3,15 @@
 # extensions/molecule/config.yml in collections and deep-merges it
 # into every scenario's molecule.yml.
 #
-# The `dependency` action is disabled here on purpose. Test-only
-# collections live in extensions/molecule/requirements-test.yml and
-# are installed once via the Makefile (`make install-test`) or the
-# CI workflow's `Install dependencies` step, never by molecule itself.
-#
-# Why: molecule's galaxy dependency action calls
-# `ansible-galaxy collection install -r <file>`, which for git-source
-# requirements unconditionally `shutil.rmtree`s the destination before
-# reinstalling. That blows up when a developer has the provisioner
-# checked out and symlinked into ~/.ansible/collections/... for local
-# iteration (Python's rmtree refuses to traverse a symlink, so the
-# install crashes with rc=250). External-install + skip-if-present
-# (see Makefile `install-test`) avoids the reinstall path entirely.
+# Molecule runs its own `dependency` step before each scenario,
+# installing the test-only collections listed in
+# extensions/molecule/requirements-test.yml via ansible-galaxy.
+# Paths in molecule config are resolved relative to molecule's
+# working directory; scenarios in this collection are invoked
+# from the collection root (see extensions/molecule/README.md),
+# which is where the requirements file lives.
 dependency:
-  enabled: false
+  name: galaxy
+  enabled: true
+  options:
+    requirements-file: extensions/molecule/requirements-test.yml

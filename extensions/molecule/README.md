@@ -17,19 +17,13 @@ layout. Running from the collection root also lets molecule
 auto-discover `extensions/molecule/config.yml` (which only fires when
 invoked from collection root, not a scenario subdir).
 
-Backends come from [`david_igou.molecule_provisioners`](https://github.com/david-igou/ansible-collection-molecule_provisioners),
+Backends come from [`david_igou.molecule_provisioners`](https://galaxy.ansible.com/ui/repo/published/david_igou/molecule_provisioners/),
 which is **not** in the root `requirements.yml` — it is a test-only
 dependency listed in `extensions/molecule/requirements-test.yml`.
-Install it once via `make install-test` (skip-if-present, respects a
-dev symlink at `~/.ansible/collections/.../david_igou/
-molecule_provisioners`) or via the CI workflow's `Install dependencies`
-step. Strict consumers of the collection never auto-resolve it.
-
-Molecule's own `dependency` action is disabled in the shared
-`extensions/molecule/config.yml`. (It would otherwise try to
-`ansible-galaxy collection install` the git-source provisioner on
-every scenario run, which `shutil.rmtree`s the destination first —
-that crashes if the local dev setup has the provisioner symlinked in.)
+Molecule resolves it automatically via its `dependency` step
+(configured in `extensions/molecule/config.yml`); no separate install
+command is needed. Strict consumers of the collection never auto-pull
+it because it is absent from the root `requirements.yml`.
 
 | Scenario | Role exercised | Default backend | Image |
 |---|---|---|---|
