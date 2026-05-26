@@ -64,38 +64,33 @@ Required:
 Missing any → playbook fails in the relevant phase. Add them to inventory
 before running.
 
-### A.2 — `armbian_netboot_image_urls[<model>]` + `armbian_netboot_image_urls_http[<model>]`
+### A.2 — `armbian_netboot_image_urls[<model>]`
 
-Two distinct inventory vars feed the .img.xz to two different consumers
-on two different hosts:
+One inventory var feeds the `.img.xz` to both consumers:
 
-- `armbian_netboot_image_urls` — consumed on the netboot_server by
-  `image_extract` (Phase 1). Typically a local NFS path the server
-  reads directly.
-- `armbian_netboot_image_urls_http` — consumed on each board by the
-  `disk_image` role (Phase 3). Must be an `http(s)://` URL the board
-  can stream from. The split exists because the netboot_server often
-  can't reach its own macvlan-fronted HTTP address, so a single
-  unified URL doesn't work.
+- `image_extract` on the netboot_server (Phase 1) — reads the value as
+  either an `http(s)://` URL or an absolute path.
+- `disk_image` on each board (Phase 3) — same var, must be reachable
+  from the board's network. Local paths only work if the board can
+  reach them (rare; typically use a URL).
 
-Both must resolve to the same `.img.xz` file per board model. Confirm
-both are set:
+Whichever value you set must be reachable from both. Confirm it's set:
 
 ```bash
 ansible-inventory --list 2>/dev/null \
-  | jq -er '{
-      paths: .all.vars.armbian_netboot_image_urls,
-      http:  .all.vars.armbian_netboot_image_urls_http
-    }'
+  | jq -er '.all.vars.armbian_netboot_image_urls'
 ```
 
 Probe reachability from BOTH consumers:
 
 ```bash
-# netboot_server reads its local path (image_extract)
-ansible netboot_server -b -m stat -a "path=<armbian_netboot_image_urls value>"
-# Boards stream from the HTTP URL (disk_image)
-ansible <board> -m uri -a "url=<armbian_netboot_image_urls_http value> method=HEAD return_content=no"
+# netboot_server reads via image_extract — works for URL or absolute path
+ansible netboot_server -m uri -a 'url={{ armbian_netboot_image_urls["<model>"] }} method=HEAD return_content=no'
+# Or, if you use absolute paths:
+ansible netboot_server -b -m stat -a 'path={{ armbian_netboot_image_urls["<model>"] }}'
+
+# Boards stream via disk_image — URL must be reachable from the board
+ansible <board> -m uri -a 'url={{ armbian_netboot_image_urls[armbian_netboot_board_model] }} method=HEAD return_content=no'
 ```
 
 ### A.3 — Router TFTP plumbing
@@ -478,7 +473,7 @@ multiple boards and the per-board tracker model doesn't 1:1 with them.
 ```bash
 # Pre-flight probes (Phase A)
 ansible <board> --list-vars | grep armbian_netboot_
-ansible-inventory --list | jq '{paths: .all.vars.armbian_netboot_image_urls, http: .all.vars.armbian_netboot_image_urls_http}'
+ansible-inventory --list | jq '.all.vars.armbian_netboot_image_urls'
 ansible <armbian_netboot_router> -m community.routeros.command -a 'commands="/ip tftp print count-only"'
 ansible boards:netboot_server:routeros_switches:routeros_routers -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 

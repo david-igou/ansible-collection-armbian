@@ -25,9 +25,10 @@ parameters, in what order.
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; optional SCP publish gated by `armbian_netboot_publish_target` |
+| `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_image.yml` publishes to the netboot server) |
 | `image_extract` | netboot server (host with sudo+losetup) | One rootfs template + per-model TFTP artifacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
 | `disk_image` | a board (or any host owning the target) | One block device imaged via streaming `xz \| dd`; mount-aware refusal |
+| `disk_provision` | a board | Declarative GPT layout via `systemd-repart` + rsync source rootfs + LABEL-keyed fstab regen; idempotent, supports `preserve_on_reprovision` per partition |
 | `rootfs_clone` | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset |
 | `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
 | `board_boot_wait` | a board | wait_for TCP/22 + SSH (no power knowledge) |
@@ -42,29 +43,32 @@ playbooks (`converge_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`
 compose roles + reference playbooks. See
 [`docs/boot-mode-override.md`](docs/boot-mode-override.md).
 
-## Status: v3.0.0 — single-purpose, transport-agnostic roles
+## Status: early-stage (0.0.x) — expect breaking changes
 
-Breaking change from v2. The five composite v2 roles (`boot_mode`,
-`netboot_assets`, `routeros_pxe_config`, `routeros_poe`,
-`bootstrap_routeros_user`) are gone. v3 ships seven single-host, single-purpose
-roles with zero RouterOS knowledge; all RouterOS-specific code lives as
-swappable reference playbooks under `playbooks/routeros/`. Inventory variables,
-boot-mode semantics, and CLI entry points are preserved.
+Roles are single-purpose, single-host, and transport-agnostic; all
+RouterOS-specific code lives as swappable reference playbooks under
+`playbooks/routeros/`. The collection is in active development with
+breaking changes between releases — inventory variables, default
+values, group names, role names, and playbook names may all shift
+between 0.0.x releases without long deprecation windows. Pin to a
+specific version in your `requirements.yml`.
 
-The always-netboot model from v2 carries forward unchanged: every onboarded
-board always has a pxelinux.cfg on rb5009, boot mode is controlled by the
+The always-netboot model: every onboarded board always has a
+pxelinux.cfg on the RouterOS router, boot mode is controlled by the
 `default` directive inside it, and the `sd` label defaults to
 `root=LABEL=armbi_root` (override per-host via `armbian_netboot_sd_root`).
 
-Specs:
-- v3: [`docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md`](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
-- v2 (boot-mode model): [`docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md`](docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md)
+Historical design specs and migration notes live under
+[`docs/superpowers/specs/`](docs/superpowers/specs/) and
+[`docs/superpowers/plans/`](docs/superpowers/plans/) — useful for
+context on why current shapes exist, but they describe past work and
+are not authoritative for current behaviour.
 
 ## Collection structure
 
 ```
 david_igou/armbian_netboot/   (this repo root)
-├── galaxy.yml                # Collection metadata (v3.0.0)
+├── galaxy.yml                # Collection metadata
 ├── ansible.cfg               # Ansible config for direct-from-root runs
 ├── requirements.yml          # Runtime deps (roles/ only — ansible.posix)
 ├── meta/runtime.yml          # Minimum Ansible version (>=2.15)

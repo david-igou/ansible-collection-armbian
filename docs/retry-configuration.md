@@ -1,18 +1,22 @@
 # Boot-retry configuration matrix
 
-The retry/timeout knobs documented here are inputs to the
-`david_igou.armbian_netboot.boot_mode` role (live contract:
-`ansible-doc -t role david_igou.armbian_netboot.boot_mode`).
-The role is invoked end-to-end by `playbooks/converge_boot_mode.yml` and
-`playbooks/set_boot_mode.yml`; its individual retry
-primitives (`cold_boot_with_retry.yml`,
-`wait_for_ssh_with_cycle_retry.yml`) are reached via `tasks_from:` by
-`test_hardware_e2e.yml`. This doc maps scenarios to recommended
-settings.
+The retry/timeout knobs documented here are inputs to the cold-boot
+primitives that live as task files under `playbooks/tasks/`:
 
-For the role-level contract (required vars like `armbian_netboot_router`,
-the full knob reference, internal architecture), run
-`ansible-doc -t role david_igou.armbian_netboot.boot_mode`.
+- `playbooks/tasks/cold_boot_with_retry.yml` — outer retry loop (PoE
+  cycle → `wait_for` TCP/22 → sustained ssh-ping).
+- `playbooks/tasks/cold_boot_single_attempt.yml` — inner
+  `block:`/`rescue:` for one attempt, included by the outer loop.
+- `playbooks/tasks/wait_for_ssh_with_cycle_retry.yml` — second-layer
+  retry around the post-boot SSH wait.
+
+These primitives are composed by the orchestration playbooks
+(`converge_boot_mode.yml`, `set_boot_mode.yml`, `test_hardware_e2e.yml`,
+`test_fleet_e2e.yml`) — there is no role-level wrapper any more (the
+v2 `boot_mode` role was removed during the v3 role refactor). The
+inventory variables (`armbian_netboot_boot_retry_attempts`,
+`armbian_netboot_boot_attempt_timeout`, etc.) are read directly by the
+task files. This doc maps scenarios to recommended settings.
 
 For why the retry stack exists at all, see issue [#38] and the
 discussion of PoE-HAT brown-out behavior. Short version: on flaky

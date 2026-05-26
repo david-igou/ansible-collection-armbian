@@ -5,15 +5,15 @@
 The `david_igou.armbian_netboot` Ansible collection manages custom Armbian SD
 images that PXE-first boot on the `orange-pi-5-pro`. The boards are powered
 over Ethernet from a RouterOS switch, draw their DHCP from a RouterOS router
-(rb5009), and NFS-root from a separate TrueNAS server. **v2.0.0 (always-netboot
-model):** every onboarded board always has a per-board `pxelinux.cfg/01-<MAC>`
+(rb5009), and NFS-root from a separate TrueNAS server. **Always-netboot
+model:** every onboarded board always has a per-board `pxelinux.cfg/01-<MAC>`
 on rb5009's TFTP server; the `default` directive inside that file selects
 `nfs` versus `sd` boot (`armbian_netboot_boot_mode` in inventory). Nothing is
 added or removed to flip modes — convergence rewrites the same file. Everything
 else in the collection is in service of making that toggle reliable and
 idempotent.
 
-## The v2 invariant
+## The always-netboot invariant
 
 There is no on-board state to mutate for routine boot-mode selection, no
 bootloader env to rewrite for that purpose, and no scripts staged on the SBC
@@ -75,14 +75,16 @@ before per-board `converge_boot_mode.yml` / `set_boot_mode.yml` operations run.
 
 The collection is organised as **single-purpose, parameter-driven roles**.
 A role enforces one external system's state given parameters; playbooks
-decide which roles to invoke, with which parameters, in what order. Seven
-roles ship in v3.
+decide which roles to invoke, with which parameters, in what order. Nine
+roles ship in the current line.
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| `image_build` | `armbian_builders` | `.img.xz` Armbian image with PXE-first U-Boot baked in; optional SCP publish via `armbian_netboot_publish_target` |
+| `image_build` | `armbian_builders` | `.img.xz` Armbian image with PXE-first U-Boot baked in; staged to controller (companion `build_image.yml` publishes to the netboot server) |
 | `image_extract` | netboot server | One rootfs template + per-model TFTP artefacts (vmlinuz / initrd / board.dtb) from a `.img.xz` (URL or local path) |
 | `rootfs_clone` | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset (hostname, machine-id, pre-generated SSH host keys) |
+| `disk_image` | a board (or any host owning the target) | One whole-disk block device imaged via streaming `xz \| dd` from an `.img.xz` (URL or absolute path); mount-aware refusal guard |
+| `disk_provision` | a board | Declarative GPT layout applied via `systemd-repart`, rsync `source` rootfs onto it, LABEL-keyed `/etc/fstab` regen; idempotent; supports `preserve_on_reprovision: true` per partition for state preservation |
 | `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
 | `bootstrap_armbian` | a board | SSH-key user with passwordless sudo on a freshly flashed board |
 | `board_boot_wait` | a board | `wait_for` TCP/22 + `wait_for_connection` SSH (no power knowledge) |
@@ -97,7 +99,7 @@ other roles consume inventory data or live-board state.
 
 ## Workflow
 
-The v3 ordering. Each step is its own playbook (or pair), run from the collection
+Each step is its own playbook (or pair), run from the collection
 root. Steps marked "(Once)" or "(Once per board model)" are
 setup-only; the rest are run as needed:
 
@@ -173,19 +175,33 @@ continuously — boot-mode changes update the rendered pxelinux content (the
 Per-model assets are added once by `stage_router.yml` and persist across
 boot-mode changes. They are shared by every board of that model.
 
-## Out of v1 scope (deferred)
+## Scope today
 
-The collection's previous incarnation supported reprovisioning (Ansible
-laying down a new image onto the board's persistent storage),
-on-host bootloader flashing (Ansible flashing U-Boot to SPI / eMMC / SD
-on a running board), and a wider catalogue of boards. Early releases
-deliberately narrowed to a single deliverable: `orange-pi-5-pro` flipping
-between SD and NFS-root via rb5009 pxelinux (v2: always-present file,
-`default` selects `nfs` vs `sd`). Reprovisioning, on-host bootloader
-flashing, and additional boards are deferred and will be re-introduced
-against the slimmer model.
+The collection covers six interlocking workflows:
 
-Spec: [`superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](superpowers/specs/2026-05-07-v1-scope-narrowing-design.md)
+- **Custom image build** (`image_build` + `build_image.yml`) — Armbian
+  `.img.xz` with PXE-first U-Boot baked in.
+- **Netboot staging** (`image_extract` + `rootfs_clone` +
+  `stage_netboot_assets.yml`) — per-model rootfs template and per-host
+  identity-reset clones on the NFS server.
+- **TFTP staging** (`stage_router.yml`) — per-model
+  kernel/initrd/dtb and per-board pxelinux.cfg uploaded to the
+  RouterOS router.
+- **Boot-mode convergence** (`pxelinux_render` + `board_boot_wait` +
+  `board_boot_verify` + `converge_boot_mode.yml`) — flip a board
+  between NFS and SD boot by rewriting one pxelinux.cfg `default`.
+- **SD imaging** (`disk_image`) — stream an `.img.xz` to a whole-disk
+  block device on the board itself.
+- **Local-disk reprovisioning** (`disk_provision` +
+  `provision_local_disk.yml` + `reprovision_to_local.yml`) — declarative
+  GPT layout via `systemd-repart`, rsync source rootfs, LABEL-keyed
+  fstab; supports `preserve_on_reprovision` per partition for state
+  preservation (e.g. `/var` for k3s).
+
+Historical narrowing notes from earlier releases (when reprovisioning
+was deferred) live in
+[`superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](superpowers/specs/2026-05-07-v1-scope-narrowing-design.md) —
+useful for context but no longer authoritative.
 
 ## Known issues
 
