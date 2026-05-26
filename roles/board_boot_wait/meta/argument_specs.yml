@@ -16,9 +16,9 @@ argument_specs:
         `docs/retry-configuration.md` for the full knob inventory.
 
     options:
-      armbian_netboot_boot_attempt_timeout:
+      armbian_boot_attempt_timeout:
         type: int
         default: 180
-      armbian_netboot_post_boot_wait_timeout:
+      armbian_post_boot_wait_timeout:
         type: int
         default: 300

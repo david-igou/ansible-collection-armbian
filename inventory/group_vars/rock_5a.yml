@@ -10,7 +10,7 @@
 # BOOT_TARGET_DEVICES X-macro form, which the `__999_pxe_first` sed
 # (in playbooks/build_image.yml's build_userpatches_common) cannot
 # patch — PXE stays at the end of the boot order and SD wins.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Delivered as a userpatches OVERLAY of config/boards/rock-5a.conf
@@ -69,7 +69,7 @@ armbian_netboot_board_branch: edge
 # unset clears rockchip64_common's default; no MTD writer is needed
 # since BOOT_SUPPORT_SPI's SPI-loader build path is not exercised
 # when no SPI artifact exists.
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "config/boards/rock-5a.conf"
     content: |
       function post_family_config_branch_edge__999_rock5a_use_mainline_uboot() {

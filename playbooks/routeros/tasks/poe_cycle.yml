@@ -1,18 +1,18 @@
 ---
 # Shared primitive: PoE-cycle a single board's switch port.
-# Delegated to the per-board switch (armbian_netboot_poe_switch).
+# Delegated to the per-board switch (armbian_poe_switch).
 #
 # Required hostvars:
-#   armbian_netboot_poe_switch
-#   armbian_netboot_poe_port
+#   armbian_poe_switch
+#   armbian_poe_port
 # Optional:
-#   armbian_netboot_poe_cycle_delay (default 5)
+#   armbian_poe_cycle_delay (default 5)
 
 - name: PoE off
   community.routeros.command:
     commands:
-      - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
-  delegate_to: "{{ armbian_netboot_poe_switch }}"
+      - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=off'
+  delegate_to: "{{ armbian_poe_switch }}"
   register: _poe_off
   retries: 3
   delay: 5
@@ -20,13 +20,13 @@
 
 - name: Pause for capacitor drain
   ansible.builtin.pause:
-    seconds: "{{ armbian_netboot_poe_cycle_delay | default(5) }}"
+    seconds: "{{ armbian_poe_cycle_delay | default(5) }}"
 
 - name: PoE on
   community.routeros.command:
     commands:
-      - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=auto'
-  delegate_to: "{{ armbian_netboot_poe_switch }}"
+      - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=auto'
+  delegate_to: "{{ armbian_poe_switch }}"
   register: _poe_on
   retries: 3
   delay: 5

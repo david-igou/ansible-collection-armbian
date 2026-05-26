@@ -92,15 +92,15 @@ After a successful run:
   gather_facts: false
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       delegate_to: localhost
       vars:
-        pxelinux_render_board_mac: "{{ armbian_netboot_board_mac }}"
-        pxelinux_render_boot_mode: "{{ armbian_netboot_boot_mode }}"
+        pxelinux_render_board_mac: "{{ armbian_board_mac }}"
+        pxelinux_render_boot_mode: "{{ armbian_boot_mode }}"
         board_console: "{{ board_config.console }}"
-        pxelinux_render_model_name: "{{ armbian_netboot_board_model }}"
-        pxelinux_render_nfs_server_ip: "{{ armbian_netboot_nfs_server_ip }}"
-        pxelinux_render_nfs_root_path: "{{ armbian_netboot_nfs_rootfs_path }}"
+        pxelinux_render_model_name: "{{ armbian_board_model }}"
+        pxelinux_render_nfs_server_ip: "{{ armbian_nfs_server_ip }}"
+        pxelinux_render_nfs_root_path: "{{ armbian_nfs_rootfs_path }}"
         pxelinux_render_hostname: "{{ inventory_hostname }}"
         pxelinux_render_output_dir: "{{ playbook_dir }}/../.cache/pxelinux.cfg"
 ```

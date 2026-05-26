@@ -1,15 +1,15 @@
 # Runbook: Reprovision a board's local disk
 
 How to safely apply (or change) the declarative
-`armbian_netboot_local_disks` layout on a board, using the
+`armbian_local_disks` layout on a board, using the
 `reprovision_to_local.yml` lifecycle playbook from #77 / PR #80.
 
 ## When to use
 
 - **First time** putting a board on local-disk boot — board currently
-  runs on `armbian_netboot_boot_mode: nfs`, you want to provision
+  runs on `armbian_boot_mode: nfs`, you want to provision
   its NVMe (or SATA, eMMC, USB SSD) and flip to
-  `armbian_netboot_boot_mode: local`.
+  `armbian_boot_mode: local`.
 - **Changing the layout** — board is already on local boot but you
   want a different partition shape (add `/var`, drop `/boot`, change
   sizes). The lifecycle re-runs end-to-end and your inventory drives
@@ -32,24 +32,24 @@ Before running the playbook, verify:
 | Board reachable | `ansible <fqdn> -m ping` | `SUCCESS / pong` |
 | Router reachable | `ansible <router-fqdn> -m community.routeros.command -a 'commands="/system identity print"'` | identity line |
 | Per-model TFTP rows present | `ansible <router-fqdn> -m community.routeros.command -a 'commands="/ip tftp print where req-filename~\"<model>\""'` | three rows (vmlinuz, initrd.img, board.dtb) with HITS ≥ 1 |
-| Inventory has `armbian_netboot_local_disks` set | `ansible-inventory --host <fqdn>` then look for the key | list of disk bindings |
-| Inventory has `armbian_netboot_poe_switch` + `armbian_netboot_poe_port` | same `ansible-inventory --host` | both present |
+| Inventory has `armbian_local_disks` set | `ansible-inventory --host <fqdn>` then look for the key | list of disk bindings |
+| Inventory has `armbian_poe_switch` + `armbian_poe_port` | same `ansible-inventory --host` | both present |
 | (Optional) UART dongle present on serial host | `ls /dev/ttyUSB0` on the serial host | char device exists |
 
 If TFTP rows are missing, run `playbooks/stage_router.yml` first.
 
-If `armbian_netboot_local_disks` is not set, the playbook will fail
+If `armbian_local_disks` is not set, the playbook will fail
 in Phase 2 pre-tasks with a clear assertion message — you need to
 add the binding before the playbook can proceed.
 
 ## DSL: declaring the layout
 
-`armbian_netboot_local_disks` is a per-host list. Each element is one
+`armbian_local_disks` is a per-host list. Each element is one
 disk binding with `device`, optional `wipe` / `force`, and a `layout`
 list of partition specs. Example:
 
 ```yaml
-armbian_netboot_local_disks:
+armbian_local_disks:
   - device: /dev/nvme0n1
     wipe: true            # default true; set false for read-only audit mode
     force: false          # default false; true bypasses preserve idempotency
@@ -89,7 +89,7 @@ armbian_netboot_local_disks:
 ## Procedure
 
 ```bash
-# 1. Edit inventory: add or change armbian_netboot_local_disks for
+# 1. Edit inventory: add or change armbian_local_disks for
 #    your host. Use `ansible-inventory --host <fqdn>` to verify the
 #    schema parses.
 
@@ -182,7 +182,7 @@ with the failure. The board is still NFS-booted (Phase 1 already
 flipped it), so re-running after fixing the issue is safe.
 
 If Phase 1 (initial NFS flip) fails, the board may be stuck on its
-previous mode. Use `set_boot_mode.yml -e armbian_netboot_boot_mode=
+previous mode. Use `set_boot_mode.yml -e armbian_boot_mode=
 sd` (or whatever known-good mode you have) to recover, then debug
 the NFS infrastructure (TFTP rows, NFS export, board's MAC in
 pxelinux.cfg).
@@ -204,7 +204,7 @@ not the documentation sample):
 ```yaml
 orange-pi-5-max-01.example.lan:
   # ... existing entries ...
-  armbian_netboot_local_disks:
+  armbian_local_disks:
     - device: /dev/nvme0n1
       wipe: true
       layout:
@@ -228,7 +228,7 @@ orange-pi-5-max-01.example.lan:
 
 ```bash
 ansible-inventory --host orange-pi-5-max-01.example.lan \
-  | jq '.armbian_netboot_local_disks[0].layout | length'
+  | jq '.armbian_local_disks[0].layout | length'
 # expected: 2
 ```
 
@@ -297,7 +297,7 @@ Option A: re-run with `force: true` on the binding (wipes everything
 including preserves):
 
 ```yaml
-armbian_netboot_local_disks:
+armbian_local_disks:
   - device: /dev/nvme0n1
     force: true   # ← bypasses preserve idempotency
     layout: [ ... your new layout ... ]
@@ -314,7 +314,7 @@ don't affect boot or system behavior.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Playbook says "no hosts matched" | Inventory keys by FQDN, playbook `hosts:` default is short name | Pass `-e target_hosts=<fqdn>` |
-| `'armbian_netboot_local_disks' is undefined` | Inventory missing the var | Add it per the DSL above |
+| `'armbian_local_disks' is undefined` | Inventory missing the var | Add it per the DSL above |
 | `Failed to parse partition type: <foo>` | DSL type isn't a valid systemd-repart name | Use one of: esp, linux, root, var, home, srv, swap |
 | `Error mounting ... vfat ... wrong fs type` | Kernel lacks CONFIG_VFAT_FS | Drop ESP from layout for this board |
 | `blkid -L <label>` retries exhausted on vfat | FAT label lowercase or >11 chars | Pre-flight validation catches this; use UPPERCASE ≤11 chars |

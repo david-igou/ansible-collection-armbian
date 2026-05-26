@@ -1098,12 +1098,12 @@ Expected: PASS. yamllint + ansible-lint clean.
 
 Run: `make collection-build`
 Expected: PASS. Produces
-`david_igou-armbian_netboot-<version>.tar.gz` at the repo root with
+`david_igou-armbian-<version>.tar.gz` at the repo root with
 `roles/disk_image/` included.
 
 - [ ] **Step 3: Confirm the role is in the tarball**
 
-Run: `tar -tzf david_igou-armbian_netboot-*.tar.gz | grep '^roles/disk_image/'`
+Run: `tar -tzf david_igou-armbian-*.tar.gz | grep '^roles/disk_image/'`
 Expected: lists the role's files (tasks/, meta/, defaults/, README.md).
 
 - [ ] **Step 4: Clean up the build artefact**
@@ -1130,9 +1130,9 @@ fleet is in the right state.
 
 **Files:**
 - Modify: `playbooks/test_fleet_e2e.yml`
-- Modify: `inventory/group_vars/all.yml` (default for `armbian_netboot_sd_device`)
+- Modify: `inventory/group_vars/all.yml` (default for `armbian_sd_device`)
 
-- [ ] **Step 1: Add `armbian_netboot_sd_device` default to inventory docs**
+- [ ] **Step 1: Add `armbian_sd_device` default to inventory docs**
 
 Append to `inventory/group_vars/all.yml`:
 
@@ -1140,7 +1140,7 @@ Append to `inventory/group_vars/all.yml`:
 # Default block device for SD-card reimaging (test_fleet_e2e.yml Phase 0).
 # Override per-host in inventory if a future board's SD slot enumerates
 # differently (see CLAUDE.md "MMC controller index varies per board").
-armbian_netboot_sd_device: /dev/mmcblk0
+armbian_sd_device: /dev/mmcblk0
 ```
 
 - [ ] **Step 2: Insert Phase 0 into `playbooks/test_fleet_e2e.yml`**
@@ -1186,16 +1186,16 @@ insert immediately before `- name: "Phase A — boot from SD card (parallel)"`:
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
-            target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
+            image_source: "{{ armbian_image_urls[armbian_board_model] }}"
+            target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 0 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 0 (dd SD) — {{ inventory_hostname }} ===
               date:    {{ ansible_date_time.iso8601 | default('') }}
-              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
-              target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
+              source:  {{ armbian_image_urls[armbian_board_model] }}
+              target:  {{ armbian_sd_device | default('/dev/mmcblk0') }}
               From-state: NFS rootfs (Phase 0 always re-converges nfs before dd)
             dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
           delegate_to: localhost
@@ -1434,7 +1434,7 @@ Expected: every playbook PASSes (no "FAIL:" lines).
 
 - [ ] **Step 4: Confirm the role is reachable from the collection**
 
-Run: `ansible-doc -t role david_igou.armbian_netboot.disk_image`
+Run: `ansible-doc -t role david_igou.armbian.disk_image`
 Expected: prints the `meta/argument_specs.yml` rendered as docs.
 
 - [ ] **Step 5: No commit needed; report done**

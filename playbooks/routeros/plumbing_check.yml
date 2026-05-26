@@ -2,8 +2,8 @@
 # Assert /ip tftp rows exist on RouterOS for each (model, asset) pair.
 #
 # Required var:
-#   armbian_netboot_tftp_check_models: list of models to verify
-#   armbian_netboot_tftp_flash_dir:    top-level dir on router flash
+#   armbian_tftp_check_models: list of models to verify
+#   armbian_tftp_flash_dir:    top-level dir on router flash
 
 - name: Assert /ip tftp rows exist on RouterOS
   hosts: routeros_router
@@ -22,7 +22,7 @@
       delay: 5
       until: _row_count is succeeded
       changed_when: false
-      loop: "{{ armbian_netboot_tftp_check_models | product(_assets) | list }}"
+      loop: "{{ armbian_tftp_check_models | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
       run_once: true

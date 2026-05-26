@@ -8,4 +8,4 @@
 # mainline v2026.04 on every branch, so this entry is documentation —
 # the build target lands on mainline u-boot regardless. Keep `edge`
 # explicit for symmetry with the other rk3588(s) boards in this fleet.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge

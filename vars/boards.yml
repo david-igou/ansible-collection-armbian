@@ -5,7 +5,7 @@
 # overrides should patch *specific* fields via group_vars / host_vars
 # rather than replacing whole entries.
 #
-# Per-board metadata. Keyed by armbian_netboot_board_model (matches
+# Per-board metadata. Keyed by armbian_board_model (matches
 # inventory host_vars and pxelinux/TFTP paths).
 #
 # Fields:
@@ -25,14 +25,14 @@
 #                        before the ttyS* driver loads. Format is
 #                        "<driver>,<bus>,<mmio_addr>" — for RK3588S the
 #                        UART2 base is 0xfeb50000. Required when
-#                        armbian_netboot_pxe_verbose=true; consulted
+#                        armbian_pxe_verbose=true; consulted
 #                        only by the verbose path in pxelinux_cfg.j2.
 #   local_kernel         OPTIONAL. Board's local_kernel mechanism config.
 #                        - storage: Full U-Boot device address including
 #                          partition number. Canonical layout is a single
 #                          root partition at p1, so the universal default
 #                          is "nvme 0:1". Override per-host via
-#                          armbian_netboot_local_kernel.storage if your
+#                          armbian_local_kernel.storage if your
 #                          disk_provision DSL creates a different layout
 #                          (e.g. additional data partitions).
 #                        - storage_scan: scan command (e.g. "nvme scan").
@@ -50,7 +50,7 @@
 #                          (consumed by persist_uboot_env.yml when storage
 #                          is spi_flash).
 
-armbian_netboot_board_configs:
+armbian_board_configs:
   orange-pi-5-pro:
     armbian_dl_dir: orangepi5pro
     armbian_board_name: orangepi5pro

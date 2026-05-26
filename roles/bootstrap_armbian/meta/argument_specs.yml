@@ -14,20 +14,20 @@ argument_specs:
         Idempotent: re-running against an already-bootstrapped board
         reconciles authorized_keys and is otherwise a no-op.
       - >-
-        Fail-fasts when armbian_netboot_bootstrap_ssh_keys is empty —
+        Fail-fasts when armbian_bootstrap_ssh_keys is empty —
         otherwise the role would create a user with no authorised keys
         and then disable password auth, leaving the board permanently
         unreachable.
 
     options:
-      armbian_netboot_bootstrap_user:
+      armbian_bootstrap_user:
         type: str
         required: true
         description: >-
           Username to create on the board. Should match the
           ansible_user the rest of the inventory connects as so
           subsequent plays land as this user.
-      armbian_netboot_bootstrap_ssh_keys:
+      armbian_bootstrap_ssh_keys:
         type: list
         elements: str
         required: true

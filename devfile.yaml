@@ -1,7 +1,7 @@
 ---
 schemaVersion: 2.2.2
 metadata:
-  name: david_igou.armbian_netboot-778f3133
+  name: david_igou.armbian-778f3133
 components:
   - name: tooling-container
     container:

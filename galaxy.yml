@@ -3,7 +3,7 @@
 # See https://docs.ansible.com/ansible/latest/dev_guide/collections_galaxy_meta.html
 
 namespace: "david_igou"
-name: "armbian_netboot"
+name: "armbian"
 version: 0.0.1-alpha
 readme: README.md
 authors:
@@ -33,10 +33,10 @@ tags:
 dependencies:
   "ansible.posix": ">=1.5.0"
 
-repository: https://github.com/david-igou/ansible-collection-armbian_netboot
-documentation: https://github.com/david-igou/ansible-collection-armbian_netboot/tree/main/docs
-homepage: https://github.com/david-igou/ansible-collection-armbian_netboot
-issues: https://github.com/david-igou/ansible-collection-armbian_netboot/issues
+repository: https://github.com/david-igou/ansible-collection-armbian
+documentation: https://github.com/david-igou/ansible-collection-armbian/tree/main/docs
+homepage: https://github.com/david-igou/ansible-collection-armbian
+issues: https://github.com/david-igou/ansible-collection-armbian/issues
 
 build_ignore:
   - .ansible

@@ -18,7 +18,7 @@
 # Our `__999_rock5b_uboot_v2026_04` hook below (delivered via the
 # per-board conf overlay) bumps that upstream-hook's v2026.01 default
 # to v2026.04. Both hooks gate on BRANCH=edge.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Delivered as a userpatches OVERLAY of config/boards/rock-5b.conf —
@@ -43,7 +43,7 @@ armbian_netboot_board_branch: edge
 # v2026.04 does NOT clear any of rock-5b's three PXE failure layers
 # on its own — Approach B (playbooks/persist_uboot_env.yml) still has
 # to run to populate SPI env. The bump is just to track upstream.
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "config/boards/rock-5b.conf"
     content: |
       function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {

@@ -4,7 +4,7 @@
 
 **Goal:** Move the playbook-embedded `build_userpatches` and `build_branches` per-board dicts in `playbooks/build_image.yml` into per-model inventory `group_vars/<model_group>.yml` files. A user can register a new board's patches and U-Boot branch in their inventory without editing the playbook.
 
-**Architecture:** Each `armbian_netboot_board_model` already maps 1:1 to an inventory subgroup of `boards` (e.g. `orange-pi-5-max` ↔ `orange_pi_5_max`). The playbook resolves one representative host per model and reads `armbian_netboot_board_userpatches` (list, default `[]`) and `armbian_netboot_board_branch` (string, default `current`) from that host's resolved vars. Cross-board family-level overlays remain in the playbook as `build_userpatches_common` because they are workflow intent, not per-board hardware data.
+**Architecture:** Each `armbian_board_model` already maps 1:1 to an inventory subgroup of `boards` (e.g. `orange-pi-5-max` ↔ `orange_pi_5_max`). The playbook resolves one representative host per model and reads `armbian_board_userpatches` (list, default `[]`) and `armbian_board_branch` (string, default `current`) from that host's resolved vars. Cross-board family-level overlays remain in the playbook as `build_userpatches_common` because they are workflow intent, not per-board hardware data.
 
 **Tech Stack:** Ansible 2.15+, Jinja2, YAML. No new collections or modules.
 
@@ -13,11 +13,11 @@
 ## File Structure
 
 **New files:**
-- `inventory/group_vars/orange_pi_5_pro.yml` — `armbian_netboot_board_branch: edge`
-- `inventory/group_vars/orange_pi_5.yml` — `armbian_netboot_board_branch: edge`
-- `inventory/group_vars/orange_pi_5_max.yml` — `armbian_netboot_board_branch: edge` + RTL8125 MAC patch
-- `inventory/group_vars/rock_5a.yml` — `armbian_netboot_board_branch: edge`
-- `inventory/group_vars/rock_5b.yml` — `armbian_netboot_board_branch: edge`
+- `inventory/group_vars/orange_pi_5_pro.yml` — `armbian_board_branch: edge`
+- `inventory/group_vars/orange_pi_5.yml` — `armbian_board_branch: edge`
+- `inventory/group_vars/orange_pi_5_max.yml` — `armbian_board_branch: edge` + RTL8125 MAC patch
+- `inventory/group_vars/rock_5a.yml` — `armbian_board_branch: edge`
+- `inventory/group_vars/rock_5b.yml` — `armbian_board_branch: edge`
 - `playbooks/tests/test_build_image_vars.yml` — localhost-only assertion harness over example inventory
 
 **Modified files:**
@@ -36,18 +36,18 @@
 ## Task 1: Add `_board_model_first_host` resolver to build_image.yml
 
 **Files:**
-- Modify: `playbooks/build_image.yml:442-509` (pre_tasks block — insert a new task before "Resolve build targets from armbian_netboot_board_configs")
+- Modify: `playbooks/build_image.yml:442-509` (pre_tasks block — insert a new task before "Resolve build targets from armbian_board_configs")
 
 **Context:** The playbook already computes `_board_models` (unique board models in `groups['boards']`). To read per-model group_vars-defined variables, we need one representative host per model. Hosts of the same model share group_vars by inheritance, so picking the first host is sufficient.
 
 - [ ] **Step 1: Add the resolver pre_task**
 
-In `playbooks/build_image.yml`, insert this task immediately after the existing "Resolve unique armbian_netboot_board_model values from groups['boards']" task (currently at lines 447-453):
+In `playbooks/build_image.yml`, insert this task immediately after the existing "Resolve unique armbian_board_model values from groups['boards']" task (currently at lines 447-453):
 
 ```yaml
     - name: Resolve a representative host per board model
-      # Per-model build vars (armbian_netboot_board_userpatches,
-      # armbian_netboot_board_branch) come from
+      # Per-model build vars (armbian_board_userpatches,
+      # armbian_board_branch) come from
       # inventory/group_vars/<model_group>.yml. Hosts of the same model
       # all inherit those group_vars, so picking any one host is
       # sufficient — we use the first host listed in groups['boards']
@@ -60,7 +60,7 @@ In `playbooks/build_image.yml`, insert this task immediately after the existing 
                 item: (
                   groups['boards']
                   | map('extract', hostvars)
-                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | selectattr('armbian_board_model', 'equalto', item)
                   | map(attribute='inventory_hostname')
                   | first
                 )
@@ -92,19 +92,19 @@ git commit -m "refactor(build_image): add _board_model_first_host resolver"
 **Files:**
 - Modify: `playbooks/build_image.yml` (pre_tasks block — append after the `_board_model_first_host` resolver from Task 1)
 
-**Context:** `build_image.yml` builds one `.img.xz` per model. If two hosts of the same model declare divergent `armbian_netboot_board_branch` or `armbian_netboot_board_userpatches` (e.g. via a host_vars override), the playbook would silently use only the first host's values and the second host would end up running an image it didn't ask for. Per-host build divergence would require keying builds by `(model + sha256(userpatches+branch))` and switching `armbian_netboot_image_urls[<model>]` to a host-keyed map — out of scope for v3. Fail loudly when divergence is detected so the operator either consolidates into per-model group_vars or opens a follow-on spec.
+**Context:** `build_image.yml` builds one `.img.xz` per model. If two hosts of the same model declare divergent `armbian_board_branch` or `armbian_board_userpatches` (e.g. via a host_vars override), the playbook would silently use only the first host's values and the second host would end up running an image it didn't ask for. Per-host build divergence would require keying builds by `(model + sha256(userpatches+branch))` and switching `armbian_image_urls[<model>]` to a host-keyed map — out of scope for v3. Fail loudly when divergence is detected so the operator either consolidates into per-model group_vars or opens a follow-on spec.
 
 - [ ] **Step 1: Append the branch-consistency assert**
 
 In `playbooks/build_image.yml`, immediately after the "Resolve a representative host per board model" task from Task 1, append:
 
 ```yaml
-    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+    - name: Assert all hosts of each model agree on armbian_board_branch
       # build_image.yml builds one .img.xz per model — divergent
       # branch declarations across hosts of the same model would
       # silently use only the first host's value. Per-host build
       # divergence would require keying builds by (model + patch-hash)
-      # and a host-keyed armbian_netboot_image_urls map; out of scope
+      # and a host-keyed armbian_image_urls map; out of scope
       # for v3. Fail loudly so the operator consolidates into
       # inventory/group_vars/<model_group>.yml, or opens a follow-on
       # spec for genuinely per-host builds.
@@ -113,12 +113,12 @@ In `playbooks/build_image.yml`, immediately after the "Resolve a representative 
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_branch', default='current')
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_branch', default='current')
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_branch values. Move the override into
+          armbian_board_branch values. Move the override into
           inventory/group_vars/<model_group>.yml (per-model) or remove
           the host_vars override. Per-host builds are not supported in
           v3.
@@ -130,7 +130,7 @@ In `playbooks/build_image.yml`, immediately after the "Resolve a representative 
 Immediately after the previous task, append:
 
 ```yaml
-    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+    - name: Assert all hosts of each model agree on armbian_board_userpatches
       # Same per-model build rule as the branch assert above. The
       # to_json(sort_keys=true) canonicalisation makes the comparison
       # deterministic across dict-key ordering differences in YAML
@@ -140,13 +140,13 @@ Immediately after the previous task, append:
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_userpatches', default=[])
              | map('to_json', sort_keys=true)
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_userpatches. Same reason as branch:
+          armbian_board_userpatches. Same reason as branch:
           builds are per-model.
       loop: "{{ _board_models }}"
 ```
@@ -173,7 +173,7 @@ git commit -m "feat(build_image): assert per-model branch/userpatches consistenc
 **Files:**
 - Create: `playbooks/tests/test_build_image_vars.yml`
 
-**Context:** A pure-Jinja resolution test that doesn't touch any real host. Runs on localhost, reads `groups['boards']` from the example inventory (`inventory/hosts.yml`), asserts the per-model resolved values for `armbian_netboot_board_userpatches` and `armbian_netboot_board_branch` match expectations. This is the "failing test" — it should FAIL after this task (because Task 4 hasn't created the group_vars files yet).
+**Context:** A pure-Jinja resolution test that doesn't touch any real host. Runs on localhost, reads `groups['boards']` from the example inventory (`inventory/hosts.yml`), asserts the per-model resolved values for `armbian_board_userpatches` and `armbian_board_branch` match expectations. This is the "failing test" — it should FAIL after this task (because Task 4 hasn't created the group_vars files yet).
 
 - [ ] **Step 1: Create the test directory**
 
@@ -208,11 +208,11 @@ Create `playbooks/tests/test_build_image_vars.yml`:
   gather_facts: false
 
   pre_tasks:
-    - name: Resolve unique armbian_netboot_board_model values from groups['boards']
+    - name: Resolve unique armbian_board_model values from groups['boards']
       ansible.builtin.set_fact:
         _board_models: >-
           {{ groups['boards']
-             | map('extract', hostvars, 'armbian_netboot_board_model')
+             | map('extract', hostvars, 'armbian_board_model')
              | unique
              | list }}
 
@@ -225,7 +225,7 @@ Create `playbooks/tests/test_build_image_vars.yml`:
                 item: (
                   groups['boards']
                   | map('extract', hostvars)
-                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | selectattr('armbian_board_model', 'equalto', item)
                   | map(attribute='inventory_hostname')
                   | first
                 )
@@ -234,45 +234,45 @@ Create `playbooks/tests/test_build_image_vars.yml`:
       loop: "{{ _board_models }}"
 
   tasks:
-    - name: Assert every model declares armbian_netboot_board_branch
+    - name: Assert every model declares armbian_board_branch
       ansible.builtin.assert:
         that:
-          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch is defined"
+          - "hostvars[_board_model_first_host[item]].armbian_board_branch is defined"
         fail_msg: >-
           Model '{{ item }}' (host '{{ _board_model_first_host[item] }}')
-          is missing armbian_netboot_board_branch in its inventory
+          is missing armbian_board_branch in its inventory
           group_vars. Define it in
           inventory/group_vars/<model_group>.yml.
       loop: "{{ _board_models }}"
 
-    - name: Assert every model's armbian_netboot_board_branch is a known value
+    - name: Assert every model's armbian_board_branch is a known value
       ansible.builtin.assert:
         that:
-          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch in ['current', 'edge', 'vendor', 'legacy']"
+          - "hostvars[_board_model_first_host[item]].armbian_board_branch in ['current', 'edge', 'vendor', 'legacy']"
         fail_msg: >-
-          Model '{{ item }}' has armbian_netboot_board_branch =
-          '{{ hostvars[_board_model_first_host[item]].armbian_netboot_board_branch }}',
+          Model '{{ item }}' has armbian_board_branch =
+          '{{ hostvars[_board_model_first_host[item]].armbian_board_branch }}',
           which is not a known armbian/build BRANCH value.
       loop: "{{ _board_models }}"
 
-    - name: Assert armbian_netboot_board_userpatches (when defined) is a well-formed list
+    - name: Assert armbian_board_userpatches (when defined) is a well-formed list
       ansible.builtin.assert:
         that:
-          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is iterable"
+          - "hostvars[_board_model_first_host[item]].armbian_board_userpatches is iterable"
           - >-
-            hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches
+            hostvars[_board_model_first_host[item]].armbian_board_userpatches
             | selectattr('dest', 'undefined') | list | length == 0
           - >-
-            hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches
+            hostvars[_board_model_first_host[item]].armbian_board_userpatches
             | selectattr('content', 'undefined') | list | length == 0
         fail_msg: >-
-          Model '{{ item }}' has armbian_netboot_board_userpatches
+          Model '{{ item }}' has armbian_board_userpatches
           defined but at least one entry is missing 'dest' or 'content'.
       when:
-        - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is defined"
+        - "hostvars[_board_model_first_host[item]].armbian_board_userpatches is defined"
       loop: "{{ _board_models }}"
 
-    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+    - name: Assert all hosts of each model agree on armbian_board_branch
       # Mirrors the runtime assert in playbooks/build_image.yml so the
       # example inventory contract documents the per-model rule even
       # when each model currently has only one host.
@@ -281,49 +281,49 @@ Create `playbooks/tests/test_build_image_vars.yml`:
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_branch', default='current')
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_branch', default='current')
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_branch values in the example inventory.
+          armbian_board_branch values in the example inventory.
       loop: "{{ _board_models }}"
 
-    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+    - name: Assert all hosts of each model agree on armbian_board_userpatches
       ansible.builtin.assert:
         that:
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_userpatches', default=[])
              | map('to_json', sort_keys=true)
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_userpatches in the example inventory.
+          armbian_board_userpatches in the example inventory.
       loop: "{{ _board_models }}"
 
     - name: Assert orange-pi-5-max ships the RTL8125 MAC userpatch
       ansible.builtin.assert:
         that:
-          - "(hostvars[_board_model_first_host['orange-pi-5-max']].armbian_netboot_board_userpatches | default([])) | length == 1"
-          - "'prefer-chip-mac' in (hostvars[_board_model_first_host['orange-pi-5-max']].armbian_netboot_board_userpatches | default([]))[0].dest"
+          - "(hostvars[_board_model_first_host['orange-pi-5-max']].armbian_board_userpatches | default([])) | length == 1"
+          - "'prefer-chip-mac' in (hostvars[_board_model_first_host['orange-pi-5-max']].armbian_board_userpatches | default([]))[0].dest"
         fail_msg: >-
           orange-pi-5-max group_vars is missing the
           0099-prefer-chip-mac-over-cpuid.patch userpatch (needed for
           RTL8125 chip MAC consistency). Add it to
           inventory/group_vars/orange_pi_5_max.yml under
-          armbian_netboot_board_userpatches.
+          armbian_board_userpatches.
       when: "'orange-pi-5-max' in _board_models"
 
     - name: Assert every model defaults to edge branch in v3 fleet
       ansible.builtin.assert:
         that:
-          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch == 'edge'"
+          - "hostvars[_board_model_first_host[item]].armbian_board_branch == 'edge'"
         fail_msg: >-
-          Model '{{ item }}' has armbian_netboot_board_branch =
-          '{{ hostvars[_board_model_first_host[item]].armbian_netboot_board_branch }}';
+          Model '{{ item }}' has armbian_board_branch =
+          '{{ hostvars[_board_model_first_host[item]].armbian_board_branch }}';
           example-inventory contract expects 'edge' for all currently
           tracked rk3588(s) boards (see plan
           docs/superpowers/plans/2026-05-25-per-board-userpatches-inventory.md).
@@ -337,7 +337,7 @@ unset ANSIBLE_INVENTORY
 ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
 ```
 
-Expected: FAIL on the first assert ("missing armbian_netboot_board_branch"). The example inventory has not yet been updated; this confirms the test is doing real work.
+Expected: FAIL on the first assert ("missing armbian_board_branch"). The example inventory has not yet been updated; this confirms the test is doing real work.
 
 - [ ] **Step 4: Commit**
 
@@ -374,7 +374,7 @@ git commit -m "test(build_image): add per-board build var inventory contract tes
 # armbian/build's `orangepi5pro` board config on the edge branch
 # (mainline u-boot v2026.04). The current branch's family-default
 # Radxa fork lacks the YT6801 driver entirely.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # None — the rk3588 family-level overlay
@@ -382,7 +382,7 @@ armbian_netboot_board_branch: edge
 # PXE-first ordering and CONFIG_PCI_INIT_R backfill. Add per-board
 # entries here only after confirming the family hook does not cover
 # your case.
-# armbian_netboot_board_userpatches: []
+# armbian_board_userpatches: []
 ```
 
 - [ ] **Step 2: Write `inventory/group_vars/orange_pi_5.yml`**
@@ -398,7 +398,7 @@ armbian_netboot_board_branch: edge
 # mainline v2026.04 on every branch, so this entry is documentation —
 # the build target lands on mainline u-boot regardless. Keep `edge`
 # explicit for symmetry with the other rk3588(s) boards in this fleet.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 ```
 
 - [ ] **Step 3: Write `inventory/group_vars/orange_pi_5_max.yml`**
@@ -416,7 +416,7 @@ armbian_netboot_board_branch: edge
 # u-boot v2025.04 + armbian/build's patch/u-boot/v2025.04/
 # board_orangepi5-max/ overlay, which adds CONFIG_RTL8169=y +
 # CONFIG_PCIE_DW_ROCKCHIP=y. That hook gates on BRANCH=edge.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Skip rockchip_setup_macaddr()'s env-set on this board so the RTL8125's
@@ -438,7 +438,7 @@ armbian_netboot_board_branch: edge
 # CONFIG_ENV_IS_NOWHERE=y on this board's defconfig, so env is
 # volatile; the chip-MAC will be re-derived by eth_post_probe on every
 # cold boot. No persistence path needed (unlike rock-5b).
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "u-boot/v2025.04/board_orangepi5-max/0099-prefer-chip-mac-over-cpuid.patch"
     content: |
       --- a/arch/arm/mach-rockchip/board.c
@@ -456,7 +456,7 @@ armbian_netboot_board_userpatches:
       +	 * different MAC than the Linux kernel uses (kernel reads
       +	 * chip MAC directly). Symptom: two DHCP leases per cold
       +	 * boot, pxelinux.cfg/01-<mac> miss against the MAC visible
-      +	 * from Linux. See david_igou.armbian_netboot's
+      +	 * from Linux. See david_igou.armbian's
       +	 * inventory/group_vars/orange_pi_5_max.yml for rationale.
       +	 */
       +	if (of_machine_is_compatible("xunlong,orangepi-5-max"))
@@ -482,7 +482,7 @@ armbian_netboot_board_userpatches:
 # Without it, rock-5a would build against the Radxa fork's
 # BOOT_TARGET_DEVICES X-macro form, which the `__999_pxe_first` sed
 # cannot patch (PXE stays at the end of the boot order, SD wins).
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 ```
 
 - [ ] **Step 5: Write `inventory/group_vars/rock_5b.yml`**
@@ -502,7 +502,7 @@ armbian_netboot_board_branch: edge
 # Our `__999_rock5b_uboot_v2026_04` hook in build_userpatches_common
 # bumps that upstream-hook's v2026.01 default to v2026.04. Both hooks
 # gate on BRANCH=edge.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 ```
 
 - [ ] **Step 6: Run the test again and confirm it PASSES**
@@ -562,7 +562,7 @@ Locate the build-loop task (currently at lines 515-523):
       loop: "{{ _build_targets }}"
 ```
 
-Replace the `vars:` block with hostvars-based lookup. The `_build_targets` loop iterates `armbian_board_name` values, but `_board_model_first_host` is keyed by `armbian_netboot_board_model`. Convert from one to the other inline:
+Replace the `vars:` block with hostvars-based lookup. The `_build_targets` loop iterates `armbian_board_name` values, but `_board_model_first_host` is keyed by `armbian_board_model`. Convert from one to the other inline:
 
 ```yaml
     - name: Build image per inventory board
@@ -576,7 +576,7 @@ Replace the `vars:` block with hostvars-based lookup. The `_build_targets` loop 
           {{
             _board_models
             | selectattr('extract', 'defined')
-            | map('extract', armbian_netboot_board_configs, 'armbian_board_name')
+            | map('extract', armbian_board_configs, 'armbian_board_name')
             | list | zip(_board_models) | items2dict | get(item)
           }}
         _first_host: "{{ _board_model_first_host[_board_model] }}"
@@ -584,9 +584,9 @@ Replace the `vars:` block with hostvars-based lookup. The `_build_targets` loop 
         armbian_build_userpatches: >-
           {{
             build_userpatches_common
-            + (hostvars[_first_host].armbian_netboot_board_userpatches | default([]))
+            + (hostvars[_first_host].armbian_board_userpatches | default([]))
           }}
-        armbian_build_branch: "{{ hostvars[_first_host].armbian_netboot_board_branch | default('current') }}"
+        armbian_build_branch: "{{ hostvars[_first_host].armbian_board_branch | default('current') }}"
       loop: "{{ _build_targets }}"
 ```
 
@@ -601,7 +601,7 @@ Add this pre_task immediately after the "Resolve a representative host per board
           {{
             _build_target_to_model | default({})
             | combine({
-                armbian_netboot_board_configs[item].armbian_board_name: item
+                armbian_board_configs[item].armbian_board_name: item
               })
           }}
       loop: "{{ _board_models }}"
@@ -619,9 +619,9 @@ Then the include_role's vars block simplifies to:
         armbian_build_userpatches: >-
           {{
             build_userpatches_common
-            + (hostvars[_first_host].armbian_netboot_board_userpatches | default([]))
+            + (hostvars[_first_host].armbian_board_userpatches | default([]))
           }}
-        armbian_build_branch: "{{ hostvars[_first_host].armbian_netboot_board_branch | default('current') }}"
+        armbian_build_branch: "{{ hostvars[_first_host].armbian_board_branch | default('current') }}"
       loop: "{{ _build_targets }}"
 ```
 
@@ -635,7 +635,7 @@ Locate the docstring at the top of `playbooks/build_image.yml` (lines 22-26):
 # The PXE-first userpatches table is playbook data, not role data —
 # the armbian_build role itself is intent-agnostic. Add a new board by
 # extending build_userpatches with another entry and adding the host(s)
-# under groups['boards'] in inventory with an armbian_netboot_board_model that exists in
+# under groups['boards'] in inventory with an armbian_board_model that exists in
 # vars/boards.yml.
 ```
 
@@ -646,13 +646,13 @@ Replace with:
 # (build_userpatches_common) — the armbian_build role itself is
 # intent-agnostic. Per-board userpatches and U-Boot branch live in
 # inventory group_vars at inventory/group_vars/<model_group>.yml as
-# armbian_netboot_board_userpatches and armbian_netboot_board_branch.
+# armbian_board_userpatches and armbian_board_branch.
 # Add a new board by:
 #   1. Adding host(s) under groups['boards'] in inventory with an
-#      armbian_netboot_board_model that exists in vars/boards.yml.
+#      armbian_board_model that exists in vars/boards.yml.
 #   2. (Optional) Creating inventory/group_vars/<model_group>.yml with
-#      armbian_netboot_board_branch (default 'current') and any
-#      per-board armbian_netboot_board_userpatches.
+#      armbian_board_branch (default 'current') and any
+#      per-board armbian_board_userpatches.
 ```
 
 - [ ] **Step 5: Run syntax-check**
@@ -705,16 +705,16 @@ Minimum touched files for a new board:
 
 1. `inventory/hosts.yml` (doc-only example) + your real inventory:
    add the host(s) under a new per-model subgroup of `boards` with
-   `armbian_netboot_board_mac`, `armbian_netboot_board_model`,
-   `armbian_netboot_boot_mode`, `armbian_netboot_poe_switch`,
-   `armbian_netboot_poe_port`.
-2. `vars/boards.yml`: entry keyed by `armbian_netboot_board_model` under
-   `armbian_netboot_board_configs` with `armbian_dl_dir`,
+   `armbian_board_mac`, `armbian_board_model`,
+   `armbian_boot_mode`, `armbian_poe_switch`,
+   `armbian_poe_port`.
+2. `vars/boards.yml`: entry keyed by `armbian_board_model` under
+   `armbian_board_configs` with `armbian_dl_dir`,
    `armbian_board_name`, `armbian_support`, `dtb`, `console`, `earlycon`.
 3. `inventory/group_vars/all.yml`: add an
-   `armbian_netboot_image_urls[<model>]` entry pointing at the
+   `armbian_image_urls[<model>]` entry pointing at the
    locally-published custom build (consumed on the netboot_server),
-   AND an `armbian_netboot_image_urls_http[<model>]` entry with the
+   AND an `armbian_image_urls_http[<model>]` entry with the
    http(s):// URL the boards stream from for the Phase 3 dd-to-SD step.
 4. `playbooks/build_image.yml` `build_branches:` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
@@ -728,12 +728,12 @@ Replace items 4 and 5 with:
 
 ```markdown
 4. `inventory/group_vars/<model_group>.yml` (doc-only example +
-   real inventory): set `armbian_netboot_board_branch` if the board's
+   real inventory): set `armbian_board_branch` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
    boards need `edge` for mainline U-Boot). Default `current` if
    omitted.
 5. (Rare) `inventory/group_vars/<model_group>.yml`
-   `armbian_netboot_board_userpatches`: list of `{dest, content}`
+   `armbian_board_userpatches`: list of `{dest, content}`
    patches the image_build role drops into `userpatches/` for this
    board's build. Add only after confirming `build_userpatches_common`
    in `playbooks/build_image.yml` (the cross-board rk3588 family
@@ -749,7 +749,7 @@ via `build_branches`), post-build defconfig audits
 
 Replace with:
 ```
-via `armbian_netboot_board_branch` in inventory group_vars), post-build defconfig audits
+via `armbian_board_branch` in inventory group_vars), post-build defconfig audits
 ```
 
 - [ ] **Step 3: Run yamllint to confirm no doc-block format drift**
@@ -789,9 +789,9 @@ Replace with:
 ```markdown
 ## Phase 4 — U-Boot branch decision
 
-Default: `current` (no `armbian_netboot_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_netboot_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
+Default: `current` (no `armbian_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
 
-Per-board `armbian_netboot_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_netboot_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
+Per-board `armbian_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
 ```
 
 - [ ] **Step 2: Commit**
@@ -914,15 +914,15 @@ Expected: PASS. If FAIL, the operator's real inventory has different group names
 - The `_board_model` lookup discussed-and-discarded in Task 5 Step 3 is replaced with the simpler `_build_target_to_model` pre_task approach; both pieces of code are shown completely.
 
 **3. Type consistency:**
-- `armbian_netboot_board_userpatches` is always a `list[dict]` with `dest` and `content` keys (matches the role's existing input contract).
-- `armbian_netboot_board_branch` is always a `string` (one of `current`/`edge`/`vendor`/`legacy`).
+- `armbian_board_userpatches` is always a `list[dict]` with `dest` and `content` keys (matches the role's existing input contract).
+- `armbian_board_branch` is always a `string` (one of `current`/`edge`/`vendor`/`legacy`).
 - `_board_model_first_host` is `dict[model_str → host_str]` everywhere it's referenced.
 - `_build_target_to_model` is `dict[armbian_board_name_str → model_str]`.
 - `_first_host` is a `string` (hostname).
 
 **4. Edge cases verified:**
-- A new board with NO `armbian_netboot_board_userpatches` defined → `default([])` kicks in, only `build_userpatches_common` is applied.
-- A new board with NO `armbian_netboot_board_branch` defined → `default('current')` kicks in.
+- A new board with NO `armbian_board_userpatches` defined → `default([])` kicks in, only `build_userpatches_common` is applied.
+- A new board with NO `armbian_board_branch` defined → `default('current')` kicks in.
 - Multiple hosts of the same model with identical group_vars → all share the same value; Task 2 asserts pass trivially.
 - Multiple hosts of the same model with divergent values (e.g. a host_vars override on one host) → Task 2 asserts fail with a clear error pointing the operator at either group_vars consolidation or a follow-on per-host build spec. Builds are stopped before any image work begins.
 

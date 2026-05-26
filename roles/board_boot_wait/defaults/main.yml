@@ -1,9 +1,9 @@
 ---
 # Per-attempt timeouts consumed inside this role. Retry-count knobs
-# (armbian_netboot_boot_retry_attempts,
-#  armbian_netboot_ssh_wait_retry_attempts,
-#  armbian_netboot_ssh_wait_timeout) live in playbooks/tasks/ — they
+# (armbian_boot_retry_attempts,
+#  armbian_ssh_wait_retry_attempts,
+#  armbian_ssh_wait_timeout) live in playbooks/tasks/ — they
 # orchestrate retries, not single-attempt waits, so they don't belong
 # on a single-host wait role.
-armbian_netboot_boot_attempt_timeout: 180         # per-attempt TCP/22 wait, seconds
-armbian_netboot_post_boot_wait_timeout: 300       # final wait_for_connection
+armbian_boot_attempt_timeout: 180         # per-attempt TCP/22 wait, seconds
+armbian_post_boot_wait_timeout: 300       # final wait_for_connection

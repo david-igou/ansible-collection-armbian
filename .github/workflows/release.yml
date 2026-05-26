@@ -1,5 +1,5 @@
 ---
-name: Release david_igou.armbian_netboot
+name: Release david_igou.armbian
 
 on: # yamllint disable-line rule:truthy
   release:

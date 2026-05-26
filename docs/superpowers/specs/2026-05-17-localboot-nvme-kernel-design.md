@@ -1,15 +1,15 @@
 # Local-Kernel Boot Mode for OPi5Max — Design
 
-**Status**: Phase 1 + Phase 2 implemented and **hardware-proven autonomous** (LK2). Build hook `__999_orangepi5max_localcmd` bakes the Approach B `localcmd` into the U-Boot binary; a cold PoE cycle on opi5max-01 reaches a logged-in NVMe-rooted Linux in ~32s with zero UART intervention. LK1 (manual) and LK2 (autonomous) evidence on tracker [#81](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/81). #78's strategic kernel-update test deferred to LK3.
+**Status**: Phase 1 + Phase 2 implemented and **hardware-proven autonomous** (LK2). Build hook `__999_orangepi5max_localcmd` bakes the Approach B `localcmd` into the U-Boot binary; a cold PoE cycle on opi5max-01 reaches a logged-in NVMe-rooted Linux in ~32s with zero UART intervention. LK1 (manual) and LK2 (autonomous) evidence on tracker [#81](https://github.com/david-igou/ansible-collection-armbian/issues/81). #78's strategic kernel-update test deferred to LK3.
 **Author**: David Igou.
 **Date**: 2026-05-17.
-**Tracking**: cross-links to [#78](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/78) (kernel updates); OPi5Max board-tracker (per LK1 evidence).
+**Tracking**: cross-links to [#78](https://github.com/david-igou/ansible-collection-armbian/issues/78) (kernel updates); OPi5Max board-tracker (per LK1 evidence).
 
 ## Background
 
 Today every onboarded board PXE-boots from rb5009 and runs a kernel/initrd/dtb served from TFTP. Three labels exist in pxelinux.cfg — `nfs`, `sd`, `local` — and they all load the **same** TFTP-served kernel/initrd/dtb. Only `append root=...` differs. The "passthrough" `local` mode means: kernel comes from TFTP, rootfs lives on NVMe.
 
-Consequence: kernel updates are centrally owned. Bumping a kernel means rebuilding the image on the builder, refreshing TFTP files on rb5009, and (per [#78](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/78)) re-rsyncing `/lib/modules/<ver>/` into every NFS clone and every local-disk rootfs. Boards never run `apt upgrade linux-image-*` as the source of truth.
+Consequence: kernel updates are centrally owned. Bumping a kernel means rebuilding the image on the builder, refreshing TFTP files on rb5009, and (per [#78](https://github.com/david-igou/ansible-collection-armbian/issues/78)) re-rsyncing `/lib/modules/<ver>/` into every NFS clone and every local-disk rootfs. Boards never run `apt upgrade linux-image-*` as the source of truth.
 
 The goal of this design is to add a fourth boot mode in which **U-Boot loads the kernel/initrd/dtb directly off the NVMe**, via Armbian's pre-existing `/boot/extlinux/extlinux.conf` mechanism. The board owns its own kernel; rb5009 only serves the pxelinux.cfg that selects the mode.
 
@@ -19,13 +19,13 @@ The goal of this design is to add a fourth boot mode in which **U-Boot loads the
 - Add a `local_kernel` pxelinux label that hands off to a local-disk extlinux boot.
 - Bring the mode up on `orange-pi-5-max-01` end-to-end and prove the kernel actually comes off NVMe (UART log + `/proc/cmdline` evidence).
 - Keep the always-netboot invariant intact — pxelinux.cfg always present on rb5009; PXE-first ordering unchanged.
-- Make the new mode renderable + validatable in `pxelinux_render`, verifiable in `board_boot_verify`, and selectable via `armbian_netboot_boot_mode: local_kernel`.
+- Make the new mode renderable + validatable in `pxelinux_render`, verifiable in `board_boot_verify`, and selectable via `armbian_boot_mode: local_kernel`.
 
 **Non-goals (v1)**
 - Generalize to other boards. Per-board U-Boot defconfigs vary in env storage; rolling this out wider requires per-board verification. OPi5Max-first; document what generalization needs.
 - Persistable U-Boot env on OPi5Max. The board ships `CONFIG_ENV_IS_NOWHERE=y` (volatile env); v1 bakes `localcmd` into the U-Boot binary's compile-time default environment via the existing image_build userpatches mechanism. Changing `localcmd` requires a rebuild.
 - Hardware E2E test integration (`test_hardware_e2e.yml`). Manual UART validation suffices in v1.
-- Auto-revert on local-kernel boot failure. Operator flips `armbian_netboot_boot_mode` back to `nfs` and re-runs `converge_boot_mode.yml`.
+- Auto-revert on local-kernel boot failure. Operator flips `armbian_boot_mode` back to `nfs` and re-runs `converge_boot_mode.yml`.
 - Cross-link with #78's kernel-update automation. That work pre-empts the rb5009-driven flow; this mode just opens the door for it.
 
 ## Design
@@ -82,7 +82,7 @@ No new playbook is needed — `converge_boot_mode.yml` already drives any boot-m
 
 ### Rendered pxelinux.cfg
 
-With `armbian_netboot_boot_mode: local_kernel` on `orange-pi-5-max-01`:
+With `armbian_boot_mode: local_kernel` on `orange-pi-5-max-01`:
 
 ```
 # pxelinux.cfg for orange-pi-5-max-01 (orange-pi-5-max)
@@ -146,7 +146,7 @@ Generalizing for other boards would lift these into `vars/boards.yml` entries (e
 ## Bring-up plan
 
 1. **Phase 1 (this session, no hardware)**: roles + molecule scenarios + spec. Lands as a PR; CI green; image not yet rebuilt.
-2. **Phase 2 (bring-up, hardware in the loop)**: image rebuild with the orangepi5-max userpatch; reflash SD on opi5max-01; flip `armbian_netboot_boot_mode: local_kernel`; `converge_boot_mode.yml --limit orange-pi-5-max-01`; UART capture; iterate on `localcmd` body until `bootflow scan` finds NVMe extlinux.conf and boots.
+2. **Phase 2 (bring-up, hardware in the loop)**: image rebuild with the orangepi5-max userpatch; reflash SD on opi5max-01; flip `armbian_boot_mode: local_kernel`; `converge_boot_mode.yml --limit orange-pi-5-max-01`; UART capture; iterate on `localcmd` body until `bootflow scan` finds NVMe extlinux.conf and boots.
 3. **Phase 3 (verify)**: confirm `findmnt /` matches local label, `/proc/cmdline` shows Armbian's NVMe-side bootargs (not rb5009's), and a fresh `apt install linux-image-current-edge` followed by cold cycle results in the new kernel running. The latter is the strategic win.
 4. **Phase 4 (document)**: update spec with the concrete `localcmd` body and any U-Boot-side gotchas. Cross-link to #78.
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Ansible Best-Practices Review — david_igou.armbian_netboot</title>
+<title>Ansible Best-Practices Review — david_igou.armbian</title>
 <style>
   :root {
     --bg: #fdfdfc;
@@ -135,7 +135,7 @@
 <main>
 
 <h1>Ansible Best-Practices Review</h1>
-<p class="lead"><strong>Collection:</strong> <code>david_igou.armbian_netboot</code> v3.1.0 &middot;
+<p class="lead"><strong>Collection:</strong> <code>david_igou.armbian</code> v3.1.0 &middot;
 <strong>Scope:</strong> nine roles, collection-level metadata, ansible.cfg, vars/boards.yml &middot;
 <strong>Date:</strong> 2026-05-20</p>
 
@@ -143,7 +143,7 @@
 <h2 id="intro">1. Introduction &amp; scope</h2>
 
 <p>This document is a maintainability- and human-readability-focused review of the
-<code>david_igou.armbian_netboot</code> collection against the two reference guides
+<code>david_igou.armbian</code> collection against the two reference guides
 the user asked it to be measured against:</p>
 
 <ul>
@@ -227,7 +227,7 @@ The shortlist of issues that warrant immediate attention is small but real:</p>
     <td><code>image_extract</code>, <code>disk_image</code>, <code>disk_provision</code></td></tr>
   <tr><td>5</td><td><span class="sev med">Medium</span></td>
     <td>Inconsistent variable-prefix convention: collection-prefixed
-    (<code>armbian_netboot_*</code>) for some roles, role-prefixed
+    (<code>armbian_*</code>) for some roles, role-prefixed
     (<code>image_build_*</code>, <code>_dp_*</code>) for others, and unprefixed
     (<code>sd_root</code>, <code>tftp_kernel</code>) for <code>pxelinux_render</code>.</td>
     <td>All roles &mdash; needs a documented convention.</td></tr>
@@ -318,7 +318,7 @@ pipelining is on, ControlPersist is set.</div>
   <pre><code>roles_path = roles</code></pre>
   <p>This forces every invocation to happen from the collection root or it silently
   resolves to the wrong directory. When the collection is installed under
-  <code>~/.ansible/collections/ansible_collections/david_igou/armbian_netboot/</code>, the
+  <code>~/.ansible/collections/ansible_collections/david_igou/armbian/</code>, the
   bundled <code>ansible.cfg</code> is not consulted &mdash; but the developer-mode &ldquo;run from repo
   root&rdquo; flow still pays the surprise cost.</p>
   <div class="why"><strong>Why:</strong> COP &ldquo;variable precedence&rdquo; prefers explicit,
@@ -334,7 +334,7 @@ have CI assert equality) to prevent drift over time.</p>
 
 <h3 id="vars-boards">4.4 <code>vars/boards.yml</code></h3>
 
-<p>This is the authoritative per-board metadata catalogue (<code>armbian_netboot_board_configs</code>).
+<p>This is the authoritative per-board metadata catalogue (<code>armbian_board_configs</code>).
 Structure is clean: top-level key is collection-prefixed, per-board values are snake-cased
 nested dicts (<code>local_kernel</code>, <code>uboot_env</code>), optional sub-trees are present only
 where the board needs them.</p>
@@ -409,8 +409,8 @@ not module calls. This is well above the average; keep it that way with an
 <div class="finding">
   <h4><span class="sev high">High</span> &mdash; <code>bootstrap_armbian</code> has no <code>meta/argument_specs.yml</code></h4>
   <div class="meta"><span class="filepath">roles/bootstrap_armbian/meta/</span></div>
-  <p>The role consumes <code>armbian_netboot_bootstrap_user</code> and
-  <code>armbian_netboot_bootstrap_ssh_keys</code>, both required for the role to do anything
+  <p>The role consumes <code>armbian_bootstrap_user</code> and
+  <code>armbian_bootstrap_ssh_keys</code>, both required for the role to do anything
   useful, yet there is no machine-readable contract. Adding the spec fail-fasts callers
   who forget to define the keys list (currently the role would create the user, succeed,
   and leave the host without authorized keys &mdash; an outage waiting to happen).</p>
@@ -424,11 +424,11 @@ argument_specs:
         unprivileged user, authorises a fixed set of SSH keys for it, grants
         passwordless sudo, and disables password authentication in sshd."
     options:
-      armbian_netboot_bootstrap_user:
+      armbian_bootstrap_user:
         type: str
         required: true
         description: "Username to create on the board."
-      armbian_netboot_bootstrap_ssh_keys:
+      armbian_bootstrap_ssh_keys:
         type: list
         elements: str
         required: true
@@ -440,8 +440,8 @@ argument_specs:
 </div>
 
 <p>Beyond the missing file, <code>board_boot_wait</code>&rsquo;s spec is missing three declared
-defaults (<code>armbian_netboot_boot_retry_attempts</code>,
-<code>armbian_netboot_ssh_wait_timeout</code>, <code>armbian_netboot_ssh_wait_retry_attempts</code>) &mdash;
+defaults (<code>armbian_boot_retry_attempts</code>,
+<code>armbian_ssh_wait_timeout</code>, <code>armbian_ssh_wait_retry_attempts</code>) &mdash;
 fixed below in §5.8.</p>
 
 <!-- ============================================================= -->
@@ -467,7 +467,7 @@ output schema and idempotency notes; cleanly documents the
   <span class="filepath">roles/image_build/defaults/main.yml</span>,
   <span class="filepath">roles/image_build/meta/argument_specs.yml</span></div>
   <p>The <code>publish_scp.yml</code> sub-task file is included from
-  <code>main.yml</code> only when <code>armbian_netboot_publish_target</code> is non-empty;
+  <code>main.yml</code> only when <code>armbian_publish_target</code> is non-empty;
   the role default is the empty string and no inventory, group_vars, or playbook in
   this collection sets it. The runner playbook
   <code>playbooks/build_image.yml</code> already publishes the build artefact to the
@@ -475,7 +475,7 @@ output schema and idempotency notes; cleanly documents the
   builder), which is the right architectural shape — the role builds, the workflow
   publishes.</p>
   <p>Two problems compound: the file is unreachable in current configurations
-  (verified by <code>grep -rn armbian_netboot_publish_target playbooks/ inventory/</code>
+  (verified by <code>grep -rn armbian_publish_target playbooks/ inventory/</code>
   returning no setter), and <em>even if it were reachable</em>, an in-role
   <code>shell: scp ...</code> step violates the role&rsquo;s &ldquo;build only&rdquo;
   scope. The COP rule &ldquo;single-responsibility&rdquo; and this collection&rsquo;s
@@ -485,9 +485,9 @@ output schema and idempotency notes; cleanly documents the
     <li>Delete <code>roles/image_build/tasks/publish_scp.yml</code>.</li>
     <li>Delete the <code>include_tasks: publish_scp.yml</code> + <code>when:</code> guard
       in <code>roles/image_build/tasks/main.yml</code> (lines 38-40).</li>
-    <li>Delete <code>armbian_netboot_publish_target: ""</code> from
+    <li>Delete <code>armbian_publish_target: ""</code> from
       <code>roles/image_build/defaults/main.yml</code>.</li>
-    <li>Delete the <code>armbian_netboot_publish_target</code> entry from
+    <li>Delete the <code>armbian_publish_target</code> entry from
       <code>roles/image_build/meta/argument_specs.yml</code>.</li>
     <li>Update <code>roles/image_build/README.md</code> to drop the optional-publish
       paragraph; point readers at <code>playbooks/build_image.yml</code> as the
@@ -543,7 +543,7 @@ _skip_build                      __image_build_skip_build</code></pre>
 
 <h4>Top 5 fixes &mdash; <code>image_build</code></h4>
 <ol>
-  <li><span class="sev high">H1</span> &mdash; delete dead <code>publish_scp.yml</code> + its include + the orphaned <code>armbian_netboot_publish_target</code> input.</li>
+  <li><span class="sev high">H1</span> &mdash; delete dead <code>publish_scp.yml</code> + its include + the orphaned <code>armbian_publish_target</code> input.</li>
   <li><span class="sev high">H2</span> &mdash; make <code>changed_when</code> on compile.sh content-derived.</li>
   <li><span class="sev med">M1</span> &mdash; rename internal facts to <code>__image_build_*</code>.</li>
   <li><span class="sev med">M2</span> &mdash; resolve license mismatch (currently GPL-3.0-or-later, mismatches the MIT majority).</li>
@@ -807,7 +807,7 @@ lifecycle.</div>
 
 <div class="finding">
   <h4><span class="sev high">High</span> &mdash; no <code>meta/argument_specs.yml</code></h4>
-  <p>See §4.8. The role consumes <code>armbian_netboot_bootstrap_user</code> and
+  <p>See §4.8. The role consumes <code>armbian_bootstrap_user</code> and
   <code>_ssh_keys</code> with no validation; supplying an empty key list silently leaves the
   board permanently unreachable as soon as password auth is disabled in the same play.
   This is the single most consequential missing spec in the collection.</p>
@@ -995,8 +995,8 @@ network probes are inherently idempotent.</div>
 
 <div class="finding">
   <h4><span class="sev med">Medium</span> &mdash; <code>argument_specs.yml</code> is missing three defaults</h4>
-  <p><code>armbian_netboot_boot_retry_attempts</code>, <code>armbian_netboot_ssh_wait_timeout</code>,
-  <code>armbian_netboot_ssh_wait_retry_attempts</code> live in <code>defaults/main.yml</code> but
+  <p><code>armbian_boot_retry_attempts</code>, <code>armbian_ssh_wait_timeout</code>,
+  <code>armbian_ssh_wait_retry_attempts</code> live in <code>defaults/main.yml</code> but
   not in the spec. Either remove them from defaults (if the role doesn&rsquo;t actually consume
   them) or add to specs (if it does). Today, retry logic happens in the outer playbook task
   files &mdash; so the right call is to <em>delete</em> the unused defaults from this role and let
@@ -1048,7 +1048,7 @@ extension without modification.</div>
 
 <table>
   <tr><th>Convention</th><th>Used by</th><th>COP-aligned?</th></tr>
-  <tr><td>Collection-prefixed: <code>armbian_netboot_*</code></td>
+  <tr><td>Collection-prefixed: <code>armbian_*</code></td>
       <td><code>bootstrap_armbian</code>, <code>board_boot_wait</code>, <code>board_boot_verify</code>, most cross-role globals</td>
       <td>Acceptable &mdash; matches the COP &ldquo;collection-level variables prefixed by collection name&rdquo; pattern.</td></tr>
   <tr><td>Role-prefixed: <code>image_build_*</code>, <code>disk_provision</code>&rsquo;s <code>disk_binding</code>, <code>image_extract_*</code></td>
@@ -1064,7 +1064,7 @@ into inventory (boot mode, default password, NFS path), and the role-prefix conv
 the most appropriate for role-internal knobs. Pick one rule and apply it:</p>
 
 <blockquote><strong>Recommended rule.</strong> Inputs that flow from inventory across many
-roles use <code>armbian_netboot_*</code>. Inputs that a role consumes only locally use
+roles use <code>armbian_*</code>. Inputs that a role consumes only locally use
 <code>&lt;role&gt;_*</code>. Internal facts (set_fact, register) use
 <code>__&lt;role&gt;_*</code>. Document this rule in CLAUDE.md so future roles inherit
 it automatically.</blockquote>
@@ -1133,7 +1133,7 @@ companion plan.</p>
     <td>S</td><td>WS-4 Idempotency</td></tr>
   <tr><td>7</td><td><span class="sev high">High</span></td>
     <td>Delete dead <code>publish_scp.yml</code> + its include + orphaned
-    <code>armbian_netboot_publish_target</code> input; publish lives in the runner
+    <code>armbian_publish_target</code> input; publish lives in the runner
     playbook (<code>build_image.yml</code>) via <code>ansible.posix.synchronize</code>.</td>
     <td>S</td><td>WS-5 Style</td></tr>
   <tr><td>8</td><td><span class="sev med">Med</span></td>

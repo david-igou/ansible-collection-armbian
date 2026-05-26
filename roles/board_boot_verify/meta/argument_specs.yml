@@ -23,7 +23,7 @@ argument_specs:
         type: dict
         default: {}
         description: >-
-          Mirrors armbian_netboot_extra_modes for verify_match lookups.
+          Mirrors armbian_extra_modes for verify_match lookups.
           When boot_mode is a key in extra_modes, this role reads the
           mode's `verify_match` regex and asserts ansible_mounts['/'].
           device matches it.

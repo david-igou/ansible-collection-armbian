@@ -10,7 +10,7 @@
   tasks:
     - name: Render in nfs mode
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
@@ -23,7 +23,7 @@
 
     - name: Render in sd mode
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
@@ -36,7 +36,7 @@
 
     - name: Render in nfs verbose mode (requires earlycon)
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
@@ -51,7 +51,7 @@
 
     - name: Render in local_kernel mode (localboot-only label active)
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
@@ -64,7 +64,7 @@
 
     - name: Render with extra_modes (usb_rescue active)
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
@@ -84,7 +84,7 @@
       block:
         - name: Attempt render with nonexistent boot_mode (should fail)
           ansible.builtin.include_role:
-            name: david_igou.armbian_netboot.pxelinux_render
+            name: david_igou.armbian.pxelinux_render
           vars:
             pxelinux_render_board_mac: "11:22:33:44:55:66"
             board_console: "ttyS2,1500000"

@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-The `david_igou.armbian_netboot` Ansible collection for managing Armbian-based
+The `david_igou.armbian` Ansible collection for managing Armbian-based
 ARM SBCs end-to-end. PXE-netboot is a workflow built on the collection's
 primitives — it is not the framing.
 
 Every onboarded board always has a pxelinux.cfg on rb5009. The `default`
-directive inside it (driven by `armbian_netboot_boot_mode` inventory variable)
+directive inside it (driven by `armbian_boot_mode` inventory variable)
 selects the active boot mode (nfs or sd). The netboot server (TrueNAS, running
 NFS) is assumed to already be running; this collection manages its NFS export
 contents, rb5009's SBC TFTP layout, PoE power state, and (via `image_build`)
@@ -56,7 +56,7 @@ specific version in your `requirements.yml`.
 The always-netboot model: every onboarded board always has a
 pxelinux.cfg on the RouterOS router, boot mode is controlled by the
 `default` directive inside it, and the `sd` label defaults to
-`root=LABEL=armbi_root` (override per-host via `armbian_netboot_sd_root`).
+`root=LABEL=armbi_root` (override per-host via `armbian_sd_root`).
 
 Historical design specs and migration notes live under
 [`docs/superpowers/specs/`](docs/superpowers/specs/) and
@@ -67,13 +67,13 @@ are not authoritative for current behaviour.
 ## Collection structure
 
 ```
-david_igou/armbian_netboot/   (this repo root)
+david_igou/armbian/   (this repo root)
 ├── galaxy.yml                # Collection metadata
 ├── ansible.cfg               # Ansible config for direct-from-root runs
 ├── requirements.yml          # Runtime deps (roles/ only — ansible.posix)
 ├── meta/runtime.yml          # Minimum Ansible version (>=2.15)
 ├── vars/
-│   └── boards.yml            # Per-board metadata (armbian_netboot_board_configs)
+│   └── boards.yml            # Per-board metadata (armbian_board_configs)
 ├── roles/                    # All single-host, single-purpose, transport-agnostic
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
 │   ├── image_extract/             # Extract one .img.xz → template rootfs + TFTP files
@@ -129,7 +129,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── hosts.yml             # orange-pi-5-pro example
 │   └── group_vars/
 │       ├── all.yml           # Global vars (IPs, paths, image URLs, cross-role defaults)
-│       ├── boards.yml        # netboot inputs (armbian_netboot_router, retry knobs)
+│       ├── boards.yml        # netboot inputs (armbian_router, retry knobs)
 │       └── routeros.yml      # network_cli connection plumbing
 └── docs/
     ├── architecture.md
@@ -176,11 +176,11 @@ ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pr
 # Ad-hoc boot mode override (no inventory edit).
 ansible-playbook playbooks/set_boot_mode.yml \
   --limit orange-pi-5-pro-01 \
-  -e armbian_netboot_boot_mode=sd
+  -e armbian_boot_mode=sd
 
 # Power cycle a board via its upstream RouterOS switch.
 ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 \
-  -e armbian_netboot_poe_action=cycle
+  -e armbian_poe_action=cycle
 
 # Persist the U-Boot env vars SPI-flash boards need for autonomous PXE.
 ansible-playbook playbooks/persist_uboot_env.yml --limit rock-5b-01
@@ -236,26 +236,26 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 - `routeros` host: `ansible_host`, `ansible_user` (`ansible-netboot` after bootstrap),
   `ansible_port` (often non-default if you've moved RouterOS SSH off 22)
 
-`inventory/group_vars/all.yml` — collection-level variables (all `armbian_netboot_*` prefixed):
+`inventory/group_vars/all.yml` — collection-level variables (all `armbian_*` prefixed):
 
-- `armbian_netboot_server_ip` — IP used as the default fallback for `armbian_netboot_nfs_server_ip`
+- `armbian_server_ip` — IP used as the default fallback for `armbian_nfs_server_ip`
   when not separately overridden. Written into pxelinux.cfg's `nfsroot=<ip>:<path>` directive.
-- `armbian_netboot_tftp_flash_dir` — top-level dir on rb5009's flash for SBC TFTP content.
+- `armbian_tftp_flash_dir` — top-level dir on rb5009's flash for SBC TFTP content.
   Default `sbc`.
-- `armbian_netboot_tftp_cache_dir` — control-node cache where kernel/initrd/dtb fetched from
+- `armbian_tftp_cache_dir` — control-node cache where kernel/initrd/dtb fetched from
   TrueNAS get stashed before `net_put` to rb5009. Default `{{ playbook_dir }}/../.cache/sbc-tftp/`.
-- `armbian_netboot_nfs_server_ip` (optional) — overrides `armbian_netboot_server_ip` for NFS.
-- `armbian_netboot_nfs_rootfs_path` — NFS rootfs export root on TrueNAS. Default
+- `armbian_nfs_server_ip` (optional) — overrides `armbian_server_ip` for NFS.
+- `armbian_nfs_rootfs_path` — NFS rootfs export root on TrueNAS. Default
   `/srv/netboot/rootfs`.
-- `armbian_netboot_default_password` — Armbian NFS root SSH password (default `1234`);
+- `armbian_default_password` — Armbian NFS root SSH password (default `1234`);
   encrypt with vault.
-- `armbian_netboot_image_urls` — per-model `.img.xz` source consumed by
+- `armbian_image_urls` — per-model `.img.xz` source consumed by
   both `image_extract` on the netboot_server (Phase 1 of
   `test_fleet_e2e.yml`, plus `stage_netboot_assets.yml`) and `disk_image`
   on each board (Phase 3 of `test_fleet_e2e.yml`). Each value is an
   `https://` URL, `http://` URL, or absolute path; whichever you set must
   be reachable from both the netboot_server and the boards.
-- `armbian_netboot_nfs_assets_export` — netboot-owned subtree on the HTTP host.
+- `armbian_nfs_assets_export` — netboot-owned subtree on the HTTP host.
   Default `/srv/netboot/boot-files`.
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
   rb5009's IP for that subnet. This is owned by your separate RouterOS-config repo
@@ -275,24 +275,24 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 - `routeros` (optional parent) — convenience group that includes both; not directly
   targeted by any playbook.
 
-The NFS rootfs export root (`armbian_netboot_nfs_rootfs_path`) must already exist on
+The NFS rootfs export root (`armbian_nfs_rootfs_path`) must already exist on
 the netboot server and be exported. Within it, the role creates `_templates/<model>/`
 (per-model rootfs template) and `<inventory_hostname>/` (per-host rootfs clone)
 automatically. The control node needs SSH (with `become: true`) to the netboot server,
 but does not need an NFS client.
 
-Each board in `inventory/hosts.yml` needs `armbian_netboot_board_mac`,
-`armbian_netboot_board_model`, and `armbian_netboot_boot_mode` set. The
-`armbian_netboot_board_model` value must exactly match a key in `vars/boards.yml`.
+Each board in `inventory/hosts.yml` needs `armbian_board_mac`,
+`armbian_board_model`, and `armbian_boot_mode` set. The
+`armbian_board_model` value must exactly match a key in `vars/boards.yml`.
 
-For PoE-powered boards, also set `armbian_netboot_poe_switch` (inventory hostname of
-the RouterOS switch providing power) and `armbian_netboot_poe_port` (interface name on
+For PoE-powered boards, also set `armbian_poe_switch` (inventory hostname of
+the RouterOS switch providing power) and `armbian_poe_port` (interface name on
 that switch, e.g. `ether3`). These are required by `playbooks/poe_control.yml`.
 
-**`armbian_netboot_router`** (consumed by `converge_boot_mode.yml`,
+**`armbian_router`** (consumed by `converge_boot_mode.yml`,
 `set_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`, and
 `persist_uboot_env.yml` for router-side delegation) — set in
-`inventory/group_vars/boards.yml` as `armbian_netboot_router: rb5009`.
+`inventory/group_vars/boards.yml` as `armbian_router: rb5009`.
 Identifies the inventory host the playbooks delegate router mutations to.
 
 ## Architecture
@@ -326,10 +326,10 @@ imports the transport-specific upload playbook (defaults to
 `routeros/upload_tftp_assets.yml`); play 3 imports the plumbing-check
 reference to verify rows landed.
 
-Inside `armbian_netboot_nfs_rootfs_path` two layouts coexist:
+Inside `armbian_nfs_rootfs_path` two layouts coexist:
 
 ```
-armbian_netboot_nfs_rootfs_path/
+armbian_nfs_rootfs_path/
 ├── _templates/
 │   └── orange-pi-5-pro/    per-model template (extracted from .img.xz)
 └── orange-pi-5-pro-01/     per-host clone of _templates/orange-pi-5-pro
@@ -350,13 +350,13 @@ netboot server during boot-mode convergence.
 
 | Playbook | Runs on |
 |---|---|
-| `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_netboot_default_password`; idempotent) |
+| `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `routeros/bootstrap_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
 | `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS rootfs, per-host clones) |
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
-| `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_netboot_poe_switch` hostvar) |
+| `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
 | `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
 | `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 
@@ -418,7 +418,7 @@ The dimensions that vary in practice:
 For the full runbook, use the `adding-armbian-board` skill — it walks
 pre-flight decisions, inventory placeholders, `vars/boards.yml` fields
 (including `earlycon`), U-Boot branch selection (`current` vs `edge`
-via `armbian_netboot_board_branch` in inventory group_vars), post-build defconfig audits (CONFIG_PCI_INIT_R,
+via `armbian_board_branch` in inventory group_vars), post-build defconfig audits (CONFIG_PCI_INIT_R,
 PHY drivers, NIC driver presence), and ends at
 `stage_netboot_assets.yml` + `stage_router.yml`. It also encodes the
 decision rule for running Approach B (`persist_uboot_env.yml`) based on
@@ -428,23 +428,23 @@ Minimum touched files for a new board:
 
 1. `inventory/hosts.yml` (doc-only example) + your real inventory:
    add the host(s) under a new per-model subgroup of `boards` with
-   `armbian_netboot_board_mac`, `armbian_netboot_board_model`,
-   `armbian_netboot_boot_mode`, `armbian_netboot_poe_switch`,
-   `armbian_netboot_poe_port`.
-2. `vars/boards.yml`: entry keyed by `armbian_netboot_board_model` under
-   `armbian_netboot_board_configs` with `armbian_dl_dir`,
+   `armbian_board_mac`, `armbian_board_model`,
+   `armbian_boot_mode`, `armbian_poe_switch`,
+   `armbian_poe_port`.
+2. `vars/boards.yml`: entry keyed by `armbian_board_model` under
+   `armbian_board_configs` with `armbian_dl_dir`,
    `armbian_board_name`, `armbian_support`, `dtb`, `console`, `earlycon`.
 3. `inventory/group_vars/all.yml`: add an
-   `armbian_netboot_image_urls[<model>]` entry (https://, http://, or
+   `armbian_image_urls[<model>]` entry (https://, http://, or
    absolute path) reachable from both the netboot_server (Phase 1
    image_extract) and the boards (Phase 3 dd-to-SD).
 4. `inventory/group_vars/<model_group>.yml` (doc-only example +
-   real inventory): set `armbian_netboot_board_branch` if the board's
+   real inventory): set `armbian_board_branch` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
    boards need `edge` for mainline U-Boot). Default `current` if
    omitted.
 5. (Rare) `inventory/group_vars/<model_group>.yml`
-   `armbian_netboot_board_userpatches`: list of `{dest, content}`
+   `armbian_board_userpatches`: list of `{dest, content}`
    patches the image_build role drops into `userpatches/` for this
    board's build. Add only after confirming `build_userpatches_common`
    in `playbooks/build_image.yml` (the cross-board rk3588 family
@@ -455,7 +455,7 @@ Minimum touched files for a new board:
 Two overlay paths are available; choose by SCOPE:
 
 - **Family-shared** — the hook applies identically to every board in a SoC family (e.g. rk3588). Add it to `build_userpatches_common` in `playbooks/build_image.yml` under `dest: config/sources/families/<family>.conf`. Today's examples: `__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`.
-- **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_netboot_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
+- **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
 
 If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `build_userpatches_common`, that's the cue to write a per-board overlay instead.
 
@@ -491,15 +491,15 @@ sends every TFTP request straight at rb5009.
 
 `poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
 and delegates the RouterOS command to the switch identified by each board's
-`armbian_netboot_poe_switch` host variable. The `delegate_to` pattern works because
+`armbian_poe_switch` host variable. The `delegate_to` pattern works because
 `group_vars/routeros.yml` sets `ansible_connection: ansible.netcommon.network_cli` on
 all RouterOS hosts, so the delegated task uses the switch's connection settings
 automatically.
 
-The role supports three actions via `-e armbian_netboot_poe_action=`:
+The role supports three actions via `-e armbian_poe_action=`:
 - `on` — sets `poe-out=auto` (default)
 - `off` — sets `poe-out=off`
-- `cycle` — off, pause (`armbian_netboot_poe_cycle_delay` seconds, default 5), then on
+- `cycle` — off, pause (`armbian_poe_cycle_delay` seconds, default 5), then on
 
 PoE uses delegation because boards may be connected to different switches. Each board
 knows its own switch and port, so delegation routes the command correctly without
@@ -507,7 +507,7 @@ filtering.
 
 ## Key files
 
-- `vars/boards.yml` — authoritative per-board metadata (`armbian_netboot_board_configs`)
+- `vars/boards.yml` — authoritative per-board metadata (`armbian_board_configs`)
 - `roles/image_extract/tasks/main.yml` — single-image extraction (URL or local path) → template + TFTP files
 - `roles/disk_image/tasks/main.yml` — orchestrate validate → write → settle for the new disk-imaging role
 - `roles/disk_image/tasks/_validate.yml` — mount-aware guard + extension classify (pre-flight)
@@ -528,7 +528,7 @@ filtering.
 - `playbooks/routeros/poe_control.yml` — PoE on/off/cycle delegated to a board's switch
 - `playbooks/routeros/bootstrap_user.yml` — provision ansible-netboot user/group/SSH keys
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs, cross-role defaults (edit before first run)
-- `inventory/group_vars/boards.yml` — `armbian_netboot_router` + retry-knob overrides
+- `inventory/group_vars/boards.yml` — `armbian_router` + retry-knob overrides
 - `playbooks/build_image.yml` — custom Armbian image build pipeline
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
 - `docs/boot-mode-override.md` — three boot mode override methods (inventory, -e, U-Boot env)

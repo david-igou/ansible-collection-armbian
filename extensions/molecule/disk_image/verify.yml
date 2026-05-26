@@ -39,7 +39,7 @@
 
         - name: "Call role with the partition as target_device — must fail"
           ansible.builtin.include_role:
-            name: david_igou.armbian_netboot.disk_image
+            name: david_igou.armbian.disk_image
           vars:
             image_source: "/tmp/test.img.xz"
             target_device: "{{ _target_loop }}p1"
@@ -57,7 +57,7 @@
       block:
         - name: "Call role with a non-URL, non-abs-path image_source"
           ansible.builtin.include_role:
-            name: david_igou.armbian_netboot.disk_image
+            name: david_igou.armbian.disk_image
           vars:
             image_source: "not-a-url-and-not-a-path"
             target_device: "{{ _target_loop }}"

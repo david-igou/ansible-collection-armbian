@@ -14,7 +14,7 @@
 
     - name: "Converge: invoke full role on a clean (unmounted) target"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_image
+        name: david_igou.armbian.disk_image
       vars:
         image_source: "/tmp/test.img.xz"
         target_device: "{{ _target_loop }}"

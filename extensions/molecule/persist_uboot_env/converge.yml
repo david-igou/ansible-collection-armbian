@@ -7,7 +7,7 @@
   vars:
     # Fixture: rock-5b (SPI flash board with full uboot_env block) and
     # orange-pi-5-max (nowhere board — negative-path reference).
-    armbian_netboot_board_configs:
+    armbian_board_configs:
       rock-5b:
         armbian_dl_dir: rock-5b
         armbian_board_name: rock-5b
@@ -49,12 +49,12 @@
     # ===== Host A: override host — _extra overrides bootmeths, ethaddr, and localcmd =====
     - name: HOST A — set host vars (override)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: spi
-        armbian_netboot_uboot_env_extra:
+        armbian_uboot_env_extra:
           bootmeths: "pxe extlinux"         # override board default
           ethaddr: "aa:bb:cc:dd:ee:ff"      # override collection-managed
           localcmd: "echo custom localcmd"  # override structured render
@@ -71,12 +71,12 @@
     # ===== Host B: control — no _extra; persist_via=spi produces localcmd =====
     - name: HOST B — reset host vars (control)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: spi
-        armbian_netboot_uboot_env_extra: {}
+        armbian_uboot_env_extra: {}
         # Explicitly clear previous-iteration intermediates so they don't
         # leak across the sequential include_tasks calls on the same host.
         _uboot_env_vars: null
@@ -94,12 +94,12 @@
     # ===== Host C: persist_via=hook — no localcmd key expected =====
     - name: HOST C — reset host vars (hook persist)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: hook
-        armbian_netboot_uboot_env_extra: {}
+        armbian_uboot_env_extra: {}
         _uboot_env_vars: null
         _src2_localcmd: null
 

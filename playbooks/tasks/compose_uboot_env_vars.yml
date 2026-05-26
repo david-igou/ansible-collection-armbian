@@ -1,21 +1,21 @@
 ---
 # Compose the per-host uboot_env_vars dict from three sources in this
 # precedence (low → high):
-#   1. armbian_netboot_board_configs[<model>].uboot_env.defaults
+#   1. armbian_board_configs[<model>].uboot_env.defaults
 #      (board static SPI defaults, e.g. rock-5b's addr_r vars)
-#   2. Collection-managed keys: ethaddr (from armbian_netboot_board_mac),
+#   2. Collection-managed keys: ethaddr (from armbian_board_mac),
 #      and localcmd (rendered, only when persist_via == 'spi')
-#   3. armbian_netboot_uboot_env_extra (operator escape hatch; wins)
+#   3. armbian_uboot_env_extra (operator escape hatch; wins)
 #
 # Output (registered fact): _uboot_env_vars — flat dict of name→value.
 #
 # Inputs (must be defined on the host before include):
-#   armbian_netboot_board_model   — model key for vars/boards.yml lookup
-#   armbian_netboot_board_mac     — colon-separated MAC (xx:xx:xx:xx:xx:xx)
-#   armbian_netboot_board_configs — usually from vars/boards.yml
-#   armbian_netboot_boot_mode     — 'local_kernel' triggers localcmd render
-#   armbian_netboot_local_kernel  — optional dict with .persist_via and field overrides
-#   armbian_netboot_uboot_env_extra — optional flat dict (operator escape hatch)
+#   armbian_board_model   — model key for vars/boards.yml lookup
+#   armbian_board_mac     — colon-separated MAC (xx:xx:xx:xx:xx:xx)
+#   armbian_board_configs — usually from vars/boards.yml
+#   armbian_boot_mode     — 'local_kernel' triggers localcmd render
+#   armbian_local_kernel  — optional dict with .persist_via and field overrides
+#   armbian_uboot_env_extra — optional flat dict (operator escape hatch)
 #
 # Used by:
 #   - playbooks/persist_uboot_env.yml (real fw_setenv path; Task 8)
@@ -23,7 +23,7 @@
 
 - name: Pull board config for this host
   ansible.builtin.set_fact:
-    _board_cfg: "{{ armbian_netboot_board_configs[armbian_netboot_board_model] }}"
+    _board_cfg: "{{ armbian_board_configs[armbian_board_model] }}"
 
 # Source 1: board-level SPI env defaults (e.g. addr_r vars for rock-5b).
 # Boards with no SPI flash (uboot_env.storage: nowhere) leave this empty.
@@ -38,11 +38,11 @@
 - name: Source 2a — collection-managed ethaddr
   ansible.builtin.set_fact:
     _src2_ethaddr:
-      ethaddr: "{{ armbian_netboot_board_mac | lower }}"
+      ethaddr: "{{ armbian_board_mac | lower }}"
 
 # Source 2b: localcmd — rendered only when:
-#   - armbian_netboot_boot_mode == 'local_kernel'  (intent)
-#   - armbian_netboot_local_kernel.persist_via == 'spi'  (mechanism)
+#   - armbian_boot_mode == 'local_kernel'  (intent)
+#   - armbian_local_kernel.persist_via == 'spi'  (mechanism)
 # The hook path (persist_via == 'hook' or absent) skips this task; the
 # resulting _src2_localcmd default({}) in the combine below is a no-op.
 #
@@ -57,7 +57,7 @@
 # both failed on opi5pro hardware; reverted to hardcoded per #82 design.
 - name: Source 2b — collection-managed localcmd (only when persist_via == spi)
   vars:
-    _lk: "{{ armbian_netboot_local_kernel | default({}) }}"
+    _lk: "{{ armbian_local_kernel | default({}) }}"
     _storage: "{{ _lk.storage | default(_board_cfg.local_kernel.storage) }}"
     _storage_scan: "{{ _lk.storage_scan | default(_board_cfg.local_kernel.storage_scan) }}"
     _root_label: "{{ _lk.root_label | default('armbi_root_local') }}"
@@ -75,8 +75,8 @@
     _src2_localcmd:
       localcmd: "{{ _chain }}"
   when:
-    - armbian_netboot_boot_mode | default('') == 'local_kernel'
-    - (armbian_netboot_local_kernel.persist_via | default('hook')) == 'spi'
+    - armbian_boot_mode | default('') == 'local_kernel'
+    - (armbian_local_kernel.persist_via | default('hook')) == 'spi'
 
 # Source 2: merge ethaddr (always) with localcmd (conditional).
 # _src2_localcmd is undefined when the when: above was skipped; default({})
@@ -89,7 +89,7 @@
 # or localcmd if the operator needs to override the collection-managed values.
 - name: Source 3 — operator escape hatch
   ansible.builtin.set_fact:
-    _src3: "{{ armbian_netboot_uboot_env_extra | default({}) }}"
+    _src3: "{{ armbian_uboot_env_extra | default({}) }}"
 
 # Final merge in precedence order: source 3 overrides 2 overrides 1.
 # Callers consume only _uboot_env_vars; the _src* facts are internal

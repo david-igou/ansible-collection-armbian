@@ -1,4 +1,4 @@
-"""Unit tests for david_igou.armbian_netboot."""
+"""Unit tests for david_igou.armbian."""
 
 
 def test_basic() -> None:

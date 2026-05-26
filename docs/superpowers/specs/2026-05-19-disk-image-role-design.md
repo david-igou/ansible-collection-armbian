@@ -168,8 +168,8 @@ New phase inserted before Phase A. Skip-flag `skip_dd_sd` defaults to
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
-            target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
+            image_source: "{{ armbian_image_urls[armbian_board_model] }}"
+            target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 0 — record timing + evidence"
           # same pattern as Phase A timing block.
@@ -194,7 +194,7 @@ Notes on the wiring:
    via `blkdiscard` + `systemd-repart`. Adding a "dd canonical image
    to NVMe" Phase 0b doesn't have a current use case.
 
-4. **`armbian_netboot_sd_device`**: new inventory var, default
+4. **`armbian_sd_device`**: new inventory var, default
    `/dev/mmcblk0`. Per CLAUDE.md ("MMC controller index varies per
    board"), a future board may enumerate differently; per-host
    override in inventory covers it.
@@ -250,7 +250,7 @@ After implementation, three ground-truth tests:
   keys) — would mirror `rootfs_clone`'s identity reset, but for SD/NVMe.
 - `growpart` last partition post-dd.
 - `image_source: extracted_template` mode — rsync from
-  `armbian_netboot_nfs_rootfs_path/_templates/<model>/` instead of
+  `armbian_nfs_rootfs_path/_templates/<model>/` instead of
   re-decompressing the upstream `.img.xz`. Faster for fleet runs (no
   re-decompress, no HTTP) but couples this role to the netboot server's
   on-disk layout.

@@ -2,19 +2,19 @@
 # Set a board's boot mode via -e override (ad-hoc, no inventory edit).
 #
 # Thin wrapper around converge_boot_mode.yml. -e is highest precedence in
-# Ansible, so passing -e armbian_netboot_boot_mode=... overrides the
+# Ansible, so passing -e armbian_boot_mode=... overrides the
 # inventory-declared value automatically.
 #
 # Usage:
 #   ansible-playbook playbooks/set_boot_mode.yml \
 #     -e target_hosts=orange-pi-5-pro-01 \
-#     -e armbian_netboot_boot_mode=sd
+#     -e armbian_boot_mode=sd
 #
 #   # Write router state only — don't cycle the board
 #   ansible-playbook playbooks/set_boot_mode.yml \
 #     -e target_hosts=orange-pi-5-pro-01 \
-#     -e armbian_netboot_boot_mode=nfs \
-#     -e armbian_netboot_cycle_board=false
+#     -e armbian_boot_mode=nfs \
+#     -e armbian_cycle_board=false
 #
 # Use -e target_hosts=... (not --limit) — see converge_boot_mode.yml
 # header for why.
@@ -24,10 +24,10 @@
   connection: local
   gather_facts: false
   tasks:
-    - name: Assert armbian_netboot_boot_mode is set via -e
+    - name: Assert armbian_boot_mode is set via -e
       ansible.builtin.assert:
-        that: armbian_netboot_boot_mode is defined
+        that: armbian_boot_mode is defined
         fail_msg: >-
-          set_boot_mode.yml requires -e armbian_netboot_boot_mode=nfs|sd|local
+          set_boot_mode.yml requires -e armbian_boot_mode=nfs|sd|local
 
 - import_playbook: converge_boot_mode.yml

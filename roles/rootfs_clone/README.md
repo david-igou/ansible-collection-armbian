@@ -67,10 +67,10 @@ After a successful run:
   become: true
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.rootfs_clone
+        name: david_igou.armbian.rootfs_clone
       vars:
-        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/orange-pi-5-pro"
-        target_dir: "{{ armbian_netboot_nfs_rootfs_path }}/orange-pi-5-pro-01"
+        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/orange-pi-5-pro"
+        target_dir: "{{ armbian_nfs_rootfs_path }}/orange-pi-5-pro-01"
         hostname: orange-pi-5-pro-01
 ```
 

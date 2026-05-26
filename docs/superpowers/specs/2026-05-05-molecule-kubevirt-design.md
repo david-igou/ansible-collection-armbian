@@ -136,7 +136,7 @@ Single play, single role invocation:
   tasks:
     - name: Apply armbian_build role
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.armbian_build
+        name: david_igou.armbian.armbian_build
       vars:
         armbian_build_board: orangepi5pro
         armbian_build_branch: current

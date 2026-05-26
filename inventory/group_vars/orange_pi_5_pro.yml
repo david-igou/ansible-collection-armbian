@@ -10,7 +10,7 @@
 # armbian/build's `orangepi5pro` board config on the edge branch
 # (mainline u-boot v2026.04). The current branch's family-default
 # Radxa fork lacks the YT6801 driver entirely.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # None — the rk3588 family-level overlay
@@ -18,4 +18,4 @@ armbian_netboot_board_branch: edge
 # PXE-first ordering and CONFIG_PCI_INIT_R backfill. Add per-board
 # entries here only after confirming the family hook does not cover
 # your case.
-# armbian_netboot_board_userpatches: []
+# armbian_board_userpatches: []

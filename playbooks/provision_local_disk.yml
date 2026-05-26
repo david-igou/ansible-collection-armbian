@@ -1,13 +1,13 @@
 ---
 # Provision a local block device (NVMe / USB / SATA / SD / etc.) on a
 # board with a copy of the currently-running rootfs. After this runs,
-# the disk holds a bootable ext4 rootfs labeled `armbian_netboot_local_disk_label`
+# the disk holds a bootable ext4 rootfs labeled `armbian_local_disk_label`
 # with a generated /etc/fstab pointing root at LABEL=<that label>.
 #
 # This playbook is transport-agnostic — it doesn't know anything about
-# NFS, PXE, or boot modes. It composes the david_igou.armbian_netboot.disk_provision
+# NFS, PXE, or boot modes. It composes the david_igou.armbian.disk_provision
 # role with parameters drawn from inventory / -e overrides. Boot-mode
-# integration (e.g. a future `nvme` value for armbian_netboot_boot_mode)
+# integration (e.g. a future `nvme` value for armbian_boot_mode)
 # is a separate concern handled by pxelinux_render + converge_boot_mode.
 #
 # Source rootfs is `/` on the target board — whatever the board is
@@ -19,15 +19,15 @@
 #
 # Required inputs (per-host, in inventory hostvars; can also be set
 # via -e for ad-hoc runs):
-#   armbian_netboot_local_disk_device  whole-disk path, e.g. /dev/nvme0n1.
+#   armbian_local_disk_device  whole-disk path, e.g. /dev/nvme0n1.
 #                                      WILL BE WIPED.
 #
 # Optional inputs:
-#   armbian_netboot_local_disk_label   filesystem label written by mkfs and
+#   armbian_local_disk_label   filesystem label written by mkfs and
 #                                      used in fstab. Default armbi_root_local.
 #                                      Pick something distinct from the SD's
 #                                      `armbi_root` to avoid root= ambiguity.
-#   armbian_netboot_local_disk_force   force re-provision even if a partition
+#   armbian_local_disk_force   force re-provision even if a partition
 #                                      with the requested label already exists.
 #                                      Default false.
 #   target_hosts                       inventory pattern. Default: `boards`.
@@ -36,13 +36,13 @@
 #   # Single board, ad-hoc device override
 #   ansible-playbook playbooks/provision_local_disk.yml \
 #     --limit orange-pi-5-max-01.example.lan \
-#     -e armbian_netboot_local_disk_device=/dev/nvme0n1
+#     -e armbian_local_disk_device=/dev/nvme0n1
 #
 #   # Force re-provision (wipe + recopy)
 #   ansible-playbook playbooks/provision_local_disk.yml \
 #     --limit orange-pi-5-max-01.example.lan \
-#     -e armbian_netboot_local_disk_device=/dev/nvme0n1 \
-#     -e armbian_netboot_local_disk_force=true
+#     -e armbian_local_disk_device=/dev/nvme0n1 \
+#     -e armbian_local_disk_force=true
 
 - name: Provision a local block device with a copy of the running rootfs
   hosts: "{{ target_hosts | default('boards') }}"
@@ -52,19 +52,19 @@
     - "!min"
     - mounts
   vars:
-    armbian_netboot_local_disk_label: "armbi_root_local"
-    armbian_netboot_local_disk_force: false
+    armbian_local_disk_label: "armbi_root_local"
+    armbian_local_disk_force: false
 
   pre_tasks:
-    - name: Assert armbian_netboot_local_disk_device is set
+    - name: Assert armbian_local_disk_device is set
       ansible.builtin.assert:
         that:
-          - armbian_netboot_local_disk_device is defined
-          - armbian_netboot_local_disk_device | length > 0
-          - armbian_netboot_local_disk_device.startswith('/dev/')
+          - armbian_local_disk_device is defined
+          - armbian_local_disk_device | length > 0
+          - armbian_local_disk_device.startswith('/dev/')
         fail_msg: >-
-          Set armbian_netboot_local_disk_device (e.g. /dev/nvme0n1) on the host
-          via inventory hostvars or pass -e armbian_netboot_local_disk_device=/dev/<disk>.
+          Set armbian_local_disk_device (e.g. /dev/nvme0n1) on the host
+          via inventory hostvars or pass -e armbian_local_disk_device=/dev/<disk>.
           Must be a whole-disk path under /dev/.
 
     # Safety guard: if the board is currently booted FROM the device
@@ -77,14 +77,14 @@
     - name: Assert we're not about to wipe the disk we're running from
       ansible.builtin.assert:
         that:
-          - not _root_source.startswith(armbian_netboot_local_disk_device)
+          - not _root_source.startswith(armbian_local_disk_device)
         fail_msg: >-
           REFUSING: rootfs is currently mounted from {{ _root_source }}, which
-          is on {{ armbian_netboot_local_disk_device }} (the disk this play
+          is on {{ armbian_local_disk_device }} (the disk this play
           would wipe). Reboot the board into a different rootfs (NFS or SD)
           before provisioning this disk.
         success_msg: >-
-          OK: rootfs is on {{ _root_source }} (not on {{ armbian_netboot_local_disk_device }}).
+          OK: rootfs is on {{ _root_source }} (not on {{ armbian_local_disk_device }}).
           Safe to proceed.
 
   tasks:
@@ -92,7 +92,7 @@
       ansible.builtin.import_role:
         name: disk_provision
       vars:
-        device: "{{ armbian_netboot_local_disk_device }}"
+        device: "{{ armbian_local_disk_device }}"
         source: "/"
-        label: "{{ armbian_netboot_local_disk_label }}"
-        force: "{{ armbian_netboot_local_disk_force | bool }}"
+        label: "{{ armbian_local_disk_label }}"
+        force: "{{ armbian_local_disk_force | bool }}"

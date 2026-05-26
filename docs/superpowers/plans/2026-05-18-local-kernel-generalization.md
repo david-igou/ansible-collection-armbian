@@ -136,7 +136,7 @@ Create `roles/image_build/vars/local_kernel.yml`:
 # playbooks/persist_uboot_env.yml (per-host SPI localcmd).
 #
 # Inputs:
-#   board_cfg: an entry from armbian_netboot_board_configs (must have
+#   board_cfg: an entry from armbian_board_configs (must have
 #              local_kernel.{storage,storage_scan}, dtb, console).
 #   overrides: optional dict with the same keys to override defaults;
 #              empty dict if no per-host override.
@@ -243,7 +243,7 @@ scenario:
   become: false
   vars:
     # Fixture: three board configs, two opted in, one not.
-    armbian_netboot_board_configs:
+    armbian_board_configs:
       orange-pi-5-max:
         armbian_dl_dir: orangepi5-max
         armbian_board_name: orangepi5-max
@@ -292,7 +292,7 @@ scenario:
           {% set macros = local_kernel_chain_macro %}
           {% from macros import render_localcmd_chain %}
           {% for board in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board] %}
+          {% set cfg = armbian_board_configs[board] %}
           {% if cfg.local_kernel is defined %}
           [{{ cfg.armbian_board_name }}]='{{ render_localcmd_chain(cfg) }}'
           {% endif %}
@@ -407,7 +407,7 @@ Update the molecule converge.yml's render task to use the new shape:
         _dispatch_table: |
           {%- from playbook_dir + '/../../../roles/image_build/templates/render_localcmd_chain.j2' import render_localcmd_chain -%}
           {% for board in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board] %}
+          {% set cfg = armbian_board_configs[board] %}
           {% if cfg.local_kernel is defined %}
           [{{ cfg.armbian_board_name }}]='{{ render_localcmd_chain(cfg) }}'
           {% endif %}
@@ -460,14 +460,14 @@ In the same play, in the `pre_tasks:` block (after the existing "Load board conf
         _local_kernel_dispatch_table: |
           {%- from playbook_dir + '/../roles/image_build/templates/render_localcmd_chain.j2' import render_localcmd_chain -%}
           {% for board_model in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board_model] %}
+          {% set cfg = armbian_board_configs[board_model] %}
           {% if cfg.local_kernel is defined %}
               [{{ cfg.armbian_board_name }}]='{{ render_localcmd_chain(cfg) }}'
           {% endif %}
           {% endfor %}
 ```
 
-This task must run AFTER `_board_models` is set (the existing "Resolve unique armbian_netboot_board_model values" task) and BEFORE `build_userpatches_common` is consumed by the include_role task. Place it right after "Resolve unique armbian_netboot_board_model values from groups['boards']".
+This task must run AFTER `_board_models` is set (the existing "Resolve unique armbian_board_model values" task) and BEFORE `build_userpatches_common` is consumed by the include_role task. Place it right after "Resolve unique armbian_board_model values from groups['boards']".
 
 - [ ] **Step 3: Add the generic build hook to `build_userpatches_common`**
 
@@ -578,7 +578,7 @@ In `playbooks/build_image.yml`'s `pre_tasks:`, after the dispatch table render (
       ansible.builtin.set_fact:
         _uboot_env_storage_table: |
           {% for board_model in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board_model] %}
+          {% set cfg = armbian_board_configs[board_model] %}
           {% if cfg.uboot_env is defined %}
               [{{ cfg.armbian_board_name }}]='{{ cfg.uboot_env.storage }}'
           {% endif %}
@@ -656,24 +656,24 @@ Create `playbooks/tasks/compose_uboot_env_vars.yml`:
 ---
 # Compose the per-host uboot_env_vars dict from three sources in this
 # precedence (low → high):
-#   1. armbian_netboot_board_configs[<model>].uboot_env.defaults
+#   1. armbian_board_configs[<model>].uboot_env.defaults
 #      (board static SPI defaults, e.g. rock-5b's addr_r vars)
-#   2. Collection-managed keys: ethaddr (from armbian_netboot_board_mac),
+#   2. Collection-managed keys: ethaddr (from armbian_board_mac),
 #      and localcmd (rendered, only when persist_via == 'spi')
-#   3. armbian_netboot_uboot_env_extra (operator escape hatch; wins)
+#   3. armbian_uboot_env_extra (operator escape hatch; wins)
 #
 # Output (registered fact): _uboot_env_vars — flat dict of name→value.
 #
 # Inputs (must be defined on the host before include):
-#   armbian_netboot_board_model — model key for vars/boards.yml lookup
-#   armbian_netboot_board_mac — colon-separated MAC
-#   armbian_netboot_board_configs — usually from vars/boards.yml
-#   armbian_netboot_boot_mode — 'local_kernel' triggers localcmd render
-#   armbian_netboot_local_kernel — optional dict with .persist_via and overrides
-#   armbian_netboot_uboot_env_extra — optional flat dict
+#   armbian_board_model — model key for vars/boards.yml lookup
+#   armbian_board_mac — colon-separated MAC
+#   armbian_board_configs — usually from vars/boards.yml
+#   armbian_boot_mode — 'local_kernel' triggers localcmd render
+#   armbian_local_kernel — optional dict with .persist_via and overrides
+#   armbian_uboot_env_extra — optional flat dict
 - name: Pull board config for this host
   ansible.builtin.set_fact:
-    _board_cfg: "{{ armbian_netboot_board_configs[armbian_netboot_board_model] }}"
+    _board_cfg: "{{ armbian_board_configs[armbian_board_model] }}"
 
 - name: Source 1 — board defaults
   ansible.builtin.set_fact:
@@ -682,19 +682,19 @@ Create `playbooks/tasks/compose_uboot_env_vars.yml`:
 - name: Source 2a — collection-managed ethaddr
   ansible.builtin.set_fact:
     _src2_ethaddr:
-      ethaddr: "{{ armbian_netboot_board_mac | lower }}"
+      ethaddr: "{{ armbian_board_mac | lower }}"
 
 - name: Source 2b — collection-managed localcmd (only when persist_via == spi)
   vars:
     _localcmd_chain: >-
       {%- from playbook_dir + '/../roles/image_build/templates/render_localcmd_chain.j2' import render_localcmd_chain -%}
-      {{ render_localcmd_chain(_board_cfg, armbian_netboot_local_kernel | default({})) }}
+      {{ render_localcmd_chain(_board_cfg, armbian_local_kernel | default({})) }}
   ansible.builtin.set_fact:
     _src2_localcmd:
       localcmd: "{{ _localcmd_chain }}"
   when:
-    - armbian_netboot_boot_mode | default('') == 'local_kernel'
-    - (armbian_netboot_local_kernel.persist_via | default('hook')) == 'spi'
+    - armbian_boot_mode | default('') == 'local_kernel'
+    - (armbian_local_kernel.persist_via | default('hook')) == 'spi'
 
 - name: Source 2 — combined collection-managed keys
   ansible.builtin.set_fact:
@@ -702,7 +702,7 @@ Create `playbooks/tasks/compose_uboot_env_vars.yml`:
 
 - name: Source 3 — operator escape hatch
   ansible.builtin.set_fact:
-    _src3: "{{ armbian_netboot_uboot_env_extra | default({}) }}"
+    _src3: "{{ armbian_uboot_env_extra | default({}) }}"
 
 - name: Compose final dict in precedence order
   ansible.builtin.set_fact:
@@ -771,7 +771,7 @@ scenario:
   become: false
   vars:
     # Fixture: rock-5b-style board with full uboot_env block.
-    armbian_netboot_board_configs:
+    armbian_board_configs:
       rock-5b:
         armbian_dl_dir: rock-5b
         armbian_board_name: rock-5b
@@ -815,12 +815,12 @@ scenario:
     #       ethaddr, and localcmd. =====
     - name: HOST A — set host vars (override)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: spi
-        armbian_netboot_uboot_env_extra:
+        armbian_uboot_env_extra:
           bootmeths: "pxe extlinux"           # override board default
           ethaddr: "aa:bb:cc:dd:ee:ff"        # override collection-managed
           localcmd: "echo custom localcmd"    # override structured render
@@ -837,12 +837,12 @@ scenario:
     # ===== Host B: control. No _extra. =====
     - name: HOST B — reset host vars (control)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: spi
-        armbian_netboot_uboot_env_extra: {}
+        armbian_uboot_env_extra: {}
         # also clear any per-host previously-computed facts
         _uboot_env_vars: null
         _src2_localcmd: null
@@ -859,12 +859,12 @@ scenario:
     # ===== Host C: persist_via=hook on the same SPI board — no localcmd. =====
     - name: HOST C — reset host vars (hook persist)
       ansible.builtin.set_fact:
-        armbian_netboot_board_model: rock-5b
-        armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-        armbian_netboot_boot_mode: local_kernel
-        armbian_netboot_local_kernel:
+        armbian_board_model: rock-5b
+        armbian_board_mac: "00:E0:4C:68:00:3B"
+        armbian_boot_mode: local_kernel
+        armbian_local_kernel:
           persist_via: hook
-        armbian_netboot_uboot_env_extra: {}
+        armbian_uboot_env_extra: {}
         _uboot_env_vars: null
         _src2_localcmd: null
 
@@ -1012,13 +1012,13 @@ Replace the existing playbook with:
 #
 # Cold-cycle ownership: when run standalone, this play cold-cycles on drift.
 # When imported by converge_boot_mode.yml, the converge play sets
-# armbian_netboot_persist_uboot_env_cycle: false and owns the cycle in step 4.
+# armbian_persist_uboot_env_cycle: false and owns the cycle in step 4.
 #
 # Prerequisites:
 #   - Board must boot to Linux (this play SSHes in to run fw_setenv).
 #   - playbooks/bootstrap_armbian.yml must have run.
-#   - inventory hostvars: armbian_netboot_board_mac (mandatory),
-#     armbian_netboot_poe_switch + armbian_netboot_poe_port (mandatory for
+#   - inventory hostvars: armbian_board_mac (mandatory),
+#     armbian_poe_switch + armbian_poe_port (mandatory for
 #     the cold-cycle handler).
 #
 # Usage (standalone):
@@ -1030,8 +1030,8 @@ Replace the existing playbook with:
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   vars:
-    armbian_netboot_persist_uboot_env_cycle: true
-    armbian_netboot_uboot_env_extra: "{{ armbian_netboot_uboot_env_extra | default({}) }}"
+    armbian_persist_uboot_env_cycle: true
+    armbian_uboot_env_extra: "{{ armbian_uboot_env_extra | default({}) }}"
 
   pre_tasks:
     - name: Load board configs (needed for per-host lookups)
@@ -1041,46 +1041,46 @@ Replace the existing playbook with:
     - name: Skip hosts whose board has no SPI flash env
       ansible.builtin.meta: end_host
       when: >-
-        armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage
+        armbian_board_configs[armbian_board_model].uboot_env.storage
         | default('nowhere') != 'spi_flash'
 
     - name: Validate persist_via against board env storage
       ansible.builtin.assert:
         that:
           - >-
-            (armbian_netboot_local_kernel.persist_via | default('hook')) == 'hook'
-            or armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage == 'spi_flash'
+            (armbian_local_kernel.persist_via | default('hook')) == 'hook'
+            or armbian_board_configs[armbian_board_model].uboot_env.storage == 'spi_flash'
         fail_msg: >-
           {{ inventory_hostname }}: local_kernel.persist_via=spi but board
-          {{ armbian_netboot_board_model }} uboot_env.storage={{
-            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage }};
+          {{ armbian_board_model }} uboot_env.storage={{
+            armbian_board_configs[armbian_board_model].uboot_env.storage }};
           change persist_via to 'hook' or pick a board with SPI env.
 
     - name: Validate fw_env_config completeness when persist_via=spi
       ansible.builtin.assert:
         that:
           - >-
-            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.device is defined
+            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.device is defined
           - >-
-            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.offset is defined
+            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.offset is defined
           - >-
-            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.size is defined
+            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.size is defined
           - >-
-            armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config.sect_size is defined
+            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.sect_size is defined
         fail_msg: >-
           {{ inventory_hostname }}: uboot_env.fw_env_config missing required keys
           (device/offset/size/sect_size) for SPI persistence.
 
-    - name: Assert per-host armbian_netboot_board_mac is defined and well-formed
+    - name: Assert per-host armbian_board_mac is defined and well-formed
       ansible.builtin.assert:
         that:
-          - armbian_netboot_board_mac is defined
-          - armbian_netboot_board_mac | length > 0
-          - armbian_netboot_board_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
+          - armbian_board_mac is defined
+          - armbian_board_mac | length > 0
+          - armbian_board_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
         fail_msg: >-
-          armbian_netboot_board_mac must be set on {{ inventory_hostname }} as a
+          armbian_board_mac must be set on {{ inventory_hostname }} as a
           colon-separated hex MAC (xx:xx:xx:xx:xx:xx). Got:
-          '{{ armbian_netboot_board_mac | default("<undefined>") }}'.
+          '{{ armbian_board_mac | default("<undefined>") }}'.
 
     - name: Gather date facts for snapshot filename
       ansible.builtin.setup:
@@ -1159,10 +1159,10 @@ Replace the existing playbook with:
       changed_when: true
 
     - name: Cold-cycle the board when any env var drifted (standalone only)
-      ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file | default('routeros/tasks/poe_cycle.yml') }}"
+      ansible.builtin.include_tasks: "{{ armbian_poe_cycle_tasks_file | default('routeros/tasks/poe_cycle.yml') }}"
       when:
         - _set_results.results | selectattr('changed') | list | length > 0
-        - armbian_netboot_persist_uboot_env_cycle | bool
+        - armbian_persist_uboot_env_cycle | bool
       tags: cold_cycle
 ```
 
@@ -1212,29 +1212,29 @@ Create `playbooks/tasks/validate_local_kernel.yml`:
 - name: Validate board supports local_kernel mode
   ansible.builtin.assert:
     that:
-      - armbian_netboot_board_configs[armbian_netboot_board_model].local_kernel is defined
+      - armbian_board_configs[armbian_board_model].local_kernel is defined
     fail_msg: >-
       {{ inventory_hostname }}: boot_mode=local_kernel but board
-      {{ armbian_netboot_board_model }} has no local_kernel block in
+      {{ armbian_board_model }} has no local_kernel block in
       vars/boards.yml. Either pick a different boot_mode or add a
       local_kernel:{storage,storage_scan} block to vars/boards.yml.
 
 - name: Validate persist_via against board env storage
   vars:
-    _persist_via: "{{ armbian_netboot_local_kernel.persist_via | default('hook') }}"
-    _env_storage: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.storage | default('nowhere') }}"
+    _persist_via: "{{ armbian_local_kernel.persist_via | default('hook') }}"
+    _env_storage: "{{ armbian_board_configs[armbian_board_model].uboot_env.storage | default('nowhere') }}"
   ansible.builtin.assert:
     that:
       - _persist_via != 'spi' or _env_storage == 'spi_flash'
     fail_msg: >-
       {{ inventory_hostname }}: local_kernel.persist_via=spi but board
-      {{ armbian_netboot_board_model }} uboot_env.storage={{ _env_storage }};
+      {{ armbian_board_model }} uboot_env.storage={{ _env_storage }};
       change persist_via to 'hook' or pick a board with SPI env.
 
 - name: Validate fw_env_config is complete when persist_via=spi
   vars:
-    _persist_via: "{{ armbian_netboot_local_kernel.persist_via | default('hook') }}"
-    _fw: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].uboot_env.fw_env_config | default({}) }}"
+    _persist_via: "{{ armbian_local_kernel.persist_via | default('hook') }}"
+    _fw: "{{ armbian_board_configs[armbian_board_model].uboot_env.fw_env_config | default({}) }}"
   ansible.builtin.assert:
     that:
       - _persist_via != 'spi' or (_fw.device is defined and _fw.offset is defined and _fw.size is defined and _fw.sect_size is defined)
@@ -1276,7 +1276,7 @@ In `playbooks/converge_boot_mode.yml`, add a new play at the very start:
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   vars:
-    armbian_netboot_local_kernel: "{{ armbian_netboot_local_kernel | default({}) }}"
+    armbian_local_kernel: "{{ armbian_local_kernel | default({}) }}"
   tasks:
     - name: Load board configs
       ansible.builtin.include_vars:
@@ -1284,7 +1284,7 @@ In `playbooks/converge_boot_mode.yml`, add a new play at the very start:
 
     - name: Run local_kernel validation (gated to local_kernel hosts)
       ansible.builtin.include_tasks: tasks/validate_local_kernel.yml
-      when: armbian_netboot_boot_mode == 'local_kernel'
+      when: armbian_boot_mode == 'local_kernel'
 ```
 
 - [ ] **Step 3: Insert the persist step between upload (play 3) and cold-boot (play 4)**
@@ -1295,11 +1295,11 @@ In `playbooks/converge_boot_mode.yml`, after the upload play and before the cold
 - name: Persist U-Boot SPI env for local_kernel + spi hosts
   ansible.builtin.import_playbook: persist_uboot_env.yml
   vars:
-    armbian_netboot_persist_uboot_env_cycle: false
-  when: (armbian_netboot_persist_uboot_env | default('auto')) != 'never'
+    armbian_persist_uboot_env_cycle: false
+  when: (armbian_persist_uboot_env | default('auto')) != 'never'
 ```
 
-Note: `armbian_netboot_persist_uboot_env_cycle: false` transfers cycle ownership to converge's step 4. The persist play's own filter (`uboot_env.storage == spi_flash`) handles per-host skipping; the playbook-level `when:` is the global escape hatch.
+Note: `armbian_persist_uboot_env_cycle: false` transfers cycle ownership to converge's step 4. The persist play's own filter (`uboot_env.storage == spi_flash`) handles per-host skipping; the playbook-level `when:` is the global escape hatch.
 
 - [ ] **Step 4: Lint**
 
@@ -1349,9 +1349,9 @@ At the end of `inventory/group_vars/all.yml`, append:
 # local_kernel mode (per host)
 # ---------------------------------------------------------------------
 # Opt a host into local_kernel mode by setting:
-#   armbian_netboot_boot_mode: local_kernel
+#   armbian_boot_mode: local_kernel
 # and an optional override block:
-#   armbian_netboot_local_kernel:
+#   armbian_local_kernel:
 #     persist_via: hook       # 'hook' (default) | 'spi'
 #     # storage: "nvme 0:4"   # default from vars/boards.yml's local_kernel.storage
 #     # storage_scan: "nvme scan"
@@ -1364,14 +1364,14 @@ At the end of `inventory/group_vars/all.yml`, append:
 #   spi  — write per-host localcmd to SPI via fw_setenv at convergence
 #          time. Only valid on boards with uboot_env.storage: spi_flash.
 #
-# armbian_netboot_uboot_env_extra (escape hatch, host or group scope):
+# armbian_uboot_env_extra (escape hatch, host or group scope):
 #   Flat dict of arbitrary U-Boot env vars merged into the converged
 #   set with highest precedence. Can override anything in
 #   uboot_env.defaults, ethaddr derived from board_mac, or the
 #   collection-rendered localcmd. Documented as "you own what you
 #   override."
 #
-# armbian_netboot_persist_uboot_env (playbook-level knob):
+# armbian_persist_uboot_env (playbook-level knob):
 #   auto    — default; run step 3.5 for hosts where uboot_env.storage
 #             == spi_flash.
 #   always  — run step 3.5 unconditionally (no-op on NOWHERE hosts).
@@ -1428,11 +1428,11 @@ git commit -m "image_build: document local_kernel/uboot_env preconditions"
 **Files:**
 - Modify: `inventory/hosts.yml`
 
-The doc-only inventory must illustrate the new shape (`armbian_netboot_local_kernel` + `armbian_netboot_local_disks`) so a new user reading the example knows what to declare.
+The doc-only inventory must illustrate the new shape (`armbian_local_kernel` + `armbian_local_disks`) so a new user reading the example knows what to declare.
 
 - [ ] **Step 1: Update the existing example host**
 
-Edit `inventory/hosts.yml`. For the `orange-pi-5-pro` example host, set `armbian_netboot_boot_mode: local_kernel`, add `armbian_netboot_local_kernel: { persist_via: hook }`, and add the `armbian_netboot_local_disks` block (same shape as real inventory uses for opi5max-01 in `.inventory/inventory.yaml`).
+Edit `inventory/hosts.yml`. For the `orange-pi-5-pro` example host, set `armbian_boot_mode: local_kernel`, add `armbian_local_kernel: { persist_via: hook }`, and add the `armbian_local_disks` block (same shape as real inventory uses for opi5max-01 in `.inventory/inventory.yaml`).
 
 - [ ] **Step 2: Run yamllint and commit**
 
@@ -1496,7 +1496,7 @@ test -f /workspace/ansible-collection-armbian_netboot/.inventory/inventory.yaml 
 
 Expected: prints `.inventory` (or absolute path to it); file exists.
 
-- [ ] **Step 2: Add `armbian_netboot_local_kernel` + `armbian_netboot_local_disks` to opi5pro-01**
+- [ ] **Step 2: Add `armbian_local_kernel` + `armbian_local_disks` to opi5pro-01**
 
 Edit `.inventory/inventory.yaml`. Replace the existing opi5pro-01 entry (currently lines ~88-96) with:
 
@@ -1505,14 +1505,14 @@ Edit `.inventory/inventory.yaml`. Replace the existing opi5pro-01 entry (current
       hosts:
         opi5pro-01.igou.systems:
           ansible_host: opi5pro-01.igou.systems
-          armbian_netboot_board_mac: "C0:74:2B:FB:4D:FD"
-          armbian_netboot_board_model: orange-pi-5-pro
-          armbian_netboot_boot_mode: local_kernel
-          armbian_netboot_local_kernel:
+          armbian_board_mac: "C0:74:2B:FB:4D:FD"
+          armbian_board_model: orange-pi-5-pro
+          armbian_boot_mode: local_kernel
+          armbian_local_kernel:
             persist_via: hook
-          armbian_netboot_poe_switch: crs328.igou.systems
-          armbian_netboot_poe_port: ether7
-          armbian_netboot_local_disks:
+          armbian_poe_switch: crs328.igou.systems
+          armbian_poe_port: ether7
+          armbian_local_disks:
             - device: /dev/nvme0n1
               wipe: true
               layout:
@@ -1540,14 +1540,14 @@ Replace the rock-5b-01 entry. Note the `persist_via: spi`:
       hosts:
         rock-5b-01.igou.systems:
           ansible_host: rock-5b-01.igou.systems
-          armbian_netboot_board_mac: "00:E0:4C:68:00:3B"
-          armbian_netboot_board_model: rock-5b
-          armbian_netboot_boot_mode: local_kernel
-          armbian_netboot_local_kernel:
+          armbian_board_mac: "00:E0:4C:68:00:3B"
+          armbian_board_model: rock-5b
+          armbian_boot_mode: local_kernel
+          armbian_local_kernel:
             persist_via: spi
-          armbian_netboot_poe_switch: crs328.igou.systems
-          armbian_netboot_poe_port: ether9
-          armbian_netboot_local_disks:
+          armbian_poe_switch: crs328.igou.systems
+          armbian_poe_port: ether9
+          armbian_local_disks:
             - device: /dev/nvme0n1
               wipe: true
               layout:
@@ -1568,7 +1568,7 @@ Replace the rock-5b-01 entry. Note the `persist_via: spi`:
 
 - [ ] **Step 4: Apply the hook shape to orange-pi-5-01 and rock-5a-01**
 
-Replace both, identical shape to opi5pro-01 except for `ansible_host`, MAC, `armbian_netboot_board_model`, PoE port. The four hosts all get `persist_via: hook` except rock-5b-01.
+Replace both, identical shape to opi5pro-01 except for `ansible_host`, MAC, `armbian_board_model`, PoE port. The four hosts all get `persist_via: hook` except rock-5b-01.
 
 orange-pi-5-01 keeps MAC `D2:9C:F7:AB:F9:B0`, model `orange-pi-5`, port `ether13`.
 rock-5a-01 keeps MAC `BA:50:E3:A1:44:1C`, model `rock-5a`, port `ether11`.
@@ -1656,7 +1656,7 @@ For opi5max-01 specifically — already on `local_kernel`, so temporarily flip t
 
 ```bash
 # Temporarily flip boot_mode in .inventory/inventory.yaml — change
-# orange-pi-5-max-01's armbian_netboot_boot_mode from local_kernel to nfs,
+# orange-pi-5-max-01's armbian_boot_mode from local_kernel to nfs,
 # run converge, then SSH in to dd the new image.
 ansible-playbook playbooks/converge_boot_mode.yml --limit orange-pi-5-max-01.igou.systems
 
@@ -1699,7 +1699,7 @@ Confirm `/mnt/ssd/public/boot-files/images/orange-pi-5-pro/Armbian_*.img.xz` exi
 
 - [ ] **Step 2: Flip opi5pro-01 to `nfs` mode temporarily (current SD image still has old U-Boot)**
 
-Edit `.inventory/inventory.yaml` opi5pro-01 entry: change `armbian_netboot_boot_mode: local_kernel` → `armbian_netboot_boot_mode: nfs`. Run:
+Edit `.inventory/inventory.yaml` opi5pro-01 entry: change `armbian_boot_mode: local_kernel` → `armbian_boot_mode: nfs`. Run:
 
 ```bash
 ansible-playbook playbooks/converge_boot_mode.yml --limit opi5pro-01.igou.systems
@@ -1723,7 +1723,7 @@ Adjust the URL to the actual filename produced by Task 16 (check `/mnt/ssd/publi
 
 ```bash
 ansible-playbook playbooks/poe_control.yml --limit opi5pro-01.igou.systems \
-  -e armbian_netboot_poe_action=cycle
+  -e armbian_poe_action=cycle
 ```
 
 The board reboots; pxelinux.cfg still says `default nfs`, so it boots NFS-rooted again — but this time using the new U-Boot binary (with `__999_local_kernel_bake` having run at build time, so `localcmd` is baked into the compile-time default env). Wait for SSH to confirm reachability.
@@ -1734,7 +1734,7 @@ The board reboots; pxelinux.cfg still says `default nfs`, so it boots NFS-rooted
 ansible-playbook playbooks/reprovision_to_local.yml --limit opi5pro-01.igou.systems
 ```
 
-Expected: NVMe wiped + repartitioned per `armbian_netboot_local_disks`; rootfs rsynced; identity reset. Per #77's disk-provision DSL behavior.
+Expected: NVMe wiped + repartitioned per `armbian_local_disks`; rootfs rsynced; identity reset. Per #77's disk-provision DSL behavior.
 
 - [ ] **Step 6: Flip opi5pro-01 back to `local_kernel` and converge**
 
@@ -1786,18 +1786,18 @@ Post evidence on the rock-5a board-tracker. This is the formal acceptance for th
 
 **Files:** (none — hardware bring-up. SPI-specific test additions.)
 
-rock-5b-01 exercises the full SPI persistence pipeline: per-host `localcmd` written via fw_setenv, plus the `armbian_netboot_uboot_env_extra` override pathway.
+rock-5b-01 exercises the full SPI persistence pipeline: per-host `localcmd` written via fw_setenv, plus the `armbian_uboot_env_extra` override pathway.
 
 - [ ] **Step 1: Repeat Task 19 steps 2–7 for rock-5b-01**
 
 Note: when `boot_mode: local_kernel` AND `persist_via: spi`, step 4 of the convergence flow (step 3.5 = persist play) writes `localcmd` to SPI before the PoE cycle. UART capture should show U-Boot reading `localcmd` from SPI (not from compile-time default).
 
-- [ ] **Step 2: Exercise `armbian_netboot_uboot_env_extra` override**
+- [ ] **Step 2: Exercise `armbian_uboot_env_extra` override**
 
 Add a host-var override to `.inventory/inventory.yaml` for rock-5b-01:
 
 ```yaml
-          armbian_netboot_uboot_env_extra:
+          armbian_uboot_env_extra:
             bootdelay: "0"
 ```
 
@@ -1817,7 +1817,7 @@ Expected: `0`.
 
 - [ ] **Step 3: Verify the override persists across a second cycle**
 
-PoE-cycle again (out-of-band or `ansible-playbook playbooks/poe_control.yml --limit rock-5b-01.igou.systems -e armbian_netboot_poe_action=cycle`), wait for SSH, re-read `bootdelay`. Expected: still `0`.
+PoE-cycle again (out-of-band or `ansible-playbook playbooks/poe_control.yml --limit rock-5b-01.igou.systems -e armbian_poe_action=cycle`), wait for SSH, re-read `bootdelay`. Expected: still `0`.
 
 - [ ] **Step 4: Document acceptance on the rock-5b board-tracker**
 
@@ -1835,11 +1835,11 @@ No commit.
 
 ```bash
 gh issue comment 78 --body "$(cat <<'EOF'
-Closing in favor of the local_kernel generalization that landed via #82 and was generalized in [spec 2026-05-18-local-kernel-generalization-design.md](https://github.com/david-igou/ansible-collection-armbian_netboot/blob/main/docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md).
+Closing in favor of the local_kernel generalization that landed via #82 and was generalized in [spec 2026-05-18-local-kernel-generalization-design.md](https://github.com/david-igou/ansible-collection-armbian/blob/main/docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md).
 
 `local_kernel` mode lands kernel ownership on the board. Kernel updates are now `apt install linux-image-<branch>-<family>=<version>` on the running board, followed by a PoE cycle. No pxelinux multi-label, no per-version TFTP layout, no chroot-on-the-netboot-server apt. Rollback is `apt install linux-image-<branch>-<family>=<older-version>` plus cycle.
 
-The "declarative rollback from inventory" property of the original framing is preserved — `armbian_netboot_local_kernel` is the declarative knob, and the kernel running on a host is observable via existing `board_boot_verify` facts.
+The "declarative rollback from inventory" property of the original framing is preserved — `armbian_local_kernel` is the declarative knob, and the kernel running on a host is observable via existing `board_boot_verify` facts.
 EOF
 )"
 ```
@@ -1854,7 +1854,7 @@ gh issue close 78
 
 ```bash
 gh issue comment 79 --body "$(cat <<'EOF'
-Closing the issue as framed. The Pattern B/D dependency on #78's state-preservation was the whole reason it was blocked. With `local_kernel` (#82 + the [generalization spec 2026-05-18](https://github.com/david-igou/ansible-collection-armbian_netboot/blob/main/docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md)), k3s nodes use Pattern C (full local disk, native overlayfs, kernel updates via apt).
+Closing the issue as framed. The Pattern B/D dependency on #78's state-preservation was the whole reason it was blocked. With `local_kernel` (#82 + the [generalization spec 2026-05-18](https://github.com/david-igou/ansible-collection-armbian/blob/main/docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md)), k3s nodes use Pattern C (full local disk, native overlayfs, kernel updates via apt).
 
 The k3s example itself is unblocked and becomes a separate, much smaller spec — Pattern C + upstream `k3s-io/k3s-ansible` wiring + a `docs/k3s-integration.md` covering the snapshotter / no_root_squash / kernel-module gotchas. Will track that as a new issue.
 EOF

@@ -389,7 +389,7 @@
 
 <p>
   The asymmetry is why this collection sets
-  <code>armbian_netboot_board_branch: edge</code> in
+  <code>armbian_board_branch: edge</code> in
   <code>inventory/group_vars/rock_5b.yml</code>. <code>rock-5b</code> on the family
   default (<code>current</code> → Radxa fork) cannot do PXE because that fork
   has no RTL8125 source files. <code>edge</code> goes through rock-5b&rsquo;s
@@ -699,7 +699,7 @@ the defconfig file.
   <li><strong>The change is intended to be upstreamable.</strong> An honest
   diff against a specific upstream commit is what <code>git send-email</code>
   produces. Issue
-  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>&rsquo;s
+  <a href="https://github.com/david-igou/ansible-collection-armbian/issues/59">#59</a>&rsquo;s
   option <em>D1</em> (patch
   <code>arch/arm/mach-rockchip/board.c</code> to honour a DT MAC over the
   chip-hashed MAC) is a textbook example — it&rsquo;s a bug fix that
@@ -718,7 +718,7 @@ the defconfig file.
 
 <p>
   Issue
-  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>
+  <a href="https://github.com/david-igou/ansible-collection-armbian/issues/59">#59</a>
   documents <strong>three stacked failure layers</strong> on rock-5b. Each
   has to be cleared for autonomous cold-boot PXE to succeed &mdash; fixing
   only some leaves you with a still-not-booting board and a misleading
@@ -902,7 +902,7 @@ the defconfig file.
 
 <p>
   The single GitHub-side tracking issue is this collection&rsquo;s own
-  <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/59">#59</a>,
+  <a href="https://github.com/david-igou/ansible-collection-armbian/issues/59">#59</a>,
   which carries the full diagnostic stack from bring-up and is the right
   place to mirror status as upstream work progresses.
 </p>

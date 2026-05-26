@@ -350,7 +350,7 @@ What needs hardware verification:
 
 ## References
 
-- PR #31 (the collection's prior NFS-root invariant restoration): https://github.com/david-igou/ansible-collection-armbian_netboot/pull/31
+- PR #31 (the collection's prior NFS-root invariant restoration): https://github.com/david-igou/ansible-collection-armbian/pull/31
 - igou-ansible's iPXE chainload deploy: `playbooks/routeros/deploy_netboot_binaries.yml`
 - igou-ansible's parallel asset-management spec: `docs/superpowers/specs/2026-05-08-netboot-asset-management-design.md`
 - Bootflow PXE-first design (the upstream invariant this design preserves): `docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md`

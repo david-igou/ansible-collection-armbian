@@ -1,14 +1,14 @@
 ---
-# Builds custom Armbian images for every unique armbian_netboot_board_model in
+# Builds custom Armbian images for every unique armbian_board_model in
 # groups['boards'], then publishes the resulting artifact directories to
 # the netboot server's HTTP export.
 #
 # Two plays:
 #   1. hosts: armbian_builders — invoke the image_build role per
-#      unique armbian_netboot_board_model, then stage each <board>/ directory on the
+#      unique armbian_board_model, then stage each <board>/ directory on the
 #      controller at /tmp/armbian_publish/<board>/.
 #   2. hosts: netboot_server — push each staged <board>/ directory from
-#      the controller into armbian_netboot_nfs_assets_export/images/<board>/.
+#      the controller into armbian_nfs_assets_export/images/<board>/.
 #
 # The controller mediates the transfer so the only SSH trust required is
 # controller→builder and controller→netboot_server (already needed for
@@ -23,13 +23,13 @@
 # (build_userpatches_common) — the image_build role itself is
 # intent-agnostic. Per-board userpatches and U-Boot branch live in
 # inventory group_vars at inventory/group_vars/<model_group>.yml as
-# armbian_netboot_board_userpatches and armbian_netboot_board_branch.
+# armbian_board_userpatches and armbian_board_branch.
 # Add a new board by:
 #   1. Adding host(s) under groups['boards'] in inventory with an
-#      armbian_netboot_board_model that exists in vars/boards.yml.
+#      armbian_board_model that exists in vars/boards.yml.
 #   2. (Optional) Creating inventory/group_vars/<model_group>.yml with
-#      armbian_netboot_board_branch (default 'current') and any
-#      per-board armbian_netboot_board_userpatches.
+#      armbian_board_branch (default 'current') and any
+#      per-board armbian_board_userpatches.
 #
 # Usage:
 #   ansible-playbook playbooks/build_image.yml
@@ -66,7 +66,7 @@
     # uses mainline u-boot v2026.04 with the legacy form (the
     # per-board conf overlay in inventory/group_vars/rock_5b.yml
     # carries a hook that overrides armbian/build's v2026.01 pin on
-    # the rock-5b board config). See armbian_netboot_board_branch in
+    # the rock-5b board config). See armbian_board_branch in
     # inventory/group_vars/<model_group>.yml.
     build_userpatches_common:
       - dest: "config/sources/families/rockchip-rk3588.conf"
@@ -255,17 +255,17 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../vars/boards.yml"
 
-    - name: Resolve unique armbian_netboot_board_model values from groups['boards']
+    - name: Resolve unique armbian_board_model values from groups['boards']
       ansible.builtin.set_fact:
         _board_models: >-
           {{ groups['boards']
-             | map('extract', hostvars, 'armbian_netboot_board_model')
+             | map('extract', hostvars, 'armbian_board_model')
              | unique
              | list }}
 
     - name: Resolve a representative host per board model
-      # Per-model build vars (armbian_netboot_board_userpatches,
-      # armbian_netboot_board_branch) come from
+      # Per-model build vars (armbian_board_userpatches,
+      # armbian_board_branch) come from
       # inventory/group_vars/<model_group>.yml. Hosts of the same model
       # all inherit those group_vars, so picking any one host is
       # sufficient — we use the first host listed in groups['boards']
@@ -280,7 +280,7 @@
                 item: (
                   groups['boards']
                   | map('extract', hostvars)
-                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | selectattr('armbian_board_model', 'equalto', item)
                   | map(attribute='inventory_hostname')
                   | first
                 )
@@ -288,9 +288,9 @@
           }}
       loop: "{{ _board_models }}"
 
-    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
+    - name: Assert every armbian_board_model has an armbian_board_configs entry
       # Must run before any task that dereferences
-      # armbian_netboot_board_configs[<model>] — otherwise an unknown
+      # armbian_board_configs[<model>] — otherwise an unknown
       # model fails with an opaque Jinja key error instead of this
       # explicit fail_msg. Earliest dereferencer is the
       # _build_target_to_model reverse-map set_fact below; later ones
@@ -298,9 +298,9 @@
       # _build_targets resolution.
       ansible.builtin.assert:
         that:
-          - item in armbian_netboot_board_configs
+          - item in armbian_board_configs
         fail_msg: >-
-          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
+          armbian_board_model '{{ item }}' (from groups['boards']) has no entry in
           vars/boards.yml. Add it there or remove the host from the
           boards group.
       loop: "{{ _board_models }}"
@@ -308,27 +308,27 @@
     - name: Resolve armbian_board_name → board_model reverse map
       # _build_target_to_model maps from the armbian/build BOARD= value
       # (the key used by _build_targets, e.g. 'orangepi5pro') back to
-      # the inventory's armbian_netboot_board_model value (e.g.
+      # the inventory's armbian_board_model value (e.g.
       # 'orange-pi-5-pro'). The build loop iterates _build_targets;
       # this map lets it resolve back to a representative host whose
-      # group_vars carry armbian_netboot_board_branch +
-      # armbian_netboot_board_userpatches.
+      # group_vars carry armbian_board_branch +
+      # armbian_board_userpatches.
       ansible.builtin.set_fact:
         _build_target_to_model: >-
           {{
             _build_target_to_model | default({})
             | combine({
-                armbian_netboot_board_configs[item].armbian_board_name: item
+                armbian_board_configs[item].armbian_board_name: item
               })
           }}
       loop: "{{ _board_models }}"
 
-    - name: Assert all hosts of each model agree on armbian_netboot_board_branch
+    - name: Assert all hosts of each model agree on armbian_board_branch
       # build_image.yml builds one .img.xz per model — divergent
       # branch declarations across hosts of the same model would
       # silently use only the first host's value. Per-host build
       # divergence would require keying builds by (model + patch-hash)
-      # and a host-keyed armbian_netboot_image_urls map; out of scope
+      # and a host-keyed armbian_image_urls map; out of scope
       # for v3. Fail loudly so the operator consolidates into
       # inventory/group_vars/<model_group>.yml, or opens a follow-on
       # spec for genuinely per-host builds.
@@ -337,18 +337,18 @@
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_branch', default='current')
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_branch', default='current')
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_branch values. Move the override into
+          armbian_board_branch values. Move the override into
           inventory/group_vars/<model_group>.yml (per-model) or remove
           the host_vars override. Per-host builds are not supported in
           v3.
       loop: "{{ _board_models }}"
 
-    - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
+    - name: Assert all hosts of each model agree on armbian_board_userpatches
       # Same per-model build rule as the branch assert above. The
       # to_json(sort_keys=true) canonicalisation makes the comparison
       # deterministic across dict-key ordering differences within each
@@ -362,13 +362,13 @@
           - >-
             (groups['boards']
              | map('extract', hostvars)
-             | selectattr('armbian_netboot_board_model', 'equalto', item)
-             | map(attribute='armbian_netboot_board_userpatches', default=[])
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_userpatches', default=[])
              | map('to_json', sort_keys=true)
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_userpatches. Move the override into
+          armbian_board_userpatches. Move the override into
           inventory/group_vars/<model_group>.yml (per-model) or remove
           the host_vars override. Per-host builds are not supported in
           v3.
@@ -391,7 +391,7 @@
       ansible.builtin.set_fact:
         _local_kernel_dispatch_table: |
           {% for board_model in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board_model] %}
+          {% set cfg = armbian_board_configs[board_model] %}
           {% if cfg.local_kernel is defined %}
           {%- set lk = cfg.local_kernel -%}
           {%- set storage      = lk.storage -%}
@@ -407,17 +407,17 @@
       ansible.builtin.set_fact:
         _uboot_env_storage_table: |
           {% for board_model in _board_models %}
-          {% set cfg = armbian_netboot_board_configs[board_model] %}
+          {% set cfg = armbian_board_configs[board_model] %}
           {% if cfg.uboot_env is defined %}
               [{{ cfg.armbian_board_name }}]='{{ cfg.uboot_env.storage }}'
           {% endif %}
           {% endfor %}
 
-    - name: Resolve build targets from armbian_netboot_board_configs
+    - name: Resolve build targets from armbian_board_configs
       ansible.builtin.set_fact:
         _build_targets: >-
           {{ _board_models
-             | map('extract', armbian_netboot_board_configs, 'armbian_board_name')
+             | map('extract', armbian_board_configs, 'armbian_board_name')
              | list }}
 
     - name: Report build targets
@@ -434,9 +434,9 @@
         armbian_build_userpatches: >-
           {{
             build_userpatches_common
-            + (hostvars[_first_host].armbian_netboot_board_userpatches | default([]))
+            + (hostvars[_first_host].armbian_board_userpatches | default([]))
           }}
-        armbian_build_branch: "{{ hostvars[_first_host].armbian_netboot_board_branch | default('current') }}"
+        armbian_build_branch: "{{ hostvars[_first_host].armbian_board_branch | default('current') }}"
       loop: "{{ _build_targets }}"
 
     # rsync invoked via command (not ansible.posix.synchronize) so it
@@ -483,7 +483,7 @@
           - --rsh
           - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
           - "/tmp/armbian_publish/{{ item }}/"
-          - "{{ ansible_user }}@{{ inventory_hostname }}:{{ armbian_netboot_nfs_assets_export }}/images/{{ item }}/"
+          - "{{ ansible_user }}@{{ inventory_hostname }}:{{ armbian_nfs_assets_export }}/images/{{ item }}/"
       delegate_to: localhost
       connection: local
       changed_when: true

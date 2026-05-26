@@ -11,7 +11,7 @@
   become: true
   gather_facts: false
   vars:
-    _images_root: "{{ armbian_netboot_nfs_assets_export }}/images"
+    _images_root: "{{ armbian_nfs_assets_export }}/images"
   tasks:
     - name: List per-board image directories
       ansible.builtin.find:

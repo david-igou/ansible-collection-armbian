@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-22
 **Status**: brainstorming complete; implementation plan TBD
-**Scope**: `david_igou.armbian_netboot` collection test layer
+**Scope**: `david_igou.armbian` collection test layer
 **Supersedes**: current `extensions/molecule/` layout (in-repo
 `provisioners/` directory + legacy `platforms:`/`provisioner:` molecule shape)
 
@@ -33,7 +33,7 @@ implementations live in this collection.
   with no role logic (`board_boot_wait`) are deliberately uncovered.
   `playbooks/test_hardware_e2e.yml` is their integration test.
 - Touching `playbooks/`, `roles/*/tasks/`, or `vars/`. This is a test-layer
-  change only on the armbian_netboot side.
+  change only on the armbian side.
 
 ## molecule_provisioners is modifiable
 
@@ -466,7 +466,7 @@ present in `/workspace/igou-devenv` per its CLAUDE.md.
 - **Internal consistency**: `disk_image` / `disk_provision` / `image_extract` need a second block device → addressed via in-VM loop file in each scenario's prepare. Same approach as the current podman scenarios, but now running on a real VM where losetup is reliable.
 - **Scope check**: one design doc, one implementation plan. No decomposition needed.
 - **Ambiguity check**: `image_extract` fixture image source resolved (option A: real SBC `.img.xz`). `bootstrap_armbian` cloud-init customisation resolved (use existing `mp_qemu_template_dir_override`; fall back to extending qemu schema only if that path proves awkward).
-- **Out-of-scope reminders**: not touching `roles/`/`playbooks/`/`vars/` in armbian_netboot; not adding multi-disk VM support to molecule_provisioners; not covering `board_boot_wait` / `board_boot_verify`. molecule_provisioners IS in scope for fixes if the implementation surfaces blockers.
+- **Out-of-scope reminders**: not touching `roles/`/`playbooks/`/`vars/` in armbian; not adding multi-disk VM support to molecule_provisioners; not covering `board_boot_wait` / `board_boot_verify`. molecule_provisioners IS in scope for fixes if the implementation surfaces blockers.
 
 ## Implementation plan
 

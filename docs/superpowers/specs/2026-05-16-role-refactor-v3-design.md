@@ -1,6 +1,6 @@
 # v3.0.0 — Role refactor: single-purpose, single-host, transport-agnostic
 
-Status: design approved 2026-05-16. Target release: `david_igou.armbian_netboot` 3.0.0
+Status: design approved 2026-05-16. Target release: `david_igou.armbian` 3.0.0
 (clean break from v2; no compatibility shims).
 
 ## Why
@@ -37,14 +37,14 @@ The refactor's goals (operator-facing, in order):
 Seven roles. Each one runs on a single host or group, has a single purpose, and
 has zero knowledge of any specific networking gear or fileserver brand. One
 role (`image_build`) keeps an optional publish step gated behind an explicit
-`armbian_netboot_publish_target` variable — opting in means accepting that the
+`armbian_publish_target` variable — opting in means accepting that the
 role talks to a fileserver; the default is local-only. Every other role
 produces artifacts at a known local path; cross-host hops are the playbook's
 job.
 
 | Role | Runs on | Inputs (sketch) | Produces |
 |---|---|---|---|
-| `image_build` | `armbian_builders` | board metadata, kernel branch, `armbian_netboot_publish_target` (opt-in) | `.img.xz` at known local path; optional SCP publish |
+| `image_build` | `armbian_builders` | board metadata, kernel branch, `armbian_publish_target` (opt-in) | `.img.xz` at known local path; optional SCP publish |
 | `image_extract` | any host with sudo + losetup (typically `netboot_server`) | `armbian_image_src` (local path **or** `http(s)://` URL), `model_name`, `template_dir`, `tftp_dir`, `board_dtb`, `force_refresh` | rootfs template at `template_dir`, `vmlinuz`/`initrd.img`/`board.dtb` at `tftp_dir` |
 | `rootfs_clone` | any host that owns the template + target paths | `template_dir`, `target_dir`, `hostname` | reflink-cloned per-host rootfs with identity reset (hostname, machine-id, ssh host keys, `.no_armbian_first_login`) |
 | `pxelinux_render` | `localhost` (typically reached via `delegate_to: localhost` inside a `hosts: boards` play, so per-board hostvars are in scope for one invocation per board) | board MAC, `boot_mode`, `nfs_server_ip`, `nfs_root_path`, TFTP-relative kernel/initrd/dtb paths (e.g. `armbian/<model>/vmlinuz` — strings written verbatim into pxelinux.cfg, *not* local FS paths), `sd_root`, `pxe_verbose`, `earlycon`, `output_dir` | `output_dir/01-<mac>` |
@@ -85,10 +85,10 @@ Transport-hook variables (defaulted at the top-level playbook, override in
 inventory or with `-e`):
 
 ```yaml
-armbian_netboot_pxelinux_upload_playbook: routeros/upload_pxelinux_cfg.yml
-armbian_netboot_tftp_upload_playbook:     routeros/upload_tftp_assets.yml
-armbian_netboot_plumbing_check_playbook:  routeros/plumbing_check.yml
-armbian_netboot_poe_cycle_tasks_file:     routeros/tasks/poe_cycle.yml
+armbian_pxelinux_upload_playbook: routeros/upload_pxelinux_cfg.yml
+armbian_tftp_upload_playbook:     routeros/upload_tftp_assets.yml
+armbian_plumbing_check_playbook:  routeros/plumbing_check.yml
+armbian_poe_cycle_tasks_file:     routeros/tasks/poe_cycle.yml
 ```
 
 `import_playbook` is used for upload/plumbing operations (separate play targeting
@@ -109,15 +109,15 @@ playbooks/
                              loop image_extract over unique models
                              loop rootfs_clone over groups['boards']
   stage_router.yml         play 1: fetch TFTP cache from netboot_server → controller
-                           play 2: import_playbook {{ armbian_netboot_tftp_upload_playbook }}
-                           play 3: import_playbook {{ armbian_netboot_plumbing_check_playbook }}
+                           play 2: import_playbook {{ armbian_tftp_upload_playbook }}
+                           play 3: import_playbook {{ armbian_plumbing_check_playbook }}
   converge_boot_mode.yml   play 1: import_playbook plumbing_check (preflight)
                            play 2: pxelinux_render on boards (delegate_to localhost)
-                           play 3: import_playbook {{ armbian_netboot_pxelinux_upload_playbook }}
+                           play 3: import_playbook {{ armbian_pxelinux_upload_playbook }}
                            play 4: cold_boot_with_retry + board_boot_wait + board_boot_verify
                                    (single play on boards, helpers include_tasks
                                     the parameterised poe_cycle hook)
-  set_boot_mode.yml        thin wrapper that reads armbian_netboot_boot_mode from -e
+  set_boot_mode.yml        thin wrapper that reads armbian_boot_mode from -e
                            instead of inventory; otherwise calls converge_boot_mode.yml
   poe_control.yml          import_playbook routeros/poe_control.yml
                            (kept as a top-level shorthand)
@@ -149,7 +149,7 @@ Two consequences worth flagging:
 
 ## Migration and user-facing breakage
 
-**Inventory shape is preserved.** All `armbian_netboot_*` variables in
+**Inventory shape is preserved.** All `armbian_*` variables in
 `group_vars/all.yml`, `boards.yml`, and per-host vars keep their names and
 meanings. The user-facing commands (`ansible-playbook playbooks/converge_boot_mode.yml --limit <host>`)
 keep their semantics. `vars/boards.yml` schema is unchanged.
@@ -159,7 +159,7 @@ What breaks in v3.0.0:
 | Surface | Change |
 |---|---|
 | Roles imported directly | All five removed role names disappear. External callers of `boot_mode`, `netboot_assets`, `routeros_pxe_config`, `routeros_poe`, `bootstrap_routeros_user` must update. |
-| Role contracts | `boot_mode`'s `argument_specs` is gone. Its retry knobs (`armbian_netboot_boot_retry_attempts`, `armbian_netboot_boot_attempt_timeout`, `armbian_netboot_ssh_wait_*`, `armbian_netboot_post_boot_wait_timeout`, `armbian_netboot_poe_cycle_delay`) keep the same names and defaults but now apply to the playbook-side helpers under `playbooks/tasks/`. |
+| Role contracts | `boot_mode`'s `argument_specs` is gone. Its retry knobs (`armbian_boot_retry_attempts`, `armbian_boot_attempt_timeout`, `armbian_ssh_wait_*`, `armbian_post_boot_wait_timeout`, `armbian_poe_cycle_delay`) keep the same names and defaults but now apply to the playbook-side helpers under `playbooks/tasks/`. |
 | `pxelinux.cfg` rendering | Produced on `localhost` by `pxelinux_render`, then uploaded by a transport-specific playbook. Anyone calling `routeros_pxe_config` via `include_role` from a downstream playbook must switch to the new playbook path. |
 | `bootstrap_routeros_user` invocation | Becomes `ansible-playbook playbooks/routeros/bootstrap_user.yml -e ansible_user=<existing-admin>` instead of `playbooks/bootstrap_routeros_user.yml`. The shorter top-level path stays as an alias if convenient. |
 

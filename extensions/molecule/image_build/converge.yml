@@ -14,7 +14,7 @@
   tasks:
     - name: Apply image_build role
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_build
+        name: david_igou.armbian.image_build
       vars:
         armbian_build_board: orangepi5pro
         armbian_build_branch: current

@@ -818,7 +818,7 @@ git commit -m "molecule(disk_image): migrate from podman to qemu (Trixie x86 qco
 
     - name: "Pass 3: render-only mode — write .repart.d files but don't apply"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_provision
+        name: david_igou.armbian.disk_provision
       vars:
         render_only: true
         disk_binding:
@@ -1016,7 +1016,7 @@ If `redirect.armbian.com` URL surfaces a stale or moved file at run time, replac
   tasks:
     - name: "Extract the Armbian fixture into template + tftp dirs"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
         armbian_image_src: /tmp/orange-pi-5-pro.img.xz
         model_name: orange-pi-5-pro
@@ -1074,7 +1074,7 @@ If `redirect.armbian.com` URL surfaces a stale or moved file at run time, replac
 
     - name: "Re-run image_extract — sentinel must short-circuit (idempotent)"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
         armbian_image_src: /tmp/orange-pi-5-pro.img.xz
         model_name: orange-pi-5-pro
@@ -1235,15 +1235,15 @@ Molecule's `--inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/` glob picks t
   become: false   # already root via ansible_user=root
 
   vars:
-    armbian_netboot_bootstrap_user: ansibletest
-    armbian_netboot_bootstrap_ssh_keys:
+    armbian_bootstrap_user: ansibletest
+    armbian_bootstrap_ssh_keys:
       # Inline fixture pubkey — a known-bad ed25519 we use only inside this scenario.
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJZ7Y8s1m4Yk5zG8oR7q7Yy3l9rN6F4xZ8t1jW2pV5x9 fixture@bootstrap_armbian"
 
   tasks:
     - name: Invoke bootstrap_armbian role
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.bootstrap_armbian
+        name: david_igou.armbian.bootstrap_armbian
 ```
 
 - [ ] **Step 7: `verify.yml`** — assert role outputs
@@ -1633,7 +1633,7 @@ No spec section is uncovered.
 
 - `mp_backend`, `mp_defaults.<backend>`, `mp.<backend>.<field>` — schema verbatim from the molecule_provisioners README. Consistent across all scenarios.
 - `_target_loop`, `_loop` — loop-device fact names match between `prepare.yml` (sets) and `converge.yml`/`verify.yml` (reads) per scenario.
-- `armbian_netboot_bootstrap_user` / `armbian_netboot_bootstrap_ssh_keys` — `bootstrap_armbian` role's documented option names (matches `roles/bootstrap_armbian/meta/argument_specs.yml`).
+- `armbian_bootstrap_user` / `armbian_bootstrap_ssh_keys` — `bootstrap_armbian` role's documented option names (matches `roles/bootstrap_armbian/meta/argument_specs.yml`).
 - `armbian_image_src`, `model_name`, `template_dir`, `tftp_dir`, `board_dtb`, `image_cache_dir`, `image_mount_dir` — `image_extract` role's option names (matches `roles/image_extract/meta/argument_specs.yml`).
 - `disk_binding`, `source`, `render_only` — `disk_provision` role's option names (matches `roles/disk_provision/meta/argument_specs.yml`).
 - `image_source`, `target_device` — `disk_image` role's option names (matches `roles/disk_image/meta/argument_specs.yml`).

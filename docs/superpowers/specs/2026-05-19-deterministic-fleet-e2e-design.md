@@ -18,7 +18,7 @@ Out of scope: apt-kernel-update mechanism check (current Phase D — removed; ca
 | **0 — PoE down** | boards | All target boards powered off; no live rootfs at risk during Phase 1's NFS reset |
 | **1 — NFS reset** | netboot_server | Fresh per-model NFS template + fresh per-host NFS clones (force_refresh on both `image_extract` and `rootfs_clone`) |
 | **2 — NFS boot + bootstrap + SPI persist** | boards | Boards on freshly-cloned NFS, igou bootstrapped, SPI env converged (no-op for non-SPI boards) |
-| **3 — SD imaging via `disk_image`** | boards | `/dev/mmcblk0` carries a fresh canonical image (streamed `xz \| dd` from `armbian_netboot_image_urls[<model>]`) |
+| **3 — SD imaging via `disk_image`** | boards | `/dev/mmcblk0` carries a fresh canonical image (streamed `xz \| dd` from `armbian_image_urls[<model>]`) |
 | **4 — SD boot + bootstrap** | boards | Boards on freshly-dd'd SD, igou bootstrapped |
 | **5 — NVMe reprovision + local_kernel verify** | boards | Boards on freshly-rsync'd NVMe rootfs in `local_kernel` mode; TFTP HITS for vmlinuz remain flat across cycle (proof U-Boot used baked localcmd, not PXE) |
 
@@ -29,7 +29,7 @@ Single invariant: every phase's "produces" column is what the next phase relies 
 ### Phase 0 — PoE down
 
 - `hosts: "{{ target_hosts | default('boards') }}"`, `gather_facts: false`
-- Single task: PoE-off via the existing `routeros/tasks/poe_cycle.yml` "off + drain" half (use the resolved `armbian_netboot_poe_cycle_delay` host fact for the drain duration).
+- Single task: PoE-off via the existing `routeros/tasks/poe_cycle.yml` "off + drain" half (use the resolved `armbian_poe_cycle_delay` host fact for the drain duration).
 - No SSH waits — boards may be wedged or unreachable; we just cut power.
 - Rationale: if any target board is currently NFS-booted from a prior run, force-refreshing the NFS clone in Phase 1 would yank the running rootfs out from under it.
 
@@ -38,15 +38,15 @@ Single invariant: every phase's "produces" column is what the next phase relies 
 - `hosts: netboot_server`, `become: true`
 - `include_role: image_extract` looped over unique models from `target_hosts` (not the full `boards` group — so a single-board run only re-extracts that board's model), each call with `force_refresh: true`.
 - `include_role: rootfs_clone` looped over `target_hosts`, each call with `force_refresh: true`.
-- Produces: fresh `_templates/<model>/` + fresh `<board>/` NFS dirs with reset machine-id, hostname, SSH host keys, and **no igou user** (canonical Armbian rootfs has only root + `armbian_netboot_default_password`).
+- Produces: fresh `_templates/<model>/` + fresh `<board>/` NFS dirs with reset machine-id, hostname, SSH host keys, and **no igou user** (canonical Armbian rootfs has only root + `armbian_default_password`).
 
 ### Phase 2 — NFS boot + bootstrap + SPI persist
 
 - `hosts: "{{ target_hosts | default('boards') }}"`
 - Sub-step a: `include_tasks: tasks/_lifecycle_set_and_verify.yml` with `target_boot_mode: nfs`, `on_failure_revert_to: sd`. This writes pxelinux.cfg, PoE-cycles, waits for TCP/22.
-- Sub-step b: `include_role: bootstrap_armbian` with inline `ansible_user: root` + `ansible_password: "{{ armbian_netboot_default_password }}"` + `ansible_ssh_common_args` host-key bypass + `ansible_become: false`. **Unconditional** — no `auto_bootstrap_if_needed` probe, because the fresh NFS clone is guaranteed to lack igou.
+- Sub-step b: `include_role: bootstrap_armbian` with inline `ansible_user: root` + `ansible_password: "{{ armbian_default_password }}"` + `ansible_ssh_common_args` host-key bypass + `ansible_become: false`. **Unconditional** — no `auto_bootstrap_if_needed` probe, because the fresh NFS clone is guaranteed to lack igou.
 - Sub-step c: `ansible.builtin.meta: reset_connection` (so subsequent tasks pick up the new igou identity).
-- Sub-step d: `import_playbook: persist_uboot_env.yml` with `armbian_netboot_persist_uboot_env_cycle: false`. The play is SPI-only-gated (`end_host` when `uboot_env.storage != 'spi_flash'`) and idempotent (drift detection via `fw_printenv -n`), so non-SPI boards are no-ops. Writing `localcmd` here ensures Phase 5's local_kernel mode has correct SPI env. **Implementation note**: `import_playbook` cannot live inside a `tasks:` block, so Phase 2 splits into two plays (2a: lifecycle + bootstrap + verify; 2b: `import_playbook: persist_uboot_env.yml`). The Summary play treats them as one phase row (`2`) — the timing TSV captures the combined wall time.
+- Sub-step d: `import_playbook: persist_uboot_env.yml` with `armbian_persist_uboot_env_cycle: false`. The play is SPI-only-gated (`end_host` when `uboot_env.storage != 'spi_flash'`) and idempotent (drift detection via `fw_printenv -n`), so non-SPI boards are no-ops. Writing `localcmd` here ensures Phase 5's local_kernel mode has correct SPI env. **Implementation note**: `import_playbook` cannot live inside a `tasks:` block, so Phase 2 splits into two plays (2a: lifecycle + bootstrap + verify; 2b: `import_playbook: persist_uboot_env.yml`). The Summary play treats them as one phase row (`2`) — the timing TSV captures the combined wall time.
 - Sub-step e: `include_role: board_boot_verify` with `boot_mode: nfs` to assert rootfs is on NFS.
 - Evidence file + timing.
 
@@ -54,8 +54,8 @@ Single invariant: every phase's "produces" column is what the next phase relies 
 
 - `hosts: "{{ target_hosts | default('boards') }}"` (reachable as igou over NFS)
 - Single `include_role: disk_image` with:
-  - `image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"`
-  - `target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"`
+  - `image_source: "{{ armbian_image_urls[armbian_board_model] }}"`
+  - `target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"`
 - The role's mount-aware guard implicitly verifies we're not booted off SD.
 - Evidence file + timing.
 
@@ -74,8 +74,8 @@ Single invariant: every phase's "produces" column is what the next phase relies 
 - `hosts: "{{ target_hosts | default('boards') }}"`, `throttle: "{{ fleet_phase_5_throttle | default(2) | int }}"`
 - Sub-step a: `include_tasks: tasks/_lifecycle_set_and_verify.yml` with `target_boot_mode: nfs`, `on_failure_revert_to: nfs` (need NFS rootfs as the rsync source). Self-revert is intentional — the helper requires `on_failure_revert_to` but if NFS converge itself fails there's no healthier mode to revert to; we want the diagnostic bundle + hard fail, not silent fallback. Matches the current Phase C pattern.
 - Sub-step b: re-gather mount facts; assert `/` is on NFS (cross-binding guard).
-- Sub-step c: cross-binding validate of `armbian_netboot_local_disks` (preserved from current Phase C — assert no duplicate mount paths, exactly one `/`).
-- Sub-step d: `include_role: disk_provision` looped over `armbian_netboot_local_disks` — wipes + repartitions NVMe + rsyncs NFS rootfs into it.
+- Sub-step c: cross-binding validate of `armbian_local_disks` (preserved from current Phase C — assert no duplicate mount paths, exactly one `/`).
+- Sub-step d: `include_role: disk_provision` looped over `armbian_local_disks` — wipes + repartitions NVMe + rsyncs NFS rootfs into it.
 - Sub-step e: `include_tasks: tasks/_lifecycle_set_and_verify.yml` with `target_boot_mode: local_kernel`, `on_failure_revert_to: nfs`.
 - Sub-step f: record TFTP HITS before and after the local_kernel cycle (delegated to the router); assert delta == 0 (TFTP-flat proof that U-Boot used baked localcmd, not PXE).
 - Evidence file + timing.
@@ -95,13 +95,13 @@ Single invariant: every phase's "produces" column is what the next phase relies 
 
 - `target_hosts | default('boards')` for single-board runs
 - Pre-flight known_hosts cleanup + `ansible_ssh_common_args` bypass (boot-mode transitions still swap host keys)
-- Pre-flight `set_fact` resolution of `armbian_netboot_boot_retry_attempts` + `armbian_netboot_poe_cycle_delay` defaults
+- Pre-flight `set_fact` resolution of `armbian_boot_retry_attempts` + `armbian_poe_cycle_delay` defaults
 - Per-phase artifact dirs `/tmp/iter-FLEET-<host>/<phase>/` + `timing.tsv` lineinfile pattern
 - Final Summary play with per-board per-phase wall-time table (numbering becomes `0  1  2  3  4  5  Total`)
 - `throttle: 2` on Phase 5 (NVMe rsync contention guard, tunable via `-e fleet_phase_5_throttle=N`)
 - `_lifecycle_set_and_verify.yml` diagnostic-bundle-on-failure + auto-revert
 - `skip_phase_<N>` flags so operators can re-run partial sequences
-- Per-board `armbian_netboot_local_disks` for NVMe layout (consumed by `disk_provision` in Phase 5)
+- Per-board `armbian_local_disks` for NVMe layout (consumed by `disk_provision` in Phase 5)
 
 ## Failure modes
 
@@ -125,7 +125,7 @@ The biggest design risk: Phase 2 is the first time we actually boot the board af
 
 - `-e skip_dd_sd=true` flag (added with `disk_image` role) goes away. Replaced by `-e skip_phase_3=true`. Pattern: `skip_phase_0` through `skip_phase_5`.
 - `-e fleet_phase_c_throttle=N` → `-e fleet_phase_5_throttle=N` (rename only).
-- `armbian_netboot_kernel_target` host fact + `kernel_update_pin` / `kernel_pkg` `-e` vars become unused (Phase D dropped). Inventory entries setting these still work, just have no effect in this playbook.
+- `armbian_kernel_target` host fact + `kernel_update_pin` / `kernel_pkg` `-e` vars become unused (Phase D dropped). Inventory entries setting these still work, just have no effect in this playbook.
 - Total wall time should land within ±1-2 minutes of the current 30-min run: Phase 1 force_refresh adds ~30-60 s per model, Phase 0 PoE-off adds ~15 s, but we save the dd-twice case (current Phase 0 + Phase A boot now becomes Phase 3 + Phase 4 boot — same work).
 - The `Shipped: dd a known image to SD` HTML section in `docs/end-to-end-fleet-test.html` needs a follow-up update — it now references the deterministic e2e flow as the canonical location for that dd, not a Phase 0 of the old structure.
 

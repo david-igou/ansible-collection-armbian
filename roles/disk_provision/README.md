@@ -21,11 +21,11 @@ contract. Summary:
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `disk_binding` | yes | — | One entry from `armbian_netboot_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
+| `disk_binding` | yes | — | One entry from `armbian_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
 | `source` | no | `/` | Source rootfs to rsync into the populated root partition. |
 | `armbian_installed_marker` | no | `true` | Write `INSTALLED=true` to `/etc/armbian-image-release` to suppress `armbian-resize-filesystem`. |
 | `reset_identity` | no | `false` | Zero machine-id files on the target. Default false because the typical caller wants the same identity across boot modes. |
-| `mount_dir_base` | no | `/var/lib/armbian_netboot/disk_provision_mnt` | Base for per-device temporary mount points. |
+| `mount_dir_base` | no | `/var/lib/armbian/disk_provision_mnt` | Base for per-device temporary mount points. |
 | `render_only` | no | `false` | Render `.repart.d` configs + validate, then return without mutating the disk. Used by Layer 1 molecule tests. |
 
 The per-partition `layout` entry shape — `id`, `size`, `type`, `format`,
@@ -74,7 +74,7 @@ After a successful run:
   hosts: orange-pi-5-pro-01
   become: true
   vars:
-    armbian_netboot_local_disks:
+    armbian_local_disks:
       - device: /dev/nvme0n1
         wipe: true
         layout:
@@ -92,9 +92,9 @@ After a successful run:
             mount: /
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_provision
+        name: david_igou.armbian.disk_provision
       vars:
-        disk_binding: "{{ armbian_netboot_local_disks[0] }}"
+        disk_binding: "{{ armbian_local_disks[0] }}"
         source: /
         reset_identity: false
 ```

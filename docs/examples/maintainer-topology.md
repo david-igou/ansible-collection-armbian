@@ -55,7 +55,7 @@ add name=ansible-netboot policy="read,write,ssh,!local,!telnet,!ftp,\
 add name=ansible-netboot \
     group=ansible-netboot \
     address=10.10.0.0/16 \
-    comment="ansible — armbian_netboot collection"
+    comment="ansible — armbian collection"
 
 /user/ssh-keys
 import public-key-file=ansible-netboot.pub user=ansible-netboot
@@ -121,7 +121,7 @@ U-Boot's PXE request lands on a deterministic IP:
     comment="orange-pi-5-01"
 ```
 
-The `armbian_netboot_board_mac` value in `inventory/hosts.yml` must match exactly
+The `armbian_board_mac` value in `inventory/hosts.yml` must match exactly
 (case-insensitive). For an example of the live pattern, see the existing
 `rock-5b` lease (`10.10.70.249`, MAC `00:E0:4C:68:00:3B`) in
 `05-router-dhcp-static.rsc`.

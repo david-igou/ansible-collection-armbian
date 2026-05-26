@@ -68,21 +68,21 @@
     - name: Pre-flight — assert per-board PoE state
       ansible.builtin.assert:
         that:
-          - armbian_netboot_poe_switch is defined
-          - armbian_netboot_poe_switch | length > 0
-          - armbian_netboot_poe_port is defined
-          - armbian_netboot_poe_port | length > 0
+          - armbian_poe_switch is defined
+          - armbian_poe_switch | length > 0
+          - armbian_poe_port is defined
+          - armbian_poe_port | length > 0
         fail_msg: >-
-          {{ inventory_hostname }} needs armbian_netboot_poe_switch and
-          armbian_netboot_poe_port hostvars set.
+          {{ inventory_hostname }} needs armbian_poe_switch and
+          armbian_poe_port hostvars set.
 
-    - name: Pre-flight — assert armbian_netboot_default_password is set
+    - name: Pre-flight — assert armbian_default_password is set
       ansible.builtin.assert:
         that:
-          - armbian_netboot_default_password is defined
-          - armbian_netboot_default_password | length > 0
+          - armbian_default_password is defined
+          - armbian_default_password | length > 0
         fail_msg: >-
-          armbian_netboot_default_password must be set (vault recommended).
+          armbian_default_password must be set (vault recommended).
           Phase 2's SSH to the NFS-mounted board uses these credentials.
       run_once: true
 
@@ -146,7 +146,7 @@
           changed_when: true
 
     - name: Pre-flight — assert per-model /ip tftp rows exist on the router
-      delegate_to: "{{ armbian_netboot_router }}"
+      delegate_to: "{{ armbian_router }}"
       run_once: true
       block:
         - name: Pre-flight — count /ip tftp rows per asset for this model
@@ -154,7 +154,7 @@
             commands:
               - >-
                 /ip tftp print count-only where
-                req-filename="armbian/{{ armbian_netboot_board_model }}/{{ item }}"
+                req-filename="armbian/{{ armbian_board_model }}/{{ item }}"
           register: _plumbing_row_count
           retries: 3
           delay: 5
@@ -168,7 +168,7 @@
               - (item.stdout[0] | trim | int) >= 1
             fail_msg: >-
               Router has no /ip tftp row for
-              armbian/{{ armbian_netboot_board_model }}/{{ item.item }}.
+              armbian/{{ armbian_board_model }}/{{ item.item }}.
               Run playbooks/stage_router.yml first.
           loop: "{{ _plumbing_row_count.results }}"
           loop_control:
@@ -200,7 +200,7 @@
         - name: Pre-flight — converge pxelinux default to sd on router
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: sd
+            armbian_boot_mode: sd
 
         - name: Phase 1 — SD baseline (skippable via skip_baseline=true)
           when: not (skip_baseline | bool)
@@ -219,7 +219,7 @@
               ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
               vars:
                 _phase_label: "Phase 1"
-                _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
+                _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
             - name: Phase 1 — auto-bootstrap if needed
               ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
@@ -230,7 +230,7 @@
               ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 1"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+                _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
 
             - name: Phase 1 — gather facts
               ansible.builtin.setup:
@@ -260,13 +260,13 @@
         - name: Phase 2 — render+upload pxelinux for nfs
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: nfs
+            armbian_boot_mode: nfs
 
         - name: Phase 2 — PoE cycle + wait for TCP/22 (with retries)
           ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 2"
-            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
+            _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 2 — reset connection so new identity takes effect
           ansible.builtin.meta: reset_connection
@@ -289,7 +289,7 @@
               ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 2"
-                _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+                _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
 
             - name: Phase 2 — gather facts
               ansible.builtin.setup:
@@ -315,12 +315,12 @@
                   {{ _root_fstype }}. Board did not PXE-boot into NFS
                   root despite pxelinux.cfg default=nfs on the router.
                   Check /proc/cmdline in the diagnostic bundle and the
-                  router's /ip tftp serving for armbian/{{ armbian_netboot_board_model }}/.
+                  router's /ip tftp serving for armbian/{{ armbian_board_model }}/.
 
         - name: Phase 3 — render+upload pxelinux for sd
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: sd
+            armbian_boot_mode: sd
 
         # Phase 3 intentionally has no block-scoped vars: the Phase 2
         # verify block has exited so its NFS-root identity vars are
@@ -334,13 +334,13 @@
           ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 3"
-            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
+            _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 3 — wait for SSH (SD-root identity, with cycle retry)
           ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+            _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
 
         - name: Phase 3 — gather facts
           ansible.builtin.setup:
@@ -375,13 +375,13 @@
               NFS root; converge back to SD manually with:
               ansible-playbook playbooks/converge_boot_mode.yml
               --limit {{ inventory_hostname }}
-              -e armbian_netboot_boot_mode=sd
+              -e armbian_boot_mode=sd
           when: leave_state | bool
 
         - name: Cleanup — converge pxelinux default sd on router
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: sd
+            armbian_boot_mode: sd
           when: not (leave_state | bool)
 
         - name: Cleanup — reset connection to inventory identity
@@ -392,7 +392,7 @@
           ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Cleanup"
-            _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
+            _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
@@ -405,7 +405,7 @@
           ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Cleanup"
-            _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
+            _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — verify board returned to SD boot

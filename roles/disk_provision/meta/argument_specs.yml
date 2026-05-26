@@ -27,7 +27,7 @@ argument_specs:
         type: dict
         required: true
         description: >-
-          One entry from armbian_netboot_local_disks. Shape:
+          One entry from armbian_local_disks. Shape:
           {device, wipe?, force?, layout: [partition_spec, ...]}.
         options:
           device:
@@ -111,7 +111,7 @@ argument_specs:
           than the source.
       mount_dir_base:
         type: path
-        default: "/var/lib/armbian_netboot/disk_provision_mnt"
+        default: "/var/lib/armbian/disk_provision_mnt"
         description: "Base for per-device temporary mount points. Each device mounts under <base>/<device-basename>/."
       render_only:
         type: bool

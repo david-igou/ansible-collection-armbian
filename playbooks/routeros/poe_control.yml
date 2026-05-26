@@ -1,10 +1,10 @@
 ---
 # Control PoE state on the switch port a board is plugged into.
 # Required var:
-#   armbian_netboot_poe_action: on | off | cycle
+#   armbian_poe_action: on | off | cycle
 # Required hostvars:
-#   armbian_netboot_poe_switch
-#   armbian_netboot_poe_port
+#   armbian_poe_switch
+#   armbian_poe_port
 
 - name: Control PoE per board
   hosts: "{{ target_hosts | default('boards') }}"
@@ -13,35 +13,35 @@
     - name: Validate inputs
       ansible.builtin.assert:
         that:
-          - armbian_netboot_poe_action in ['on', 'off', 'cycle']
-          - armbian_netboot_poe_switch is defined and armbian_netboot_poe_switch | length > 0
-          - armbian_netboot_poe_port   is defined and armbian_netboot_poe_port   | length > 0
+          - armbian_poe_action in ['on', 'off', 'cycle']
+          - armbian_poe_switch is defined and armbian_poe_switch | length > 0
+          - armbian_poe_port   is defined and armbian_poe_port   | length > 0
         fail_msg: >-
-          armbian_netboot_poe_action must be on|off|cycle; poe_switch
+          armbian_poe_action must be on|off|cycle; poe_switch
           and poe_port hostvars must be set on {{ inventory_hostname }}.
 
     - name: PoE on
       community.routeros.command:
         commands:
-          - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=auto'
-      delegate_to: "{{ armbian_netboot_poe_switch }}"
+          - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=auto'
+      delegate_to: "{{ armbian_poe_switch }}"
       retries: 3
       delay: 5
       register: _poe_on
       until: _poe_on is succeeded
-      when: armbian_netboot_poe_action == 'on'
+      when: armbian_poe_action == 'on'
 
     - name: PoE off
       community.routeros.command:
         commands:
-          - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
-      delegate_to: "{{ armbian_netboot_poe_switch }}"
+          - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=off'
+      delegate_to: "{{ armbian_poe_switch }}"
       retries: 3
       delay: 5
       register: _poe_off
       until: _poe_off is succeeded
-      when: armbian_netboot_poe_action == 'off'
+      when: armbian_poe_action == 'off'
 
     - name: PoE cycle
       ansible.builtin.include_tasks: tasks/poe_cycle.yml
-      when: armbian_netboot_poe_action == 'cycle'
+      when: armbian_poe_action == 'cycle'

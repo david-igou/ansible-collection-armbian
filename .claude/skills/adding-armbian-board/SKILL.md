@@ -1,16 +1,16 @@
 ---
 name: adding-armbian-board
-description: Use when adding a new ARM SBC board to the david_igou.armbian_netboot Ansible collection, or when bringing up an Armbian-supported board the collection doesn't yet track. Applies to any board armbian/build supports.
+description: Use when adding a new ARM SBC board to the david_igou.armbian Ansible collection, or when bringing up an Armbian-supported board the collection doesn't yet track. Applies to any board armbian/build supports.
 ---
 
-# Adding a New Board to david_igou.armbian_netboot
+# Adding a New Board to david_igou.armbian
 
 ## Overview
 
 End-to-end runbook through the `stage_netboot_assets.yml` and
 `stage_router.yml` staging milestones. The collection is inventory-driven: a new board is picked
 up automatically once inventory, `vars/boards.yml`, and
-`armbian_netboot_image_urls` agree.
+`armbian_image_urls` agree.
 
 **Core insight:** ARM SBCs are not uniform. Naming, U-Boot trees, NIC
 drivers, MAC sourcing, and SPI-env semantics differ per board. Never
@@ -24,17 +24,17 @@ Capture before touching code:
 
 - **Armbian board** exists upstream: `gh api 'repos/armbian/build/contents/config/boards/<board>.conf' --jq '.size'`. Read it for `BOARD_NAME` (filename casing) and any `post_family_config_branch_*__<board>_use_mainline_uboot` override.
 - **NIC support in family-default U-Boot tree:** read `config/sources/families/<family>.conf` for `BOOTSOURCE`. If the tree's `drivers/net/` lacks the board's NIC driver, plan on `edge`.
-- **PoE wiring** (operator knowledge): `armbian_netboot_poe_switch` + `armbian_netboot_poe_port`.
-- **MAC**: use real if known; placeholder `00:00:00:00:00:00` otherwise — `build_image.yml` only reads `armbian_netboot_board_model` from inventory, so build-before-DHCP works.
+- **PoE wiring** (operator knowledge): `armbian_poe_switch` + `armbian_poe_port`.
+- **MAC**: use real if known; placeholder `00:00:00:00:00:00` otherwise — `build_image.yml` only reads `armbian_board_model` from inventory, so build-before-DHCP works.
 - **UART**: without it, U-Boot pre-SSH failures are only observable via second-order signals (rb5009 `/ip tftp print where real-filename~"<board>"` HITS=0 ⇒ U-Boot never made a TFTP request).
 
 ## Phase 1 — Inventory
 
-Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_netboot_board_mac`, `armbian_netboot_board_model` (must equal a `vars/boards.yml` key), `armbian_netboot_poe_switch`, `armbian_netboot_poe_port`.
+Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_board_mac`, `armbian_board_model` (must equal a `vars/boards.yml` key), `armbian_poe_switch`, `armbian_poe_port`.
 
 ## Phase 2 — `vars/boards.yml`
 
-Add a key under `armbian_netboot_board_configs` with every field below. All load-bearing — verify, don't guess:
+Add a key under `armbian_board_configs` with every field below. All load-bearing — verify, don't guess:
 
 | Field | Source of truth |
 |---|---|
@@ -43,17 +43,17 @@ Add a key under `armbian_netboot_board_configs` with every field below. All load
 | `armbian_support` | armbian/build's support tier (`standard`/`community`/`wip`). |
 | `dtb` | The board's kernel-deb-shipped `/boot/dtb/<vendor>/<file>.dtb`. |
 | `console` | Per board's serial-console docs (RK3588: `ttyS2,1500000n8`; Allwinner: `ttyS0,115200`). |
-| `earlycon` | UART MMIO base from SoC RM. Required when `armbian_netboot_pxe_verbose=true`. |
+| `earlycon` | UART MMIO base from SoC RM. Required when `armbian_pxe_verbose=true`. |
 
 ## Phase 3 — Image URL placeholder
 
-Add `armbian_netboot_image_urls[<model>]` in your real `group_vars/all.yml` (and the doc-only one). The `<model>` key must match each host's `armbian_netboot_board_model`. The exact filename is filled in after Phase 4.
+Add `armbian_image_urls[<model>]` in your real `group_vars/all.yml` (and the doc-only one). The `<model>` key must match each host's `armbian_board_model`. The exact filename is filled in after Phase 4.
 
 ## Phase 4 — U-Boot branch decision
 
-Default: `current` (no `armbian_netboot_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_netboot_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
+Default: `current` (no `armbian_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
 
-Per-board `armbian_netboot_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_netboot_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
+Per-board `armbian_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
 
 For board-specific armbian/build hook FUNCTIONS (as opposed to source patches against the kernel or U-Boot tree), use `dest: config/boards/<board>.conf`. armbian/build sources that overlay file additively on top of upstream's `config/boards/<board>.conf` only when building that board, so the hook fires per-board structurally — you do not need an internal `[[ "${BOARD}" != "..." ]] && return 0` filter (keep one as defensive belt-and-suspenders if you wish). Source-tree patches still use the `userpatches/u-boot/<version>/<board>/<NNNN-name>.patch` shape — see the orange-pi-5-max RTL8125 patch in `inventory/group_vars/orange_pi_5_max.yml` for an example.
 
@@ -63,7 +63,7 @@ For board-specific armbian/build hook FUNCTIONS (as opposed to source patches ag
 ansible-playbook playbooks/build_image.yml
 ```
 
-Iterates over all unique `armbian_netboot_board_model` values in `groups['boards']`. Cached boards skip the heavy work. **Known flake:** first build of a new board can segfault during `install_distribution_agnostic` (qemu-user-static + Python pycompile) — retry once before deeper diagnosis.
+Iterates over all unique `armbian_board_model` values in `groups['boards']`. Cached boards skip the heavy work. **Known flake:** first build of a new board can segfault during `install_distribution_agnostic` (qemu-user-static + Python pycompile) — retry once before deeper diagnosis.
 
 After the build, audit the compiled defconfig:
 
@@ -73,11 +73,11 @@ ls /var/lib/armbian_build/build/cache/sources/u-boot-worktree/*/*/configs/<board
 
 Verify: `CONFIG_CMD_PXE=y`, `CONFIG_NET=y`, `CONFIG_PCI_INIT_R=y` (when `CONFIG_PCI=y`), and the NIC's driver (e.g. `CONFIG_PHY_REALTEK=y` for RTL8211F PHYs; for PCIe NICs confirm the driver source file actually exists under `drivers/net/`).
 
-Update `armbian_netboot_image_urls[<model>]` to the published filename — read it from `/tmp/armbian_publish/<board>/manifest.json`.
+Update `armbian_image_urls[<model>]` to the published filename — read it from `/tmp/armbian_publish/<board>/manifest.json`.
 
 ## Phase 6 — Bootstrap + stage
 
-Real inventory must define `armbian_netboot_default_password` (typically `1234`) before bootstrap. Then:
+Real inventory must define `armbian_default_password` (typically `1234`) before bootstrap. Then:
 
 ```bash
 ansible-playbook playbooks/bootstrap_armbian.yml --limit <hostname>
@@ -105,8 +105,8 @@ See `docs/uboot-armbian-build-explainer.html` §8 for the three-layer failure mo
 | Copy a userpatch by analogy from a "similar" board | Silent no-op — patch never matches, board boots SD, looks like a different bug | The family `__999_pxe_first` hook already covers rk3588; skip per-board userpatches unless you've grepped the actual upstream U-Boot source for the construct you're patching |
 | Assume family-default U-Boot supports the board's NIC | 30+ min wasted; HITS=0 on rb5009 with no obvious cause | Inspect `drivers/net/` in the tree before building; opt into `edge` if missing |
 | Skip the post-build defconfig audit | Layer 0 / driver bugs hide until E2E test | Run Phase 5's grep checks before flashing the SD |
-| Mismatch case between `armbian_netboot_board_model` and `armbian_board_name` | `stage_netboot_assets.yml` / `stage_router.yml` or preflight 404s on the image URL | `armbian_netboot_board_model` is the inventory + `vars/boards.yml` key (typically dashed); `armbian_board_name` follows Armbian's `.conf` casing |
-| Forget `armbian_netboot_default_password` in real inventory | `bootstrap_armbian.yml` dies on the first secret lookup | Set in `group_vars/all/*.yml` (vault-encrypted for prod) |
+| Mismatch case between `armbian_board_model` and `armbian_board_name` | `stage_netboot_assets.yml` / `stage_router.yml` or preflight 404s on the image URL | `armbian_board_model` is the inventory + `vars/boards.yml` key (typically dashed); `armbian_board_name` follows Armbian's `.conf` casing |
+| Forget `armbian_default_password` in real inventory | `bootstrap_armbian.yml` dies on the first secret lookup | Set in `group_vars/all/*.yml` (vault-encrypted for prod) |
 | Leave stale `userpatches/config/boards/<board>.conf` from removed per-board hooks | Old hook sources at build time as `500_*`, runs before `__999_*` | `rm -f /var/lib/armbian_build/build/userpatches/config/boards/<removed>.conf` on the builder after refactoring |
 
 ## Cross-references

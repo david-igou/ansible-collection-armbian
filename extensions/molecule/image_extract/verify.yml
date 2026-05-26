@@ -42,7 +42,7 @@
 
     - name: "Re-run image_extract — sentinel must short-circuit (idempotent)"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
         armbian_image_src: /tmp/orangepi5.img.xz
         model_name: orangepi5

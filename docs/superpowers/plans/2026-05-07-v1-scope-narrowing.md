@@ -1160,7 +1160,7 @@ Spec: [`docs/superpowers/specs/2026-05-07-v1-scope-narrowing-design.md`](docs/su
 **New "Collection structure" tree (replace the existing tree):**
 
 ```markdown
-david_igou/armbian_netboot/   (this repo root)
+david_igou/armbian/   (this repo root)
 ├── galaxy.yml                # Collection metadata
 ├── ansible.cfg               # Ansible config for direct-from-root runs
 ├── requirements.yml          # External collection dependencies
@@ -1363,7 +1363,7 @@ cat docs/architecture.md
 
 The rewrite mirrors the CLAUDE.md changes for the architecture-doc audience (someone reading the repo cold without the agent-facing guidance). The structure should cover, in this order:
 
-1. **What this repo is** — `david_igou.armbian_netboot` Ansible collection for managing custom Armbian SD images that PXE-first boot on `orange-pi-5-pro`. RouterOS DHCP toggle is the only mode switch.
+1. **What this repo is** — `david_igou.armbian` Ansible collection for managing custom Armbian SD images that PXE-first boot on `orange-pi-5-pro`. RouterOS DHCP toggle is the only mode switch.
 
 2. **The v1 invariant**: U-Boot tries PXE first by compile-time `BOOT_TARGETS` (set by the `armbian_build` role's userpatch). When DHCP advertises an `armbian-nfsroot` option set the board NFS-roots; without it the board falls through to the local SD rootfs. There is no on-host bootloader flashing in v1 — the U-Boot binary is part of the SD image, written once by the operator.
 

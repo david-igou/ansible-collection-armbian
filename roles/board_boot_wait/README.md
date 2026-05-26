@@ -18,8 +18,8 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `armbian_netboot_boot_attempt_timeout` | no | `180` | Per-attempt TCP/22 wait, seconds. |
-| `armbian_netboot_post_boot_wait_timeout` | no | `300` | Final `wait_for_connection` wait, seconds. |
+| `armbian_boot_attempt_timeout` | no | `180` | Per-attempt TCP/22 wait, seconds. |
+| `armbian_post_boot_wait_timeout` | no | `300` | Final `wait_for_connection` wait, seconds. |
 
 ## Outputs / side effects
 
@@ -48,7 +48,7 @@ After a successful run:
   gather_facts: false
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.board_boot_wait
+        name: david_igou.armbian.board_boot_wait
 ```
 
 Typically reached via `playbooks/converge_boot_mode.yml` after the
