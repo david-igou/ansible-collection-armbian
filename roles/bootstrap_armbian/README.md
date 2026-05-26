@@ -25,7 +25,7 @@ per-host) to match `armbian_netboot_bootstrap_user`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `armbian_netboot_bootstrap_user` | `igou` | User to create. Should match `ansible_user` set elsewhere in inventory so subsequent plays connect as this user. |
+| `armbian_netboot_bootstrap_user` | `armbian` | User to create. Should match `ansible_user` set elsewhere in inventory so subsequent plays connect as this user. |
 | `armbian_netboot_bootstrap_ssh_keys` | `[]` | **Required.** List of public-key strings. The role asserts the list is non-empty before doing anything destructive. |
 
 The connecting credentials (`ansible_user: root`,

@@ -17,8 +17,10 @@
 # Must be an inventory host with the matching network_cli connection
 # settings — typically a member of the `routeros_router` group.
 # Override per-host (host_vars/<board>.yml) if a specific board is
-# served by a different router.
-armbian_netboot_router: rb5009
+# served by a different router. No default — set this in your real
+# inventory's group_vars/boards.yml; an unset value will cause
+# router-delegated tasks to fail with an explicit ansible error.
+# armbian_netboot_router: <inventory-hostname-of-your-routeros-router>
 
 # ── boot-mode retry/timeout knobs (optional overrides) ───────────────
 # Defaults live in roles/board_boot_wait/defaults/main.yml and are

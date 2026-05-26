@@ -105,7 +105,7 @@ ansible-playbook playbooks/reprovision_to_local.yml \
 The playbook's `hosts:` default is `orange-pi-5-max-01` (short
 name); `--limit` narrows the inventory subset, but `hosts:` ALSO
 needs to match an inventory entry. If your inventory keys hosts by
-FQDN (e.g. `orange-pi-5-max-01.igou.systems`), pass `-e
+FQDN (e.g. `orange-pi-5-max-01.example.lan`), pass `-e
 target_hosts=<fqdn>` to override the playbook default.
 
 ### What the playbook does (4 plays)
@@ -202,7 +202,7 @@ land there but don't boot).
 not the documentation sample):
 
 ```yaml
-orange-pi-5-max-01.igou.systems:
+orange-pi-5-max-01.example.lan:
   # ... existing entries ...
   armbian_netboot_local_disks:
     - device: /dev/nvme0n1
@@ -227,7 +227,7 @@ orange-pi-5-max-01.igou.systems:
 ### 2. Verify inventory parses
 
 ```bash
-ansible-inventory --host orange-pi-5-max-01.igou.systems \
+ansible-inventory --host orange-pi-5-max-01.example.lan \
   | jq '.armbian_netboot_local_disks[0].layout | length'
 # expected: 2
 ```
@@ -236,8 +236,8 @@ ansible-inventory --host orange-pi-5-max-01.igou.systems \
 
 ```bash
 ansible-playbook playbooks/reprovision_to_local.yml \
-  --limit orange-pi-5-max-01.igou.systems \
-  -e target_hosts=orange-pi-5-max-01.igou.systems \
+  --limit orange-pi-5-max-01.example.lan \
+  -e target_hosts=orange-pi-5-max-01.example.lan \
   -e capture_serial=true
 ```
 

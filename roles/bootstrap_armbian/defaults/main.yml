@@ -1,5 +1,5 @@
 ---
-armbian_netboot_bootstrap_user: "igou"
+armbian_netboot_bootstrap_user: "armbian"
 # armbian_netboot_bootstrap_ssh_keys is intentionally undefined here.
 # It is declared `required: true` in meta/argument_specs.yml; callers
 # MUST supply at least one public key — see roles/bootstrap_armbian/README.md.

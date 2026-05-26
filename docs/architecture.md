@@ -53,8 +53,8 @@ SD rootfs is determined by pxelinux content on rb5009:
 
 ## External RouterOS prerequisite
 
-The SBC RouterOS network's `next-server` field must be set to rb5009's IP for
-that subnet (e.g. `10.10.9.1` for vlan9). U-Boot 2025.10's PXE bootmeth derives
+The SBC RouterOS network's `next-server` field must be set to the RouterOS
+router's IP for that subnet. U-Boot 2025.10's PXE bootmeth derives
 the TFTP source (`serverip`) from BOOTP `siaddr` (RFC 951 next-server) — DHCP
 option 66 is parsed but silently ignored for `serverip` selection. Without
 `next-server`, U-Boot falls back to the DHCP server's own IP via option 54,

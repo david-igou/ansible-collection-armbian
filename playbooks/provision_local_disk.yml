@@ -35,12 +35,12 @@
 # Usage:
 #   # Single board, ad-hoc device override
 #   ansible-playbook playbooks/provision_local_disk.yml \
-#     --limit orange-pi-5-max-01.igou.systems \
+#     --limit orange-pi-5-max-01.example.lan \
 #     -e armbian_netboot_local_disk_device=/dev/nvme0n1
 #
 #   # Force re-provision (wipe + recopy)
 #   ansible-playbook playbooks/provision_local_disk.yml \
-#     --limit orange-pi-5-max-01.igou.systems \
+#     --limit orange-pi-5-max-01.example.lan \
 #     -e armbian_netboot_local_disk_device=/dev/nvme0n1 \
 #     -e armbian_netboot_local_disk_force=true
 

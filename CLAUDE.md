@@ -215,7 +215,7 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   TrueNAS get stashed before `net_put` to rb5009. Default `{{ playbook_dir }}/../.cache/sbc-tftp/`.
 - `armbian_netboot_nfs_server_ip` (optional) — overrides `armbian_netboot_server_ip` for NFS.
 - `armbian_netboot_nfs_rootfs_path` — NFS rootfs export root on TrueNAS. Default
-  `/mnt/ssd/netboot/rootfs`.
+  `/srv/netboot/rootfs`.
 - `armbian_netboot_default_password` — Armbian NFS root SSH password (default `1234`);
   encrypt with vault.
 - `armbian_netboot_image_urls` — per-model `.img.xz` source consumed by
@@ -225,7 +225,7 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   `https://` URL, `http://` URL, or absolute path; whichever you set must
   be reachable from both the netboot_server and the boards.
 - `armbian_netboot_nfs_assets_export` — netboot-owned subtree on the HTTP host.
-  Default `/mnt/ssd/public/boot-files`.
+  Default `/srv/netboot/boot-files`.
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
   rb5009's IP for that subnet. This is owned by your separate RouterOS-config repo
   and not asserted by this collection.

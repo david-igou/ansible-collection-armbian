@@ -11,10 +11,10 @@
 # Variables (override with -e or in inventory):
 #   routeros_user_name             default: ansible-netboot
 #   routeros_user_group_name       default: same as user
-#   routeros_user_address_scope    default: 10.10.0.0/16
+#   routeros_user_address_scope    default: 0.0.0.0/0 (any source IP)
 #   routeros_user_comment          default: "ansible armbian_netboot collection"
 #   routeros_user_policy           default: read,write,ssh + denylist
-#   routeros_user_ssh_keys         required: list of public-key strings
+#   routeros_user_ssh_keys         required: list of public-key strings (no default — empty list fails the assert)
 #   routeros_user_initial_password default: random throwaway (key auth only)
 #   routeros_disable_password_ssh  default: false
 
@@ -28,16 +28,20 @@
 
     routeros_user_name: "ansible-netboot"
     routeros_user_group_name: "{{ routeros_user_name }}"
-    routeros_user_address_scope: "10.10.0.0/16"
+    # IPv4 CIDR(s) the user is allowed to log in from. Override to match
+    # your management subnet — e.g. "192.0.2.0/24" or "0.0.0.0/0" if you
+    # accept connections from anywhere (RouterOS still requires SSH key).
+    routeros_user_address_scope: "0.0.0.0/0"
     routeros_user_comment: "ansible armbian_netboot collection"
     routeros_user_policy: "read,write,ssh,!local,!telnet,!ftp,!reboot,!policy,!test,!winbox,!password,!web,!sniff,!sensitive,!romon,!rest-api,!api"
     routeros_user_initial_password: >-
       {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
     routeros_disable_password_ssh: false
 
-    routeros_user_ssh_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWgNfV1zdod84sj28d+z7YBLkaD5ZImElWt8zHw+u7/"
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINHO7UsiIgAepf5+s2z+1CbPQf2eqJo8aNK/vT9Oaf4B"
+    # Required — your operator-side public keys. Empty list (the
+    # default) fails the assert below; pass via -e or set in inventory
+    # group_vars/routeros_netboot.yml.
+    routeros_user_ssh_keys: []
 
   tasks:
     - name: Validate that at least one SSH key was provided

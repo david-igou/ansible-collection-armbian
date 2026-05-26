@@ -36,9 +36,9 @@ collections:
 Before any playbook runs, the following must already be true in your environment:
 
 - **Netboot server** reachable over SSH (`become: true`), with an NFS export
-  for per-host rootfs trees (default: `/mnt/ssd/netboot/rootfs`) and an HTTP
+  for per-host rootfs trees (default: `/srv/netboot/rootfs`) and an HTTP
   assets root for serving `.img.xz` artifacts (default:
-  `/mnt/ssd/public/boot-files`). The collection creates `_templates/<model>/`
+  `/srv/netboot/boot-files`). The collection creates `_templates/<model>/`
   and `<inventory_hostname>/` subtrees inside the NFS root. See
   [`docs/architecture.md`](docs/architecture.md).
 - **MikroTik rb5009 (or equivalent RouterOS device)** reachable via
@@ -255,16 +255,18 @@ current shapes exist, but not authoritative for current behaviour.
 ## Requirements
 
 - Ansible >= 2.15
-- A netboot server (e.g. TrueNAS) reachable over SSH that exports the
-  per-host NFS rootfs to the boards. The HTTP assets root defaults match the
-  homelab's public nginx container on TrueNAS — host-side path
-  `/mnt/ssd/public/boot-files`, reachable at `https://public.igou.systems/boot-files/`.
-  Override `armbian_netboot_nfs_assets_export` in `group_vars/all.yml` if you
-  serve HTTP from a different path.
-- A MikroTik RouterOS rb5009 with SSH access. The collection writes per-board
-  `pxelinux.cfg/01-<MAC>` (always present; boot mode via `default`) and per-model
-  kernel/initrd/dtb under `flash:/sbc/` (override path segment via
-  `armbian_netboot_tftp_flash_dir`, default `sbc`) and registers corresponding
+- A netboot server reachable over SSH that exports the per-host NFS rootfs
+  to the boards. The collection has been validated on TrueNAS but anything
+  that speaks NFSv4 and SSH should work. The default HTTP/NFS root paths
+  in `inventory/group_vars/all.yml` (`armbian_netboot_nfs_assets_export`,
+  `armbian_netboot_nfs_rootfs_path`) are examples — override them to
+  match your server's actual exported directories.
+- A MikroTik RouterOS router (or any device speaking the RouterOS API
+  the `community.routeros` collection supports) with SSH access. The
+  collection writes per-board `pxelinux.cfg/01-<MAC>` (always present;
+  boot mode via `default`) and per-model kernel/initrd/dtb under
+  `flash:/sbc/` (override path segment via `armbian_netboot_tftp_flash_dir`,
+  default `sbc`) and registers corresponding
   `/ip tftp` rows; no DHCP option-sets or lease mutations. The SBC subnet's
   `next-server` must already point at rb5009 (owned externally — typically
   by your routeros-config repo).
@@ -599,10 +601,10 @@ flowchart TB
     IB["<b>image_build</b> role<br/><i>hosts: armbian_builders</i><br/>one-time build per model<br/>(PXE-first U-Boot baked in)"]
     IB_OUT[("&lt;model&gt;.img.xz<br/>rsynced to netboot server's HTTP root")]
     IE["<b>image_extract</b> role<br/><i>hosts: netboot_server</i><br/>decompress + loop-mount,<br/>rsync rootfs partition"]
-    IE_OUT[("/mnt/ssd/netboot/rootfs/_templates/&lt;model&gt;/<br/>per-model rootfs template")]
+    IE_OUT[("/srv/netboot/rootfs/_templates/&lt;model&gt;/<br/>per-model rootfs template")]
     RC["<b>rootfs_clone</b> role<br/><i>hosts: netboot_server</i><br/>cp --reflink=auto + identity reset<br/>(hostname / machine-id / SSH host keys)"]
-    RC_OUT[("/mnt/ssd/netboot/rootfs/&lt;hostname&gt;/<br/>per-host NFS clone")]
-    NFSEXP["NFS export over the network<br/><i>netboot_server:/mnt/ssd/netboot/rootfs/&lt;hostname&gt;</i>"]
+    RC_OUT[("/srv/netboot/rootfs/&lt;hostname&gt;/<br/>per-host NFS clone")]
+    NFSEXP["NFS export over the network<br/><i>netboot_server:/srv/netboot/rootfs/&lt;hostname&gt;</i>"]
     BOARD_ROOT[("board's <code>/</code><br/>mounted via NFS (boot_mode=nfs)")]
     DP["<b>disk_provision</b> role<br/><i>hosts: boards</i><br/>rsync -aAX from <code>/</code>,<br/>regen fstab (LABEL=...),<br/>INSTALLED=true marker"]
     DP_OUT(["/dev/&lt;disk&gt;p1<br/>LABEL=armbi_root_local"])
