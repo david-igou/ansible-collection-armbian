@@ -9,7 +9,41 @@
 # mainline u-boot. The family-default `current` branch builds against
 # the Radxa fork and cannot PXE on Rock 5B.
 #
-# Our `__999_rock5b_uboot_v2026_04` hook in build_userpatches_common
-# bumps that upstream-hook's v2026.01 default to v2026.04. Both hooks
-# gate on BRANCH=edge.
+# Our `__999_rock5b_uboot_v2026_04` hook below (delivered via the
+# per-board conf overlay) bumps that upstream-hook's v2026.01 default
+# to v2026.04. Both hooks gate on BRANCH=edge.
 armbian_netboot_board_branch: edge
+
+# ── per-board userpatches ────────────────────────────────────────────
+# Delivered as a userpatches OVERLAY of config/boards/rock-5b.conf —
+# armbian/build sources userpatches/config/boards/<board>.conf AFTER
+# the upstream board conf, so this ADDS our hook function rather than
+# replacing the upstream file (which carries the v2026.01 mainline
+# pin we are bumping). The overlay is only sourced when BOARD=rock-5b
+# is being built, so this hook does not run for any other rk3588 board.
+#
+# armbian/build's extension manager registers any function matching
+# `post_family_config_branch_<branch>__*` and calls them after the
+# family config is resolved, in numeric-prefix sort order. Upstream's
+# `post_family_config_branch_edge__rock-5b_use_mainline_uboot` is
+# auto-prefixed `500_`; ours has an explicit `__999_` numeric ID so it
+# sorts after upstream and wins on the BOOTBRANCH / BOOTPATCHDIR
+# re-declaration. armbian/build ships a `patch/u-boot/v2026.04/`
+# directory, so BOOTPATCHDIR points at a real patch set (not at
+# v2026.01 patches applied to a v2026.04 tree, which would risk
+# rejects).
+#
+# Per the explainer (docs/uboot-armbian-build-explainer.html §8.2),
+# v2026.04 does NOT clear any of rock-5b's three PXE failure layers
+# on its own — Approach B (playbooks/persist_uboot_env.yml) still has
+# to run to populate SPI env. The bump is just to track upstream.
+armbian_netboot_board_userpatches:
+  - dest: "config/boards/rock-5b.conf"
+    content: |
+      function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
+          [[ "${BOARD}" != "rock-5b" ]] && return 0
+          [[ "${BRANCH}" != "edge" ]] && return 0
+          display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
+          declare -g BOOTBRANCH="tag:v2026.04"
+          declare -g BOOTPATCHDIR="v2026.04"
+      }
