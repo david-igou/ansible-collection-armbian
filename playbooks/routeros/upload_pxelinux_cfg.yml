@@ -11,7 +11,7 @@
 #   armbian_netboot_tftp_flash_dir:         top-level dir on rb5009's flash (e.g. sbc)
 
 - name: Upload pxelinux.cfg files to RouterOS
-  hosts: routeros_routers
+  hosts: routeros_router
   gather_facts: false
   tasks:
     - name: Ensure pxelinux.cfg directory exists on router flash

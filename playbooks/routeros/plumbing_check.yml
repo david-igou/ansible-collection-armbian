@@ -6,7 +6,7 @@
 #   armbian_netboot_tftp_flash_dir:    top-level dir on router flash
 
 - name: Assert /ip tftp rows exist on RouterOS
-  hosts: routeros_routers
+  hosts: routeros_router
   gather_facts: false
   vars:
     _assets: [vmlinuz, initrd.img, board.dtb]

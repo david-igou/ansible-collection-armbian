@@ -236,9 +236,9 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 
 **Three RouterOS groups in `inventory/hosts.yml`**:
 
-- `routeros_routers` — devices that run a DHCP server. `converge_boot_mode.yml`,
+- `routeros_router` — devices that run a DHCP server. `converge_boot_mode.yml`,
   `set_boot_mode.yml`, and `stage_router.yml` target this group.
-- `routeros_switches` — devices that don't run DHCP but should still get the SSH user.
+- `routeros_switch` — devices that don't run DHCP but should still get the SSH user.
 - `routeros_netboot` — subset that `playbooks/routeros/bootstrap_user.yml`
   provisions the `ansible-netboot` user on.
 - `routeros` (optional parent) — convenience group that includes both; not directly
@@ -325,7 +325,7 @@ netboot server during boot-mode convergence.
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
 | `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
-| `poe_control.yml` | **boards** (delegated to `routeros_switches` via `armbian_netboot_poe_switch` hostvar) |
+| `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_netboot_poe_switch` hostvar) |
 | `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
 | `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 

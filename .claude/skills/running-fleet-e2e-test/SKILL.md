@@ -149,7 +149,7 @@ bypasses host-key checking for the run, but the SSH **key** itself must
 be authorised on every target. Quick sweep:
 
 ```bash
-ansible boards:netboot_server:routeros_switches:routeros_routers -m ping 2>&1 \
+ansible boards:netboot_server:routeros_switch:routeros_router -m ping 2>&1 \
   | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 ```
 
@@ -306,7 +306,7 @@ PLAY RECAP outward.
 Failure mode: the RouterOS command `/interface ethernet poe set ... poe-out=off`
 errored, or the switch was unreachable.
 
-- Check `armbian_netboot_poe_switch` is in `routeros_switches` group.
+- Check `armbian_netboot_poe_switch` is in `routeros_switch` group.
 - Check the switch is on the network: `ansible <switch> -m community.routeros.command -a 'commands="/system identity print"'`.
 - Wrong port name? `armbian_netboot_poe_port` must match the switch's `/interface print` output exactly.
 - One board's failure here doesn't poison the rest — Phase 1 still
@@ -475,7 +475,7 @@ multiple boards and the per-board tracker model doesn't 1:1 with them.
 ansible <board> --list-vars | grep armbian_netboot_
 ansible-inventory --list | jq '.all.vars.armbian_netboot_image_urls'
 ansible <armbian_netboot_router> -m community.routeros.command -a 'commands="/ip tftp print count-only"'
-ansible boards:netboot_server:routeros_switches:routeros_routers -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
+ansible boards:netboot_server:routeros_switch:routeros_router -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 
 # Full fleet
 .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh
