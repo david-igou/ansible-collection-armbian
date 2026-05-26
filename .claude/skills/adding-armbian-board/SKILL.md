@@ -55,6 +55,8 @@ Default: `current` (no `armbian_netboot_board_branch` entry needed). Switch to `
 
 Per-board `armbian_netboot_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_netboot_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
 
+For board-specific armbian/build hook FUNCTIONS (as opposed to source patches against the kernel or U-Boot tree), use `dest: config/boards/<board>.conf`. armbian/build sources that overlay file additively on top of upstream's `config/boards/<board>.conf` only when building that board, so the hook fires per-board structurally — you do not need an internal `[[ "${BOARD}" != "..." ]] && return 0` filter (keep one as defensive belt-and-suspenders if you wish). Source-tree patches still use the `userpatches/u-boot/<version>/<board>/<NNNN-name>.patch` shape — see the orange-pi-5-max RTL8125 patch in `inventory/group_vars/orange_pi_5_max.yml` for an example.
+
 ## Phase 5 — Build + audit
 
 ```bash

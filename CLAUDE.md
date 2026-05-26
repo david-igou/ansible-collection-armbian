@@ -419,6 +419,17 @@ Minimum touched files for a new board:
    in `playbooks/build_image.yml` (the cross-board rk3588 family
    overlay) doesn't already cover the case.
 
+### Where to put a new armbian/build hook
+
+Two overlay paths are available; choose by SCOPE:
+
+- **Family-shared** — the hook applies identically to every board in a SoC family (e.g. rk3588). Add it to `build_userpatches_common` in `playbooks/build_image.yml` under `dest: config/sources/families/<family>.conf`. Today's examples: `__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`.
+- **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_netboot_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
+
+If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `build_userpatches_common`, that's the cue to write a per-board overlay instead.
+
+**Userpatches overlay files persist across rebuilds.** The `image_build` role writes `userpatches/config/{sources/families,boards}/<file>.conf` via `ansible.builtin.copy` (overwrite-style), so renaming an existing overlay file or removing it from inventory leaves a stale file on the builder host that armbian/build will continue to source. After such a change, manually delete the orphan from `${armbian_build_cache_dir}/build/userpatches/` on the builder, or run the next build with a fresh `armbian_build_cache_dir`. See `docs/superpowers/specs/.rock5b-friction-notes.md` for a prior incident this caused.
+
 ## rb5009 SBC TFTP layout
 
 The collection writes file + `/ip tftp` row state on rb5009; no DHCP option-sets,
