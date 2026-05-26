@@ -1,0 +1,11 @@
+---
+# Per-model vars for the orange_pi_5 group. See
+# inventory/group_vars/orange_pi_5_pro.yml header for the rationale on
+# branch selection and per-board userpatches.
+
+# armbian/build's orangepi5.conf
+# `post_family_config__orangepi5_use_mainline_uboot` hook forces
+# mainline v2026.04 on every branch, so this entry is documentation —
+# the build target lands on mainline u-boot regardless. Keep `edge`
+# explicit for symmetry with the other rk3588(s) boards in this fleet.
+armbian_netboot_board_branch: edge

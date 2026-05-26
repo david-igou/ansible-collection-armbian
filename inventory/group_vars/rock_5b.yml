@@ -1,0 +1,15 @@
+---
+# Per-model vars for the rock_5b group.
+
+# ── armbian/build BRANCH ─────────────────────────────────────────────
+# armbian/build's
+# `post_family_config_branch_edge__rock-5b_use_mainline_uboot` (in
+# config/boards/rock-5b.conf) swaps the Radxa next-dev-v2024.10 fork
+# (which lacks the RTL8125 PCIe NIC driver Rock 5B ships with) for
+# mainline u-boot. The family-default `current` branch builds against
+# the Radxa fork and cannot PXE on Rock 5B.
+#
+# Our `__999_rock5b_uboot_v2026_04` hook in build_userpatches_common
+# bumps that upstream-hook's v2026.01 default to v2026.04. Both hooks
+# gate on BRANCH=edge.
+armbian_netboot_board_branch: edge
