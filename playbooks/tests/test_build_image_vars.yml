@@ -70,6 +70,7 @@
     - name: Assert armbian_netboot_board_userpatches (when defined) is a well-formed list
       ansible.builtin.assert:
         that:
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is not string"
           - "hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches is iterable"
           - >-
             hostvars[_board_model_first_host[item]].armbian_netboot_board_userpatches

@@ -270,6 +270,8 @@
       # all inherit those group_vars, so picking any one host is
       # sufficient — we use the first host listed in groups['boards']
       # for each model. Used by the include_role vars: block below.
+      # `| first` is safe: _board_models is derived from groups['boards'],
+      # so every model is guaranteed at least one matching host.
       ansible.builtin.set_fact:
         _board_model_first_host: >-
           {{
@@ -282,6 +284,41 @@
                   | map(attribute='inventory_hostname')
                   | first
                 )
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
+      # Must run before any task that dereferences
+      # armbian_netboot_board_configs[<model>] — otherwise an unknown
+      # model fails with an opaque Jinja key error instead of this
+      # explicit fail_msg. Earliest dereferencer is the
+      # _build_target_to_model reverse-map set_fact below; later ones
+      # are the local_kernel / uboot_env render blocks and
+      # _build_targets resolution.
+      ansible.builtin.assert:
+        that:
+          - item in armbian_netboot_board_configs
+        fail_msg: >-
+          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
+          vars/boards.yml. Add it there or remove the host from the
+          boards group.
+      loop: "{{ _board_models }}"
+
+    - name: Resolve armbian_board_name → board_model reverse map
+      # _build_target_to_model maps from the armbian/build BOARD= value
+      # (the key used by _build_targets, e.g. 'orangepi5pro') back to
+      # the inventory's armbian_netboot_board_model value (e.g.
+      # 'orange-pi-5-pro'). The build loop iterates _build_targets;
+      # this map lets it resolve back to a representative host whose
+      # group_vars carry armbian_netboot_board_branch +
+      # armbian_netboot_board_userpatches.
+      ansible.builtin.set_fact:
+        _build_target_to_model: >-
+          {{
+            _build_target_to_model | default({})
+            | combine({
+                armbian_netboot_board_configs[item].armbian_board_name: item
               })
           }}
       loop: "{{ _board_models }}"
@@ -314,8 +351,12 @@
     - name: Assert all hosts of each model agree on armbian_netboot_board_userpatches
       # Same per-model build rule as the branch assert above. The
       # to_json(sort_keys=true) canonicalisation makes the comparison
-      # deterministic across dict-key ordering differences in YAML
-      # source.
+      # deterministic across dict-key ordering differences within each
+      # patch entry; it does NOT canonicalise list-item order, so two
+      # hosts declaring the same patches in different sequence would
+      # falsely diverge. Acceptable in practice because all hosts of a
+      # model inherit from the same group_vars YAML (identical parse
+      # order).
       ansible.builtin.assert:
         that:
           - >-
@@ -327,24 +368,10 @@
              | unique | list | length) == 1
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
-          armbian_netboot_board_userpatches. Same reason as branch:
-          builds are per-model.
-      loop: "{{ _board_models }}"
-
-    - name: Resolve armbian_board_name → board_model reverse map
-      # The build loop iterates over _build_targets (armbian_board_name
-      # values, e.g. 'orangepi5-max'). To look up the per-model branch
-      # and userpatches in hostvars[_first_host], we first need to map
-      # the armbian_board_name back to its source armbian_netboot_board_model
-      # key so we can index _board_model_first_host.
-      ansible.builtin.set_fact:
-        _build_target_to_model: >-
-          {{
-            _build_target_to_model | default({})
-            | combine({
-                armbian_netboot_board_configs[item].armbian_board_name: item
-              })
-          }}
+          armbian_netboot_board_userpatches. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
       loop: "{{ _board_models }}"
 
     - name: Render local_kernel dispatch table for the build hook
@@ -385,16 +412,6 @@
               [{{ cfg.armbian_board_name }}]='{{ cfg.uboot_env.storage }}'
           {% endif %}
           {% endfor %}
-
-    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
-      ansible.builtin.assert:
-        that:
-          - item in armbian_netboot_board_configs
-        fail_msg: >-
-          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
-          vars/boards.yml. Add it there or remove the host from the
-          boards group.
-      loop: "{{ _board_models }}"
 
     - name: Resolve build targets from armbian_netboot_board_configs
       ansible.builtin.set_fact:

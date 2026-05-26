@@ -1,5 +1,11 @@
 ---
 # Per-model vars for the rock_5b group.
+#
+# NOTE: rock_5b is not declared in the example inventory/hosts.yml
+# (the doc-only inventory currently tracks four rk3588(s) boards).
+# This file serves as a template for operators whose real inventory
+# does include rock-5b — copy it into your .inventory/group_vars/
+# along with adding the rock_5b group to hosts.yml.
 
 # ── armbian/build BRANCH ─────────────────────────────────────────────
 # armbian/build's
