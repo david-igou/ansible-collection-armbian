@@ -1,4 +1,21 @@
-# RouterOS Setup Guide
+# Example: maintainer's RouterOS topology
+
+> ⚠️ **This is a maintainer-specific example, not a generic setup guide.**
+> The hostnames, IP ranges, VLAN IDs, port numbers, switch firewall
+> filters, and `igou-io/routeros-setup` repository linked below are
+> all specific to David Igou's homelab and exist here purely as a
+> reference for how the moving parts fit together in one concrete
+> deployment. A generic public-facing RouterOS setup guide is on
+> the roadmap; until that lands, treat this file as illustrative
+> rather than prescriptive.
+>
+> What you actually need on your RouterOS device to use this
+> collection is documented in the project [README](../../README.md)
+> and [architecture overview](../architecture.md): an SSH user
+> reachable by the controller, the SBC subnet's DHCP `next-server`
+> pointing at the router's IP for that subnet, and enough TFTP
+> capacity for the per-model kernel/initrd/dtb + per-board
+> pxelinux.cfg layout the collection writes under `flash:/sbc/`.
 
 This guide reflects the live `igou.systems` topology: boards live on **vlan70
 (DMZ, `10.10.70.0/24`, `dmz.igou.systems`)** with DHCP served by **`dhcp_vlan70`**

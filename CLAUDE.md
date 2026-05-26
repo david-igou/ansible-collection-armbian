@@ -78,6 +78,7 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
 │   ├── image_extract/             # Extract one .img.xz → template rootfs + TFTP files
 │   ├── disk_image/                # Stream an .img.xz/.img to a block device (dd-style)
+│   ├── disk_provision/            # Declarative GPT layout via systemd-repart + rsync + LABEL-keyed fstab
 │   ├── rootfs_clone/              # Reflink-clone a template into a per-host rootfs
 │   ├── pxelinux_render/           # Render one per-board pxelinux.cfg to a local dir
 │   ├── board_boot_wait/           # Wait for TCP/22 + SSH on a board
@@ -87,12 +88,18 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── bootstrap_armbian.yml        # Provision SSH-key user on flashed boards
 │   ├── stage_netboot_assets.yml     # Extract templates + clone per-host rootfs on netboot server
 │   ├── stage_router.yml             # Fetch TFTP cache to controller → push to router + verify rows
-│   ├── build_image.yml              # Build custom Armbian .img.xz
+│   ├── build_image.yml              # Build custom Armbian .img.xz + publish to netboot server
+│   ├── cleanup_boot_files.yml       # Remove stale per-host pxelinux.cfg + per-model TFTP rows
 │   ├── converge_boot_mode.yml       # Converge board(s) to inventory-declared boot mode
 │   ├── set_boot_mode.yml            # Thin wrapper around converge for -e override
 │   ├── poe_control.yml              # PoE on/off/cycle (wraps routeros/poe_control.yml)
-│   ├── persist_uboot_env.yml        # Approach B: write rock-5b SPI env vars via fw_setenv
-│   ├── test_hardware_e2e.yml        # SD → NFS → SD assertion harness
+│   ├── persist_uboot_env.yml        # Write SPI U-Boot env vars via fw_setenv (rock-5b etc.)
+│   ├── provision_local_disk.yml     # Compose disk_provision against a board's local disk
+│   ├── reprovision_to_local.yml     # Headless NFS-boot → reprovision → flip pxelinux to local
+│   ├── test_fleet_e2e.yml           # Deterministic six-phase whole-fleet harness
+│   ├── test_hardware_e2e.yml        # SD → NFS → SD single-board assertion harness
+│   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
+│   ├── test_reprovision_e2e.yml     # Single-board reprovision regression
 │   ├── routeros/                    # RouterOS-specific reference playbooks (swappable)
 │   │   ├── requirements.yml           # Optional deps: community.routeros + ansible.netcommon
 │   │   ├── bootstrap_user.yml         # Provision ansible-netboot user/group/SSH keys
@@ -107,12 +114,16 @@ david_igou/armbian_netboot/   (this repo root)
 │   ├── tests/
 │   │   └── test_build_image_vars.yml   # Localhost inventory-contract test for build_image.yml's per-model vars
 │   └── tasks/
-│       ├── cold_boot_with_retry.yml      # PoE cycle + wait_for TCP/22 with retries
-│       ├── cold_boot_single_attempt.yml  # Inner block/rescue for one attempt
-│       ├── wait_for_ssh_with_cycle_retry.yml # Post-boot wait with cycle retry
-│       ├── auto_bootstrap_if_needed.yml  # SSH probe → bootstrap_armbian fallback
-│       ├── render_and_upload_pxelinux.yml # Render locally + upload to router (e2e/manual-PSU helper)
-│       └── diagnostic_bundle.yml         # findmnt/cmdline/journal capture on failure
+│       ├── _converge_boot_mode.yml         # Inner converge primitive used by lifecycle wrappers
+│       ├── _lifecycle_set_and_verify.yml   # Converge + verify with diagnostic-bundle on failure
+│       ├── auto_bootstrap_if_needed.yml    # SSH probe → bootstrap_armbian fallback
+│       ├── cold_boot_single_attempt.yml    # Inner block/rescue for one cold-boot attempt
+│       ├── cold_boot_with_retry.yml        # PoE cycle + wait_for TCP/22 with retries
+│       ├── compose_uboot_env_vars.yml      # Build the converged U-Boot env dict
+│       ├── diagnostic_bundle.yml           # findmnt/cmdline/journal capture on failure
+│       ├── render_and_upload_pxelinux.yml  # Render locally + upload to router (e2e/manual-PSU helper)
+│       ├── validate_local_kernel.yml       # Assert local_kernel preconditions per host
+│       └── wait_for_ssh_with_cycle_retry.yml # Post-boot wait with cycle retry
 ├── .inventory/               # Real inventory (gitignored)
 ├── inventory/                # Documentation-only sample inventory
 │   ├── hosts.yml             # orange-pi-5-pro example
@@ -124,7 +135,8 @@ david_igou/armbian_netboot/   (this repo root)
     ├── architecture.md
     ├── boot-mode-override.md      # Three override methods (inventory, -e, U-Boot env)
     ├── retry-configuration.md     # Retry/timeout knob tuning recipes
-    ├── routeros-setup.md
+    ├── examples/
+    │   └── maintainer-topology.md # Maintainer-specific RouterOS example
     └── superpowers/specs/         # Design specs
 ```
 
@@ -170,12 +182,31 @@ ansible-playbook playbooks/set_boot_mode.yml \
 ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 \
   -e armbian_netboot_poe_action=cycle
 
-# Persist the U-Boot env vars rock-5b needs for autonomous PXE.
+# Persist the U-Boot env vars SPI-flash boards need for autonomous PXE.
 ansible-playbook playbooks/persist_uboot_env.yml --limit rock-5b-01
 
-# Hardware E2E test: converge board through SD → NFS → SD and assert
-# each transition. Single board via --limit.
+# Reprovision a board's local disk(s) via systemd-repart + rsync.
+# Composes the disk_provision role; refuses to wipe the disk the board
+# is currently booted from.
+ansible-playbook playbooks/provision_local_disk.yml --limit orange-pi-5-pro-01
+
+# Headless full-lifecycle reprovision: boot NFS → reprovision local
+# disk(s) → flip pxelinux to local → verify (auto-reverts on failure).
+ansible-playbook playbooks/reprovision_to_local.yml --limit orange-pi-5-pro-01
+
+# Clean up stale TFTP rows + per-host pxelinux.cfg for retired boards.
+ansible-playbook playbooks/cleanup_boot_files.yml
+
+# Hardware E2E test: converge a single board through SD → NFS → SD and
+# assert each transition. Single board via --limit.
 ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
+
+# Deterministic whole-fleet E2E test: six phases × all target boards.
+# See `.claude/skills/running-fleet-e2e-test/` for the wrapper.
+ansible-playbook playbooks/test_fleet_e2e.yml
+
+# Single-board reprovision regression test.
+ansible-playbook playbooks/test_reprovision_e2e.yml --limit orange-pi-5-pro-01
 ```
 
 ## Inventory: documentation vs. real

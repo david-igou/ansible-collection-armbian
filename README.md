@@ -45,7 +45,7 @@ Before any playbook runs, the following must already be true in your environment
   `ansible.netcommon.network_cli`. The SBC subnet's DHCP `next-server` must
   point at this device — that DHCP config is owned externally (typically by
   your RouterOS-config repo) and is not asserted by this collection. See
-  [`docs/routeros-setup.md`](docs/routeros-setup.md).
+  [`docs/examples/maintainer-topology.md`](docs/examples/maintainer-topology.md).
 - **Docker-capable build host** in the `armbian_builders` inventory group —
   only needed if you build your own images. Pre-built images can be served
   directly from the netboot server's HTTP root.
@@ -324,8 +324,11 @@ Install via `ansible-galaxy collection install -r playbooks/routeros/requirement
 | 8 | `persist_uboot_env.yml` | Once per rock-5b board (rare) | Writes the U-Boot env vars rock-5b needs for autonomous PXE via `fw_setenv` from Linux into SPI. |
 | 9 | `provision_local_disk.yml` | Once per board you want to make local-bootable (e.g. NVMe) | Wipes the target disk and rsyncs the board's currently-mounted `/` onto a fresh ext4 partition labeled `armbi_root_local`. Composes the `disk_provision` role; refuses to wipe the disk the board is currently booted from. |
 | 10 | `reprovision_to_local.yml` | Once per board (or whenever layout changes) | Headless full-lifecycle: boot board into NFS → loop disk_provision over `armbian_netboot_local_disks` → flip pxelinux to local → verify. Auto-reverts to nfs on local-boot failure with a diagnostic bundle captured. |
-| — | `test_hardware_e2e.yml` | Ad-hoc | Hardware regression test: drives a single board through SD → NFS → SD via pxelinux + PoE cycles, asserting `findmnt /` reports the expected source at each transition. |
+| — | `test_fleet_e2e.yml` | Ad-hoc | Deterministic six-phase whole-fleet harness: PoE-down → NFS reset → NFS boot + bootstrap → dd SD → SD boot + bootstrap → NVMe reprovision + local_kernel verify. Used to validate cross-iteration determinism after image rebuilds or role changes; see `.claude/skills/running-fleet-e2e-test/`. |
+| — | `test_hardware_e2e.yml` | Ad-hoc | Hardware regression test for a single board: drives SD → NFS → SD via pxelinux + PoE cycles, asserting `findmnt /` reports the expected source at each transition. |
 | — | `test_manual_psu_cold_boot.yml` | Ad-hoc | Same shape as the NFS-mode phase of `test_hardware_e2e.yml`, but for USB-C powered boards where power transitions are operator-driven. |
+| — | `test_reprovision_e2e.yml` | Ad-hoc | Single-board reprovision regression: drives a board through `reprovision_to_local.yml` and asserts the final rootfs is on the declared local disk. |
+| — | `cleanup_boot_files.yml` | Ad-hoc | Removes stale per-host pxelinux.cfg + per-model TFTP artefacts from the router for boards that have been retired from inventory. |
 
 ### RouterOS reference playbooks (swappable)
 
@@ -773,7 +776,7 @@ molecule verify -s default
 - [Architecture and boot flow](docs/architecture.md)
 - [Boot mode override methods](docs/boot-mode-override.md)
 - [Retry / timeout knob recipes](docs/retry-configuration.md)
-- [RouterOS setup guide](docs/routeros-setup.md)
+- [RouterOS setup guide](docs/examples/maintainer-topology.md)
 - [U-Boot + armbian/build deep-dive](docs/uboot-armbian-build-explainer.html)
 - [v3 role refactor spec](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
 
