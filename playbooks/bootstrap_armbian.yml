@@ -14,7 +14,7 @@
 #
 # Role variables (override with -e or in inventory). See
 # `roles/bootstrap_armbian/README.md`:
-#   armbian_netboot_bootstrap_user      — user to create (default: igou)
+#   armbian_netboot_bootstrap_user      — user to create (default: armbian)
 #   armbian_netboot_bootstrap_ssh_keys  — list of public-key strings (required)
 
 - name: Bootstrap Armbian user with SSH key auth

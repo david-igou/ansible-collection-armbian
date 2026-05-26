@@ -48,7 +48,7 @@
 #
 #   # Subset of hosts (use -e target_hosts=, not --limit, because the
 #   # plays delegate to rb5009/netboot_server/PoE switches):
-#   ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01.igou.systems
+#   ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01.example.lan
 #
 #   # Skip phases you've already proven on a previous run:
 #   ansible-playbook playbooks/test_fleet_e2e.yml -e skip_phase_3=true

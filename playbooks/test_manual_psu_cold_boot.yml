@@ -28,7 +28,7 @@
 #
 # Usage:
 #   ansible-playbook playbooks/test_manual_psu_cold_boot.yml \
-#     --limit opi5pro-01.igou.systems \
+#     --limit opi5pro-01.example.lan \
 #     -e armbian_netboot_default_password=1234
 
 - name: Manual-PSU cold-boot test (single cold boot per run)
