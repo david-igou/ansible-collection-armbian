@@ -215,14 +215,11 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
 - `armbian_netboot_default_password` — Armbian NFS root SSH password (default `1234`);
   encrypt with vault.
 - `armbian_netboot_image_urls` — per-model `.img.xz` source consumed by
-  `image_extract` on the netboot_server (Phase 1 of `test_fleet_e2e.yml`,
-  plus `stage_netboot_assets.yml`). Typically a local NFS path on the
-  server.
-- `armbian_netboot_image_urls_http` — per-model http(s):// URL consumed
-  by the `disk_image` role on each board (Phase 3 of `test_fleet_e2e.yml`).
-  Must resolve to the SAME `.img.xz` as `armbian_netboot_image_urls` but
-  via a URL the boards can reach (the netboot_server often can't reach
-  its own macvlan-fronted HTTP address, hence the split).
+  both `image_extract` on the netboot_server (Phase 1 of
+  `test_fleet_e2e.yml`, plus `stage_netboot_assets.yml`) and `disk_image`
+  on each board (Phase 3 of `test_fleet_e2e.yml`). Each value is an
+  `https://` URL, `http://` URL, or absolute path; whichever you set must
+  be reachable from both the netboot_server and the boards.
 - `armbian_netboot_nfs_assets_export` — netboot-owned subtree on the HTTP host.
   Default `/mnt/ssd/public/boot-files`.
 - **External RouterOS prerequisite**: the SBC subnet's `next-server` must be set to
@@ -403,10 +400,9 @@ Minimum touched files for a new board:
    `armbian_netboot_board_configs` with `armbian_dl_dir`,
    `armbian_board_name`, `armbian_support`, `dtb`, `console`, `earlycon`.
 3. `inventory/group_vars/all.yml`: add an
-   `armbian_netboot_image_urls[<model>]` entry pointing at the
-   locally-published custom build (consumed on the netboot_server),
-   AND an `armbian_netboot_image_urls_http[<model>]` entry with the
-   http(s):// URL the boards stream from for the Phase 3 dd-to-SD step.
+   `armbian_netboot_image_urls[<model>]` entry (https://, http://, or
+   absolute path) reachable from both the netboot_server (Phase 1
+   image_extract) and the boards (Phase 3 dd-to-SD).
 4. `inventory/group_vars/<model_group>.yml` (doc-only example +
    real inventory): set `armbian_netboot_board_branch` if the board's
    family-default U-Boot tree can't netboot (e.g. rk3588 PCIe-NIC
