@@ -1,4 +1,4 @@
-# armbian_build
+# image_build
 
 Build a custom Armbian image with caller-supplied userpatches, using
 [`armbian/build`](https://github.com/armbian/build) in Docker mode. The
@@ -82,7 +82,7 @@ That publish step requires:
 
 ```yaml
 - ansible.builtin.include_role:
-    name: armbian_build
+    name: image_build
   vars:
     armbian_build_board: orangepi5pro
     armbian_build_userpatches:

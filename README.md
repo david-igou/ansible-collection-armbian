@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/github/license/david-igou/ansible-collection-armbian_netboot)
 ![Last Commit](https://img.shields.io/github/last-commit/david-igou/ansible-collection-armbian_netboot)
 
-Ansible collection (`v3.0.0`) for managing Armbian-based ARM SBCs end-to-end:
+Ansible collection (early-stage, `0.0.x` — expect breaking changes between releases) for managing Armbian-based ARM SBCs end-to-end:
 build a custom Armbian image with PXE-first U-Boot, stage NFS rootfs templates
 and per-host clones on a netboot server, push per-model kernel/initrd/dtb plus
 per-board `pxelinux.cfg/01-<MAC>` files to a MikroTik rb5009, then flip each
@@ -89,7 +89,7 @@ detailed [Lifecycle](#lifecycle) below.
 
 ## How it works
 
-The collection exposes seven roles. Each one runs on a specific host class,
+The collection exposes nine roles. Each one runs on a specific host class,
 takes a small input set, and produces one output. Most roles are
 independent — they consume inventory metadata or live-board state, not
 artefacts from other roles. The only direct role-to-role chain is **image
@@ -120,6 +120,8 @@ flowchart TB
         R_BA["<b>bootstrap_armbian</b><br/>input: ansible_user, SSH key list<br/>(connects as root + default password)<br/>output: SSH-key user + passwordless sudo<br/>on the running rootfs"]
         R_BBW["<b>board_boot_wait</b><br/>input: TCP/22 + SSH probe timeout<br/>output: assertion the board is reachable"]
         R_BBV["<b>board_boot_verify</b><br/>input: declared boot_mode<br/>output: assertion ansible_mounts['/']<br/>matches mode (NFS vs block device)"]
+        R_DI["<b>disk_image</b><br/>input: .img.xz or .img source<br/>(URL or absolute path), target block device<br/>output: whole-disk image streamed via<br/>curl | xz | dd, mount-aware refusal"]
+        R_DP["<b>disk_provision</b><br/>input: declarative GPT layout,<br/>rsync source rootfs, target block device<br/>output: partitions applied via systemd-repart,<br/>fstab rewritten by LABEL, idempotent"]
     end
 
     R_IB -- ".img.xz" --> R_IE
@@ -220,7 +222,7 @@ compose them into workflows.**
 A role asks: *given these inputs, is the world in the desired state, and if
 not, make it so.* It does not decide intent — callers do. A playbook decides
 which roles to invoke, against which inventory, with which parameters, in
-what order. Roles in v3 are transport-agnostic; switch-ecosystem-specific
+what order. Roles are transport-agnostic; switch-ecosystem-specific
 tasks (RouterOS upload, PoE control) live as swappable reference playbooks
 under [`playbooks/routeros/`](playbooks/routeros/), selected via
 `armbian_netboot_*_playbook` variables.
@@ -231,19 +233,24 @@ Swapping to a different switch ecosystem means writing a parallel
 `playbooks/<vendor>/` directory and pointing the transport-hook variables
 at it.
 
-## Status: v3.0.0 — single-purpose, transport-agnostic roles
+## Status: early-stage (0.0.x) — expect breaking changes
 
-Breaking change from v2. The five composite v2 roles (`boot_mode`,
-`netboot_assets`, `routeros_pxe_config`, `routeros_poe`,
-`bootstrap_routeros_user`) are gone; v3 ships seven single-host,
-single-purpose roles with zero RouterOS knowledge. The always-netboot model
-carries forward unchanged: every onboarded board always has
-`pxelinux.cfg/01-<MAC>` on rb5009, boot mode is controlled by the `default`
-directive inside it, and the `sd` label defaults to
-`root=LABEL=armbi_root` (override per-host via `armbian_netboot_sd_root`).
+The collection is in active development. Inventory variables, default
+values, group names, role names, and playbook names may all shift
+between 0.0.x releases without long deprecation windows. Pin to a
+specific version in your `requirements.yml` if you depend on a given
+shape.
 
-Specs: [v3 design](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md) ·
-[v2 always-netboot model](docs/superpowers/specs/2026-05-14-always-netboot-migration-design.md)
+The always-netboot model is the stable invariant the collection is
+built around: every onboarded board always has
+`pxelinux.cfg/01-<MAC>` on the RouterOS router, boot mode is
+controlled by the `default` directive inside it, and the `sd` label
+defaults to `root=LABEL=armbi_root` (override per-host via
+`armbian_netboot_sd_root`).
+
+Historical design specs and migration notes live under
+[`docs/superpowers/`](docs/superpowers/) — useful for context on why
+current shapes exist, but not authoritative for current behaviour.
 
 ## Requirements
 
@@ -290,7 +297,8 @@ Install via `ansible-galaxy collection install -r playbooks/routeros/requirement
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; optional SCP publish gated by `armbian_netboot_publish_target` |
+| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_image.yml` publishes to the netboot server) |
+| [`disk_image`](roles/disk_image/) | a board | Stream an `.img.xz` or `.img` (URL or absolute path) to a whole-disk block device via `curl \| xz -dc \| dd` with a mount-aware refusal guard |
 | [`image_extract`](roles/image_extract/) | netboot server | One rootfs template + per-model TFTP artefacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
 | [`rootfs_clone`](roles/rootfs_clone/) | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset (hostname / machine-id / SSH host keys) |
 | [`pxelinux_render`](roles/pxelinux_render/) | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
@@ -303,7 +311,7 @@ Install via `ansible-galaxy collection install -r playbooks/routeros/requirement
 
 | # | Playbook | Frequency | What it does |
 |---|---|---|---|
-| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for the target board on the `armbian_builders` host. Optionally publishes to the netboot server's HTTP root when `armbian_netboot_publish_target` is set. |
+| 0 | `build_image.yml` | Per board model, on `armbian/build` ref or patch-table change | Builds a custom Armbian `.img.xz` for the target board on the `armbian_builders` host, then publishes the staged artefacts to the netboot server's HTTP assets root over rsync+SSH (`become: true` on the receive side). |
 | 1 | `bootstrap_armbian.yml` | Once per board, right after flashing the custom image | Connects as root with `armbian_netboot_default_password`, creates the inventory's `ansible_user` with passwordless sudo + SSH-key auth, drops Armbian's first-login TUI prompt, disables sshd password auth. |
 | 2 | `routeros/bootstrap_user.yml` | Once per RouterOS device | Provisions the `ansible-netboot` SSH user, group, and keys on every host in the `routeros_netboot` group. |
 | 3 | `stage_netboot_assets.yml` | Once per environment, then on every inventory change | Against the netboot server: image extraction → per-model rootfs templates → per-host rootfs clones with identity reset. |
