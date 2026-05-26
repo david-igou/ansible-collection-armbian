@@ -17,9 +17,10 @@
 #   armbian_support      Armbian support tier (standard / community /
 #                        wip / unsupported). Documentation only.
 #   dtb                  Device tree path under /boot/dtb/. Used by
-#                        roles/netboot_assets/tasks/per_board.yml.
+#                        roles/image_extract/tasks/_copy_kernel_artifacts.yml
+#                        when extracting per-model TFTP artefacts.
 #   console              Kernel console parameter. Used by
-#                        roles/routeros_pxe_config/templates/pxelinux_cfg.j2.
+#                        roles/pxelinux_render/templates/pxelinux_cfg.j2.
 #   earlycon             earlycon= argument that drives kernel output
 #                        before the ttyS* driver loads. Format is
 #                        "<driver>,<bus>,<mmio_addr>" — for RK3588S the

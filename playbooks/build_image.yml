@@ -4,7 +4,7 @@
 # the netboot server's HTTP export.
 #
 # Two plays:
-#   1. hosts: armbian_builders — invoke the armbian_build role per
+#   1. hosts: armbian_builders — invoke the image_build role per
 #      unique armbian_netboot_board_model, then stage each <board>/ directory on the
 #      controller at /tmp/armbian_publish/<board>/.
 #   2. hosts: netboot_server — push each staged <board>/ directory from
@@ -20,7 +20,7 @@
 #     writes the root-owned per-board directories with --mkpath).
 #
 # The PXE-first userpatches family overlay is playbook data
-# (build_userpatches_common) — the armbian_build role itself is
+# (build_userpatches_common) — the image_build role itself is
 # intent-agnostic. Per-board userpatches and U-Boot branch live in
 # inventory group_vars at inventory/group_vars/<model_group>.yml as
 # armbian_netboot_board_userpatches and armbian_netboot_board_branch.

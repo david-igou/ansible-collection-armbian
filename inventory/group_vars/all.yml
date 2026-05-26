@@ -72,7 +72,7 @@ armbian_netboot_bootstrap_ssh_keys: []
 
 # Verbose / diagnostic kernel cmdline for PXE-booted boards.
 #
-# When true, roles/routeros_pxe_config/templates/pxelinux_cfg.j2 appends
+# When true, roles/pxelinux_render/templates/pxelinux_cfg.j2 appends
 # a diagnostic suffix to the append line (earlycon, loglevel=8,
 # initcall_debug, systemd.log_target=console, ...). Per-host overrides
 # win: setting `armbian_netboot_pxe_verbose: true` in host_vars flips

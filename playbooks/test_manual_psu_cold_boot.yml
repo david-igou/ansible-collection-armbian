@@ -3,9 +3,10 @@
 #
 # Same shape as test_hardware_e2e.yml's Phase 2 (converge pxelinux.cfg
 # to nfs + verify NFS-rooted boot), but the power transitions are
-# operator-driven `ansible.builtin.pause` prompts instead of a
-# routeros_poe cycle on the switch. Use this when the board is being
-# powered via its USB-C input from an external PSU rather than via PoE.
+# operator-driven `ansible.builtin.pause` prompts instead of a PoE
+# cycle on the upstream RouterOS switch. Use this when the board is
+# being powered via its USB-C input from an external PSU rather than
+# via PoE.
 #
 # Pre-conditions:
 #   - PSU is DISCONNECTED (board is off) at invocation.

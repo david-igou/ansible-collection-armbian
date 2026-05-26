@@ -4,10 +4,10 @@
 # Identity (`ansible_user`, `ansible_host`, `ansible_port`) lives on each
 # RouterOS host entry in `inventory/hosts.yml`, the same as any other
 # Ansible-managed host. Set `ansible_user` to the user provisioned by
-# `playbooks/bootstrap_routeros_user.yml` (default `ansible-netboot`).
+# `playbooks/routeros/bootstrap_user.yml` (default `ansible-netboot`).
 #
 # Authentication is SSH key based — no password is set here. Provision
-# keys with `playbooks/bootstrap_routeros_user.yml` before running other
+# keys with `playbooks/routeros/bootstrap_user.yml` before running other
 # playbooks.
 ansible_connection: "ansible.netcommon.network_cli"
 ansible_network_os: "community.routeros.routeros"

@@ -74,9 +74,9 @@ labels: ["hardware", "board-tracker"]
   to keep this board reliable. Update when adding new mitigations.
 -->
 
-- <e.g. `roles/netboot_assets/tasks/stage_rb5009.yml` always force-removes
-  rb5009 vmlinuz before net_put — guards against the kernel/module
-  version-mismatch class of mount-time failure>
+- <e.g. `playbooks/routeros/upload_tftp_assets.yml` always force-removes
+  the router's vmlinuz before net_put — guards against the
+  kernel/module version-mismatch class of mount-time failure>
 - <e.g. `playbooks/test_hardware_e2e.yml` `_wait_timeout: 300` — chosen
   to absorb U-Boot's PXE → EFI → MMC fall-through on cold boots>
 
