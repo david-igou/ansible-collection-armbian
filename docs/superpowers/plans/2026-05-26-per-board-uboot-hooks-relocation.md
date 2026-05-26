@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move the two board-selective U-Boot override hooks (`__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`) out of `build_userpatches_common` in `playbooks/build_image.yml` and into per-board `armbian_netboot_board_userpatches` entries in `inventory/group_vars/rock_5a.yml` / `rock_5b.yml`. Deliver them via the per-board overlay `userpatches/config/boards/<board>.conf` (sourced by armbian/build only when building that board) instead of via the rk3588 family conf overlay.
+**Goal:** Move the two board-selective U-Boot override hooks (`__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`) out of `build_userpatches_common` in `playbooks/build_image.yml` and into per-board `armbian_board_userpatches` entries in `inventory/group_vars/rock_5a.yml` / `rock_5b.yml`. Deliver them via the per-board overlay `userpatches/config/boards/<board>.conf` (sourced by armbian/build only when building that board) instead of via the rk3588 family conf overlay.
 
 **Architecture:** armbian/build sources four user-overlay paths additively (i.e. ON TOP of the upstream file, not replacing it): `userpatches/lib.config`, `userpatches/config/sources/families/<family>.conf`, `userpatches/config/boards/<board>.conf`, and `userpatches/customize-image.sh`. Today the rk3588 family overlay carries five `__999_*` hooks; three (`__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`) are truly family-shared and stay where they are. The other two are per-board hooks that currently filter internally on `BOARD=`; moving them to per-board overlays makes the per-board scope a structural property (only sourced for that board) instead of a runtime filter, removes them from the playbook surface, and lets the operator change them by editing one inventory file. The role contract (`armbian_build_userpatches` as a flat `list[{dest, content}]`) is unchanged.
 
 **Tech Stack:** Ansible 2.15+, Jinja2, YAML, bash (function bodies for armbian/build hooks). No new collections or modules.
 
 **Prerequisite:** Plan `docs/superpowers/plans/2026-05-25-per-board-userpatches-inventory.md` must be fully implemented and merged first. This plan depends on:
-- `inventory/group_vars/rock_5a.yml` and `rock_5b.yml` existing with `armbian_netboot_board_branch: edge`.
-- `playbooks/build_image.yml`'s include_role vars resolving `armbian_netboot_board_userpatches` from per-model hostvars.
+- `inventory/group_vars/rock_5a.yml` and `rock_5b.yml` existing with `armbian_board_branch: edge`.
+- `playbooks/build_image.yml`'s include_role vars resolving `armbian_board_userpatches` from per-model hostvars.
 - `playbooks/tests/test_build_image_vars.yml` existing as the per-model contract test.
 
 If the prerequisite plan is not yet merged, stop and execute that first.
@@ -20,7 +20,7 @@ If the prerequisite plan is not yet merged, stop and execute that first.
 ## File Structure
 
 **Modified files:**
-- `inventory/group_vars/rock_5a.yml` — add `armbian_netboot_board_userpatches` entry with `dest: config/boards/rock-5a.conf` carrying the relocated hook.
+- `inventory/group_vars/rock_5a.yml` — add `armbian_board_userpatches` entry with `dest: config/boards/rock-5a.conf` carrying the relocated hook.
 - `inventory/group_vars/rock_5b.yml` — same shape, with `dest: config/boards/rock-5b.conf`.
 - `playbooks/build_image.yml` — delete the two function blocks (and their preceding comment blocks) from `build_userpatches_common`. Keep the three family-shared hooks.
 - `playbooks/tests/test_build_image_vars.yml` — extend with per-board hook assertions (rock-5a and rock-5b must each carry a per-board conf overlay entry).
@@ -50,18 +50,18 @@ In `playbooks/tests/test_build_image_vars.yml`, immediately after the "Assert or
     - name: Assert rock-5a ships its mainline-u-boot hook via per-board conf overlay
       ansible.builtin.assert:
         that:
-          - "(hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([])) | length >= 1"
+          - "(hostvars[_board_model_first_host['rock-5a']].armbian_board_userpatches | default([])) | length >= 1"
           - >-
-            (hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+            (hostvars[_board_model_first_host['rock-5a']].armbian_board_userpatches | default([]))
             | selectattr('dest', 'equalto', 'config/boards/rock-5a.conf')
             | list | length == 1
           - >-
-            (hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+            (hostvars[_board_model_first_host['rock-5a']].armbian_board_userpatches | default([]))
             | selectattr('dest', 'equalto', 'config/sources/families/rockchip-rk3588.conf')
             | list | length == 0
           - >-
             'post_family_config_branch_edge__999_rock5a_use_mainline_uboot' in
-            ((hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+            ((hostvars[_board_model_first_host['rock-5a']].armbian_board_userpatches | default([]))
              | selectattr('dest', 'equalto', 'config/boards/rock-5a.conf')
              | map(attribute='content') | first | default(''))
         fail_msg: >-
@@ -76,18 +76,18 @@ In `playbooks/tests/test_build_image_vars.yml`, immediately after the "Assert or
     - name: Assert rock-5b ships its v2026.04 u-boot bump via per-board conf overlay
       ansible.builtin.assert:
         that:
-          - "(hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([])) | length >= 1"
+          - "(hostvars[_board_model_first_host['rock-5b']].armbian_board_userpatches | default([])) | length >= 1"
           - >-
-            (hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+            (hostvars[_board_model_first_host['rock-5b']].armbian_board_userpatches | default([]))
             | selectattr('dest', 'equalto', 'config/boards/rock-5b.conf')
             | list | length == 1
           - >-
-            (hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+            (hostvars[_board_model_first_host['rock-5b']].armbian_board_userpatches | default([]))
             | selectattr('dest', 'equalto', 'config/sources/families/rockchip-rk3588.conf')
             | list | length == 0
           - >-
             'post_family_config_branch_edge__999_rock5b_uboot_v2026_04' in
-            ((hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+            ((hostvars[_board_model_first_host['rock-5b']].armbian_board_userpatches | default([]))
              | selectattr('dest', 'equalto', 'config/boards/rock-5b.conf')
              | map(attribute='content') | first | default(''))
         fail_msg: >-
@@ -105,7 +105,7 @@ unset ANSIBLE_INVENTORY
 ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
 ```
 
-Expected: FAIL on the new rock-5a assert ("rock-5a group_vars must ship the … hook via dest: config/boards/rock-5a.conf"). The prerequisite plan put only `armbian_netboot_board_branch: edge` in `rock_5a.yml` — no userpatches list — so the `selectattr('dest', 'equalto', 'config/boards/rock-5a.conf') | list | length == 1` clause fails. This confirms the test is doing real work.
+Expected: FAIL on the new rock-5a assert ("rock-5a group_vars must ship the … hook via dest: config/boards/rock-5a.conf"). The prerequisite plan put only `armbian_board_branch: edge` in `rock_5a.yml` — no userpatches list — so the `selectattr('dest', 'equalto', 'config/boards/rock-5a.conf') | list | length == 1` clause fails. This confirms the test is doing real work.
 
 - [ ] **Step 3: Commit**
 
@@ -119,13 +119,13 @@ git commit -m "test(build_image): assert rock-5{a,b} ship u-boot hooks via per-b
 ## Task 2: Relocate `__999_rock5b_uboot_v2026_04` into `inventory/group_vars/rock_5b.yml`
 
 **Files:**
-- Modify: `inventory/group_vars/rock_5b.yml` (append `armbian_netboot_board_userpatches` after the existing `armbian_netboot_board_branch` line)
+- Modify: `inventory/group_vars/rock_5b.yml` (append `armbian_board_userpatches` after the existing `armbian_board_branch` line)
 
 **Context:** The function body is unchanged from `playbooks/build_image.yml:242-248`. The internal `[[ "${BOARD}" != "rock-5b" ]] && return 0` filter is kept as defensive belt-and-suspenders even though `userpatches/config/boards/rock-5b.conf` is only sourced for that board. The comment block (currently in `playbooks/build_image.yml:225-241`) moves with it, with light edits to explain the new delivery path.
 
 - [ ] **Step 1: Rewrite `inventory/group_vars/rock_5b.yml`**
 
-Replace the file's content (it currently has only `armbian_netboot_board_branch: edge` plus its comment block) with:
+Replace the file's content (it currently has only `armbian_board_branch: edge` plus its comment block) with:
 
 ```yaml
 ---
@@ -142,7 +142,7 @@ Replace the file's content (it currently has only `armbian_netboot_board_branch:
 # Our `__999_rock5b_uboot_v2026_04` hook below (delivered via the
 # per-board conf overlay) bumps that upstream-hook's v2026.01 default
 # to v2026.04. Both hooks gate on BRANCH=edge.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Delivered as a userpatches OVERLAY of config/boards/rock-5b.conf —
@@ -167,7 +167,7 @@ armbian_netboot_board_branch: edge
 # v2026.04 does NOT clear any of rock-5b's three PXE failure layers
 # on its own — Approach B (playbooks/persist_uboot_env.yml) still has
 # to run to populate SPI env. The bump is just to track upstream.
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "config/boards/rock-5b.conf"
     content: |
       function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
@@ -221,7 +221,7 @@ Replace the file's content with:
 # BOOT_TARGET_DEVICES X-macro form, which the `__999_pxe_first` sed
 # (in playbooks/build_image.yml's build_userpatches_common) cannot
 # patch — PXE stays at the end of the boot order and SD wins.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Delivered as a userpatches OVERLAY of config/boards/rock-5a.conf
@@ -280,7 +280,7 @@ armbian_netboot_board_branch: edge
 # unset clears rockchip64_common's default; no MTD writer is needed
 # since BOOT_SUPPORT_SPI's SPI-loader build path is not exercised
 # when no SPI artifact exists.
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "config/boards/rock-5a.conf"
     content: |
       function post_family_config_branch_edge__999_rock5a_use_mainline_uboot() {
@@ -416,7 +416,7 @@ Expected: no new findings vs. the baseline at branch start. Pre-existing finding
 - Modify: `CLAUDE.md` (anywhere `build_userpatches_common` is described as the home for per-board hooks)
 - Modify: `.claude/skills/adding-armbian-board/SKILL.md` (Phase 4 / hook-placement guidance)
 
-**Context:** Today CLAUDE.md and the skill direct new-board onboarders to add per-board U-Boot hooks under `build_userpatches_common` in the playbook. After this refactor, the canonical location for per-board hooks is a `dest: config/boards/<board>.conf` entry under `armbian_netboot_board_userpatches` in the matching `inventory/group_vars/<model_group>.yml`. Update both docs to reflect that, and explain WHEN to use the family overlay vs. the per-board overlay so the next onboarder doesn't have to re-derive the distinction.
+**Context:** Today CLAUDE.md and the skill direct new-board onboarders to add per-board U-Boot hooks under `build_userpatches_common` in the playbook. After this refactor, the canonical location for per-board hooks is a `dest: config/boards/<board>.conf` entry under `armbian_board_userpatches` in the matching `inventory/group_vars/<model_group>.yml`. Update both docs to reflect that, and explain WHEN to use the family overlay vs. the per-board overlay so the next onboarder doesn't have to re-derive the distinction.
 
 - [ ] **Step 1: Audit CLAUDE.md for stale references**
 
@@ -427,7 +427,7 @@ grep -n 'build_userpatches_common\|build_userpatches' CLAUDE.md
 
 For each hit, decide:
 - If it describes the **family-shared** PXE-first hook, leave it (the hook still lives there).
-- If it describes adding **per-board** hooks, update to point at `armbian_netboot_board_userpatches` per-board conf overlays.
+- If it describes adding **per-board** hooks, update to point at `armbian_board_userpatches` per-board conf overlays.
 
 The most likely affected spot is the "Adding a new board" minimum-touched-files list (was already touched by the prior plan to remove `build_branches:` and `build_userpatches:`; double-check the resulting text now reflects per-board confs as one option for board-specific hooks).
 
@@ -441,7 +441,7 @@ Append to the existing collection-structure or "Adding a new board" section (whi
 Two overlay paths are available; choose by SCOPE:
 
 - **Family-shared** — the hook applies identically to every board in a SoC family (e.g. rk3588). Add it to `build_userpatches_common` in `playbooks/build_image.yml` under `dest: config/sources/families/<family>.conf`. Today's examples: `__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`.
-- **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_netboot_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
+- **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
 
 If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `build_userpatches_common`, that's the cue to write a per-board overlay instead.
 ```
@@ -450,7 +450,7 @@ If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `buil
 
 - [ ] **Step 3: Update the adding-armbian-board skill**
 
-In `.claude/skills/adding-armbian-board/SKILL.md`, find the Phase 4 section. After the prior plan's edits, it currently mentions `armbian_netboot_board_userpatches` for `userpatches/` source-patch entries. Append a sentence (or short paragraph) clarifying the per-board conf overlay shape, with this wording:
+In `.claude/skills/adding-armbian-board/SKILL.md`, find the Phase 4 section. After the prior plan's edits, it currently mentions `armbian_board_userpatches` for `userpatches/` source-patch entries. Append a sentence (or short paragraph) clarifying the per-board conf overlay shape, with this wording:
 
 ```markdown
 For board-specific armbian/build hook FUNCTIONS (as opposed to source patches against the kernel or U-Boot tree), use `dest: config/boards/<board>.conf`. armbian/build sources that overlay file additively on top of upstream's `config/boards/<board>.conf` only when building that board, so the hook fires per-board structurally — you do not need an internal `[[ "${BOARD}" != "..." ]] && return 0` filter (keep one as defensive belt-and-suspenders if you wish). Source-tree patches still use the `userpatches/u-boot/<version>/<board>/<NNNN-name>.patch` shape — see the orange-pi-5-max RTL8125 patch in `inventory/group_vars/orange_pi_5_max.yml` for an example.
@@ -482,7 +482,7 @@ cp inventory/group_vars/rock_5a.yml .inventory/group_vars/
 cp inventory/group_vars/rock_5b.yml .inventory/group_vars/
 ```
 
-If the operator has any local customisations in `.inventory/group_vars/rock_5{a,b}.yml` beyond what the example carries, they must merge (not overwrite) — the new content adds an `armbian_netboot_board_userpatches` list; existing keys like `armbian_netboot_board_branch` are unchanged in name/value.
+If the operator has any local customisations in `.inventory/group_vars/rock_5{a,b}.yml` beyond what the example carries, they must merge (not overwrite) — the new content adds an `armbian_board_userpatches` list; existing keys like `armbian_board_branch` are unchanged in name/value.
 
 - [ ] **Step 2: Operator sanity-checks against real inventory**
 
@@ -531,15 +531,15 @@ The fleet e2e test exercises the SD → NFS → SD round trip. A successful run 
 - Function bodies in Tasks 2 and 3 are reproduced verbatim from the source playbook lines, not summarised or referenced by line range alone.
 
 **3. Type consistency:**
-- `armbian_netboot_board_userpatches` is always `list[{dest: str, content: str}]` — matches the role's existing input contract and the prior plan's contract.
+- `armbian_board_userpatches` is always `list[{dest: str, content: str}]` — matches the role's existing input contract and the prior plan's contract.
 - `dest` is always a string path relative to `userpatches/` (no leading `/`, no `..` — the role's `apply_userpatches.yml` asserts both).
 - `content` is always a multi-line YAML literal block scalar (`|`) preserving leading-tab indentation inside the bash function body.
 - Function names (`post_family_config_branch_edge__999_rock5{a,b}_*`) are identical in inventory and in the Task 1 test-harness substring search.
 
 **4. Edge cases verified:**
 - Stale family-overlay file on the builder host from a prior run carrying the old hooks → the role uses `ansible.builtin.copy` which is overwrite-style; Task 4's next build rewrites `userpatches/config/sources/families/rockchip-rk3588.conf` in full with only the three remaining hooks, removing the relocated ones automatically. No manual cleanup needed.
-- Build of orange-pi-5{,_pro,_max} after this refactor → their per-board overlays don't exist (those boards don't have `armbian_netboot_board_userpatches` carrying a `config/boards/*.conf` entry); the three family-shared hooks still fire via the family overlay. Behaviour unchanged.
-- Build of rock-5a or rock-5b with `armbian_netboot_board_branch: current` (someone manually overrides) → the relocated hooks have `[[ "${BRANCH}" != "edge" ]] && return 0` as belt-and-suspenders; they no-op. armbian/build's hook-name `_branch_edge_` segment also gates discovery at the extension-manager level. Belt-and-suspenders is intentional.
+- Build of orange-pi-5{,_pro,_max} after this refactor → their per-board overlays don't exist (those boards don't have `armbian_board_userpatches` carrying a `config/boards/*.conf` entry); the three family-shared hooks still fire via the family overlay. Behaviour unchanged.
+- Build of rock-5a or rock-5b with `armbian_board_branch: current` (someone manually overrides) → the relocated hooks have `[[ "${BRANCH}" != "edge" ]] && return 0` as belt-and-suspenders; they no-op. armbian/build's hook-name `_branch_edge_` segment also gates discovery at the extension-manager level. Belt-and-suspenders is intentional.
 - A future board added with its own per-board hook → the operator follows the new CLAUDE.md guidance from Task 6: per-board conf overlay in inventory. No playbook touch needed.
 
 ---

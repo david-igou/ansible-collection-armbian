@@ -5,15 +5,15 @@
 # context where import_playbook is unavailable).
 #
 # Designed to be included with:
-#   delegate_to: "{{ armbian_netboot_router }}"
+#   delegate_to: "{{ armbian_router }}"
 #   run_once: true
 #
 # Required vars (from play scope or include vars):
-#   armbian_netboot_board_model   board model string (e.g. orange-pi-5-max)
-#   armbian_netboot_tftp_flash_dir top-level dir on router flash (e.g. sbc)
+#   armbian_board_model   board model string (e.g. orange-pi-5-max)
+#   armbian_tftp_flash_dir top-level dir on router flash (e.g. sbc)
 #
 # When called inside a multi-host play via run_once, the
-# armbian_netboot_board_model must resolve correctly for the intended
+# armbian_board_model must resolve correctly for the intended
 # host. Callers should ensure the correct host context or pass the model
 # explicitly.
 
@@ -22,7 +22,7 @@
     commands:
       - >-
         /ip tftp print count-only where
-        req-filename="armbian/{{ armbian_netboot_board_model }}/{{ item }}"
+        req-filename="armbian/{{ armbian_board_model }}/{{ item }}"
   register: _plumbing_check_one_row_count
   retries: 3
   delay: 5
@@ -30,7 +30,7 @@
   changed_when: false
   loop: [vmlinuz, initrd.img, board.dtb]
   loop_control:
-    label: "armbian/{{ armbian_netboot_board_model }}/{{ item }}"
+    label: "armbian/{{ armbian_board_model }}/{{ item }}"
 
 - name: Assert each /ip tftp row exists
   ansible.builtin.assert:
@@ -38,9 +38,9 @@
       - (item.stdout[0] | trim | int) >= 1
     fail_msg: >-
       Router has no /ip tftp row for
-      armbian/{{ armbian_netboot_board_model }}/{{ item.item }}.
+      armbian/{{ armbian_board_model }}/{{ item.item }}.
       Run playbooks/stage_router.yml to populate TFTP assets
       before invoking converge_boot_mode.
   loop: "{{ _plumbing_check_one_row_count.results }}"
   loop_control:
-    label: "armbian/{{ armbian_netboot_board_model }}/{{ item.item }}"
+    label: "armbian/{{ armbian_board_model }}/{{ item.item }}"

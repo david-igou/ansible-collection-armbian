@@ -30,7 +30,7 @@
 # Usage:
 #   ansible-playbook playbooks/test_manual_psu_cold_boot.yml \
 #     --limit opi5pro-01.example.lan \
-#     -e armbian_netboot_default_password=1234
+#     -e armbian_default_password=1234
 
 - name: Manual-PSU cold-boot test (single cold boot per run)
   hosts: boards
@@ -42,7 +42,7 @@
     serial_baud: 1500000
     _routeros_target: "{{ groups['routeros_router'] | first }}"
     _wait_timeout: 300
-    armbian_netboot_boot_attempt_timeout: 180
+    armbian_boot_attempt_timeout: 180
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"
     _serial_pid: "/tmp/socat-{{ inventory_hostname }}.pid"
 
@@ -56,14 +56,14 @@
           hosts: {{ ansible_play_hosts }}
       run_once: true
 
-    - name: Pre-flight — assert armbian_netboot_default_password is set
+    - name: Pre-flight — assert armbian_default_password is set
       ansible.builtin.assert:
         that:
-          - armbian_netboot_default_password is defined
-          - armbian_netboot_default_password | length > 0
+          - armbian_default_password is defined
+          - armbian_default_password | length > 0
         fail_msg: >-
-          armbian_netboot_default_password must be set. Pass via
-          -e armbian_netboot_default_password=<pw> or set in inventory.
+          armbian_default_password must be set. Pass via
+          -e armbian_default_password=<pw> or set in inventory.
       run_once: true
 
     - name: Pre-flight — start serial capture
@@ -123,7 +123,7 @@
         - name: Setup — converge pxelinux.cfg to nfs mode on rb5009
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: nfs
+            armbian_boot_mode: nfs
 
         - name: PSU plug-in — operator action
           ansible.builtin.pause:
@@ -138,7 +138,7 @@
           ansible.builtin.wait_for:
             host: "{{ ansible_host | default(inventory_hostname) }}"
             port: 22
-            timeout: "{{ armbian_netboot_boot_attempt_timeout | default(180) }}"
+            timeout: "{{ armbian_boot_attempt_timeout | default(180) }}"
             state: started
           delegate_to: localhost
 
@@ -177,7 +177,7 @@
         - name: Cleanup — converge pxelinux.cfg to sd mode on rb5009
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_netboot_boot_mode: sd
+            armbian_boot_mode: sd
 
         - name: Cleanup — stop serial capture
           ansible.builtin.shell: |

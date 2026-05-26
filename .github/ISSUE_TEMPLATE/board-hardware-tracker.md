@@ -59,7 +59,7 @@ labels: ["hardware", "board-tracker"]
 
 **Workaround in this collection**: <link to commit/role/variable, or "none — operator-side only">
 
-**Workaround manual**: <e.g. "longer PoE drain (-e armbian_netboot_poe_cycle_delay=20-30) helps", "physically reseat SD card">
+**Workaround manual**: <e.g. "longer PoE drain (-e armbian_poe_cycle_delay=20-30) helps", "physically reseat SD card">
 
 **Upstream / hardware tracking**: <links to Armbian forum, Rockchip BSP issues, vendor support tickets>
 

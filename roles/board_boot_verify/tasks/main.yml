@@ -72,6 +72,6 @@
       boot_mode[{{ boot_mode }}]: _root_device={{ _root_device }}
       does not match verify_match regex
       '{{ extra_modes[boot_mode].verify_match | default('<unset>') }}'.
-      Define armbian_netboot_extra_modes[{{ boot_mode }}].verify_match
+      Define armbian_extra_modes[{{ boot_mode }}].verify_match
       so this role can assert the rootfs source.
   when: boot_mode not in ['nfs', 'sd', 'local', 'local_kernel']

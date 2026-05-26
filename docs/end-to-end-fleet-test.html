@@ -165,7 +165,7 @@
 <p class="subtitle">
   A first-time-reader walkthrough of testing all three boot modes
   (<code>sd</code>, <code>nfs</code>, <code>local_kernel</code>) plus
-  in-place kernel updates across a fleet of <code>david_igou.armbian_netboot</code>-managed
+  in-place kernel updates across a fleet of <code>david_igou.armbian</code>-managed
   ARM SBCs. Each phase shows the playbook invocation, what changes on
   the wire, and what a successful (or unsuccessful) result looks like.
 </p>
@@ -344,7 +344,7 @@ env -u SSH_AUTH_SOCK ansible-playbook playbooks/stage_router.yml
         <code>etc/sudoers.d/igou</code>. Survives reboots.</li>
     <li><strong>Run <code>bootstrap_armbian.yml</code></strong> against
         the running NFS-booted board (connects as <code>root</code>
-        with <code>armbian_netboot_default_password</code>). Only works
+        with <code>armbian_default_password</code>). Only works
         if you first re-enable password auth in the NFS rootfs&rsquo;s
         <code>/etc/ssh/sshd_config</code> (Armbian disables it by
         default) <em>and</em> a root password is set.</li>
@@ -533,14 +533,14 @@ env -u SSH_AUTH_SOCK ansible-playbook playbooks/stage_router.yml
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/set_boot_mode.yml \
     -e target_hosts=&lt;host&gt; \
-    -e armbian_netboot_boot_mode=sd \
-    -e armbian_netboot_cycle_board=false
+    -e armbian_boot_mode=sd \
+    -e armbian_cycle_board=false
 
 # Cycle PoE separately
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
-    -e armbian_netboot_poe_action=cycle \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_action=cycle \
+    -e armbian_poe_cycle_delay=30
 
 # Capture evidence as root (stock Armbian has password 1234, no igou user)
 unset SSH_AUTH_SOCK
@@ -585,11 +585,11 @@ sshpass -p 1234 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
 <pre><code>env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/set_boot_mode.yml \
     -e target_hosts=&lt;host&gt; \
-    -e armbian_netboot_boot_mode=nfs \
-    -e armbian_netboot_cycle_board=false
+    -e armbian_boot_mode=nfs \
+    -e armbian_cycle_board=false
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
-    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_action=cycle -e armbian_poe_cycle_delay=30
 
 # After TCP/22 comes back up:
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
@@ -614,7 +614,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 <ol>
   <li>Set boot mode <code>nfs</code> + verify the board comes up rooted on NFS.</li>
   <li>Cross-binding validation (no two layouts share a mount path, exactly one <code>/</code>).</li>
-  <li>For each disk in <code>armbian_netboot_local_disks</code>: run
+  <li>For each disk in <code>armbian_local_disks</code>: run
       <code>systemd-repart</code> against it, then rsync the running rootfs
       onto the freshly-formatted partitions. Filesystem labels are how
       preserved partitions stay idempotent across re-runs.</li>
@@ -629,7 +629,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/reprovision_to_local.yml \
     --limit &lt;host&gt; \
     -e target_hosts=&lt;host&gt; \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_cycle_delay=30
 </code></pre>
 </div>
 
@@ -664,8 +664,8 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 <pre><code>env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/set_boot_mode.yml \
     -e target_hosts=&lt;host&gt; \
-    -e armbian_netboot_boot_mode=local_kernel \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_boot_mode=local_kernel \
+    -e armbian_poe_cycle_delay=30
 </code></pre>
 </div>
 
@@ -700,7 +700,7 @@ HITS_BEFORE=$(env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   2>/dev/null | grep -oE '[0-9]+$' | tail -1)
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
-    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_action=cycle -e armbian_poe_cycle_delay=30
 # Wait for TCP/22 …
 HITS_AFTER=$(env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible rb5009.igou.systems -m community.routeros.command \
@@ -738,7 +738,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 # Cycle and verify uname -r changed
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/poe_control.yml --limit &lt;host&gt; \
-    -e armbian_netboot_poe_action=cycle -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_action=cycle -e armbian_poe_cycle_delay=30
 # After TCP/22:
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible &lt;host&gt; -m shell -a 'uname -r'
@@ -845,7 +845,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   &mdash; the standalone <code>reprovision_to_local.yml</code> already
   emits a diagnostic bundle on failure under
   <code>./diagnostics/</code> (path configurable via
-  <code>-e armbian_netboot_diagnostic_bundle_dir=</code>). The
+  <code>-e armbian_diagnostic_bundle_dir=</code>). The
   successful-path proof is implicit in Phase C2 (which asserts the
   board boots from the freshly-rsynced NVMe rootfs).
 </p>
@@ -887,13 +887,13 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 <div class="snippet">
   <header><strong>group_vars/all/main.yml</strong> &mdash; collection-wide defaults</header>
 <pre><code># Where the NFS export root lives on truenas.
-armbian_netboot_server_ip:      "10.10.9.213"
-armbian_netboot_nfs_server_ip:  "10.10.9.213"
-armbian_netboot_nfs_rootfs_path: "/mnt/ssd/netboot/rootfs"   # default
-armbian_netboot_nfs_assets_export: "/mnt/ssd/public/boot-files"
+armbian_server_ip:      "10.10.9.213"
+armbian_nfs_server_ip:  "10.10.9.213"
+armbian_nfs_rootfs_path: "/mnt/ssd/netboot/rootfs"   # default
+armbian_nfs_assets_export: "/mnt/ssd/public/boot-files"
 
 # Root password on a freshly-flashed Armbian image (vault this in real life)
-armbian_netboot_default_password: "1234"
+armbian_default_password: "1234"
 
 # Debian release for image_build
 armbian_build_release: "trixie"
@@ -901,8 +901,8 @@ armbian_build_release: "trixie"
 # DHCP server name on rb5009 that owns the SBC VLAN's static leases
 routeros_dhcp_server_name: "dhcp_vlan9"
 
-# Per-board .img.xz URLs (or local truenas paths). Keyed by armbian_netboot_board_model.
-armbian_netboot_image_urls:
+# Per-board .img.xz URLs (or local truenas paths). Keyed by armbian_board_model.
+armbian_image_urls:
   orange-pi-5-pro: "/mnt/ssd/public/boot-files/images/orangepi5pro/Armbian-…7.0.7_minimal.img.xz"
   orange-pi-5:     "/mnt/ssd/public/boot-files/images/orangepi5/Armbian-…7.0.7_minimal.img.xz"
   orange-pi-5-max: "/mnt/ssd/public/boot-files/images/orangepi5-max/Armbian-…7.0.8_minimal.img.xz"
@@ -910,14 +910,14 @@ armbian_netboot_image_urls:
   rock-5b:         "/mnt/ssd/public/boot-files/images/rock-5b/Armbian-…7.0.7_minimal.img.xz"
 
 # SSH keys installed on a freshly-flashed board by bootstrap_armbian.yml
-armbian_netboot_bootstrap_ssh_keys:
+armbian_bootstrap_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…"
 </code></pre>
 </div>
 
 <div class="snippet">
   <header><strong>group_vars/boards.yml</strong> &mdash; which router owns plumbing</header>
-<pre><code>armbian_netboot_router: rb5009.igou.systems
+<pre><code>armbian_router: rb5009.igou.systems
 </code></pre>
 </div>
 
@@ -974,14 +974,14 @@ all:
       hosts:
         opi5pro-01.igou.systems:
           ansible_host: opi5pro-01.igou.systems
-          armbian_netboot_board_mac:   "C0:74:2B:FB:4D:FD"
-          armbian_netboot_board_model: orange-pi-5-pro
-          armbian_netboot_boot_mode:   local_kernel
-          armbian_netboot_local_kernel:
+          armbian_board_mac:   "C0:74:2B:FB:4D:FD"
+          armbian_board_model: orange-pi-5-pro
+          armbian_boot_mode:   local_kernel
+          armbian_local_kernel:
             persist_via: hook        # baked into U-Boot binary at image_build time
-          armbian_netboot_poe_switch:  crs328.igou.systems
-          armbian_netboot_poe_port:    ether7
-          armbian_netboot_local_disks:
+          armbian_poe_switch:  crs328.igou.systems
+          armbian_poe_port:    ether7
+          armbian_local_disks:
             - device: /dev/nvme0n1
               wipe: true
               layout:
@@ -996,16 +996,16 @@ all:
       hosts:
         rock-5b-01.igou.systems:
           ansible_host: rock-5b-01.igou.systems
-          armbian_netboot_board_mac:   "00:E0:4C:68:00:3B"
-          armbian_netboot_board_model: rock-5b
-          armbian_netboot_boot_mode:   local_kernel
-          armbian_netboot_local_kernel:
+          armbian_board_mac:   "00:E0:4C:68:00:3B"
+          armbian_board_model: rock-5b
+          armbian_boot_mode:   local_kernel
+          armbian_local_kernel:
             persist_via: spi         # writes via fw_setenv into SPI flash (persist_uboot_env.yml)
-          armbian_netboot_uboot_env_extra:
+          armbian_uboot_env_extra:
             bootdelay: "0"
-          armbian_netboot_poe_switch:  crs328.igou.systems
-          armbian_netboot_poe_port:    ether9
-          armbian_netboot_local_disks:
+          armbian_poe_switch:  crs328.igou.systems
+          armbian_poe_port:    ether9
+          armbian_local_disks:
             - device: /dev/nvme0n1
               wipe: true
               layout:
@@ -1021,23 +1021,23 @@ all:
   <dt>Required per-host (boards group) keys</dt>
   <dd>
     <code>ansible_host</code>,
-    <code>armbian_netboot_board_mac</code>,
-    <code>armbian_netboot_board_model</code> (must match a key in <code>vars/boards.yml</code>),
-    <code>armbian_netboot_boot_mode</code>,
-    <code>armbian_netboot_poe_switch</code>,
-    <code>armbian_netboot_poe_port</code>.
+    <code>armbian_board_mac</code>,
+    <code>armbian_board_model</code> (must match a key in <code>vars/boards.yml</code>),
+    <code>armbian_boot_mode</code>,
+    <code>armbian_poe_switch</code>,
+    <code>armbian_poe_port</code>.
   </dd>
   <dt>Required for <code>local_kernel</code> mode</dt>
   <dd>
-    <code>armbian_netboot_local_kernel.persist_via</code> &isin;
+    <code>armbian_local_kernel.persist_via</code> &isin;
     { <code>hook</code> (baked at image_build), <code>spi</code> (fw_setenv into SPI) },
-    plus <code>armbian_netboot_local_disks</code> (Phase C input).
+    plus <code>armbian_local_disks</code> (Phase C input).
   </dd>
   <dt>Required on netboot_server</dt>
   <dd>
     <code>ansible_user</code> (with sudo) reachable over SSH; the host
     must own the NFS export path declared in
-    <code>armbian_netboot_nfs_rootfs_path</code>.
+    <code>armbian_nfs_rootfs_path</code>.
   </dd>
   <dt>Required on RouterOS hosts</dt>
   <dd>
@@ -1054,7 +1054,7 @@ all:
     <tr>
       <td>Stock SD card has no <code>igou</code> user</td>
       <td>Phase A&rsquo;s SSH-as-igou step would fail with <em>publickey,password</em> denied</td>
-      <td>Phase A passes <code>_skip_ssh_stability_check: true</code> to <code>cold_boot_with_retry</code> so the retry loop is TCP/22 only, then <code>auto_bootstrap_if_needed</code> probes as <code>igou</code> and falls back to <code>bootstrap_armbian</code> against <code>root + armbian_netboot_default_password</code> when needed. <strong>Shipped + validated; no operator intervention required.</strong></td>
+      <td>Phase A passes <code>_skip_ssh_stability_check: true</code> to <code>cold_boot_with_retry</code> so the retry loop is TCP/22 only, then <code>auto_bootstrap_if_needed</code> probes as <code>igou</code> and falls back to <code>bootstrap_armbian</code> against <code>root + armbian_default_password</code> when needed. <strong>Shipped + validated; no operator intervention required.</strong></td>
     </tr>
     <tr>
       <td>Stock NFS rootfs has empty <code>/root/.ssh</code> and password auth disabled</td>
@@ -1162,7 +1162,7 @@ all:
 <p>
   After committing the <code>fast_wipe</code> patch and adding
   <code>fast_wipe: true</code> explicitly to every host&rsquo;s
-  <code>armbian_netboot_local_disks</code> binding, the
+  <code>armbian_local_disks</code> binding, the
   <code>test_fleet_e2e.yml</code> playbook was run with no host filter
   (all 5 boards): one play per phase, parallel A/B/C2/D, serial Phase C.
   Across three runs (one full + two targeted retries after fixing
@@ -1345,7 +1345,7 @@ all:
 <pre><code># Run the full fleet (writes per-host TSVs as a side-effect)
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/test_fleet_e2e.yml \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_cycle_delay=30
 
 # Format the per-board per-phase table:
 printf '%-30s  %5s  %5s  %5s  %5s  %5s  %s\n' Board A B C C2 D Total
@@ -1390,7 +1390,7 @@ done
     cleanly in every prior session (including earlier the same
     morning), so this is a transient RK3588 SD-controller
     voltage-select flake (well-documented in
-    <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/38">tracker
+    <a href="https://github.com/david-igou/ansible-collection-armbian/issues/38">tracker
     #38</a>). Recovery: PoE-cycle, set <code>boot_mode=nfs</code>,
     cycle, re-run with <code>-e skip_sd=true</code>:
     <code>ok=193 changed=30 failed=0</code>.
@@ -1430,7 +1430,7 @@ done
     targeted Phase A test); this single 240 s wait_for timeout
     suggests an intermittent SD-controller voltage-select issue on
     RK3588 that the existing
-    <a href="https://github.com/david-igou/ansible-collection-armbian_netboot/issues/38">tracker
+    <a href="https://github.com/david-igou/ansible-collection-armbian/issues/38">tracker
     #38 documents</a>. Recovery: PoE-cycle, set boot_mode=nfs,
     cycle, retry. Re-run with <code>-e skip_sd=true</code> on this
     board alone: full pass through B/C/C2/D.
@@ -1563,7 +1563,7 @@ converge[local_kernel] — wait for SSH (first attempt) -------------------- 31.
   as <code>igou</code>, got <code>Permission denied
   (publickey,password)</code>, and ran
   <code>bootstrap_armbian</code> against <code>root</code> +
-  <code>armbian_netboot_default_password</code> to create the
+  <code>armbian_default_password</code> to create the
   inventory user with SSH-key auth. End-to-end demonstration that the
   fleet test now handles either SD-card user state without operator
   intervention.
@@ -1581,14 +1581,14 @@ converge[local_kernel] — wait for SSH (first attempt) -------------------- 31.
 <ol>
   <li>
     <strong>Self-referential play-var template:</strong>
-    <code>armbian_netboot_boot_retry_attempts: "{{
-    armbian_netboot_boot_retry_attempts | default(1) }}"</code> at
+    <code>armbian_boot_retry_attempts: "{{
+    armbian_boot_retry_attempts | default(1) }}"</code> at
     play-vars scope. Ansible&rsquo;s variable resolution is lazy;
     shadowing a name with a same-name template recurses infinitely
     when no underlying scope provides the literal. Fired in &lt; 60 s,
     all 5 boards failed before any PoE cycle.
     <em>Same trap was latently present for
-    <code>armbian_netboot_poe_cycle_delay</code> in Phase D &mdash;
+    <code>armbian_poe_cycle_delay</code> in Phase D &mdash;
     only fired on opi5pro because the
     bootstrap_armbian role &amp; <code>meta: reset_connection</code>
     path left that host&rsquo;s var scope different from the other 4
@@ -1893,7 +1893,7 @@ opi5pro-01.igou.systems
     playbooks/test_fleet_e2e.yml \
     -e "target_hosts=orange-pi-5-01.igou.systems,rock-5a-01.igou.systems,orange-pi-5-max-01.igou.systems" \
     -e skip_sd=true -e skip_nfs=true -e skip_reprovision=true \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e armbian_poe_cycle_delay=30
 ...
 TASK [Phase C2 — assert TFTP-flat (local_kernel = U-Boot baked localcmd, no TFTP fetch)] ***
     "msg": "vmlinuz HITS unchanged across cycle (19) — local_kernel proven"
@@ -1980,8 +1980,8 @@ After cycle: uname -r = 7.0.7-edge-rockchip64, board reachable
 <pre><code># 1. Switch board back to NFS (router-only, no SSH to the board needed)
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/set_boot_mode.yml \
-    -e target_hosts=&lt;host&gt; -e armbian_netboot_boot_mode=nfs \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e target_hosts=&lt;host&gt; -e armbian_boot_mode=nfs \
+    -e armbian_poe_cycle_delay=30
 
 # 2. From the NFS-booted board, mount NVMe and copy NFS rootfs's working kernel onto it
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
@@ -2002,8 +2002,8 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 # 3. Converge back to local_kernel
 env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   ansible-playbook playbooks/set_boot_mode.yml \
-    -e target_hosts=&lt;host&gt; -e armbian_netboot_boot_mode=local_kernel \
-    -e armbian_netboot_poe_cycle_delay=30
+    -e target_hosts=&lt;host&gt; -e armbian_boot_mode=local_kernel \
+    -e armbian_poe_cycle_delay=30
 </code></pre>
 </div>
 
@@ -2116,7 +2116,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
   <li>
     <strong>Per-board kernel pin in inventory</strong> &mdash;
     <strong>shipped</strong>: a per-host
-    <code>armbian_netboot_kernel_target: "26.05.0-trunk"</code> hostvar
+    <code>armbian_kernel_target: "26.05.0-trunk"</code> hostvar
     pins Phase D to a specific version
     (<code>state: present</code>, <code>allow_downgrade: true</code>).
     Precedence: hostvar &gt; <code>-e kernel_update_pin</code> &gt;
@@ -2150,7 +2150,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
 
 <ul>
   <li>
-    <code>armbian_netboot_poe_cycle_delay</code>: 30 s is conservative
+    <code>armbian_poe_cycle_delay</code>: 30 s is conservative
     for RK3588 voltage-select reliability. Boards on stable PoE-HAT
     firmware can drop to 10 s without regressions; halves
     cycle-related wait. <em>Inventory knob &mdash; tune per fleet.</em>
@@ -2203,7 +2203,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
     <code>cold_boot_with_retry.yml</code> with
     <code>_skip_ssh_stability_check: true</code> &mdash; PoE cycle +
     TCP/22 wait, retried on flake via
-    <code>armbian_netboot_boot_retry_attempts</code> (default 1 at
+    <code>armbian_boot_retry_attempts</code> (default 1 at
     fleet-play scope &mdash; one rock-5b SD voltage-select flake
     survives). The <code>wait_for_connection</code> step inside
     <code>cold_boot_single_attempt</code> is gated on the new flag, so
@@ -2213,7 +2213,7 @@ env -u SSH_AUTH_SOCK ANSIBLE_HOST_KEY_CHECKING=False \
     <code>auto_bootstrap_if_needed.yml</code> &mdash; probes as the
     inventory user. Fast no-op on a previously-bootstrapped SD card;
     runs <code>bootstrap_armbian</code> inline against
-    <code>root</code> + <code>armbian_netboot_default_password</code>
+    <code>root</code> + <code>armbian_default_password</code>
     on a fresh-flashed SD card. <strong>Phase A is now agnostic to
     whether the SD card carries the <code>igou</code> user or
     not.</strong>
@@ -2244,7 +2244,7 @@ the deterministic six-phase flow, backed by the <code>disk_image</code>
 role. Phase 3 runs after Phase 2 has booted every target board on a
 freshly-refreshed NFS rootfs (Phase 1) and bootstrapped igou, then
 streams the canonical image from
-<code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
+<code>armbian_image_urls[&lt;model&gt;]</code> to
 <code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
 with <code>-e skip_phase_3=true</code>.</p>
 
@@ -2415,7 +2415,7 @@ with <code>-e skip_phase_3=true</code>.</p>
         <td>1-line playbook change</td>
         <td><strong>shipped + validated</strong></td>
         <td>Phase C 1 751 s &rarr; 881 s over 5 boards (in batches of 2)</td></tr>
-    <tr><td>Per-host kernel pin (<code>armbian_netboot_kernel_target</code>)</td>
+    <tr><td>Per-host kernel pin (<code>armbian_kernel_target</code>)</td>
         <td>~20-line inventory + playbook change</td>
         <td><strong>shipped + validated</strong></td>
         <td>Phase D goes from &ldquo;mech check&rdquo; to deterministic per-host pin</td></tr>

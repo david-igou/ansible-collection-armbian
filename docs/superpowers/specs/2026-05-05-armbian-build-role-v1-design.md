@@ -1,6 +1,6 @@
 # 2026-05-05 — `armbian_build` role v1: design
 
-**Issue:** [#16](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/16)
+**Issue:** [#16](https://github.com/david-igou/ansible-collection-armbian/issues/16)
 **Direction spec:** [`2026-05-05-collection-direction-design.md`](./2026-05-05-collection-direction-design.md)
 
 ## Goal

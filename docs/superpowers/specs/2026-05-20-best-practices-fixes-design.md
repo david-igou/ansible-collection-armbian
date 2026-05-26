@@ -1,6 +1,6 @@
 # Best-practices fixes — collection hardening pass
 
-Status: design 2026-05-20. Target releases: `david_igou.armbian_netboot`
+Status: design 2026-05-20. Target releases: `david_igou.armbian`
 3.1.1 (specs), 3.2.0 (docs / idempotency / style), 4.0.0
 (variable rename — single breaking change).
 
@@ -15,7 +15,7 @@ hidden by the otherwise-clean structure:
 
 - **Missing argument contract.** Eight of nine roles ship
   `meta/argument_specs.yml`; `bootstrap_armbian` does not. A caller that
-  forgets to define `armbian_netboot_bootstrap_ssh_keys` gets a board with no
+  forgets to define `armbian_bootstrap_ssh_keys` gets a board with no
   authorised keys and password auth disabled — i.e. a permanently
   unreachable host.
 - **License split.** Seven role meta files declare MIT, two declare
@@ -62,7 +62,7 @@ in `CLAUDE.md` so future roles inherit them without re-litigation.
 
 | Scope | Pattern | Example |
 |---|---|---|
-| Cross-role / inventory-facing input | `armbian_netboot_*` | `armbian_netboot_boot_mode`, `armbian_netboot_default_password` |
+| Cross-role / inventory-facing input | `armbian_*` | `armbian_boot_mode`, `armbian_default_password` |
 | Role-local input (only this role consumes it) | `<role>_*` | `image_build_force`, `disk_provision_source` |
 | Role-internal fact (set_fact, register) | `__<role>_*` | `__image_build_patch_hash`, `__disk_provision_repart` |
 
@@ -129,7 +129,7 @@ Seven workstreams, grouped by which release they ship in.
 | Item | File | Change |
 |---|---|---|
 | 1.1 | `roles/bootstrap_armbian/meta/argument_specs.yml` (new) | Declare both required vars; assert `length > 0` on `ssh_keys`. |
-| 1.2 | `roles/board_boot_wait/` (defaults vs specs reconcile) | Delete unused `armbian_netboot_boot_retry_attempts`, `armbian_netboot_ssh_wait_timeout`, `armbian_netboot_ssh_wait_retry_attempts` from `defaults/main.yml` (the retry logic lives in `playbooks/tasks/cold_boot_with_retry.yml`, not this role). |
+| 1.2 | `roles/board_boot_wait/` (defaults vs specs reconcile) | Delete unused `armbian_boot_retry_attempts`, `armbian_ssh_wait_timeout`, `armbian_ssh_wait_retry_attempts` from `defaults/main.yml` (the retry logic lives in `playbooks/tasks/cold_boot_with_retry.yml`, not this role). |
 
 ### Release 3.2.0 — docs, idempotency, style (non-breaking, ship as a minor)
 
@@ -172,7 +172,7 @@ the conventions section. Order by priority (highest user cost first):
 | Item | File | Change |
 |---|---|---|
 | 5.1 | `roles/disk_provision/tasks/_populate.yml` | Replace `command: rsync ...` with `ansible.posix.synchronize:`. |
-| 5.2 | `roles/image_build/tasks/publish_scp.yml`, `roles/image_build/tasks/main.yml`, `roles/image_build/defaults/main.yml`, `roles/image_build/meta/argument_specs.yml`, `roles/image_build/README.md` | Delete dead `publish_scp.yml` + its `main.yml` include + the `armbian_netboot_publish_target` default and argspec entry. `armbian_netboot_publish_target` is set nowhere in the repo, and `playbooks/build_image.yml` already publishes the build artefact via `ansible.posix.synchronize` — the role builds, the workflow publishes. |
+| 5.2 | `roles/image_build/tasks/publish_scp.yml`, `roles/image_build/tasks/main.yml`, `roles/image_build/defaults/main.yml`, `roles/image_build/meta/argument_specs.yml`, `roles/image_build/README.md` | Delete dead `publish_scp.yml` + its `main.yml` include + the `armbian_publish_target` default and argspec entry. `armbian_publish_target` is set nowhere in the repo, and `playbooks/build_image.yml` already publishes the build artefact via `ansible.posix.synchronize` — the role builds, the workflow publishes. |
 | 5.3 | `roles/rootfs_clone/tasks/main.yml` | Replace `shell: cp -a --reflink=auto` with `command: argv:` form. |
 | 5.4 | `roles/rootfs_clone/tasks/_identity_reset.yml` | Replace `shell rm "{{ target_dir }}"/etc/ssh/ssh_host_*` with `find` + `file` loop. |
 | 5.5 | `roles/bootstrap_armbian/handlers/main.yml` | `ansible.builtin.service` → `ansible.builtin.systemd_service`. |
@@ -247,7 +247,7 @@ Target CI time: ~30s.
 
 | Bump | Trigger | User impact |
 |---|---|---|
-| 3.1.1 | WS-1 ships | None. New `bootstrap_armbian` argument_specs fail-fast if `armbian_netboot_bootstrap_ssh_keys` is empty, which is a strict improvement on the previous silent footgun. |
+| 3.1.1 | WS-1 ships | None. New `bootstrap_armbian` argument_specs fail-fast if `armbian_bootstrap_ssh_keys` is empty, which is a strict improvement on the previous silent footgun. |
 | 3.2.0 | WS-2 + WS-3 + WS-4 + WS-5 ship | Possible `changed:` count delta in operator reports (previously always-changed steps will now sometimes report `ok`). Document this prominently in the release note. |
 | 4.0.0 | WS-6 ships | All `pxelinux_render` callers must rename variables. Migration guide ships in the release note; the rename is a `git grep` away from mechanical for every consumer. |
 | (any) | WS-7 ships | None. |

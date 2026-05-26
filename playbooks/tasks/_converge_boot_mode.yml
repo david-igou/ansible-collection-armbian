@@ -9,22 +9,22 @@
 # playbook are preserved in order:
 #   1. Pre-flight plumbing check (router, delegated + run_once)
 #   2. Render pxelinux.cfg locally + upload to router (per-host)
-#   3. PoE cold-boot retry (optional, armbian_netboot_cycle_board)
-#   4. Post-boot SSH wait (optional, armbian_netboot_cycle_board)
-#   5. Verify rootfs matches declared mode (optional, armbian_netboot_verify_state)
+#   3. PoE cold-boot retry (optional, armbian_cycle_board)
+#   4. Post-boot SSH wait (optional, armbian_cycle_board)
+#   5. Verify rootfs matches declared mode (optional, armbian_verify_state)
 #
 # Caller contract:
 #   - Include from a play whose hosts: is the target board (or board group).
-#   - armbian_netboot_boot_mode must be set (from inventory or -e).
-#   - armbian_netboot_router must be set (inventory hostvar pointing at the
+#   - armbian_boot_mode must be set (from inventory or -e).
+#   - armbian_router must be set (inventory hostvar pointing at the
 #     RouterOS router to use for plumbing-check and pxelinux upload).
 #   - vars/boards.yml must already be loaded (include_vars) before calling.
 #
 # Transport overrides (swappable, consistent with converge_boot_mode.yml):
-#   armbian_netboot_plumbing_check_tasks  absolute path to tasks file for plumbing check
+#   armbian_plumbing_check_tasks  absolute path to tasks file for plumbing check
 #                                         default: ../routeros/tasks/plumbing_check_one.yml
 #                                                  (relative to this file's directory)
-#   armbian_netboot_pxelinux_upload_tasks absolute path to tasks file for render+upload
+#   armbian_pxelinux_upload_tasks absolute path to tasks file for render+upload
 #                                         default: render_and_upload_pxelinux.yml
 #                                                  (relative to this file's directory)
 
@@ -32,47 +32,47 @@
 # include_tasks — Ansible rejects them on TaskInclude. The block
 # inherits both to every task in the included file (verified against
 # the test_hardware_e2e.yml pattern that uses the same shape).
-- name: "converge[{{ armbian_netboot_boot_mode }}] — pre-flight plumbing check"
-  delegate_to: "{{ armbian_netboot_router }}"
+- name: "converge[{{ armbian_boot_mode }}] — pre-flight plumbing check"
+  delegate_to: "{{ armbian_router }}"
   run_once: true
   block:
     - name: "converge — include plumbing check tasks"
       ansible.builtin.include_tasks: >-
-        {{ armbian_netboot_plumbing_check_tasks
+        {{ armbian_plumbing_check_tasks
            | default('../routeros/tasks/plumbing_check_one.yml') }}
 
-# pxelinux_render reads armbian_netboot_board_configs from
+# pxelinux_render reads armbian_board_configs from
 # vars/boards.yml. Original converge_boot_mode.yml loads it in its
 # render play; we replicate that here so this tasks file is
 # self-sufficient regardless of caller.
-- name: "converge[{{ armbian_netboot_boot_mode }}] — load board configs"
+- name: "converge[{{ armbian_boot_mode }}] — load board configs"
   ansible.builtin.include_vars:
     file: "{{ playbook_dir }}/../vars/boards.yml"
 
-- name: "converge[{{ armbian_netboot_boot_mode }}] — render pxelinux.cfg + upload"
+- name: "converge[{{ armbian_boot_mode }}] — render pxelinux.cfg + upload"
   ansible.builtin.include_tasks: >-
-    {{ armbian_netboot_pxelinux_upload_tasks
+    {{ armbian_pxelinux_upload_tasks
        | default('render_and_upload_pxelinux.yml') }}
 
-- name: "converge[{{ armbian_netboot_boot_mode }}] — PoE cycle + cold-boot retry"
+- name: "converge[{{ armbian_boot_mode }}] — PoE cycle + cold-boot retry"
   ansible.builtin.include_tasks: cold_boot_with_retry.yml
   vars:
-    _phase_label: "converge[{{ armbian_netboot_boot_mode }}]"
-    _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-  when: armbian_netboot_cycle_board | default(true) | bool
+    _phase_label: "converge[{{ armbian_boot_mode }}]"
+    _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
+  when: armbian_cycle_board | default(true) | bool
 
-- name: "converge[{{ armbian_netboot_boot_mode }}] — wait for SSH"
+- name: "converge[{{ armbian_boot_mode }}] — wait for SSH"
   ansible.builtin.include_tasks: wait_for_ssh_with_cycle_retry.yml
   vars:
-    _phase_label: "converge[{{ armbian_netboot_boot_mode }}]"
-    _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
-  when: armbian_netboot_cycle_board | default(true) | bool
+    _phase_label: "converge[{{ armbian_boot_mode }}]"
+    _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
+  when: armbian_cycle_board | default(true) | bool
 
-- name: "converge[{{ armbian_netboot_boot_mode }}] — verify rootfs matches declared mode"
+- name: "converge[{{ armbian_boot_mode }}] — verify rootfs matches declared mode"
   ansible.builtin.include_role:
     name: board_boot_verify
   vars:
-    boot_mode: "{{ armbian_netboot_boot_mode }}"
+    boot_mode: "{{ armbian_boot_mode }}"
   when:
-    - armbian_netboot_cycle_board | default(true) | bool
-    - armbian_netboot_verify_state | default(true) | bool
+    - armbian_cycle_board | default(true) | bool
+    - armbian_verify_state | default(true) | bool

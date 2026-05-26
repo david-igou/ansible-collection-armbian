@@ -8,14 +8,14 @@
   when: not (_boot_succeeded | default(false))
   block:
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — PoE cycle"
-      ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file
+      ansible.builtin.include_tasks: "{{ armbian_poe_cycle_tasks_file
                                           | default('../routeros/tasks/poe_cycle.yml') }}"
 
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — wait for board TCP/22"
       ansible.builtin.wait_for:
         host: "{{ ansible_host | default(inventory_hostname) }}"
         port: 22
-        timeout: "{{ armbian_netboot_boot_attempt_timeout | default(180) }}"
+        timeout: "{{ armbian_boot_attempt_timeout | default(180) }}"
         state: started
       delegate_to: localhost
 
@@ -29,7 +29,7 @@
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — wait for SSH ready (stability)"
       ansible.builtin.wait_for_connection:
         delay: 5
-        timeout: "{{ armbian_netboot_ssh_wait_timeout | default(90) }}"
+        timeout: "{{ armbian_ssh_wait_timeout | default(90) }}"
       when: not (_skip_ssh_stability_check | default(false) | bool)
 
     - name: "{{ _phase_label }} attempt {{ _attempt_num }} — succeeded"

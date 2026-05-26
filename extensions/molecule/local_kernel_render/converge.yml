@@ -7,7 +7,7 @@
   vars:
     # Fixture: three board configs, two opted in (local_kernel block present),
     # one not (rock-5a — expected to produce no dispatch row).
-    armbian_netboot_board_configs:
+    armbian_board_configs:
       orange-pi-5-max:
         armbian_dl_dir: orangepi5-max
         armbian_board_name: orangepi5-max

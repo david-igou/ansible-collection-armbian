@@ -6,14 +6,14 @@
 # Caller contract:
 #   target_boot_mode:        required (nfs|sd|local|<extra>)
 #   on_failure_revert_to:    required (nfs|sd|local|<extra>)
-#   armbian_netboot_diagnostic_bundle_dir: optional, default ./diagnostics
+#   armbian_diagnostic_bundle_dir: optional, default ./diagnostics
 
 - name: "Lifecycle: set + verify {{ target_boot_mode }}"
   block:
     - name: "Set boot mode (via convergence tasks)"
       ansible.builtin.include_tasks: _converge_boot_mode.yml
       vars:
-        armbian_netboot_boot_mode: "{{ target_boot_mode }}"
+        armbian_boot_mode: "{{ target_boot_mode }}"
 
   rescue:
     # diagnostic_bundle.yml has `failed_when: false` on every gather
@@ -23,16 +23,16 @@
     - name: "Lifecycle: capture diagnostic bundle before revert"
       ansible.builtin.include_tasks: diagnostic_bundle.yml
       vars:
-        bundle_dir: "{{ armbian_netboot_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}"
+        bundle_dir: "{{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}"
 
     - name: "Lifecycle: auto-revert to {{ on_failure_revert_to }}"
       ansible.builtin.include_tasks: _converge_boot_mode.yml
       vars:
-        armbian_netboot_boot_mode: "{{ on_failure_revert_to }}"
+        armbian_boot_mode: "{{ on_failure_revert_to }}"
 
     - name: "Lifecycle: fail loudly with diagnostic bundle pointer"
       ansible.builtin.fail:
         msg: >-
           Boot mode '{{ target_boot_mode }}' failed for {{ inventory_hostname }};
           auto-reverted to '{{ on_failure_revert_to }}'. Diagnostic bundle:
-          {{ armbian_netboot_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}/
+          {{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}/

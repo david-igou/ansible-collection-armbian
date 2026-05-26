@@ -7,7 +7,7 @@
   tasks:
     - name: Apply rootfs_clone role
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.rootfs_clone
+        name: david_igou.armbian.rootfs_clone
       vars:
         template_dir: /tmp/fixture/template
         target_dir: /tmp/fixture/clone

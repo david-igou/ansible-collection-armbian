@@ -92,7 +92,7 @@ jobs:
           # installed by molecule's own `dependency` step via
           # extensions/molecule/config.yml + requirements-test.yml.
           # Install the collection itself so molecule scenarios that
-          # reference roles via FQCN (david_igou.armbian_netboot.<role>)
+          # reference roles via FQCN (david_igou.armbian.<role>)
           # can resolve them.
           ansible-galaxy collection install . --force
 

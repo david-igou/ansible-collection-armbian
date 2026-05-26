@@ -9,7 +9,7 @@
 #}
 {%- from 'render_localcmd_chain.j2' import render_localcmd_chain -%}
 {% for board in _board_models -%}
-{%- set cfg = armbian_netboot_board_configs[board] -%}
+{%- set cfg = armbian_board_configs[board] -%}
 {%- if cfg.local_kernel is defined %}
 [{{ cfg.armbian_board_name }}]='{{ render_localcmd_chain(cfg) }}'
 {%- endif %}

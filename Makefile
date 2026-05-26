@@ -1,5 +1,5 @@
 COLLECTION_NAMESPACE := david_igou
-COLLECTION_NAME      := armbian_netboot
+COLLECTION_NAME      := armbian
 COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 

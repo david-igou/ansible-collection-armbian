@@ -17,7 +17,7 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `boot_mode` | yes | — | One of `nfs`, `sd`, `local`, `local_kernel`, or a key in `extra_modes`. |
-| `extra_modes` | no | `{}` | Mirrors `armbian_netboot_extra_modes`. When `boot_mode` is a key here, the role reads that mode's `verify_match` regex and asserts `ansible_mounts['/'].device` matches it. |
+| `extra_modes` | no | `{}` | Mirrors `armbian_extra_modes`. When `boot_mode` is a key here, the role reads that mode's `verify_match` regex and asserts `ansible_mounts['/'].device` matches it. |
 
 ### Built-in assertion table
 
@@ -53,10 +53,10 @@ After a successful run:
   hosts: orange-pi-5-pro-01
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.board_boot_verify
+        name: david_igou.armbian.board_boot_verify
       vars:
-        boot_mode: "{{ armbian_netboot_boot_mode }}"
-        extra_modes: "{{ armbian_netboot_extra_modes | default({}) }}"
+        boot_mode: "{{ armbian_boot_mode }}"
+        extra_modes: "{{ armbian_extra_modes | default({}) }}"
 ```
 
 Typically reached via `playbooks/converge_boot_mode.yml` and

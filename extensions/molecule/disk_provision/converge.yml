@@ -14,7 +14,7 @@
 
     - name: "Pass 1: initial provision — full layout, no preserves yet"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_provision
+        name: david_igou.armbian.disk_provision
       vars:
         source: "/tmp/testroot"
         disk_binding:
@@ -54,7 +54,7 @@
 
     - name: "Pass 2: re-provision — preserve_on_reprovision=true keeps /var sentinel"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_provision
+        name: david_igou.armbian.disk_provision
       vars:
         source: "/tmp/testroot"
         disk_binding:
@@ -83,7 +83,7 @@
 
     - name: "Pass 3: render-only mode — write .repart.d files but don't apply"
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.disk_provision
+        name: david_igou.armbian.disk_provision
       vars:
         render_only: true
         disk_binding:

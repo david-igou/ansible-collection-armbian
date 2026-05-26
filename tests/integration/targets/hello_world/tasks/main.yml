@@ -1,7 +1,7 @@
 ---
 - name: Test the Hello World filter plugin
   ansible.builtin.set_fact:
-    msg: "{{ 'ansible-creator' | david_igou.armbian_netboot.sample_filter }}"
+    msg: "{{ 'ansible-creator' | david_igou.armbian.sample_filter }}"
 
 - name: Assert that the filter worked
   ansible.builtin.assert:

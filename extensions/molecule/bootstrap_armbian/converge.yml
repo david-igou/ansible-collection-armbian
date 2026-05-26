@@ -5,11 +5,11 @@
   become: false   # already root via molecule runtime inventory
 
   vars:
-    armbian_netboot_bootstrap_user: ansibletest
-    armbian_netboot_bootstrap_ssh_keys:
+    armbian_bootstrap_user: ansibletest
+    armbian_bootstrap_ssh_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJZ7Y8s1m4Yk5zG8oR7q7Yy3l9rN6F4xZ8t1jW2pV5x9 fixture@bootstrap_armbian"
 
   tasks:
     - name: Invoke bootstrap_armbian role
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.bootstrap_armbian
+        name: david_igou.armbian.bootstrap_armbian

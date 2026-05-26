@@ -10,7 +10,7 @@
 # u-boot v2025.04 + armbian/build's patch/u-boot/v2025.04/
 # board_orangepi5-max/ overlay, which adds CONFIG_RTL8169=y +
 # CONFIG_PCIE_DW_ROCKCHIP=y. That hook gates on BRANCH=edge.
-armbian_netboot_board_branch: edge
+armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # Skip rockchip_setup_macaddr()'s env-set on this board so the RTL8125's
@@ -32,7 +32,7 @@ armbian_netboot_board_branch: edge
 # CONFIG_ENV_IS_NOWHERE=y on this board's defconfig, so env is
 # volatile; the chip-MAC will be re-derived by eth_post_probe on every
 # cold boot. No persistence path needed (unlike rock-5b).
-armbian_netboot_board_userpatches:
+armbian_board_userpatches:
   - dest: "u-boot/v2025.04/board_orangepi5-max/0099-prefer-chip-mac-over-cpuid.patch"
     content: |
       --- a/arch/arm/mach-rockchip/board.c
@@ -50,7 +50,7 @@ armbian_netboot_board_userpatches:
       +	 * different MAC than the Linux kernel uses (kernel reads
       +	 * chip MAC directly). Symptom: two DHCP leases per cold
       +	 * boot, pxelinux.cfg/01-<mac> miss against the MAC visible
-      +	 * from Linux. See david_igou.armbian_netboot's
+      +	 * from Linux. See david_igou.armbian's
       +	 * inventory/group_vars/orange_pi_5_max.yml for rationale.
       +	 */
       +	if (of_machine_is_compatible("xunlong,orangepi-5-max"))

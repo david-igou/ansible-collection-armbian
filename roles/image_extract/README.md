@@ -27,8 +27,8 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml). Summary:
 | `tftp_dir` | yes | — | Destination directory for `vmlinuz` / `initrd.img` / `board.dtb`. |
 | `board_dtb` | yes | — | Basename of the DTB to copy from the image's `/boot` tree (e.g. `rk3588s-orangepi-5-pro.dtb`). |
 | `force_refresh` | no | `false` | When true, remove `template_dir`, `tftp_dir`, and the cached image before re-extracting. |
-| `image_cache_dir` | no | `/var/lib/armbian_netboot/cache` | Scratch directory for downloads and the decompressed `.img`. |
-| `image_mount_dir` | no | `/var/lib/armbian_netboot/mnt` | Mount point used during extraction. |
+| `image_cache_dir` | no | `/var/lib/armbian/cache` | Scratch directory for downloads and the decompressed `.img`. |
+| `image_mount_dir` | no | `/var/lib/armbian/mnt` | Mount point used during extraction. |
 
 ## Outputs / side effects
 
@@ -69,11 +69,11 @@ After a successful run:
   become: true
   tasks:
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
-        armbian_image_src: "{{ armbian_netboot_image_urls['orange-pi-5-pro'] }}"
+        armbian_image_src: "{{ armbian_image_urls['orange-pi-5-pro'] }}"
         model_name: orange-pi-5-pro
-        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/orange-pi-5-pro"
-        tftp_dir: "{{ armbian_netboot_nfs_assets_export }}/tftp/armbian/orange-pi-5-pro"
+        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/orange-pi-5-pro"
+        tftp_dir: "{{ armbian_nfs_assets_export }}/tftp/armbian/orange-pi-5-pro"
         board_dtb: rk3588s-orangepi-5-pro.dtb
 ```

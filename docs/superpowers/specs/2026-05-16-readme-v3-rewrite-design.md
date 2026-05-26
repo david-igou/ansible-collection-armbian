@@ -17,7 +17,7 @@ runs and what it composes.
 
 ## Goal
 
-A first-time reader of `david_igou.armbian_netboot` can, within five minutes of
+A first-time reader of `david_igou.armbian` can, within five minutes of
 landing on the README:
 
 1. Understand what the collection does in one paragraph.
@@ -46,7 +46,7 @@ renames are swept throughout.
 2. **One-paragraph what-it-is** — 3–4 sentences. Replaces the current 25-line
    intro + v2 status block. Mentions v3.0.0 once.
 3. **Quickstart** — three numbered subsections:
-   - 3.1 Install (`ansible-galaxy collection install david_igou.armbian_netboot`
+   - 3.1 Install (`ansible-galaxy collection install david_igou.armbian`
      and the `requirements.yml` snippet).
    - 3.2 External prerequisites — bullet checklist (TrueNAS NFS export exists,
      rb5009 reachable via `network_cli`, SBC subnet's `next-server` points at

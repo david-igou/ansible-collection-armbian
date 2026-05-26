@@ -2,7 +2,7 @@
 
 ## Mission
 
-`david_igou.armbian_netboot` provides Ansible roles and playbooks to manage
+`david_igou.armbian` provides Ansible roles and playbooks to manage
 Armbian-based ARM SBCs end-to-end. Three primitive roles each enforce one
 external system's state; workflow playbooks compose them. PXE-netboot and
 reprovisioning are workflows built on those primitives, not the framing of the
@@ -33,7 +33,7 @@ order. Existing playbooks keep their names and shapes. New
 `README.md` and `docs/architecture.md` lead with this two-line model. Each
 role README states which primitive or workflow it provides.
 
-The collection name stays `david_igou.armbian_netboot` for v1. Renaming is
+The collection name stays `david_igou.armbian` for v1. Renaming is
 cheap to defer (and reversible if you ever publish); a third pillar landing
 isn't reason enough to churn the namespace.
 

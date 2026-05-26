@@ -1,8 +1,8 @@
 # Disk Provision DSL + Headless Local-Boot Lifecycle — Design
 
 **Status**: Brainstormed, awaiting user spec review.
-**Tracking issue**: [#77](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/77).
-**Related issues**: [#78](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/78) (kernel updates — modules-sync cross-link), [#79](https://github.com/david-igou/ansible-collection-armbian_netboot/issues/79) (k3s example — direct consumer).
+**Tracking issue**: [#77](https://github.com/david-igou/ansible-collection-armbian/issues/77).
+**Related issues**: [#78](https://github.com/david-igou/ansible-collection-armbian/issues/78) (kernel updates — modules-sync cross-link), [#79](https://github.com/david-igou/ansible-collection-armbian/issues/79) (k3s example — direct consumer).
 **Author**: David Igou.
 **Date**: 2026-05-17.
 
@@ -12,7 +12,7 @@ The `disk_provision` role and `provision_local_disk.yml` playbook landed as a Po
 
 - Partition layout is hardcoded to a single ext4 partition. No `/var`, no `/boot`, no ESP, no multi-disk hosts.
 - The full lifecycle (boot to NFS → wipe → partition → format → rsync → flip pxelinux → cold boot → verify) is operator-driven via separate playbook invocations.
-- Recovery from a failed local boot is manual — operator must run `set_boot_mode.yml -e armbian_netboot_boot_mode=nfs` to revive the board.
+- Recovery from a failed local boot is manual — operator must run `set_boot_mode.yml -e armbian_boot_mode=nfs` to revive the board.
 
 This spec promotes both concerns to first-class features:
 1. A declarative partitioning DSL expressed inline per host.
@@ -41,7 +41,7 @@ This spec promotes both concerns to first-class features:
 
 ## Boot model: passthrough (settled)
 
-`armbian_netboot_boot_mode: local` does **not** mean `localboot 0`. Mechanically:
+`armbian_boot_mode: local` does **not** mean `localboot 0`. Mechanically:
 
 - SD/SPI carries U-Boot. PXE-first ordering is patched into U-Boot by `image_build`.
 - U-Boot performs PXE on every boot. `pxelinux.cfg/01-<MAC>` is fetched from rb5009 over TFTP.
@@ -50,7 +50,7 @@ This spec promotes both concerns to first-class features:
   - `nfs`: `root=/dev/nfs nfsroot=<server>:<path>/<host>,nfsvers=3,rw ip=dhcp`
   - `sd`: `root=LABEL=armbi_root` (the SD's label)
   - `local`: `root=LABEL=armbi_root_local` (the locally-provisioned partition)
-  - custom: `root=<user-supplied>` from `armbian_netboot_extra_modes[<name>].root`
+  - custom: `root=<user-supplied>` from `armbian_extra_modes[<name>].root`
 
 Implication for `disk_provision`: `/boot` on the local disk is **not** on the boot path. Boot artifacts (kernel/initrd/dtb) come from TFTP. The role still rsyncs `/boot` onto the local disk so future `apt update-initramfs` runs produce coherent state, but boot doesn't read it.
 
@@ -63,7 +63,7 @@ Three role changes, one new playbook:
 | Role | Change | Responsibility |
 |---|---|---|
 | `disk_provision` | Refactored | Given one disk binding (device + layout list + preserved labels), validate, render `.repart.d/*.conf`, invoke `systemd-repart`, mount, rsync source, write fstab, rewrite extlinux.conf, unmount. Single-disk contract; playbook loops over multi-disk bindings. |
-| `pxelinux_render` | Modified | Template loops over `{nfs, sd, local} ∪ keys(armbian_netboot_extra_modes)`. `boot_mode` value validates against the union. |
+| `pxelinux_render` | Modified | Template loops over `{nfs, sd, local} ∪ keys(armbian_extra_modes)`. `boot_mode` value validates against the union. |
 | `board_boot_verify` | Light touch | Gains optional `verify_match: <pattern>` field per custom mode; asserts `ansible_mounts['/']['device']` matches when mode is custom. Built-in modes keep existing behavior. |
 
 New playbook: `playbooks/reprovision_to_local.yml`.
@@ -72,7 +72,7 @@ New playbook: `playbooks/reprovision_to_local.yml`.
 
 ```
 [ INVENTORY ]                              [ ROLES ON THE BOARD ]              [ ON-BOARD STATE ]
-armbian_netboot_local_disks:               ────────────────────────             ──────────────────
+armbian_local_disks:               ────────────────────────             ──────────────────
   - device: /dev/nvme0n1                   role: disk_provision                 /dev/nvme0n1
     wipe: true                             ────────────────────                 ├─ p1  ESP   (vfat,  armbi_esp)
     layout:                                For each disk in playbook loop:      ├─ p2  boot  (ext4,  armbi_boot)
@@ -82,9 +82,9 @@ armbian_netboot_local_disks:               ────────────�
           preserve_on_reprovision: true}     4. systemd-repart --empty=force
       - {id: root, ...}                      5. Mount in dep order
                                              6. rsync source → mounts
-armbian_netboot_boot_mode: local                 with preserve excludes
+armbian_boot_mode: local                 with preserve excludes
                                              7. Write /etc/fstab (LABEL= refs)
-armbian_netboot_extra_modes:                 8. Rewrite extlinux.conf root=
+armbian_extra_modes:                 8. Rewrite extlinux.conf root=
   usb_rescue:                                9. sync; umount
     menu_label: "USB rescue rootfs"
     root: "LABEL=rescue_root"               role: pxelinux_render (MODIFIED)
@@ -118,7 +118,7 @@ Single-responsibility per role; transport-agnostic (no RouterOS knowledge in any
 
 ```yaml
 # host_vars/<board>.yml
-armbian_netboot_local_disks:
+armbian_local_disks:
   - device: /dev/nvme0n1          # required, absolute, whole-disk
     wipe: true                    # optional, default true; set false to no-op-on-mismatch (debug)
     force: false                  # optional, default false; bypasses preserve idempotency
@@ -156,7 +156,7 @@ Custom boot modes (independent of disks, may be set globally or per-host):
 
 ```yaml
 # group_vars/all.yml or host_vars/<board>.yml
-armbian_netboot_extra_modes:
+armbian_extra_modes:
   usb_rescue:
     menu_label: "USB rescue rootfs"   # required, free-form string
     root: "LABEL=rescue_root"          # required, kernel cmdline root= value
@@ -193,7 +193,7 @@ SizeMinBytes=4G
 ### Generated `/etc/fstab`
 
 ```
-# Generated by david_igou.armbian_netboot disk_provision role.
+# Generated by david_igou.armbian disk_provision role.
 # Do not edit; re-run reprovision_to_local.yml to change.
 
 LABEL=armbi_root_local  /          ext4  defaults,noatime  0 1
@@ -252,14 +252,14 @@ label usb_rescue
 1. **Validate**:
    - `device` exists, is block, is whole-disk (not partition).
    - `_root_source` (from `findmnt`) does not start with `device` — refuse to wipe booted-from disk (already in v3.1.0).
-   - No two disks in `armbian_netboot_local_disks` declare the same mount path.
+   - No two disks in `armbian_local_disks` declare the same mount path.
    - Every `preserve_on_reprovision: true` partition has a non-empty `label`.
    - Every `mount` value is an absolute path.
    - Exactly one partition across all disks declares `mount: /`.
 2. **Render** `.repart.d/*.conf` files at `/run/disk_provision/<device-id>/repart.d/`.
 3. **Pre-scan preserved labels**: for each `preserve_on_reprovision: true` entry, `lsblk -no LABEL <derived-partition-path>`; if the label matches, mark that slot as "skip" in the repart invocation (via separate `Type=root` matching, or by generating a sentinel that `disk_provision`'s post-repart logic respects).
 4. **Invoke systemd-repart**: `systemd-repart --definitions=<dir> --empty=force --dry-run=no --discard=yes <device>`. Preserved slots are skipped per step 3.
-5. **Mount filesystems** in dependency order (root first, then deeper paths) at temporary mount points under `/var/lib/armbian_netboot/disk_provision_mnt/`.
+5. **Mount filesystems** in dependency order (root first, then deeper paths) at temporary mount points under `/var/lib/armbian/disk_provision_mnt/`.
 6. **rsync** source (`source` argument, default `/`) into the mounted root, with:
    - `-aAX --numeric-ids --one-file-system --delete`
    - excludes for `/dev/*`, `/proc/*`, `/sys/*`, `/run/*`, `/tmp/*`, `/mnt/*`, `/media/*`, `/var/log/journal`
@@ -278,7 +278,7 @@ label usb_rescue
 - name: Boot board into NFS so we can safely wipe local disk
   import_playbook: set_boot_mode.yml
   vars:
-    armbian_netboot_boot_mode: nfs
+    armbian_boot_mode: nfs
     target_hosts: "{{ target_hosts }}"
 
 - name: Provision each local disk from NFS rootfs source
@@ -298,12 +298,12 @@ label usb_rescue
         name: disk_provision
       vars:
         disk_binding: "{{ item }}"
-      loop: "{{ armbian_netboot_local_disks }}"
+      loop: "{{ armbian_local_disks }}"
 
 - name: Flip pxelinux to local and verify
   import_playbook: tasks/_lifecycle_set_and_verify.yml
   vars:
-    armbian_netboot_boot_mode: local
+    armbian_boot_mode: local
     target_hosts: "{{ target_hosts }}"
     on_failure_revert_to: nfs
 ```
@@ -325,11 +325,11 @@ If the local-mode cold boot fails (`cold_boot_with_retry`'s timeout expires, or 
 | `device` starts with `/dev/`, whole-disk | Disk binding entry |
 | `stat(device).isblk` | Disk binding entry |
 | `_root_source` not on `device` | Disk binding entry |
-| No mount-path collisions across disks | Across full `armbian_netboot_local_disks` list |
+| No mount-path collisions across disks | Across full `armbian_local_disks` list |
 | `preserve_on_reprovision` partitions have non-empty `label` | Per partition |
 | `mount` is absolute path | Per partition |
 | Exactly one `mount: /` across all disks | Across full list |
-| `boot_mode` ∈ `{nfs, sd, local} ∪ keys(armbian_netboot_extra_modes)` | Top of `pxelinux_render` |
+| `boot_mode` ∈ `{nfs, sd, local} ∪ keys(armbian_extra_modes)` | Top of `pxelinux_render` |
 
 All validations run before any destructive operation. Failures abort the playbook before partition tables touch.
 
@@ -346,7 +346,7 @@ All validations run before any destructive operation. Failures abort the playboo
 
 #78 (kernel updates) maintains per-host NFS clone's `/lib/modules/<ver>/` in lock-step with the TFTP'd kernel. Local-disk rootfses created by `disk_provision` carry their own `/lib/modules/<ver>/` (rsynced from the NFS source at provision time). Once #78 lands and template-side kernel updates produce a new version, every local-disk host's `/lib/modules/<old-ver>/` will be stale.
 
-Resolution: #78's `update_kernel.yml` playbook gains a final step that walks `armbian_netboot_local_disks` for every host and rsyncs `/lib/modules/<new-ver>/` from the NFS source (or from the staging template) into the local-disk rootfs. Documented in #78's MVP acceptance criteria; not implemented as part of this spec.
+Resolution: #78's `update_kernel.yml` playbook gains a final step that walks `armbian_local_disks` for every host and rsyncs `/lib/modules/<new-ver>/` from the NFS source (or from the staging template) into the local-disk rootfs. Documented in #78's MVP acceptance criteria; not implemented as part of this spec.
 
 Until #78 lands, kernel updates remain image-rebuild-driven; the rebuild → re-template → re-clone path naturally refreshes the NFS clone, but local-disk hosts require a manual `rsync /lib/modules/` step after each kernel bump.
 
@@ -390,7 +390,7 @@ nfs (assert) → reprovision_to_local → local (assert findmnt / matches armbi_
 
 `-e leave_state=true` preserves failure state. `-e capture_serial=true` tails UART.
 
-The board's inventory needs `armbian_netboot_local_disks` configured with the full ESP+boot+var+root layout (see DSL section above), `armbian_netboot_poe_switch` / `armbian_netboot_poe_port` set, and `armbian_netboot_boot_mode: local` declared so the test exercises the canonical path. A second pass in the test re-runs `reprovision_to_local.yml` to assert idempotency on the preserved `/var` partition.
+The board's inventory needs `armbian_local_disks` configured with the full ESP+boot+var+root layout (see DSL section above), `armbian_poe_switch` / `armbian_poe_port` set, and `armbian_boot_mode: local` declared so the test exercises the canonical path. A second pass in the test re-runs `reprovision_to_local.yml` to assert idempotency on the preserved `/var` partition.
 
 ## Open questions deferred to writing-plans
 
@@ -401,9 +401,9 @@ The board's inventory needs `armbian_netboot_local_disks` configured with the fu
 
 ## MVP acceptance criteria
 
-1. `armbian_netboot_local_disks` accepted as a list of disk bindings; each binding supports `esp`, `boot`, `var`, `root` partition types with sizes in `MiB|GiB|grow` and `preserve_on_reprovision: true` on any labeled partition.
+1. `armbian_local_disks` accepted as a list of disk bindings; each binding supports `esp`, `boot`, `var`, `root` partition types with sizes in `MiB|GiB|grow` and `preserve_on_reprovision: true` on any labeled partition.
 2. `disk_provision` refactored to consume the inline DSL via systemd-repart; preserves matching-label partitions across re-runs.
-3. `pxelinux_render` emits labels for `{nfs, sd, local}` plus every key in `armbian_netboot_extra_modes`; `boot_mode` value validates against the union.
+3. `pxelinux_render` emits labels for `{nfs, sd, local}` plus every key in `armbian_extra_modes`; `boot_mode` value validates against the union.
 4. `board_boot_verify` supports `verify_match` per custom mode.
 5. `playbooks/reprovision_to_local.yml` runs end-to-end on a single board with `--limit`, leaves the board cold-booted on its local disk with `findmnt /` reporting the local-disk label.
 6. Auto-revert to `nfs` on local-mode boot failure; diagnostic bundle captured to `./diagnostics/<host>-<timestamp>/` before revert.

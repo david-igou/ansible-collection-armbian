@@ -6,7 +6,7 @@
 #
 # Required vars:
 #   _phase_label
-#   armbian_netboot_default_password
+#   armbian_default_password
 
 - name: "{{ _phase_label }} — short SSH probe as inventory user"
   ansible.builtin.wait_for_connection:
@@ -29,7 +29,7 @@
         name: bootstrap_armbian
       vars:
         ansible_user: root
-        ansible_password: "{{ armbian_netboot_default_password }}"
+        ansible_password: "{{ armbian_default_password }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_become: false
 

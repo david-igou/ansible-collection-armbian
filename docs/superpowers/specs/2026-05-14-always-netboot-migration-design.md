@@ -13,7 +13,7 @@ pxelinux.cfg on rb5009, and the `default` directive inside that file
 selects the boot mode. This eliminates the imperative enable/disable
 toggle pair, replaces it with a single idempotent convergence playbook,
 renames all variables to follow Ansible collection best practices
-(`armbian_netboot_` prefix), and simplifies role names.
+(`armbian_` prefix), and simplifies role names.
 
 ## Motivation
 
@@ -88,24 +88,24 @@ current inventory state. There is no remove path. Deleted from v1:
 
 ### 2. Variable contract
 
-All variables use the `armbian_netboot_` prefix.
+All variables use the `armbian_` prefix.
 
 #### Per-host inventory vars (`hosts.yml`)
 
 | Variable | Required | Notes |
 |---|---|---|
-| `armbian_netboot_board_mac` | always | MAC address for pxelinux.cfg filename |
-| `armbian_netboot_board_model` | always | Key into `armbian_netboot_board_configs` |
-| `armbian_netboot_boot_mode` | always | `nfs` or `sd`. Determines `default` line. No default — must be declared. |
-| `armbian_netboot_sd_partuuid` | when `boot_mode: sd` | PARTUUID of the SD rootfs partition |
-| `armbian_netboot_poe_switch` | for PoE boards | PoE switch inventory hostname |
-| `armbian_netboot_poe_port` | for PoE boards | Interface name on PoE switch |
+| `armbian_board_mac` | always | MAC address for pxelinux.cfg filename |
+| `armbian_board_model` | always | Key into `armbian_board_configs` |
+| `armbian_boot_mode` | always | `nfs` or `sd`. Determines `default` line. No default — must be declared. |
+| `armbian_sd_partuuid` | when `boot_mode: sd` | PARTUUID of the SD rootfs partition |
+| `armbian_poe_switch` | for PoE boards | PoE switch inventory hostname |
+| `armbian_poe_port` | for PoE boards | Interface name on PoE switch |
 
 #### Group vars — boards (`group_vars/boards.yml`)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `armbian_netboot_router` | (none, required) | Inventory hostname of RouterOS router for rb5009 delegation |
+| `armbian_router` | (none, required) | Inventory hostname of RouterOS router for rb5009 delegation |
 
 #### Global vars (`group_vars/all.yml`)
 
@@ -113,39 +113,39 @@ Cross-role variables live here (not duplicated in role defaults):
 
 | Variable | Default | Consumers |
 |---|---|---|
-| `armbian_netboot_server_ip` | (required) | Multiple roles |
-| `armbian_netboot_nfs_server_ip` | (falls back to `_server_ip`) | routeros_pxe_config template, netboot_assets |
-| `armbian_netboot_nfs_rootfs_path` | `/mnt/ssd/netboot/rootfs` | netboot_assets, routeros_pxe_config |
-| `armbian_netboot_tftp_flash_dir` | `sbc` | netboot_assets, routeros_pxe_config |
-| `armbian_netboot_tftp_cache_dir` | `{{ playbook_dir }}/../.cache/sbc-tftp` | netboot_assets, routeros_pxe_config |
-| `armbian_netboot_nfs_assets_export` | `/mnt/ssd/public/boot-files` | netboot_assets, armbian_build |
-| `armbian_netboot_image_urls` | (required, per model) | netboot_assets |
-| `armbian_netboot_branch` | `current` | Informational |
-| `armbian_netboot_bootstrap_ssh_keys` | (required) | bootstrap_armbian |
-| `armbian_netboot_pxe_verbose` | `false` | routeros_pxe_config template |
+| `armbian_server_ip` | (required) | Multiple roles |
+| `armbian_nfs_server_ip` | (falls back to `_server_ip`) | routeros_pxe_config template, netboot_assets |
+| `armbian_nfs_rootfs_path` | `/mnt/ssd/netboot/rootfs` | netboot_assets, routeros_pxe_config |
+| `armbian_tftp_flash_dir` | `sbc` | netboot_assets, routeros_pxe_config |
+| `armbian_tftp_cache_dir` | `{{ playbook_dir }}/../.cache/sbc-tftp` | netboot_assets, routeros_pxe_config |
+| `armbian_nfs_assets_export` | `/mnt/ssd/public/boot-files` | netboot_assets, armbian_build |
+| `armbian_image_urls` | (required, per model) | netboot_assets |
+| `armbian_branch` | `current` | Informational |
+| `armbian_bootstrap_ssh_keys` | (required) | bootstrap_armbian |
+| `armbian_pxe_verbose` | `false` | routeros_pxe_config template |
 
 #### Role defaults (single-consumer only)
 
 | Variable | Default | Role |
 |---|---|---|
-| `armbian_netboot_image_cache` | `/mnt/ssd/netboot/cache` | netboot_assets |
-| `armbian_netboot_image_mount` | `/mnt/ssd/netboot/.loop-mount` | netboot_assets |
-| `armbian_netboot_cycle_board` | `true` | boot_mode |
-| `armbian_netboot_verify_state` | `true` | boot_mode |
-| `armbian_netboot_boot_retry_attempts` | `0` | boot_mode |
-| `armbian_netboot_boot_attempt_timeout` | `180` | boot_mode |
-| `armbian_netboot_ssh_wait_timeout` | `90` | boot_mode |
-| `armbian_netboot_ssh_wait_retry_attempts` | `{{ armbian_netboot_boot_retry_attempts }}` | boot_mode |
-| `armbian_netboot_post_boot_wait_timeout` | `300` | boot_mode |
-| `armbian_netboot_poe_cycle_delay` | `5` | boot_mode |
+| `armbian_image_cache` | `/mnt/ssd/netboot/cache` | netboot_assets |
+| `armbian_image_mount` | `/mnt/ssd/netboot/.loop-mount` | netboot_assets |
+| `armbian_cycle_board` | `true` | boot_mode |
+| `armbian_verify_state` | `true` | boot_mode |
+| `armbian_boot_retry_attempts` | `0` | boot_mode |
+| `armbian_boot_attempt_timeout` | `180` | boot_mode |
+| `armbian_ssh_wait_timeout` | `90` | boot_mode |
+| `armbian_ssh_wait_retry_attempts` | `{{ armbian_boot_retry_attempts }}` | boot_mode |
+| `armbian_post_boot_wait_timeout` | `300` | boot_mode |
+| `armbian_poe_cycle_delay` | `5` | boot_mode |
 
 #### Per-model metadata (`vars/boards.yml`)
 
-Top-level dict renamed to `armbian_netboot_board_configs`. Inner keys
+Top-level dict renamed to `armbian_board_configs`. Inner keys
 stay short (already scoped by the dict):
 
 ```yaml
-armbian_netboot_board_configs:
+armbian_board_configs:
   orange-pi-5-pro:
     armbian_dl_dir: orangepi5pro
     armbian_board_name: orangepi5pro
@@ -176,15 +176,15 @@ role before template rendering — the same pattern v1 uses with
 `target_board_host`):
 
 ```jinja2
-{% set _mode = hostvars[_target_host].armbian_netboot_boot_mode %}
-{% set _model = hostvars[_target_host].armbian_netboot_board_model %}
-{% set _board = armbian_netboot_board_configs[_model] %}
-{% set _verbose = (hostvars[_target_host].armbian_netboot_pxe_verbose
-                   | default(armbian_netboot_pxe_verbose | default(false)))
+{% set _mode = hostvars[_target_host].armbian_boot_mode %}
+{% set _model = hostvars[_target_host].armbian_board_model %}
+{% set _board = armbian_board_configs[_model] %}
+{% set _verbose = (hostvars[_target_host].armbian_pxe_verbose
+                   | default(armbian_pxe_verbose | default(false)))
                   | bool %}
 {% set _verbose_suffix = ' earlycon=' ~ _board.earlycon ~ ' loglevel=8 ignore_loglevel initcall_debug printk.devkmsg=on systemd.log_level=debug systemd.log_target=console systemd.journald.forward_to_console=1' if _verbose else '' %}
 # pxelinux.cfg for {{ _target_host }} ({{ _model }})
-# MAC: {{ hostvars[_target_host].armbian_netboot_board_mac }}
+# MAC: {{ hostvars[_target_host].armbian_board_mac }}
 # Active mode: {{ _mode }}
 # Generated by Ansible — do not edit manually.
 
@@ -197,15 +197,15 @@ label nfs
   kernel armbian/{{ _model }}/vmlinuz
   initrd armbian/{{ _model }}/initrd.img
   fdt    armbian/{{ _model }}/board.dtb
-  append root=/dev/nfs nfsroot={{ armbian_netboot_nfs_server_ip | default(armbian_netboot_server_ip) }}:{{ armbian_netboot_nfs_rootfs_path }}/{{ _target_host }},nfsvers=3,rw ip=dhcp console={{ _board.console }} rootwait rw{{ _verbose_suffix }}
+  append root=/dev/nfs nfsroot={{ armbian_nfs_server_ip | default(armbian_server_ip) }}:{{ armbian_nfs_rootfs_path }}/{{ _target_host }},nfsvers=3,rw ip=dhcp console={{ _board.console }} rootwait rw{{ _verbose_suffix }}
 
-{% if hostvars[_target_host].armbian_netboot_sd_partuuid is defined %}
+{% if hostvars[_target_host].armbian_sd_partuuid is defined %}
 label sd
   menu label Armbian on SD ({{ _target_host }})
   kernel armbian/{{ _model }}/vmlinuz
   initrd armbian/{{ _model }}/initrd.img
   fdt    armbian/{{ _model }}/board.dtb
-  append root=PARTUUID={{ hostvars[_target_host].armbian_netboot_sd_partuuid }} rootfstype=ext4 rootwait rw console={{ _board.console }}{{ _verbose_suffix }}
+  append root=PARTUUID={{ hostvars[_target_host].armbian_sd_partuuid }} rootfstype=ext4 rootwait rw console={{ _board.console }}{{ _verbose_suffix }}
 {% endif %}
 ```
 
@@ -213,12 +213,12 @@ Key design points:
 
 - **`nfs` label is always rendered** — every onboarded board has NFS
   assets staged, so NFS is always a valid fallback.
-- **`sd` label is gated on `armbian_netboot_sd_partuuid`** — only
+- **`sd` label is gated on `armbian_sd_partuuid`** — only
   rendered when the host declares it.
-- **Pre-render validation**: the role asserts that `armbian_netboot_boot_mode`
+- **Pre-render validation**: the role asserts that `armbian_boot_mode`
   matches a label that will actually be rendered. Setting `boot_mode: sd`
   without `sd_partuuid` fails with a clear message before any write.
-- **Label names match `armbian_netboot_boot_mode` values exactly** — no
+- **Label names match `armbian_boot_mode` values exactly** — no
   mapping layer.
 - **`append` is always a single line** — U-Boot's PXE bootmeth does not
   honor backslash line continuations.
@@ -241,8 +241,8 @@ Key design points:
 
 | Playbook | Replaces | Purpose |
 |---|---|---|
-| `converge_boot_mode.yml` | `enable_netboot.yml` + `disable_netboot.yml` | Reads `armbian_netboot_boot_mode` from inventory, converges pxelinux.cfg on rb5009. Idempotent. |
-| `set_boot_mode.yml` | (new) | Same convergence but expects `-e armbian_netboot_boot_mode=nfs\|sd` for ad-hoc overrides. |
+| `converge_boot_mode.yml` | `enable_netboot.yml` + `disable_netboot.yml` | Reads `armbian_boot_mode` from inventory, converges pxelinux.cfg on rb5009. Idempotent. |
+| `set_boot_mode.yml` | (new) | Same convergence but expects `-e armbian_boot_mode=nfs\|sd` for ad-hoc overrides. |
 | `stage_nfs_rootfs.yml` | `stage_netboot_assets.yml` (NFS half) | Download image, extract per-model template, clone per-host rootfs on TrueNAS. |
 | `stage_tftp_assets.yml` | `stage_netboot_assets.yml` (TFTP half) | Net_put per-model kernel/initrd/dtb to rb5009, register `/ip tftp` rows. |
 | `build_image.yml` | (stays) | Variable references updated. |
@@ -262,8 +262,8 @@ Three ways to control a board's boot mode, documented in
 
 | Method | Durability | Touches rb5009? |
 |---|---|---|
-| Set `armbian_netboot_boot_mode` in inventory, run `converge_boot_mode.yml` | Permanent until inventory changes | Yes |
-| `set_boot_mode.yml -e armbian_netboot_boot_mode=sd` | Until next `converge_boot_mode.yml` | Yes |
+| Set `armbian_boot_mode` in inventory, run `converge_boot_mode.yml` | Permanent until inventory changes | Yes |
+| `set_boot_mode.yml -e armbian_boot_mode=sd` | Until next `converge_boot_mode.yml` | Yes |
 | `setenv pxe_label_override sd` at U-Boot prompt | Single boot (unless `saveenv` on SPI boards) | No |
 
 ### 6. Migration path
@@ -307,10 +307,10 @@ aliases unnecessary overhead.
 
 #### Operator migration checklist
 
-1. Rename all vars in real inventory to `armbian_netboot_*` prefix
-2. Replace `boot_state` references with `armbian_netboot_boot_mode`
+1. Rename all vars in real inventory to `armbian_*` prefix
+2. Replace `boot_state` references with `armbian_boot_mode`
    (`pxe` → `nfs`, `disk` → `sd`)
-3. Add `armbian_netboot_sd_partuuid` to boards that need SD boot mode
+3. Add `armbian_sd_partuuid` to boards that need SD boot mode
 4. Replace `enable_netboot.yml` / `disable_netboot.yml` invocations
    with `converge_boot_mode.yml` / `set_boot_mode.yml`
 5. Replace `stage_netboot_assets.yml` invocations with

@@ -44,7 +44,7 @@
 #
 #   # Pass extra knobs through to ansible-playbook
 #   .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh -- -e fleet_phase_5_throttle=1 \
-#                                       -e armbian_netboot_poe_cycle_delay=45
+#                                       -e armbian_poe_cycle_delay=45
 #
 # Artifact layout (per run):
 #   /tmp/fleet-run-<timestamp>/

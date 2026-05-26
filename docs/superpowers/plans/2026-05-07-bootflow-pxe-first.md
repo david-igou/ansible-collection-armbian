@@ -6,7 +6,7 @@
 
 **Architecture:** Single new preflight task file in the `routeros_dhcp` role; included at the top of every playbook that depends on netboot working (`setup_routeros_dhcp.yml`, `enable_netboot.yml`, `disable_netboot.yml`, `stage_netboot_assets.yml`). Adds a required role variable (`routeros_sbc_network_address`). Adds a sibling role task file `remove_pxelinux_cfg.yml` and a new netboot-server play in `playbooks/disable_netboot.yml`. Documentation updates fix the wrong "no next-server" wording in `docs/architecture.md` and document the new required inventory variable in `CLAUDE.md`.
 
-**Tech Stack:** Ansible collection (`david_igou.armbian_netboot`); RouterOS via `community.routeros.command`; netboot server (TrueNAS) accessed over SSH for filesystem ops; mainline U-Boot v2025.10's `bootflow` framework on the SD-resident image.
+**Tech Stack:** Ansible collection (`david_igou.armbian`); RouterOS via `community.routeros.command`; netboot server (TrueNAS) accessed over SSH for filesystem ops; mainline U-Boot v2025.10's `bootflow` framework on the SD-resident image.
 
 **Spec:** [`docs/superpowers/specs/2026-05-07-bootflow-pxe-first-design.md`](../specs/2026-05-07-bootflow-pxe-first-design.md)
 

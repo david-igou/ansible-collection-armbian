@@ -10,8 +10,8 @@ force_refresh: false
 
 # Scratch directory on the target host for downloads and the
 # decompressed .img file. The role creates it if missing.
-image_cache_dir: "/var/lib/armbian_netboot/cache"
+image_cache_dir: "/var/lib/armbian/cache"
 
 # Mount point used during extraction. The role creates and tears
 # this down per-invocation.
-image_mount_dir: "/var/lib/armbian_netboot/mnt"
+image_mount_dir: "/var/lib/armbian/mnt"

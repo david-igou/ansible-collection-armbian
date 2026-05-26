@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Decompose the `david_igou.armbian_netboot` v2 roles into seven single-purpose, single-host, transport-agnostic v3 roles; move all RouterOS-specific code into `playbooks/routeros/` reference playbooks; bump to 3.0.0.
+**Goal:** Decompose the `david_igou.armbian` v2 roles into seven single-purpose, single-host, transport-agnostic v3 roles; move all RouterOS-specific code into `playbooks/routeros/` reference playbooks; bump to 3.0.0.
 
 **Architecture:** Six new roles added alongside v2 (image_extract, rootfs_clone, pxelinux_render, board_boot_wait, board_boot_verify, image_build [rename of armbian_build]); five v2 roles deleted (boot_mode, netboot_assets, routeros_pxe_config, routeros_poe, bootstrap_routeros_user); RouterOS calls move to reference playbooks under `playbooks/routeros/`; top-level playbooks compose roles + reference playbooks via transport-hook variables.
 
@@ -126,11 +126,11 @@ force_refresh: false
 
 # Scratch directory on the target host for downloads and the
 # decompressed .img file. The role creates it if missing.
-image_cache_dir: "/var/lib/armbian_netboot/cache"
+image_cache_dir: "/var/lib/armbian/cache"
 
 # Mount point used during extraction. The role creates and tears
 # this down per-invocation.
-image_mount_dir: "/var/lib/armbian_netboot/mnt"
+image_mount_dir: "/var/lib/armbian/mnt"
 ```
 
 - [ ] **Step 1.2: Create `roles/image_extract/meta/argument_specs.yml`**
@@ -180,10 +180,10 @@ argument_specs:
         description: "When true, remove template_dir, tftp_dir, and the cached image before re-extracting."
       image_cache_dir:
         type: path
-        default: "/var/lib/armbian_netboot/cache"
+        default: "/var/lib/armbian/cache"
       image_mount_dir:
         type: path
-        default: "/var/lib/armbian_netboot/mnt"
+        default: "/var/lib/armbian/mnt"
 ```
 
 - [ ] **Step 1.3: Create `roles/image_extract/meta/main.yml`** using the skeleton at the top of Phase 1 with `role_name: image_extract` and a one-liner description matching `short_description`.
@@ -389,7 +389,7 @@ cat > /tmp/imgex-smoke.yml <<'YAML'
   gather_facts: false
   tasks:
     - include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
 YAML
 ansible-playbook /tmp/imgex-smoke.yml 2>&1 | grep -i 'required'
 rm /tmp/imgex-smoke.yml
@@ -739,7 +739,7 @@ cat > /tmp/pxe-render-smoke.yml <<'YAML'
   gather_facts: false
   tasks:
     - include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
         board_mac: "AA:BB:CC:DD:EE:FF"
         boot_mode: nfs
@@ -789,11 +789,11 @@ git commit -m "feat(pxelinux_render): render per-board pxelinux.cfg to a local d
 ---
 # Mirror the names + defaults that lived on the v2 boot_mode role so
 # inventory-level overrides continue to apply unchanged.
-armbian_netboot_boot_retry_attempts: 0           # 0 = single attempt, no retries
-armbian_netboot_boot_attempt_timeout: 180         # per-attempt TCP/22 wait, seconds
-armbian_netboot_ssh_wait_timeout: 300             # per-attempt SSH ping wait
-armbian_netboot_ssh_wait_retry_attempts: 0
-armbian_netboot_post_boot_wait_timeout: 300       # final wait_for_connection
+armbian_boot_retry_attempts: 0           # 0 = single attempt, no retries
+armbian_boot_attempt_timeout: 180         # per-attempt TCP/22 wait, seconds
+armbian_ssh_wait_timeout: 300             # per-attempt SSH ping wait
+armbian_ssh_wait_retry_attempts: 0
+armbian_post_boot_wait_timeout: 300       # final wait_for_connection
 ```
 
 - [ ] **Step 4.2: Create `roles/board_boot_wait/meta/argument_specs.yml`**
@@ -814,10 +814,10 @@ argument_specs:
         overrides keep working.
 
     options:
-      armbian_netboot_boot_attempt_timeout:
+      armbian_boot_attempt_timeout:
         type: int
         default: 180
-      armbian_netboot_post_boot_wait_timeout:
+      armbian_post_boot_wait_timeout:
         type: int
         default: 300
 ```
@@ -835,14 +835,14 @@ argument_specs:
   ansible.builtin.wait_for:
     host: "{{ ansible_host | default(inventory_hostname) }}"
     port: 22
-    timeout: "{{ armbian_netboot_boot_attempt_timeout }}"
+    timeout: "{{ armbian_boot_attempt_timeout }}"
     state: started
   delegate_to: localhost
   become: false
 
 - name: Wait for SSH to authenticate
   ansible.builtin.wait_for_connection:
-    timeout: "{{ armbian_netboot_post_boot_wait_timeout }}"
+    timeout: "{{ armbian_post_boot_wait_timeout }}"
     sleep: 5
 ```
 
@@ -943,7 +943,7 @@ git commit -m "feat(board_boot_verify): assert rootfs matches declared boot mode
 - Rename: `roles/armbian_build/` → `roles/image_build/` (preserve git history with `git mv`)
 - Modify: `roles/image_build/meta/argument_specs.yml` (rename role + add optional publish var)
 - Create: `roles/image_build/tasks/publish_scp.yml` (extracted from existing publish step inside `invoke_build.yml`, if any) or wrapping a new SCP push
-- Modify: `roles/image_build/tasks/main.yml` (gate the publish step on `armbian_netboot_publish_target`)
+- Modify: `roles/image_build/tasks/main.yml` (gate the publish step on `armbian_publish_target`)
 - Update: `extensions/molecule/armbian_build/` → `extensions/molecule/image_build/`
 
 - [ ] **Step 6.1: Rename the role directory preserving history**
@@ -960,23 +960,23 @@ grep -rn "publish\|scp" roles/image_build/tasks/ 2>/dev/null || true
 grep -rn "publish\|scp" playbooks/build_image.yml 2>/dev/null || true
 ```
 
-If the existing role/playbook already SCPs the built `.img.xz` to the netboot server, lift that block into a new `tasks/publish_scp.yml`. If publish is done in `playbooks/build_image.yml` today, move it into the role gated behind `armbian_netboot_publish_target`.
+If the existing role/playbook already SCPs the built `.img.xz` to the netboot server, lift that block into a new `tasks/publish_scp.yml`. If publish is done in `playbooks/build_image.yml` today, move it into the role gated behind `armbian_publish_target`.
 
 - [ ] **Step 6.3: Create `roles/image_build/tasks/publish_scp.yml`**
 
 ```yaml
 ---
 # Optional publish: SCP the built .img.xz to a remote host.
-# Gated by armbian_netboot_publish_target (host:path).
+# Gated by armbian_publish_target (host:path).
 # Format: <ssh-host>:<absolute-path-on-remote>
 #
-# Example armbian_netboot_publish_target:
+# Example armbian_publish_target:
 #   netboot-server.lan:/mnt/ssd/public/boot-files/images/orangepi5pro/
 
 - name: Parse publish target
   ansible.builtin.set_fact:
-    _publish_host: "{{ armbian_netboot_publish_target.split(':', 1)[0] }}"
-    _publish_path: "{{ armbian_netboot_publish_target.split(':', 1)[1] }}"
+    _publish_host: "{{ armbian_publish_target.split(':', 1)[0] }}"
+    _publish_path: "{{ armbian_publish_target.split(':', 1)[1] }}"
 
 - name: Ensure remote publish directory exists
   ansible.builtin.shell: |
@@ -988,7 +988,7 @@ If the existing role/playbook already SCPs the built `.img.xz` to the netboot se
 - name: SCP the built .img.xz to the publish target
   ansible.builtin.shell: |
     scp "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/"*.img.xz \
-        "{{ armbian_netboot_publish_target }}/"
+        "{{ armbian_publish_target }}/"
   delegate_to: "{{ inventory_hostname }}"
   changed_when: true
 ```
@@ -1000,7 +1000,7 @@ Append to the end of `tasks/main.yml`:
 ```yaml
 - name: Publish .img.xz to remote (opt-in)
   ansible.builtin.include_tasks: publish_scp.yml
-  when: armbian_netboot_publish_target | default('') | length > 0
+  when: armbian_publish_target | default('') | length > 0
 ```
 
 - [ ] **Step 6.5: Update `meta/argument_specs.yml`**
@@ -1008,7 +1008,7 @@ Append to the end of `tasks/main.yml`:
 Change the role's `short_description` reference if it names `armbian_build`. Add a non-required option:
 
 ```yaml
-      armbian_netboot_publish_target:
+      armbian_publish_target:
         type: str
         default: ""
         description:
@@ -1164,19 +1164,19 @@ git commit -m "feat(routeros): shared upload_file primitive (net_put + /ip tftp 
 ```yaml
 ---
 # Shared primitive: PoE-cycle a single board's switch port.
-# Delegated to the per-board switch (armbian_netboot_poe_switch).
+# Delegated to the per-board switch (armbian_poe_switch).
 #
 # Required hostvars:
-#   armbian_netboot_poe_switch
-#   armbian_netboot_poe_port
+#   armbian_poe_switch
+#   armbian_poe_port
 # Optional:
-#   armbian_netboot_poe_cycle_delay (default 5)
+#   armbian_poe_cycle_delay (default 5)
 
 - name: PoE off
   community.routeros.command:
     commands:
-      - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
-  delegate_to: "{{ armbian_netboot_poe_switch }}"
+      - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=off'
+  delegate_to: "{{ armbian_poe_switch }}"
   register: _poe_off
   retries: 3
   delay: 5
@@ -1184,13 +1184,13 @@ git commit -m "feat(routeros): shared upload_file primitive (net_put + /ip tftp 
 
 - name: Pause for capacitor drain
   ansible.builtin.pause:
-    seconds: "{{ armbian_netboot_poe_cycle_delay | default(5) }}"
+    seconds: "{{ armbian_poe_cycle_delay | default(5) }}"
 
 - name: PoE on
   community.routeros.command:
     commands:
-      - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=auto'
-  delegate_to: "{{ armbian_netboot_poe_switch }}"
+      - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=auto'
+  delegate_to: "{{ armbian_poe_switch }}"
   register: _poe_on
   retries: 3
   delay: 5
@@ -1214,15 +1214,15 @@ git commit -m "feat(routeros): shared poe_cycle primitive (off → pause → on)
 ```yaml
 ---
 # Upload per-board pxelinux.cfg files to the RouterOS router under
-# flash:/{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/, registering
+# flash:/{{ armbian_tftp_flash_dir }}/pxelinux.cfg/, registering
 # regex-prefixed /ip tftp rows.
 #
 # Required vars on play invocation:
-#   armbian_netboot_pxelinux_upload_boards: list of inventory hostnames
+#   armbian_pxelinux_upload_boards: list of inventory hostnames
 #                                           whose pxelinux files should be uploaded
-#   armbian_netboot_tftp_cache_dir:         controller-side directory holding the
+#   armbian_tftp_cache_dir:         controller-side directory holding the
 #                                           rendered 01-<mac> files (under pxelinux.cfg/)
-#   armbian_netboot_tftp_flash_dir:         top-level dir on rb5009's flash (e.g. sbc)
+#   armbian_tftp_flash_dir:         top-level dir on rb5009's flash (e.g. sbc)
 
 - name: Upload pxelinux.cfg files to RouterOS
   hosts: routeros_routers
@@ -1232,8 +1232,8 @@ git commit -m "feat(routeros): shared poe_cycle primitive (off → pause → on)
       community.routeros.command:
         commands:
           - >-
-            :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg" type=directory] = "")
-            do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg" type=directory}
+            :if ([/file find name="{{ armbian_tftp_flash_dir }}/pxelinux.cfg" type=directory] = "")
+            do={/file add name="{{ armbian_tftp_flash_dir }}/pxelinux.cfg" type=directory}
       register: _pxedir
       retries: 3
       delay: 5
@@ -1244,12 +1244,12 @@ git commit -m "feat(routeros): shared poe_cycle primitive (off → pause → on)
     - name: Upload one pxelinux.cfg per board
       ansible.builtin.include_tasks: tasks/upload_file.yml
       vars:
-        _pxe_filename: "01-{{ hostvars[item].armbian_netboot_board_mac | lower | replace(':', '-') }}"
-        _upload_local_src: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
-        _upload_remote_path: "{{ armbian_netboot_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        _pxe_filename: "01-{{ hostvars[item].armbian_board_mac | lower | replace(':', '-') }}"
+        _upload_local_src: "{{ armbian_tftp_cache_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
+        _upload_remote_path: "{{ armbian_tftp_flash_dir }}/pxelinux.cfg/{{ _pxe_filename }}"
         _upload_req_filename: "{{ _pxe_filename }}"
         _upload_req_filename_is_regex: true
-      loop: "{{ armbian_netboot_pxelinux_upload_boards }}"
+      loop: "{{ armbian_pxelinux_upload_boards }}"
       run_once: true
 ```
 
@@ -1273,9 +1273,9 @@ git commit -m "feat(routeros): reference playbook for pxelinux.cfg upload"
 # and register /ip tftp rows.
 #
 # Required vars:
-#   armbian_netboot_tftp_upload_models: list of model strings
-#   armbian_netboot_tftp_cache_dir:     controller cache holding per-model files
-#   armbian_netboot_tftp_flash_dir:     top-level dir on rb5009 flash
+#   armbian_tftp_upload_models: list of model strings
+#   armbian_tftp_cache_dir:     controller cache holding per-model files
+#   armbian_tftp_flash_dir:     top-level dir on rb5009 flash
 
 - name: Upload SBC TFTP assets to RouterOS
   hosts: routeros_routers
@@ -1287,8 +1287,8 @@ git commit -m "feat(routeros): reference playbook for pxelinux.cfg upload"
       community.routeros.command:
         commands:
           - >-
-            :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory] = "")
-            do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian" type=directory}
+            :if ([/file find name="{{ armbian_tftp_flash_dir }}/armbian" type=directory] = "")
+            do={/file add name="{{ armbian_tftp_flash_dir }}/armbian" type=directory}
       register: _basedir
       retries: 3
       delay: 5
@@ -1300,14 +1300,14 @@ git commit -m "feat(routeros): reference playbook for pxelinux.cfg upload"
       community.routeros.command:
         commands:
           - >-
-            :if ([/file find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
-            do={/file add name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
+            :if ([/file find name="{{ armbian_tftp_flash_dir }}/armbian/{{ item }}" type=directory] = "")
+            do={/file add name="{{ armbian_tftp_flash_dir }}/armbian/{{ item }}" type=directory}
       register: _modeldir
       retries: 3
       delay: 5
       until: _modeldir is succeeded
       changed_when: false
-      loop: "{{ armbian_netboot_tftp_upload_models }}"
+      loop: "{{ armbian_tftp_upload_models }}"
       run_once: true
 
     # Force-remove router-side files so net_put always pushes fresh
@@ -1320,13 +1320,13 @@ git commit -m "feat(routeros): reference playbook for pxelinux.cfg upload"
         commands:
           - >-
             /file remove
-            [find name="{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
+            [find name="{{ armbian_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"]
       register: _preremove
       retries: 3
       delay: 5
       until: _preremove is succeeded
       changed_when: false
-      loop: "{{ armbian_netboot_tftp_upload_models | product(_assets) | list }}"
+      loop: "{{ armbian_tftp_upload_models | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
       run_once: true
@@ -1334,11 +1334,11 @@ git commit -m "feat(routeros): reference playbook for pxelinux.cfg upload"
     - name: Upload each (model, asset) pair via shared primitive
       ansible.builtin.include_tasks: tasks/upload_file.yml
       vars:
-        _upload_local_src: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
-        _upload_remote_path: "{{ armbian_netboot_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
+        _upload_local_src: "{{ armbian_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+        _upload_remote_path: "{{ armbian_tftp_flash_dir }}/armbian/{{ item.0 }}/{{ item.1 }}"
         _upload_req_filename: "armbian/{{ item.0 }}/{{ item.1 }}"
         _upload_req_filename_is_regex: false
-      loop: "{{ armbian_netboot_tftp_upload_models | product(_assets) | list }}"
+      loop: "{{ armbian_tftp_upload_models | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
       run_once: true
@@ -1366,8 +1366,8 @@ git commit -m "feat(routeros): reference playbook for kernel/initrd/dtb upload"
 # Assert /ip tftp rows exist on RouterOS for each (model, asset) pair.
 #
 # Required var:
-#   armbian_netboot_tftp_check_models: list of models to verify
-#   armbian_netboot_tftp_flash_dir:    top-level dir on router flash
+#   armbian_tftp_check_models: list of models to verify
+#   armbian_tftp_flash_dir:    top-level dir on router flash
 
 - name: Assert /ip tftp rows exist on RouterOS
   hosts: routeros_routers
@@ -1386,7 +1386,7 @@ git commit -m "feat(routeros): reference playbook for kernel/initrd/dtb upload"
       delay: 5
       until: _row_count is succeeded
       changed_when: false
-      loop: "{{ armbian_netboot_tftp_check_models | product(_assets) | list }}"
+      loop: "{{ armbian_tftp_check_models | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
       run_once: true
@@ -1424,10 +1424,10 @@ git commit -m "feat(routeros): reference playbook for /ip tftp plumbing assertio
 ---
 # Control PoE state on the switch port a board is plugged into.
 # Required var:
-#   armbian_netboot_poe_action: on | off | cycle
+#   armbian_poe_action: on | off | cycle
 # Required hostvars:
-#   armbian_netboot_poe_switch
-#   armbian_netboot_poe_port
+#   armbian_poe_switch
+#   armbian_poe_port
 
 - name: Control PoE per board
   hosts: "{{ target_hosts | default('boards') }}"
@@ -1436,38 +1436,38 @@ git commit -m "feat(routeros): reference playbook for /ip tftp plumbing assertio
     - name: Validate inputs
       ansible.builtin.assert:
         that:
-          - armbian_netboot_poe_action in ['on', 'off', 'cycle']
-          - armbian_netboot_poe_switch is defined and armbian_netboot_poe_switch | length > 0
-          - armbian_netboot_poe_port   is defined and armbian_netboot_poe_port   | length > 0
+          - armbian_poe_action in ['on', 'off', 'cycle']
+          - armbian_poe_switch is defined and armbian_poe_switch | length > 0
+          - armbian_poe_port   is defined and armbian_poe_port   | length > 0
         fail_msg: >-
-          armbian_netboot_poe_action must be on|off|cycle; poe_switch
+          armbian_poe_action must be on|off|cycle; poe_switch
           and poe_port hostvars must be set on {{ inventory_hostname }}.
 
     - name: PoE on
       community.routeros.command:
         commands:
-          - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=auto'
-      delegate_to: "{{ armbian_netboot_poe_switch }}"
+          - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=auto'
+      delegate_to: "{{ armbian_poe_switch }}"
       retries: 3
       delay: 5
       register: _poe_on
       until: _poe_on is succeeded
-      when: armbian_netboot_poe_action == 'on'
+      when: armbian_poe_action == 'on'
 
     - name: PoE off
       community.routeros.command:
         commands:
-          - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
-      delegate_to: "{{ armbian_netboot_poe_switch }}"
+          - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=off'
+      delegate_to: "{{ armbian_poe_switch }}"
       retries: 3
       delay: 5
       register: _poe_off
       until: _poe_off is succeeded
-      when: armbian_netboot_poe_action == 'off'
+      when: armbian_poe_action == 'off'
 
     - name: PoE cycle
       ansible.builtin.include_tasks: tasks/poe_cycle.yml
-      when: armbian_netboot_poe_action == 'cycle'
+      when: armbian_poe_action == 'cycle'
 ```
 
 - [ ] **Step 12.2: Commit**
@@ -1553,21 +1553,21 @@ Create `playbooks/tasks/cold_boot_with_retry.yml`:
 # Required vars:
 #   _phase_label:                   string used in task names
 #   _boot_max_attempts:             int — total attempts (1 = no retry)
-#   armbian_netboot_poe_cycle_tasks_file:
+#   armbian_poe_cycle_tasks_file:
 #     path to a tasks-file (default: routeros/tasks/poe_cycle.yml)
 #     loaded via include_tasks; users override to swap transport.
 
 - name: "{{ _phase_label }} — cold-boot attempts loop"
   block:
     - name: "{{ _phase_label }} — attempt {{ _attempt }} — PoE cycle"
-      ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file
+      ansible.builtin.include_tasks: "{{ armbian_poe_cycle_tasks_file
                                           | default('routeros/tasks/poe_cycle.yml') }}"
 
     - name: "{{ _phase_label }} — attempt {{ _attempt }} — wait for TCP/22"
       ansible.builtin.wait_for:
         host: "{{ ansible_host | default(inventory_hostname) }}"
         port: 22
-        timeout: "{{ armbian_netboot_boot_attempt_timeout | default(180) }}"
+        timeout: "{{ armbian_boot_attempt_timeout | default(180) }}"
         state: started
       delegate_to: localhost
       become: false
@@ -1614,7 +1614,7 @@ Create `playbooks/tasks/wait_for_ssh_with_cycle_retry.yml`:
 # Required vars:
 #   _phase_label
 #   _wait_timeout
-#   armbian_netboot_poe_cycle_tasks_file (defaulted)
+#   armbian_poe_cycle_tasks_file (defaulted)
 
 - name: "{{ _phase_label }} — wait for SSH (initial)"
   block:
@@ -1623,7 +1623,7 @@ Create `playbooks/tasks/wait_for_ssh_with_cycle_retry.yml`:
         sleep: 5
   rescue:
     - name: "{{ _phase_label }} — initial SSH wait failed; cycling and retrying"
-      ansible.builtin.include_tasks: "{{ armbian_netboot_poe_cycle_tasks_file
+      ansible.builtin.include_tasks: "{{ armbian_poe_cycle_tasks_file
                                           | default('routeros/tasks/poe_cycle.yml') }}"
 
     - name: "{{ _phase_label }} — wait for SSH (retry)"
@@ -1663,7 +1663,7 @@ Create `playbooks/tasks/auto_bootstrap_if_needed.yml`:
 #
 # Required vars:
 #   _phase_label
-#   armbian_netboot_default_password
+#   armbian_default_password
 
 - name: "{{ _phase_label }} — short SSH probe as inventory user"
   ansible.builtin.wait_for_connection:
@@ -1683,10 +1683,10 @@ Create `playbooks/tasks/auto_bootstrap_if_needed.yml`:
           running bootstrap_armbian inline.
 
     - ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.bootstrap_armbian
+        name: david_igou.armbian.bootstrap_armbian
       vars:
         ansible_user: root
-        ansible_password: "{{ armbian_netboot_default_password }}"
+        ansible_password: "{{ armbian_default_password }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_become: false
 
@@ -1736,7 +1736,7 @@ git mv playbooks/stage_nfs_rootfs.yml playbooks/stage_netboot_assets.yml
   vars:
     _unique_models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
   tasks:
     - name: Load board configs from collection vars
@@ -1745,24 +1745,24 @@ git mv playbooks/stage_nfs_rootfs.yml playbooks/stage_netboot_assets.yml
 
     - name: Extract per-model templates + TFTP artifacts
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
-        armbian_image_src: "{{ armbian_netboot_image_urls[item] }}"
+        armbian_image_src: "{{ armbian_image_urls[item] }}"
         model_name: "{{ item }}"
-        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ item }}"
-        tftp_dir: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ item }}"
-        board_dtb: "{{ armbian_netboot_board_configs[item].dtb }}"
-        force_refresh: "{{ armbian_netboot_force_refresh | default(false) }}"
+        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ item }}"
+        tftp_dir: "{{ armbian_image_cache }}/sbc-tftp/{{ item }}"
+        board_dtb: "{{ armbian_board_configs[item].dtb }}"
+        force_refresh: "{{ armbian_force_refresh | default(false) }}"
       loop: "{{ _unique_models }}"
 
     - name: Clone per-host rootfs for every board in inventory
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.rootfs_clone
+        name: david_igou.armbian.rootfs_clone
       vars:
-        template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[item].armbian_netboot_board_model }}"
-        target_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ item }}"
+        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[item].armbian_board_model }}"
+        target_dir: "{{ armbian_nfs_rootfs_path }}/{{ item }}"
         hostname: "{{ item }}"
-        force_refresh: "{{ armbian_netboot_force_refresh | default(false) }}"
+        force_refresh: "{{ armbian_force_refresh | default(false) }}"
       loop: "{{ groups['boards'] }}"
 ```
 
@@ -1795,7 +1795,7 @@ Replace contents:
 #
 # Pre-condition: stage_netboot_assets.yml has been run so the
 # kernel/initrd/dtb are populated under
-# {{ armbian_netboot_image_cache }}/sbc-tftp/<model>/ on netboot_server.
+# {{ armbian_image_cache }}/sbc-tftp/<model>/ on netboot_server.
 
 - name: Fetch TFTP artifacts from netboot server to controller cache
   hosts: netboot_server
@@ -1804,13 +1804,13 @@ Replace contents:
   vars:
     _unique_models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
     _assets: [vmlinuz, initrd.img, board.dtb]
   tasks:
     - name: Ensure controller cache dir exists per model
       ansible.builtin.file:
-        path: "{{ armbian_netboot_tftp_cache_dir }}/{{ item }}"
+        path: "{{ armbian_tftp_cache_dir }}/{{ item }}"
         state: directory
         mode: "0755"
       delegate_to: localhost
@@ -1819,27 +1819,27 @@ Replace contents:
 
     - name: Fetch each (model, asset) from netboot server
       ansible.builtin.fetch:
-        src: "{{ armbian_netboot_image_cache }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
-        dest: "{{ armbian_netboot_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
+        src: "{{ armbian_image_cache }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
+        dest: "{{ armbian_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
         flat: true
       loop: "{{ _unique_models | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
 
 - name: Upload TFTP assets to router (reference playbook)
-  import_playbook: "{{ armbian_netboot_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
+  import_playbook: "{{ armbian_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
   vars:
-    armbian_netboot_tftp_upload_models: >-
+    armbian_tftp_upload_models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
 
 - name: Plumbing check — verify /ip tftp rows landed
-  import_playbook: "{{ armbian_netboot_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
+  import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
-    armbian_netboot_tftp_check_models: >-
+    armbian_tftp_check_models: >-
       {{ groups['boards']
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
 ```
 
@@ -1870,11 +1870,11 @@ git commit -m "refactor(playbook): stage_router fetches + uploads TFTP assets"
 #   4. PoE cycle + wait + verify on the board
 
 - name: Pre-flight — assert router /ip tftp plumbing
-  import_playbook: "{{ armbian_netboot_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
+  import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
-    armbian_netboot_tftp_check_models: >-
+    armbian_tftp_check_models: >-
       {{ query('inventory_hostnames', target_hosts | default('boards'))
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
 
 - name: Render per-board pxelinux.cfg locally
@@ -1887,26 +1887,26 @@ git commit -m "refactor(playbook): stage_router fetches + uploads TFTP assets"
 
     - name: Render pxelinux.cfg (delegated to localhost)
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.pxelinux_render
+        name: david_igou.armbian.pxelinux_render
       vars:
-        board_mac: "{{ armbian_netboot_board_mac }}"
-        boot_mode: "{{ armbian_netboot_boot_mode }}"
-        board_console: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].console }}"
-        model_name: "{{ armbian_netboot_board_model }}"
-        nfs_server_ip: "{{ armbian_netboot_nfs_server_ip | default(armbian_netboot_server_ip) }}"
-        nfs_root_path: "{{ armbian_netboot_nfs_rootfs_path }}"
+        board_mac: "{{ armbian_board_mac }}"
+        boot_mode: "{{ armbian_boot_mode }}"
+        board_console: "{{ armbian_board_configs[armbian_board_model].console }}"
+        model_name: "{{ armbian_board_model }}"
+        nfs_server_ip: "{{ armbian_nfs_server_ip | default(armbian_server_ip) }}"
+        nfs_root_path: "{{ armbian_nfs_rootfs_path }}"
         hostname: "{{ inventory_hostname }}"
-        output_dir: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg"
-        sd_root: "{{ armbian_netboot_sd_root | default('LABEL=armbi_root') }}"
-        pxe_verbose: "{{ armbian_netboot_pxe_verbose | default(false) }}"
-        earlycon: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].earlycon | default('') }}"
+        output_dir: "{{ armbian_tftp_cache_dir }}/pxelinux.cfg"
+        sd_root: "{{ armbian_sd_root | default('LABEL=armbi_root') }}"
+        pxe_verbose: "{{ armbian_pxe_verbose | default(false) }}"
+        earlycon: "{{ armbian_board_configs[armbian_board_model].earlycon | default('') }}"
       delegate_to: localhost
       become: false
 
 - name: Upload rendered pxelinux.cfg to router (reference playbook)
-  import_playbook: "{{ armbian_netboot_pxelinux_upload_playbook | default('routeros/upload_pxelinux_cfg.yml') }}"
+  import_playbook: "{{ armbian_pxelinux_upload_playbook | default('routeros/upload_pxelinux_cfg.yml') }}"
   vars:
-    armbian_netboot_pxelinux_upload_boards: >-
+    armbian_pxelinux_upload_boards: >-
       {{ query('inventory_hostnames', target_hosts | default('boards')) }}
 
 - name: Cycle, wait, verify
@@ -1916,25 +1916,25 @@ git commit -m "refactor(playbook): stage_router fetches + uploads TFTP assets"
     - name: Cycle PoE + cold-boot retry
       ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/cold_boot_with_retry.yml"
       vars:
-        _phase_label: "converge[{{ armbian_netboot_boot_mode }}]"
-        _boot_max_attempts: "{{ armbian_netboot_boot_retry_attempts | default(0) | int + 1 }}"
-      when: armbian_netboot_cycle_board | default(true) | bool
+        _phase_label: "converge[{{ armbian_boot_mode }}]"
+        _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
+      when: armbian_cycle_board | default(true) | bool
 
     - name: Wait for SSH after cold boot
       ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/wait_for_ssh_with_cycle_retry.yml"
       vars:
-        _phase_label: "converge[{{ armbian_netboot_boot_mode }}]"
-        _wait_timeout: "{{ armbian_netboot_post_boot_wait_timeout | default(300) }}"
-      when: armbian_netboot_cycle_board | default(true) | bool
+        _phase_label: "converge[{{ armbian_boot_mode }}]"
+        _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
+      when: armbian_cycle_board | default(true) | bool
 
     - name: Verify rootfs matches declared mode
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.board_boot_verify
+        name: david_igou.armbian.board_boot_verify
       vars:
-        boot_mode: "{{ armbian_netboot_boot_mode }}"
+        boot_mode: "{{ armbian_boot_mode }}"
       when:
-        - armbian_netboot_cycle_board | default(true) | bool
-        - armbian_netboot_verify_state | default(true) | bool
+        - armbian_cycle_board | default(true) | bool
+        - armbian_verify_state | default(true) | bool
 ```
 
 - [ ] **Step 19.2: Syntax check + lint + commit**
@@ -1955,13 +1955,13 @@ git commit -m "refactor(playbook): converge_boot_mode composes new roles + refer
 
 ```yaml
 ---
-# Ad-hoc boot-mode override: read armbian_netboot_boot_mode from `-e`
+# Ad-hoc boot-mode override: read armbian_boot_mode from `-e`
 # instead of inventory. Wraps converge_boot_mode.yml unchanged.
 
 - import_playbook: converge_boot_mode.yml
 ```
 
-The `-e armbian_netboot_boot_mode=...` arg already overrides the inventory-declared value because Ansible `-e` is highest precedence. No further glue needed.
+The `-e armbian_boot_mode=...` arg already overrides the inventory-declared value because Ansible `-e` is highest precedence. No further glue needed.
 
 - [ ] **Step 20.2: Commit**
 
@@ -1983,7 +1983,7 @@ git commit -m "refactor(playbook): set_boot_mode is a thin wrapper around conver
 # Users with non-RouterOS transport replace this with a parallel
 # wrapper pointing at their own poe_control reference.
 
-- import_playbook: "{{ armbian_netboot_poe_control_playbook | default('routeros/poe_control.yml') }}"
+- import_playbook: "{{ armbian_poe_control_playbook | default('routeros/poe_control.yml') }}"
 ```
 
 - [ ] **Step 21.2: Commit**
@@ -2006,11 +2006,11 @@ cat playbooks/build_image.yml
 
 - [ ] **Step 22.2: Update role references**
 
-Find every `armbian_build` token and replace with `image_build`. If the playbook does a publish step outside the role (e.g. inline SCP after the build), remove that block — `image_build` now handles publishing via `armbian_netboot_publish_target`. Set the variable in the playbook's `vars:` to preserve current behaviour:
+Find every `armbian_build` token and replace with `image_build`. If the playbook does a publish step outside the role (e.g. inline SCP after the build), remove that block — `image_build` now handles publishing via `armbian_publish_target`. Set the variable in the playbook's `vars:` to preserve current behaviour:
 
 ```yaml
   vars:
-    armbian_netboot_publish_target: "{{ armbian_netboot_image_publish_target | default('') }}"
+    armbian_publish_target: "{{ armbian_image_publish_target | default('') }}"
 ```
 
 - [ ] **Step 22.3: Syntax check + lint + commit**
@@ -2043,10 +2043,10 @@ For each of Phase 1, Phase 2, Phase 3, and Cleanup, replace:
 |---|---|
 | `include_role: boot_mode tasks_from: cold_boot_with_retry.yml` | `include_tasks: tasks/cold_boot_with_retry.yml` |
 | `include_role: boot_mode tasks_from: wait_for_ssh_with_cycle_retry.yml` | `include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml` |
-| `include_role: boot_mode tasks_from: converge.yml` | Render+upload via the converge_boot_mode shape: `include_role: pxelinux_render` (delegate_to localhost) then `include_tasks` the upload reference playbook tasks. For a single board this is cheap; alternatively, `import_playbook: converge_boot_mode.yml --limit <self> -e armbian_netboot_cycle_board=false` is equivalent but more plays. Prefer inline include_role + include_tasks. |
+| `include_role: boot_mode tasks_from: converge.yml` | Render+upload via the converge_boot_mode shape: `include_role: pxelinux_render` (delegate_to localhost) then `include_tasks` the upload reference playbook tasks. For a single board this is cheap; alternatively, `import_playbook: converge_boot_mode.yml --limit <self> -e armbian_cycle_board=false` is equivalent but more plays. Prefer inline include_role + include_tasks. |
 | Phase-1/Phase-2/Cleanup inline auto-bootstrap probe | `include_tasks: tasks/auto_bootstrap_if_needed.yml` (deduplicates the 3 copies) |
 
-Manually inspect the `vars:` blocks at each phase — many of them set `armbian_netboot_boot_mode: nfs|sd` to drive the v2 `boot_mode` role. Under v3, pass `boot_mode:` to `pxelinux_render` and `board_boot_verify` directly.
+Manually inspect the `vars:` blocks at each phase — many of them set `armbian_boot_mode: nfs|sd` to drive the v2 `boot_mode` role. Under v3, pass `boot_mode:` to `pxelinux_render` and `board_boot_verify` directly.
 
 - [ ] **Step 23.3: Preserve serial capture, diagnostic_bundle, leave_state, skip_baseline knobs**
 
@@ -2083,11 +2083,11 @@ grep -rn --include='*.yml' --include='*.yaml' \
   -e 'name: routeros_pxe_config' \
   -e 'name: routeros_poe' \
   -e 'name: bootstrap_routeros_user' \
-  -e 'david_igou.armbian_netboot.boot_mode' \
-  -e 'david_igou.armbian_netboot.netboot_assets' \
-  -e 'david_igou.armbian_netboot.routeros_pxe_config' \
-  -e 'david_igou.armbian_netboot.routeros_poe' \
-  -e 'david_igou.armbian_netboot.bootstrap_routeros_user' \
+  -e 'david_igou.armbian.boot_mode' \
+  -e 'david_igou.armbian.netboot_assets' \
+  -e 'david_igou.armbian.routeros_pxe_config' \
+  -e 'david_igou.armbian.routeros_poe' \
+  -e 'david_igou.armbian.bootstrap_routeros_user' \
   .
 ```
 

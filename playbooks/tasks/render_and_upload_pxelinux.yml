@@ -5,14 +5,14 @@
 # (e.g. test_hardware_e2e.yml).
 #
 # Required (from play scope, inventory, or vars at include time):
-#   armbian_netboot_boot_mode               nfs | sd
-#   armbian_netboot_board_mac
-#   armbian_netboot_board_model
-#   armbian_netboot_board_configs           (loaded by including vars/boards.yml)
-#   armbian_netboot_nfs_server_ip (or armbian_netboot_server_ip fallback)
-#   armbian_netboot_nfs_rootfs_path
-#   armbian_netboot_tftp_cache_dir
-#   armbian_netboot_router                  inventory hostname of the router
+#   armbian_boot_mode               nfs | sd
+#   armbian_board_mac
+#   armbian_board_model
+#   armbian_board_configs           (loaded by including vars/boards.yml)
+#   armbian_nfs_server_ip (or armbian_server_ip fallback)
+#   armbian_nfs_rootfs_path
+#   armbian_tftp_cache_dir
+#   armbian_router                  inventory hostname of the router
 
 - name: Render pxelinux.cfg locally
   delegate_to: localhost
@@ -22,22 +22,22 @@
       ansible.builtin.include_role:
         name: pxelinux_render
       vars:
-        pxelinux_render_board_mac: "{{ armbian_netboot_board_mac }}"
-        pxelinux_render_boot_mode: "{{ armbian_netboot_boot_mode }}"
-        board_console: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].console }}"
-        pxelinux_render_model_name: "{{ armbian_netboot_board_model }}"
-        pxelinux_render_nfs_server_ip: "{{ armbian_netboot_nfs_server_ip | default(armbian_netboot_server_ip) }}"
-        pxelinux_render_nfs_root_path: "{{ armbian_netboot_nfs_rootfs_path }}"
+        pxelinux_render_board_mac: "{{ armbian_board_mac }}"
+        pxelinux_render_boot_mode: "{{ armbian_boot_mode }}"
+        board_console: "{{ armbian_board_configs[armbian_board_model].console }}"
+        pxelinux_render_model_name: "{{ armbian_board_model }}"
+        pxelinux_render_nfs_server_ip: "{{ armbian_nfs_server_ip | default(armbian_server_ip) }}"
+        pxelinux_render_nfs_root_path: "{{ armbian_nfs_rootfs_path }}"
         pxelinux_render_hostname: "{{ inventory_hostname }}"
-        pxelinux_render_output_dir: "{{ armbian_netboot_tftp_cache_dir }}/pxelinux.cfg"
-        pxelinux_render_sd_root: "{{ armbian_netboot_sd_root | default('LABEL=armbi_root') }}"
-        pxelinux_render_local_root: "{{ armbian_netboot_local_root | default('LABEL=' ~ (armbian_netboot_local_disk_label | default('armbi_root_local'))) }}"
-        pxelinux_render_extra_modes: "{{ armbian_netboot_extra_modes | default({}) }}"
-        pxelinux_render_pxe_verbose: "{{ armbian_netboot_pxe_verbose | default(false) }}"
-        pxelinux_render_earlycon: "{{ armbian_netboot_board_configs[armbian_netboot_board_model].earlycon | default('') }}"
+        pxelinux_render_output_dir: "{{ armbian_tftp_cache_dir }}/pxelinux.cfg"
+        pxelinux_render_sd_root: "{{ armbian_sd_root | default('LABEL=armbi_root') }}"
+        pxelinux_render_local_root: "{{ armbian_local_root | default('LABEL=' ~ (armbian_local_disk_label | default('armbi_root_local'))) }}"
+        pxelinux_render_extra_modes: "{{ armbian_extra_modes | default({}) }}"
+        pxelinux_render_pxe_verbose: "{{ armbian_pxe_verbose | default(false) }}"
+        pxelinux_render_earlycon: "{{ armbian_board_configs[armbian_board_model].earlycon | default('') }}"
 
 - name: Upload pxelinux.cfg to router
-  delegate_to: "{{ armbian_netboot_router }}"
+  delegate_to: "{{ armbian_router }}"
   block:
     - name: Include per-host pxelinux upload tasks
       ansible.builtin.include_tasks: "{{ playbook_dir }}/routeros/tasks/upload_pxelinux_one.yml"

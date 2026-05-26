@@ -5,7 +5,7 @@
   tasks:
     - name: Extract the Armbian fixture into template + tftp dirs
       ansible.builtin.include_role:
-        name: david_igou.armbian_netboot.image_extract
+        name: david_igou.armbian.image_extract
       vars:
         armbian_image_src: /tmp/orangepi5.img.xz
         model_name: orangepi5

@@ -56,12 +56,12 @@ Replace the entire `playbooks/test_fleet_e2e.yml` content with the new docstring
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `netboot_server`,
 #     `rb5009`, and each PoE switch.
-#   - Inventory's `armbian_netboot_image_urls[<model>]` published
+#   - Inventory's `armbian_image_urls[<model>]` published
 #     somewhere reachable from netboot_server (Phase 1) and from the
 #     board (Phase 3 dd-from-URL).
 #   - stage_router.yml has been run (per-model TFTP rows on rb5009).
-#   - Inventory's `armbian_netboot_local_disks` set per board (Phase 5).
-#   - Inventory's `armbian_netboot_poe_switch` + `armbian_netboot_poe_port`
+#   - Inventory's `armbian_local_disks` set per board (Phase 5).
+#   - Inventory's `armbian_poe_switch` + `armbian_poe_port`
 #     set per board.
 #
 # Per-board artefacts: /tmp/iter-FLEET-<host>/{0-poe-down,1-nfs-reset,
@@ -82,10 +82,10 @@ Replace the entire `playbooks/test_fleet_e2e.yml` content with the new docstring
 #   # skip_phase_4, skip_phase_5.
 #
 # SD-flake survival: Phases 2/4/5 use the in-tree cold_boot_with_retry
-# primitive and default to armbian_netboot_boot_retry_attempts=1 at
+# primitive and default to armbian_boot_retry_attempts=1 at
 # fleet-play scope. A single rock-5b voltage-select flake (tracker #38)
 # gets one automatic retry before the host falls out of the run.
-# Override with -e armbian_netboot_boot_retry_attempts=N or set in
+# Override with -e armbian_boot_retry_attempts=N or set in
 # inventory for fleet-wide tuning.
 
 - name: "Pre-flight: ensure all per-board artifact dirs exist on controller"
@@ -119,11 +119,11 @@ Replace the entire `playbooks/test_fleet_e2e.yml` content with the new docstring
 
     - name: "Pre-flight — resolve fleet SD-flake retry default"
       ansible.builtin.set_fact:
-        armbian_netboot_boot_retry_attempts: "{{ armbian_netboot_boot_retry_attempts | default(1) | int }}"
+        armbian_boot_retry_attempts: "{{ armbian_boot_retry_attempts | default(1) | int }}"
 
     - name: "Pre-flight — resolve fleet PoE cycle delay default"
       ansible.builtin.set_fact:
-        armbian_netboot_poe_cycle_delay: "{{ armbian_netboot_poe_cycle_delay | default(30) | int }}"
+        armbian_poe_cycle_delay: "{{ armbian_poe_cycle_delay | default(30) | int }}"
 
     - name: "Pre-flight — clear stale known_hosts entries on controller"
       ansible.builtin.command:
@@ -180,7 +180,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Task 2: Phase 0 — PoE down all target boards
 
-Insert the Phase 0 play between the pre-flight play and the Summary play. PoE-off + drain (no PoE-on), no SSH wait. Each board's PoE control is delegated to its `armbian_netboot_poe_switch`.
+Insert the Phase 0 play between the pre-flight play and the Summary play. PoE-off + drain (no PoE-on), no SSH wait. Each board's PoE control is delegated to its `armbian_poe_switch`.
 
 **Files:**
 - Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
@@ -216,8 +216,8 @@ Immediately after it (still before the Summary play), insert:
         - name: "Phase 0 — PoE off"
           community.routeros.command:
             commands:
-              - '/interface ethernet poe set [find name="{{ armbian_netboot_poe_port }}"] poe-out=off'
-          delegate_to: "{{ armbian_netboot_poe_switch }}"
+              - '/interface ethernet poe set [find name="{{ armbian_poe_port }}"] poe-out=off'
+          delegate_to: "{{ armbian_poe_switch }}"
           register: _poe_off
           retries: 3
           delay: 5
@@ -225,15 +225,15 @@ Immediately after it (still before the Summary play), insert:
 
         - name: "Phase 0 — pause for capacitor drain"
           ansible.builtin.pause:
-            seconds: "{{ armbian_netboot_poe_cycle_delay | int }}"
+            seconds: "{{ armbian_poe_cycle_delay | int }}"
 
         - name: "Phase 0 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 0 (PoE down) — {{ inventory_hostname }} ===
-              switch:  {{ armbian_netboot_poe_switch }}
-              port:    {{ armbian_netboot_poe_port }}
-              drain_s: {{ armbian_netboot_poe_cycle_delay }}
+              switch:  {{ armbian_poe_switch }}
+              port:    {{ armbian_poe_port }}
+              drain_s: {{ armbian_poe_cycle_delay }}
             dest: "{{ fleet_artifact_dir }}/poe-down-evidence.txt"
           delegate_to: localhost
           vars:
@@ -291,7 +291,7 @@ Insert the Phase 1 play between Phase 0 and Summary. Runs on `netboot_server` wi
     _target_boards: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
     _target_models: >-
       {{ _target_boards
-         | map('extract', hostvars, 'armbian_netboot_board_model')
+         | map('extract', hostvars, 'armbian_board_model')
          | list | unique }}
   pre_tasks:
     - name: "Phase 1 — load board configs (consumed by image_extract dtb lookup)"
@@ -311,11 +311,11 @@ Insert the Phase 1 play between Phase 0 and Summary. Runs on `netboot_server` wi
           ansible.builtin.include_role:
             name: image_extract
           vars:
-            armbian_image_src: "{{ armbian_netboot_image_urls[item] }}"
+            armbian_image_src: "{{ armbian_image_urls[item] }}"
             model_name: "{{ item }}"
-            template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ item }}"
-            tftp_dir: "{{ armbian_netboot_image_cache | default('/var/lib/armbian_netboot/cache') }}/sbc-tftp/{{ item }}"
-            board_dtb: "{{ armbian_netboot_board_configs[item].dtb }}"
+            template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ item }}"
+            tftp_dir: "{{ armbian_image_cache | default('/var/lib/armbian/cache') }}/sbc-tftp/{{ item }}"
+            board_dtb: "{{ armbian_board_configs[item].dtb }}"
             force_refresh: true
           loop: "{{ _target_models }}"
 
@@ -323,8 +323,8 @@ Insert the Phase 1 play between Phase 0 and Summary. Runs on `netboot_server` wi
           ansible.builtin.include_role:
             name: rootfs_clone
           vars:
-            template_dir: "{{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[_board].armbian_netboot_board_model }}"
-            target_dir: "{{ armbian_netboot_nfs_rootfs_path }}/{{ _board }}"
+            template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[_board].armbian_board_model }}"
+            target_dir: "{{ armbian_nfs_rootfs_path }}/{{ _board }}"
             hostname: "{{ _board }}"
             force_refresh: true
           loop: "{{ _target_boards }}"
@@ -339,8 +339,8 @@ Insert the Phase 1 play between Phase 0 and Summary. Runs on `netboot_server` wi
             mkdir -p "${DIR}"
             cat > "${DIR}/nfs-reset-evidence.txt" <<EOF
             === Phase 1 (NFS reset) — ${HOST} ===
-            template: {{ armbian_netboot_nfs_rootfs_path }}/_templates/{{ hostvars[board].armbian_netboot_board_model }}
-            target:   {{ armbian_netboot_nfs_rootfs_path }}/${HOST}
+            template: {{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[board].armbian_board_model }}
+            target:   {{ armbian_nfs_rootfs_path }}/${HOST}
             force_refresh: true
             EOF
             T_END=$(date +%s)
@@ -419,7 +419,7 @@ Two plays: 2a runs `_lifecycle_set_and_verify` + `bootstrap_armbian` (inline-inc
             name: bootstrap_armbian
           vars:
             ansible_user: root
-            ansible_password: "{{ armbian_netboot_default_password }}"
+            ansible_password: "{{ armbian_default_password }}"
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
@@ -439,7 +439,7 @@ Two plays: 2a runs `_lifecycle_set_and_verify` + `bootstrap_armbian` (inline-inc
 - name: "Phase 2b — Persist SPI U-Boot env (no-op for non-SPI boards)"
   ansible.builtin.import_playbook: persist_uboot_env.yml
   vars:
-    armbian_netboot_persist_uboot_env_cycle: false
+    armbian_persist_uboot_env_cycle: false
   when: not (skip_phase_2 | default(false) | bool)
 ```
 
@@ -457,7 +457,7 @@ After Phase 2b, insert:
       ansible.builtin.copy:
         content: |
           === Phase 2 (NFS boot + bootstrap + SPI persist) — {{ inventory_hostname }} ===
-          rootfs:  NFS ({{ armbian_netboot_nfs_rootfs_path }}/{{ inventory_hostname }})
+          rootfs:  NFS ({{ armbian_nfs_rootfs_path }}/{{ inventory_hostname }})
           igou:    bootstrapped via bootstrap_armbian
           SPI:     persist_uboot_env.yml ran (no-op when uboot_env.storage != spi_flash)
         dest: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/2-nfs-bootstrap/nfs-bootstrap-evidence.txt"
@@ -503,7 +503,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Task 5: Phase 3 — dd canonical SD image via `disk_image` role
 
-Single play targeting boards (now on NFS as igou). Invokes the `disk_image` role with `image_source` from `armbian_netboot_image_urls[<model>]` and `target_device` from `armbian_netboot_sd_device`.
+Single play targeting boards (now on NFS as igou). Invokes the `disk_image` role with `image_source` from `armbian_image_urls[<model>]` and `target_device` from `armbian_sd_device`.
 
 **Files:**
 - Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
@@ -529,15 +529,15 @@ Single play targeting boards (now on NFS as igou). Invokes the `disk_image` role
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_netboot_image_urls[armbian_netboot_board_model] }}"
-            target_device: "{{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}"
+            image_source: "{{ armbian_image_urls[armbian_board_model] }}"
+            target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 3 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 3 (dd SD) — {{ inventory_hostname }} ===
-              source:  {{ armbian_netboot_image_urls[armbian_netboot_board_model] }}
-              target:  {{ armbian_netboot_sd_device | default('/dev/mmcblk0') }}
+              source:  {{ armbian_image_urls[armbian_board_model] }}
+              target:  {{ armbian_sd_device | default('/dev/mmcblk0') }}
               From-state: NFS rootfs (board was bootstrapped + verified NFS in Phase 2)
             dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
           delegate_to: localhost
@@ -616,7 +616,7 @@ Mirrors Phase 2a but for SD boot mode. Same unconditional `bootstrap_armbian` pa
             name: bootstrap_armbian
           vars:
             ansible_user: root
-            ansible_password: "{{ armbian_netboot_default_password }}"
+            ansible_password: "{{ armbian_default_password }}"
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             ansible_become: false
 
@@ -676,7 +676,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Task 7: Phase 5 — NVMe reprovision + local_kernel verify
 
-Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `armbian_netboot_local_disks`, then converges to `local_kernel` mode and asserts TFTP HITS for vmlinuz remain flat across the cycle (proof U-Boot used baked localcmd, not PXE). `throttle: 2` for NVMe rsync contention.
+Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `armbian_local_disks`, then converges to `local_kernel` mode and asserts TFTP HITS for vmlinuz remain flat across the cycle (proof U-Boot used baked localcmd, not PXE). `throttle: 2` for NVMe rsync contention.
 
 **Files:**
 - Modify: `/workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
@@ -725,13 +725,13 @@ Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `
           ansible.builtin.assert:
             that:
               - >-
-                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                (armbian_local_disks | map(attribute='layout') | flatten
                  | selectattr('mount', 'defined') | map(attribute='mount') | list | length)
                 ==
-                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                (armbian_local_disks | map(attribute='layout') | flatten
                  | selectattr('mount', 'defined') | map(attribute='mount') | list | unique | length)
               - >-
-                (armbian_netboot_local_disks | map(attribute='layout') | flatten
+                (armbian_local_disks | map(attribute='layout') | flatten
                  | selectattr('mount', 'defined') | selectattr('mount', 'equalto', '/')
                  | list | length) == 1
 
@@ -740,15 +740,15 @@ Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `
             name: disk_provision
           vars:
             disk_binding: "{{ item }}"
-          loop: "{{ armbian_netboot_local_disks | default([]) }}"
+          loop: "{{ armbian_local_disks | default([]) }}"
           loop_control:
             label: "{{ item.device }}"
 
         - name: "Phase 5 — record TFTP HITS BEFORE local_kernel cycle"
           community.routeros.command:
             commands:
-              - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
-          delegate_to: "{{ armbian_netboot_router }}"
+              - '/ip tftp print where real-filename~"{{ armbian_board_model }}/vmlinuz"'
+          delegate_to: "{{ armbian_router }}"
           register: _hits_before
 
         - name: "Phase 5 — set + verify local_kernel"
@@ -760,8 +760,8 @@ Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `
         - name: "Phase 5 — record TFTP HITS AFTER local_kernel cycle"
           community.routeros.command:
             commands:
-              - '/ip tftp print where real-filename~"{{ armbian_netboot_board_model }}/vmlinuz"'
-          delegate_to: "{{ armbian_netboot_router }}"
+              - '/ip tftp print where real-filename~"{{ armbian_board_model }}/vmlinuz"'
+          delegate_to: "{{ armbian_router }}"
           register: _hits_after
 
         - name: "Phase 5 — extract HITS counts"
@@ -784,7 +784,7 @@ Largest play. Converges back to NFS (rsync source), runs `disk_provision` over `
           ansible.builtin.copy:
             content: |
               === Phase 5 (NVMe reprovision + local_kernel) — {{ inventory_hostname }} ===
-              NVMe layout: {{ armbian_netboot_local_disks | default([]) | length }} disk(s) declared
+              NVMe layout: {{ armbian_local_disks | default([]) | length }} disk(s) declared
               TFTP vmlinuz HITS: before={{ _hits_before_n }} after={{ _hits_after_n }} delta=0
               U-Boot baked localcmd (or SPI env) loaded kernel from NVMe.
             dest: "{{ fleet_artifact_dir }}/nvme-localkernel-evidence.txt"
@@ -955,7 +955,7 @@ the deterministic six-phase flow, backed by the <code>disk_image</code>
 role. Phase 3 runs after Phase 2 has booted every target board on a
 freshly-refreshed NFS rootfs (Phase 1) and bootstrapped igou, then
 streams the canonical image from
-<code>armbian_netboot_image_urls[&lt;model&gt;]</code> to
+<code>armbian_image_urls[&lt;model&gt;]</code> to
 <code>/dev/mmcblk0</code> via <code>curl | xz -dc | dd</code>. Skip
 with <code>-e skip_phase_3=true</code>.</p>
 ```
@@ -1003,13 +1003,13 @@ Expected: lists 10 `- name:` lines matching the structure described in Task 8 st
 
 - [ ] **Step 4: Confirm no stale references to old phase letters**
 
-Run: `grep -nE "Phase [A-D]|Phase C2|skip_dd_sd|skip_sd|skip_nfs|skip_reprovision|skip_local_kernel|skip_kernel_update|kernel_update_pin|kernel_pkg|armbian_netboot_kernel_target|fleet_phase_c_throttle" /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
+Run: `grep -nE "Phase [A-D]|Phase C2|skip_dd_sd|skip_sd|skip_nfs|skip_reprovision|skip_local_kernel|skip_kernel_update|kernel_update_pin|kernel_pkg|armbian_kernel_target|fleet_phase_c_throttle" /workspace/ansible-collection-armbian_netboot/playbooks/test_fleet_e2e.yml`
 Expected: no output. (If there ARE matches, decide whether each is stale and fix.)
 
 - [ ] **Step 5: Confirm the collection still builds**
 
 Run: `cd /workspace/ansible-collection-armbian_netboot && make collection-build`
-Expected: PASS, produces `david_igou-armbian_netboot-<version>.tar.gz`.
+Expected: PASS, produces `david_igou-armbian-<version>.tar.gz`.
 
 Run: `make clean`
 

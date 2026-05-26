@@ -1,6 +1,6 @@
 ---
 # Bootstrap a freshly flashed Armbian board with a passwordless-sudo,
-# SSH-key-only user. Connects as root using armbian_netboot_default_password
+# SSH-key-only user. Connects as root using armbian_default_password
 # (group_vars/all.yml — typically "1234" on a fresh image) since this
 # is the only user that exists before bootstrap. After this playbook
 # succeeds, subsequent plays connect as the provisioned user
@@ -14,8 +14,8 @@
 #
 # Role variables (override with -e or in inventory). See
 # `roles/bootstrap_armbian/README.md`:
-#   armbian_netboot_bootstrap_user      — user to create (default: armbian)
-#   armbian_netboot_bootstrap_ssh_keys  — list of public-key strings (required)
+#   armbian_bootstrap_user      — user to create (default: armbian)
+#   armbian_bootstrap_ssh_keys  — list of public-key strings (required)
 
 - name: Bootstrap Armbian user with SSH key auth
   hosts: boards
@@ -25,15 +25,15 @@
     # Connection overrides for the freshly-flashed-image state: the
     # board only has the Armbian default root user with the default
     # password until this playbook provisions the inventory user.
-    # The role-level vars (armbian_netboot_bootstrap_user,
-    # armbian_netboot_bootstrap_ssh_keys) are sourced from inventory
+    # The role-level vars (armbian_bootstrap_user,
+    # armbian_bootstrap_ssh_keys) are sourced from inventory
     # (inventory/group_vars/all.yml in this repo, the operator's
     # equivalent in their real inventory). The role asserts
-    # armbian_netboot_bootstrap_ssh_keys is non-empty before doing anything
+    # armbian_bootstrap_ssh_keys is non-empty before doing anything
     # destructive, so a missing inventory definition fails fast and
     # actionably.
     ansible_user: root
-    ansible_password: "{{ armbian_netboot_default_password }}"
+    ansible_password: "{{ armbian_default_password }}"
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     ansible_become: false
 

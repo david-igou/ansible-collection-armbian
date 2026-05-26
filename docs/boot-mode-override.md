@@ -3,7 +3,7 @@
 Three ways to change a board's boot mode, ranked by durability.
 
 **Available boot modes** (rendered as labels in every pxelinux.cfg; the
-inventory's `armbian_netboot_boot_mode` selects which becomes `default`):
+inventory's `armbian_boot_mode` selects which becomes `default`):
 
 | Mode | Kernel/initrd/dtb source | Rootfs source | Notes |
 |---|---|---|---|
@@ -16,18 +16,18 @@ inventory's `armbian_netboot_boot_mode` selects which becomes `default`):
 
 | Method | Durability | Touches rb5009? | Use case |
 |---|---|---|---|
-| Inventory (`armbian_netboot_boot_mode`) | Permanent | Yes (on converge) | Fleet-level default |
+| Inventory (`armbian_boot_mode`) | Permanent | Yes (on converge) | Fleet-level default |
 | Ansible `-e` (`set_boot_mode.yml`) | Until next converge | Yes | Ad-hoc testing, one-off flip |
 | U-Boot env (`pxe_label_override`) | Single boot (non-SPI) or until cleared (SPI) | No | Serial console triage |
 
 ## Method 1: Inventory (permanent)
 
-Set `armbian_netboot_boot_mode` on the host in your inventory, then run
+Set `armbian_boot_mode` on the host in your inventory, then run
 `converge_boot_mode.yml`:
 
 ```yaml
 # inventory/host_vars/orange-pi-5-pro-01.yml  (or inline in hosts.yml)
-armbian_netboot_boot_mode: sd
+armbian_boot_mode: sd
 ```
 
 ```bash
@@ -41,7 +41,7 @@ the change persists across automation runs.
 To revert, change the inventory back and re-converge:
 
 ```yaml
-armbian_netboot_boot_mode: nfs
+armbian_boot_mode: nfs
 ```
 
 ```bash
@@ -56,12 +56,12 @@ Use `set_boot_mode.yml` with an extra-var — no inventory edit needed:
 # Flip to sd boot temporarily
 ansible-playbook playbooks/set_boot_mode.yml \
   --limit orange-pi-5-pro-01 \
-  -e armbian_netboot_boot_mode=sd
+  -e armbian_boot_mode=sd
 
 # Flip back to nfs
 ansible-playbook playbooks/set_boot_mode.yml \
   --limit orange-pi-5-pro-01 \
-  -e armbian_netboot_boot_mode=nfs
+  -e armbian_boot_mode=nfs
 ```
 
 The `-e` value wins over inventory for this run. The pxelinux.cfg on
@@ -74,8 +74,8 @@ To write rb5009 state without cycling the board:
 ```bash
 ansible-playbook playbooks/set_boot_mode.yml \
   --limit orange-pi-5-pro-01 \
-  -e armbian_netboot_boot_mode=sd \
-  -e armbian_netboot_cycle_board=false
+  -e armbian_boot_mode=sd \
+  -e armbian_cycle_board=false
 ```
 
 ## Method 3: U-Boot environment variable (single boot)

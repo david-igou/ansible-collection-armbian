@@ -64,11 +64,11 @@ argument_specs:
       - "Idempotent: re-running against an already-bootstrapped board
         reconciles authorized_keys and is otherwise a no-op."
     options:
-      armbian_netboot_bootstrap_user:
+      armbian_bootstrap_user:
         type: str
         required: true
         description: "Username to create on the board."
-      armbian_netboot_bootstrap_ssh_keys:
+      armbian_bootstrap_ssh_keys:
         type: list
         elements: str
         required: true
@@ -86,9 +86,9 @@ Open `roles/bootstrap_armbian/tasks/main.yml`. At the top of the file (immediate
 - name: Assert SSH key list is non-empty
   ansible.builtin.assert:
     that:
-      - armbian_netboot_bootstrap_ssh_keys | length > 0
+      - armbian_bootstrap_ssh_keys | length > 0
     fail_msg: >
-      armbian_netboot_bootstrap_ssh_keys is empty. Continuing would create
+      armbian_bootstrap_ssh_keys is empty. Continuing would create
       a user with no authorised keys and disable password auth, leaving
       the board unreachable.
 ```
@@ -121,7 +121,7 @@ git commit -m "bootstrap_armbian: add argument_specs + assert non-empty ssh_keys
 
 Run:
 ```bash
-for v in armbian_netboot_boot_retry_attempts armbian_netboot_ssh_wait_timeout armbian_netboot_ssh_wait_retry_attempts; do
+for v in armbian_boot_retry_attempts armbian_ssh_wait_timeout armbian_ssh_wait_retry_attempts; do
   echo "=== $v ==="
   grep -rn "$v" roles/board_boot_wait/ || echo "  unused inside role"
 done
@@ -134,7 +134,7 @@ In `roles/board_boot_wait/defaults/main.yml`, delete the three variable lines (a
 
 - [ ] **Step 3: Verify retry logic still lives in the playbook layer**
 
-Run: `grep -rn 'armbian_netboot_boot_retry_attempts' playbooks/`
+Run: `grep -rn 'armbian_boot_retry_attempts' playbooks/`
 Expected: at least one match under `playbooks/tasks/` (where the retry actually happens). This confirms the defaults belong there, not in the role.
 
 - [ ] **Step 4: Lint**
@@ -632,11 +632,11 @@ git commit -m "disk_provision: switch populate from rsync command to synchronize
 - Modify: `roles/image_build/meta/argument_specs.yml`
 - Modify: `roles/image_build/README.md`
 
-- [ ] **Step 1: Confirm `armbian_netboot_publish_target` is set nowhere**
+- [ ] **Step 1: Confirm `armbian_publish_target` is set nowhere**
 
 Run:
 ```bash
-grep -rn 'armbian_netboot_publish_target\|publish_scp' playbooks/ inventory/ vars/
+grep -rn 'armbian_publish_target\|publish_scp' playbooks/ inventory/ vars/
 ```
 Expected: zero matches in `playbooks/`, `inventory/`, and `vars/`. The only matches across the repo should be inside `roles/image_build/` (the dead-code self-references).
 
@@ -647,9 +647,9 @@ If the grep finds a setter, STOP — the file is not orphaned and this Task need
 In `roles/image_build/tasks/main.yml`, delete the three lines:
 
 ```yaml
-- name: Publish .img.xz to remote (opt-in via armbian_netboot_publish_target)
+- name: Publish .img.xz to remote (opt-in via armbian_publish_target)
   ansible.builtin.include_tasks: publish_scp.yml
-  when: armbian_netboot_publish_target | default('') | length > 0
+  when: armbian_publish_target | default('') | length > 0
 ```
 
 - [ ] **Step 3: Delete the sub-task file**
@@ -663,20 +663,20 @@ git rm roles/image_build/tasks/publish_scp.yml
 In `roles/image_build/defaults/main.yml`, delete the line:
 
 ```yaml
-armbian_netboot_publish_target: ""
+armbian_publish_target: ""
 ```
 
-In `roles/image_build/meta/argument_specs.yml`, delete the `armbian_netboot_publish_target:` option block.
+In `roles/image_build/meta/argument_specs.yml`, delete the `armbian_publish_target:` option block.
 
 - [ ] **Step 5: Update the README**
 
-In `roles/image_build/README.md`, delete any paragraph or table row that references `armbian_netboot_publish_target` or "optional SCP publish". Point readers at `playbooks/build_image.yml` (which already does the publish via `ansible.posix.synchronize`).
+In `roles/image_build/README.md`, delete any paragraph or table row that references `armbian_publish_target` or "optional SCP publish". Point readers at `playbooks/build_image.yml` (which already does the publish via `ansible.posix.synchronize`).
 
 - [ ] **Step 6: Verify no dangling references**
 
 Run:
 ```bash
-grep -rn 'publish_scp\|armbian_netboot_publish_target' roles/ playbooks/ inventory/ vars/
+grep -rn 'publish_scp\|armbian_publish_target' roles/ playbooks/ inventory/ vars/
 ```
 Expected: zero matches.
 

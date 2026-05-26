@@ -42,7 +42,7 @@ argument_specs:
         description: "When true, remove template_dir, tftp_dir, and the cached image before re-extracting."
       image_cache_dir:
         type: path
-        default: "/var/lib/armbian_netboot/cache"
+        default: "/var/lib/armbian/cache"
       image_mount_dir:
         type: path
-        default: "/var/lib/armbian_netboot/mnt"
+        default: "/var/lib/armbian/mnt"
