@@ -206,10 +206,10 @@ Every user-facing playbook is one row.
 | `bootstrap_armbian.yml` | `boards` (as `root`) | `bootstrap_armbian` | — |
 | `routeros/bootstrap_user.yml` | `routeros_netboot` | — (uses `community.routeros.command`) | — |
 | `stage_netboot_assets.yml` | `netboot_server` | `image_extract`, `rootfs_clone` | — |
-| `stage_router.yml` | `netboot_server` (fetch) → `routeros_routers` (push) | — | `routeros/upload_tftp_assets.yml`, `routeros/plumbing_check.yml` |
-| `converge_boot_mode.yml` | `routeros_routers` (plumbing) → `boards` (render + boot) | `pxelinux_render`, `board_boot_wait`, `board_boot_verify` | `routeros/plumbing_check.yml`, `routeros/upload_pxelinux_cfg.yml` |
+| `stage_router.yml` | `netboot_server` (fetch) → `routeros_router` (push) | — | `routeros/upload_tftp_assets.yml`, `routeros/plumbing_check.yml` |
+| `converge_boot_mode.yml` | `routeros_router` (plumbing) → `boards` (render + boot) | `pxelinux_render`, `board_boot_wait`, `board_boot_verify` | `routeros/plumbing_check.yml`, `routeros/upload_pxelinux_cfg.yml` |
 | `set_boot_mode.yml` | (import wrapper) | — | `converge_boot_mode.yml` |
-| `poe_control.yml` | `boards` → `routeros_switches` (delegated) | — | `routeros/poe_control.yml` |
+| `poe_control.yml` | `boards` → `routeros_switch` (delegated) | — | `routeros/poe_control.yml` |
 | `persist_uboot_env.yml` | rock-5b boards → switch (delegated) | — | — (uses `routeros/tasks/poe_cycle.yml`) |
 | `test_hardware_e2e.yml` | `boards` + router (delegated) + switch (delegated) | exercises all roles transitively | exercises all reference playbooks transitively |
 | `test_manual_psu_cold_boot.yml` | `boards` (manual PSU) | — | — |

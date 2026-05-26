@@ -39,7 +39,7 @@
     serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
-    _routeros_target: "{{ groups['routeros_routers'] | first }}"
+    _routeros_target: "{{ groups['routeros_router'] | first }}"
     _wait_timeout: 300
     armbian_netboot_boot_attempt_timeout: 180
     _serial_log: "/tmp/serial-{{ inventory_hostname }}.log"

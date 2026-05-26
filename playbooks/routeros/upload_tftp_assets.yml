@@ -8,7 +8,7 @@
 #   armbian_netboot_tftp_flash_dir:     top-level dir on rb5009 flash
 
 - name: Upload SBC TFTP assets to RouterOS
-  hosts: routeros_routers
+  hosts: routeros_router
   gather_facts: false
   vars:
     _assets: [vmlinuz, initrd.img, board.dtb]
