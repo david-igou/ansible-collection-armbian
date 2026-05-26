@@ -64,9 +64,10 @@
     # form instead — but that fork lacks RTL8125 PCIe driver anyway, so
     # the collection ships affected boards on the edge branch which
     # uses mainline u-boot v2026.04 with the legacy form (the
-    # `__999_rock5b_uboot_v2026_04` hook below overrides armbian/build's
-    # v2026.01 pin on the rock-5b board config). See
-    # inventory/group_vars/rock_5b.yml for the branch declaration.
+    # per-board conf overlay in inventory/group_vars/rock_5b.yml
+    # carries a hook that overrides armbian/build's v2026.01 pin on
+    # the rock-5b board config). See armbian_netboot_board_branch in
+    # inventory/group_vars/<model_group>.yml.
     build_userpatches_common:
       - dest: "config/sources/families/rockchip-rk3588.conf"
         content: |
@@ -229,107 +230,6 @@
               fi
           }
 
-          # Bumps rock-5b's mainline u-boot pin from armbian/build's
-          # v2026.01 default to v2026.04. armbian/build registers
-          # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
-          # (in config/boards/rock-5b.conf) which sets BOOTBRANCH +
-          # BOOTPATCHDIR to v2026.01; that hook is auto-prefixed to
-          # `500_` by initialize_extension_manager, so our `__999_*`
-          # variant sorts after it and wins on the BOOTBRANCH /
-          # BOOTPATCHDIR re-declaration. armbian/build ships a
-          # `patch/u-boot/v2026.04/` directory, so BOOTPATCHDIR points
-          # at a real patch set (not at v2026.01 patches applied to a
-          # v2026.04 tree, which would risk rejects).
-          #
-          # Per the explainer (docs/uboot-armbian-build-explainer.html
-          # §8.2), v2026.04 does NOT clear any of rock-5b's three PXE
-          # failure layers on its own — Approach B
-          # (playbooks/persist_uboot_env.yml) still has to run to
-          # populate SPI env. The bump is just to track upstream.
-          function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
-              [[ "${BOARD}" != "rock-5b" ]] && return 0
-              [[ "${BRANCH}" != "edge" ]] && return 0
-              display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
-              declare -g BOOTBRANCH="tag:v2026.04"
-              declare -g BOOTPATCHDIR="v2026.04"
-          }
-
-          # Switch rock-5a from the rk3588 family-default Radxa fork
-          # (next-dev-v2024.10) to mainline u-boot v2026.04 on the edge
-          # branch. armbian/build's config/boards/rock-5a.conf has no
-          # `post_family_config_branch_edge__*` hook (unlike rock-5b),
-          # so without this override rock-5a would build against the
-          # Radxa fork, which:
-          #   1. uses the X-macro `BOOT_TARGET_DEVICES(func)` form in
-          #      include/configs/rockchip-common.h — our
-          #      `__999_pxe_first` sed against `#define BOOT_TARGETS`
-          #      is silently a no-op, so PXE stays at the end of the
-          #      Radxa fork's default order (USB → SD → NVMe → SCSI →
-          #      eMMC → MTD → RKNAND → PXE → DHCP) and SD wins.
-          #   2. has no `post_family_config_branch_edge` override at
-          #      all in upstream armbian/build for rock-5a (only the
-          #      vendor branch gets `post_family_config_branch_vendor__
-          #      dual_uboot_for_rock5a`).
-          # Mainline v2026.04 already ships a rock5a-rk3588s_defconfig
-          # (note: NO dash between "rock" and "5a" — matches rock-5b's
-          # mainline naming pattern, distinct from the Radxa fork's
-          # rock-5a-rk3588s_defconfig). Upstream's rock5a defconfig
-          # includes CONFIG_PHY_REALTEK=y and a DT PHY node carrying
-          # the Realtek OUI compatible (`ethernet-phy-id001c.c916`,
-          # which is RTL8211F per the Radxa product page); whether
-          # that matches the specific Rock 5A revision in operator's
-          # hands is *not* something this file should assume. See
-          # "SBC ecosystem reality" in CLAUDE.md for why and how to
-          # validate against the live `dmesg`/`ethtool` output.
-          #
-          # The body mirrors armbian/build's
-          # `post_family_config_branch_edge__rock-5b_use_mainline_uboot`
-          # exactly (BOOT_SCENARIO + prepare_boot_configuration to reuse
-          # the ATF path from rockchip64_common, binman-produced
-          # u-boot-rockchip{,-spi}.bin via UBOOT_TARGET_MAP, custom
-          # write_uboot_platform{,_mtd}). Auto-prefixed `500_` by
-          # initialize_extension_manager would NOT happen here because
-          # this hook has an explicit `__999_` numeric ID; sort order
-          # only matters relative to any future upstream hook on the
-          # same name.
-          # Diverges from rock-5b's mainline override in one place:
-          # UBOOT_TARGET_MAP lists only u-boot-rockchip.bin (no -spi.bin
-          # variant). rock-5b's mainline-mainline binman config emits both
-          # SD-bootable and SPI-bootable images, but mainline v2026.04's
-          # rock5a binman config (`arch/arm/dts/rk3588s-rock-5a-u-boot.dtsi`
-          # is a near-empty stub) only emits the SD-bootable form. Listing
-          # u-boot-rockchip-spi.bin in UBOOT_TARGET_MAP makes
-          # `deploy_built_uboot_bins_for_one_target_to_packaging_area`
-          # exit_with_error after the SD bin has already been copied.
-          # We netboot from SD; the SPI variant is unused, so dropping it
-          # is the correct minimal fix (vs. the heavier alternative of
-          # patching the upstream u-boot DTSI to add a binman SPI image
-          # node). Correspondingly we don't redefine write_uboot_platform_mtd
-          # — the unset clears rockchip64_common's default; no MTD writer
-          # is needed since BOOT_SUPPORT_SPI's SPI-loader build path is not
-          # exercised when no SPI artifact exists.
-          function post_family_config_branch_edge__999_rock5a_use_mainline_uboot() {
-              [[ "${BOARD}" != "rock-5a" ]] && return 0
-              [[ "${BRANCH}" != "edge" ]] && return 0
-              display_alert "${BOARD}" "switching to mainline u-boot v2026.04 (was Radxa next-dev-v2024.10)" "info"
-
-              BOOT_SCENARIO="tpl-blob-atf-mainline"
-              prepare_boot_configuration
-
-              declare -g BOOTCONFIG="rock5a-rk3588s_defconfig"
-              declare -g BOOTDELAY=1
-              declare -g BOOTSOURCE="https://github.com/u-boot/u-boot.git"
-              declare -g BOOTBRANCH="tag:v2026.04"
-              declare -g BOOTPATCHDIR="v2026.04"
-              declare -g BOOTDIR="u-boot-${BOARD}"
-              declare -g UBOOT_TARGET_MAP="BL31=bl31.elf ROCKCHIP_TPL=${RKBIN_DIR}/${DDR_BLOB};;u-boot-rockchip.bin"
-              unset uboot_custom_postprocess write_uboot_platform write_uboot_platform_mtd
-
-              function write_uboot_platform() {
-                  dd "if=$1/u-boot-rockchip.bin" "of=$2" bs=32k seek=1 conv=notrunc status=none
-              }
-          }
-
           # Suppress the bcmdhd Broadcom WiFi DKMS driver. Some rk3588
           # boards (e.g. orangepi5-max) `enable_extension "bcmdhd"` +
           # `BCMDHD_TYPE="sdio"` in their armbian/build board config,
@@ -349,7 +249,6 @@
               unset BCMDHD_TYPE
               declare -g INSTALL_HEADERS="no"
           }
-
 
   pre_tasks:
     - name: Load board configs for board name lookup
@@ -387,6 +286,23 @@
                 )
               })
           }}
+      loop: "{{ _board_models }}"
+
+    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
+      # Must run before any task that dereferences
+      # armbian_netboot_board_configs[<model>] — otherwise an unknown
+      # model fails with an opaque Jinja key error instead of this
+      # explicit fail_msg. Earliest dereferencer is the
+      # _build_target_to_model reverse-map set_fact below; later ones
+      # are the local_kernel / uboot_env render blocks and
+      # _build_targets resolution.
+      ansible.builtin.assert:
+        that:
+          - item in armbian_netboot_board_configs
+        fail_msg: >-
+          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
+          vars/boards.yml. Add it there or remove the host from the
+          boards group.
       loop: "{{ _board_models }}"
 
     - name: Resolve armbian_board_name → board_model reverse map
@@ -496,16 +412,6 @@
               [{{ cfg.armbian_board_name }}]='{{ cfg.uboot_env.storage }}'
           {% endif %}
           {% endfor %}
-
-    - name: Assert every armbian_netboot_board_model has an armbian_netboot_board_configs entry
-      ansible.builtin.assert:
-        that:
-          - item in armbian_netboot_board_configs
-        fail_msg: >-
-          armbian_netboot_board_model '{{ item }}' (from groups['boards']) has no entry in
-          vars/boards.yml. Add it there or remove the host from the
-          boards group.
-      loop: "{{ _board_models }}"
 
     - name: Resolve build targets from armbian_netboot_board_configs
       ansible.builtin.set_fact:

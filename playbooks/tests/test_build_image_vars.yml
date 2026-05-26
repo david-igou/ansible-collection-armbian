@@ -129,3 +129,65 @@
           inventory/group_vars/orange_pi_5_max.yml under
           armbian_netboot_board_userpatches.
       when: "'orange-pi-5-max' in _board_models"
+
+    - name: Assert rock-5a ships its mainline-u-boot hook via per-board conf overlay
+      ansible.builtin.assert:
+        that:
+          - "(hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([])) | length >= 1"
+          - >-
+            (hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+            | selectattr('dest', 'equalto', 'config/boards/rock-5a.conf')
+            | list | length == 1
+          - >-
+            (hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+            | selectattr('dest', 'equalto', 'config/sources/families/rockchip-rk3588.conf')
+            | list | length == 0
+          - >-
+            'post_family_config_branch_edge__999_rock5a_use_mainline_uboot' in
+            ((hostvars[_board_model_first_host['rock-5a']].armbian_netboot_board_userpatches | default([]))
+             | selectattr('dest', 'equalto', 'config/boards/rock-5a.conf')
+             | map(attribute='content') | first | default(''))
+        fail_msg: >-
+          rock-5a group_vars must ship the
+          post_family_config_branch_edge__999_rock5a_use_mainline_uboot
+          hook via dest: config/boards/rock-5a.conf (a per-board overlay
+          armbian/build sources only when building rock-5a). It must NOT
+          ship via the rk3588 family overlay — that defeats the
+          per-board scoping.
+      when: "'rock-5a' in _board_models"
+
+    - name: Assert rock-5b ships its v2026.04 u-boot bump via per-board conf overlay
+      ansible.builtin.assert:
+        that:
+          - "(hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([])) | length >= 1"
+          - >-
+            (hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+            | selectattr('dest', 'equalto', 'config/boards/rock-5b.conf')
+            | list | length == 1
+          - >-
+            (hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+            | selectattr('dest', 'equalto', 'config/sources/families/rockchip-rk3588.conf')
+            | list | length == 0
+          - >-
+            'post_family_config_branch_edge__999_rock5b_uboot_v2026_04' in
+            ((hostvars[_board_model_first_host['rock-5b']].armbian_netboot_board_userpatches | default([]))
+             | selectattr('dest', 'equalto', 'config/boards/rock-5b.conf')
+             | map(attribute='content') | first | default(''))
+        fail_msg: >-
+          rock-5b group_vars must ship the
+          post_family_config_branch_edge__999_rock5b_uboot_v2026_04
+          hook via dest: config/boards/rock-5b.conf. See the rock-5a
+          assert above for the rationale.
+      when: "'rock-5b' in _board_models"
+
+    - name: Assert every model defaults to edge branch in v3 fleet
+      ansible.builtin.assert:
+        that:
+          - "hostvars[_board_model_first_host[item]].armbian_netboot_board_branch == 'edge'"
+        fail_msg: >-
+          Model '{{ item }}' has armbian_netboot_board_branch =
+          '{{ hostvars[_board_model_first_host[item]].armbian_netboot_board_branch }}';
+          example-inventory contract expects 'edge' for all currently
+          tracked rk3588(s) boards (see plan
+          docs/superpowers/plans/2026-05-25-per-board-userpatches-inventory.md).
+      loop: "{{ _board_models }}"
