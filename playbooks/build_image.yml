@@ -452,6 +452,29 @@
              | unique
              | list }}
 
+    - name: Resolve a representative host per board model
+      # Per-model build vars (armbian_netboot_board_userpatches,
+      # armbian_netboot_board_branch) come from
+      # inventory/group_vars/<model_group>.yml. Hosts of the same model
+      # all inherit those group_vars, so picking any one host is
+      # sufficient — we use the first host listed in groups['boards']
+      # for each model. Used by the include_role vars: block below.
+      ansible.builtin.set_fact:
+        _board_model_first_host: >-
+          {{
+            _board_model_first_host | default({})
+            | combine({
+                item: (
+                  groups['boards']
+                  | map('extract', hostvars)
+                  | selectattr('armbian_netboot_board_model', 'equalto', item)
+                  | map(attribute='inventory_hostname')
+                  | first
+                )
+              })
+          }}
+      loop: "{{ _board_models }}"
+
     - name: Render local_kernel dispatch table for the build hook
       # Macro inlined here because Jinja's set_fact context blocks
       # absolute-path imports via {%- from ... -%}. The canonical macro
