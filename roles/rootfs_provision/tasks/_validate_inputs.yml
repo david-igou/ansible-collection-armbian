@@ -1,0 +1,30 @@
+# roles/rootfs_provision/tasks/_validate_inputs.yml
+---
+- name: Assert required inputs are present and well-formed
+  ansible.builtin.assert:
+    that:
+      - armbian_rootfs_src  | length > 0
+      - armbian_rootfs_host | length > 0
+      - armbian_rootfs_dtb  | length > 0
+    fail_msg: >-
+      rootfs_provision requires armbian_rootfs_src, armbian_rootfs_host,
+      and armbian_rootfs_dtb. See meta/argument_specs.yml.
+
+- name: Refuse to overwrite a mounted target_dir
+  ansible.builtin.shell: |
+    set -e
+    if findmnt -n -T "{{ armbian_rootfs_target_dir }}" >/dev/null 2>&1; then
+        echo "MOUNTED" && exit 0
+    fi
+    echo "NOT_MOUNTED"
+  args:
+    executable: /bin/bash
+  register: __rootfs_provision_target_mount_state
+  changed_when: false
+
+- name: Fail if target_dir is currently a mountpoint
+  ansible.builtin.fail:
+    msg: >-
+      armbian_rootfs_target_dir={{ armbian_rootfs_target_dir }} is currently
+      a mountpoint. Refusing to overwrite. Unmount it before re-provisioning.
+  when: "'MOUNTED' in __rootfs_provision_target_mount_state.stdout"
