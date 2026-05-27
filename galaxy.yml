@@ -44,6 +44,8 @@ build_ignore:
   - .ansible
   - .ansible-lint
   - .cache
+  - .claude
+  - .cursor
   - .devcontainer
   - .github
   - .gitignore
@@ -52,16 +54,19 @@ build_ignore:
   - .prettierignore
   - .vscode
   - .worktrees
+  - .yamllint.yml
   - AGENTS.md
   - CLAUDE.md
   - CONTRIBUTING.md
   - MAINTAINERS
   - Makefile
   - ansible-creator.log
+  - ansible.cfg
   - changelogs/.plugin-cache.yaml
   - devfile.yaml
   - extensions
   - pyproject.toml
   - requirements.txt
   - test-requirements.txt
+  - tests
   - tox-ansible.ini
