@@ -1,0 +1,33 @@
+# playbooks/tasks/_resolve_board_config.yml
+#
+# Per-host resolver: merges three explicit named layers into the
+# resolved fact armbian_board_config. Run once per host that needs
+# hardware facts (boards, builders that delegate to boards).
+#
+# Layers (precedence low → high):
+#   armbian_board_config_family — inventory/group_vars/<family>.yml
+#   armbian_board_config_model  — inventory/group_vars/<model_group>.yml
+#   armbian_board_config_host   — inventory/host_vars/<host>.yml
+#
+# Required after-merge fields: armbian_board_name, dtb, console.
+
+- name: Resolve effective armbian_board_config (family → model → host)
+  ansible.builtin.set_fact:
+    armbian_board_config: >-
+      {{
+        (armbian_board_config_family | default({}))
+        | combine(armbian_board_config_model | default({}), recursive=true)
+        | combine(armbian_board_config_host  | default({}), recursive=true)
+      }}
+
+- name: Assert required hardware fields are present after merge
+  ansible.builtin.assert:
+    that:
+      - armbian_board_config.armbian_board_name | default('') | length > 0
+      - armbian_board_config.dtb              | default('') | length > 0
+      - armbian_board_config.console          | default('') | length > 0
+    fail_msg: >-
+      Host {{ inventory_hostname }}: missing required armbian_board_config
+      fields after merge (need armbian_board_name, dtb, console). Check
+      inventory/group_vars/<family>.yml, group_vars/<model_group>.yml,
+      and host_vars/{{ inventory_hostname }}.yml for the missing field.
