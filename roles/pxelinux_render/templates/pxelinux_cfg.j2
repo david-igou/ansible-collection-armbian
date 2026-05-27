@@ -1,6 +1,6 @@
-{% set _verbose_suffix = ' earlycon=' ~ pxelinux_render_earlycon ~ ' loglevel=8 ignore_loglevel initcall_debug printk.devkmsg=on systemd.log_level=debug systemd.log_target=console systemd.journald.forward_to_console=1' if pxelinux_render_pxe_verbose | bool else '' %}
+{% set _verbose_suffix = ' earlycon=' ~ armbian_board_config.earlycon ~ ' loglevel=8 ignore_loglevel initcall_debug printk.devkmsg=on systemd.log_level=debug systemd.log_target=console systemd.journald.forward_to_console=1' if pxelinux_render_pxe_verbose | bool else '' %}
 # {{ ansible_managed }}
-# pxelinux.cfg for {{ pxelinux_render_hostname }} ({{ pxelinux_render_model_name }})
+# pxelinux.cfg for {{ pxelinux_render_hostname }} ({{ armbian_board_config.armbian_board_name }})
 # MAC: {{ pxelinux_render_board_mac }}
 # Active mode: {{ pxelinux_render_boot_mode }}
 
@@ -13,21 +13,21 @@ label nfs
   kernel {{ pxelinux_render_tftp_kernel }}
   initrd {{ pxelinux_render_tftp_initrd }}
   fdt    {{ pxelinux_render_tftp_dtb }}
-  append root=/dev/nfs nfsroot={{ pxelinux_render_nfs_server_ip }}:{{ pxelinux_render_nfs_root_path }}/{{ pxelinux_render_hostname }},nfsvers=3,rw ip=dhcp console={{ board_console }} rootwait rw{{ _verbose_suffix }}
+  append root=/dev/nfs nfsroot={{ pxelinux_render_nfs_server_ip }}:{{ pxelinux_render_nfs_root_path }}/{{ pxelinux_render_hostname }},nfsvers=3,rw ip=dhcp console={{ armbian_board_config.console }} rootwait rw{{ _verbose_suffix }}
 
 label sd
   menu label Armbian on SD ({{ pxelinux_render_hostname }})
   kernel {{ pxelinux_render_tftp_kernel }}
   initrd {{ pxelinux_render_tftp_initrd }}
   fdt    {{ pxelinux_render_tftp_dtb }}
-  append root={{ pxelinux_render_sd_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}
+  append root={{ pxelinux_render_sd_root }} rootfstype=ext4 rootwait rw console={{ armbian_board_config.console }}{{ _verbose_suffix }}
 
 label local
   menu label Armbian on local disk ({{ pxelinux_render_hostname }})
   kernel {{ pxelinux_render_tftp_kernel }}
   initrd {{ pxelinux_render_tftp_initrd }}
   fdt    {{ pxelinux_render_tftp_dtb }}
-  append root={{ pxelinux_render_local_root }} rootfstype=ext4 rootwait rw console={{ board_console }}{{ _verbose_suffix }}
+  append root={{ pxelinux_render_local_root }} rootfstype=ext4 rootwait rw console={{ armbian_board_config.console }}{{ _verbose_suffix }}
 
 label local_kernel
   menu label Boot local kernel from NVMe ({{ pxelinux_render_hostname }})
@@ -39,5 +39,5 @@ label {{ mode_name }}
   kernel {{ pxelinux_render_tftp_kernel }}
   initrd {{ pxelinux_render_tftp_initrd }}
   fdt    {{ pxelinux_render_tftp_dtb }}
-  append root={{ mode.root }} rootfstype={{ mode.rootfstype | default('ext4') }} rootwait rw console={{ board_console }}{% if mode.extra_append is defined %} {{ mode.extra_append }}{% endif %}{{ _verbose_suffix }}
+  append root={{ mode.root }} rootfstype={{ mode.rootfstype | default('ext4') }} rootwait rw console={{ armbian_board_config.console }}{% if mode.extra_append is defined %} {{ mode.extra_append }}{% endif %}{{ _verbose_suffix }}
 {% endfor %}

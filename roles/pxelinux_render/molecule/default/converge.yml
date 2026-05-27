@@ -15,8 +15,11 @@
       vars:
         pxelinux_render_board_mac: "aa:bb:cc:dd:ee:01"
         pxelinux_render_boot_mode: nfs
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: "orange-pi-5-pro"
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: "uart8250,mmio32,0xfeb50000"
+          armbian_board_name: "orange-pi-5-pro"
+          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
         pxelinux_render_nfs_server_ip: "192.0.2.10"
         pxelinux_render_nfs_root_path: "/mnt/ssd/netboot/rootfs"
         pxelinux_render_hostname: "test-board-01"

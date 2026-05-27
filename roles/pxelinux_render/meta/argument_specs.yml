@@ -13,6 +13,12 @@ argument_specs:
         `hosts: boards` play, so per-board hostvars are in scope and
         one invocation per board renders one file.
       - >-
+        Requires the caller to have resolved `armbian_board_config` on
+        the running host before invocation (typically via
+        `_resolve_board_config.yml` in the calling playbook's
+        pre_tasks). The template reads `armbian_board_config.console`
+        and `armbian_board_config.earlycon` directly.
+      - >-
         v4.0.0 breaking change: every external input is now
         `pxelinux_render_*`-prefixed (was unprefixed in v3.x). See the
         role README for the full rename table.
@@ -43,14 +49,6 @@ argument_specs:
           rendered pxelinux.cfg with the supplied root= and rootfstype.
           Keys become label names and valid pxelinux_render_boot_mode
           values.
-      board_console:
-        type: str
-        required: true
-        description: "console= kernel argument value (e.g. ttyS2,1500000)."
-      pxelinux_render_model_name:
-        type: str
-        required: true
-        description: "Board model identifier — used to compose default TFTP paths."
       pxelinux_render_nfs_server_ip:
         type: str
         required: true
@@ -84,16 +82,15 @@ argument_specs:
       pxelinux_render_pxe_verbose:
         type: bool
         default: false
-      pxelinux_render_earlycon:
-        type: str
-        default: ""
-        description: "Required when pxelinux_render_pxe_verbose=true. Format <driver>,<bus>,<mmio_addr>."
       pxelinux_render_tftp_kernel:
         type: str
-        default: "armbian/{{ pxelinux_render_model_name }}/vmlinuz"
+        default: "armbian/{{ inventory_hostname }}/vmlinuz"
+        description: "TFTP-relative path to the kernel. Defaults to a per-host layout keyed by inventory_hostname."
       pxelinux_render_tftp_initrd:
         type: str
-        default: "armbian/{{ pxelinux_render_model_name }}/initrd.img"
+        default: "armbian/{{ inventory_hostname }}/initrd.img"
+        description: "TFTP-relative path to the initrd. Defaults to a per-host layout keyed by inventory_hostname."
       pxelinux_render_tftp_dtb:
         type: str
-        default: "armbian/{{ pxelinux_render_model_name }}/board.dtb"
+        default: "armbian/{{ inventory_hostname }}/board.dtb"
+        description: "TFTP-relative path to the DTB. Defaults to a per-host layout keyed by inventory_hostname."
