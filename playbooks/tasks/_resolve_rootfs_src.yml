@@ -1,0 +1,57 @@
+# playbooks/tasks/_resolve_rootfs_src.yml
+#
+# Per-host resolver for armbian_rootfs_src. Precedence:
+#   1. host_vars value set → use as-is
+#   2. published manifest at armbian_nfs_assets_export/images/<host>/manifest.json
+#      (stat'd on the first netboot_server host) → derive file path
+#   3. neither → fail with actionable message
+
+- name: Skip resolution when host_vars armbian_rootfs_src is already set
+  ansible.builtin.set_fact:
+    __armbian_rootfs_src_was_set: "{{ armbian_rootfs_src is defined and (armbian_rootfs_src | length > 0) }}"
+
+- name: Compute published manifest path candidate
+  ansible.builtin.set_fact:
+    __published_manifest_path: >-
+      {{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}/manifest.json
+  when: not __armbian_rootfs_src_was_set
+
+- name: Stat published manifest on netboot server (delegated)
+  ansible.builtin.stat:
+    path: "{{ __published_manifest_path }}"
+  delegate_to: "{{ groups['netboot_server'][0] | default('localhost') }}"
+  become: "{{ groups['netboot_server'] is defined and (groups['netboot_server'] | length > 0) }}"
+  register: __published_manifest_stat
+  when: not __armbian_rootfs_src_was_set
+
+- name: Slurp published manifest if present
+  ansible.builtin.slurp:
+    src: "{{ __published_manifest_path }}"
+  delegate_to: "{{ groups['netboot_server'][0] | default('localhost') }}"
+  become: "{{ groups['netboot_server'] is defined and (groups['netboot_server'] | length > 0) }}"
+  register: __published_manifest_raw
+  when:
+    - not __armbian_rootfs_src_was_set
+    - __published_manifest_stat.stat.exists | default(false)
+
+- name: Derive armbian_rootfs_src from published manifest
+  ansible.builtin.set_fact:
+    armbian_rootfs_src: >-
+      {{ armbian_nfs_assets_export }}/images/{{ inventory_hostname
+         }}/{{ (__published_manifest_raw.content | b64decode | from_json).image_filename }}
+  when:
+    - not __armbian_rootfs_src_was_set
+    - __published_manifest_stat.stat.exists | default(false)
+
+- name: Fail if no source could be resolved
+  ansible.builtin.fail:
+    msg: >-
+      Host {{ inventory_hostname }}: cannot resolve armbian_rootfs_src.
+      Remediation:
+        (a) set armbian_rootfs_src in host_vars to an upstream Armbian URL
+            (e.g. "https://redirect.armbian.com/<model>/Bookworm_current_minimal"), OR
+        (b) run build_and_publish_from_inventory.yml first so a manifest
+            lands at {{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}/manifest.json.
+  when:
+    - not __armbian_rootfs_src_was_set
+    - not (__published_manifest_stat.stat.exists | default(false))
