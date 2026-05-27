@@ -34,8 +34,7 @@ it because it is absent from the root `requirements.yml`.
 | `local_kernel_render` | `image_build` (template macro) | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
-
-The `rootfs_provision` role (which replaced the old `image_extract` + `rootfs_clone` pair in 4.0.0) lives at the role-level scenario `roles/rootfs_provision/molecule/default/` rather than under `extensions/molecule/`. It exercises losetup + mount + rsync inside a privileged container, which is closer to the disk_image scenario style; it does not need the `extensions/molecule/` collection-level inventory.
+| `rootfs_provision` | `rootfs_provision` | qemu | Debian 13 (Trixie) genericcloud |
 
 Switch backend per invocation (only meaningful when the scenario's
 inventory ships multiple `mp.<backend>` blocks):
