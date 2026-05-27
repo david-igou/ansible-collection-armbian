@@ -28,6 +28,11 @@
       - armbian_board_config.console          | default('') | length > 0
     fail_msg: >-
       Host {{ inventory_hostname }}: missing required armbian_board_config
-      fields after merge (need armbian_board_name, dtb, console). Check
-      inventory/group_vars/<family>.yml, group_vars/<model_group>.yml,
-      and host_vars/{{ inventory_hostname }}.yml for the missing field.
+      field(s) after merge: {{
+        (
+          (['armbian_board_name'] if armbian_board_config.armbian_board_name | default('') | length == 0 else [])
+          + (['dtb']               if armbian_board_config.dtb               | default('') | length == 0 else [])
+          + (['console']           if armbian_board_config.console           | default('') | length == 0 else [])
+        ) | join(', ')
+      }}. Check inventory/group_vars/<family>.yml,
+      group_vars/<model_group>.yml, and host_vars/{{ inventory_hostname }}.yml.
