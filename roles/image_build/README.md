@@ -45,13 +45,24 @@ the patch list and consume the resulting `.img.xz` + `manifest.json` from
 }
 ```
 
-## Idempotency
+## Idempotency & check mode
 
 The role skips the build (and the manifest write) when an existing
 `manifest.json` matches all five decision fields: `patch_hash`,
 `armbian_build_ref`, `board`, `branch`, `release`. `patch_hash` is
 `sha256` of the canonical-JSON-encoded `armbian_build_userpatches`. Pass
-`-e armbian_build_force=true` to override.
+`-e armbian_build_force=true` to override. The role is not check-mode
+safe: `compile.sh` runs in Docker and always writes to the build cache.
+
+## Rollback / Recovery
+
+If the build fails mid-run, the manifest is not written (it is only
+written on success), so a subsequent run will re-trigger the build.
+The partial Docker build artifacts under `armbian_build_cache_dir/build/`
+are safe to leave in place — `armbian/build` handles incremental
+rebuilds. To force a clean rebuild from scratch, delete
+`armbian_build_cache_dir/<host>/build/` and re-run with
+`armbian_build_force: true`.
 
 ## Preflight assumptions
 

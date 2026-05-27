@@ -31,6 +31,23 @@ Optional: `disk_image_dd_bs` (default `4M`).
 The running rootfs must have `curl`, `xz`, `dd`, `sync`, and `partprobe`
 (from `parted`) installed. All present in stock Armbian.
 
+## Idempotency & check mode
+
+The role always writes; there is no idempotency cache — every invocation
+streams the full image to the target. Not check-mode safe: the role
+asserts and exits early when `ansible_check_mode` is true, because
+streaming writes to a block device cannot be simulated.
+
+## Rollback / Recovery
+
+A failed mid-stream write (curl error, xz CRC error, partial transfer)
+leaves the target device in an unknown state. Recovery is always a clean
+re-run: the role streams from the beginning with no partial-write
+detection. A corrupt or truncated image leaves an unbootable device —
+re-invoke with a known-good source to recover. Verify image integrity
+out-of-band (e.g. via the `.sha` sidecar) before invoking this role
+on a production board.
+
 ## What this role does NOT do
 
 - Reset identity (machine-id, ssh host keys, hostname).
