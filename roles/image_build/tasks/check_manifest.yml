@@ -6,57 +6,58 @@
 
 - name: Compute per-host manifest path
   ansible.builtin.set_fact:
-    _manifest_path: "{{ __image_build_output_dir_host }}/manifest.json"
+    __image_build_manifest_path: "{{ __image_build_output_dir_host }}/manifest.json"
 
 - name: Stat existing manifest
   ansible.builtin.stat:
-    path: "{{ _manifest_path }}"
-  register: _manifest_stat
+    path: "{{ __image_build_manifest_path }}"
+  register: __image_build_manifest_stat
 
 - name: Default to no existing manifest
   ansible.builtin.set_fact:
-    _existing_manifest: {}
+    __image_build_existing_manifest: {}
 
 - name: Read and parse existing manifest if present
   block:
     - name: Slurp existing manifest
       ansible.builtin.slurp:
-        src: "{{ _manifest_path }}"
-      register: _manifest_raw
-      when: _manifest_stat.stat.exists
+        src: "{{ __image_build_manifest_path }}"
+      register: __image_build_manifest_raw
+      when: __image_build_manifest_stat.stat.exists
 
     - name: Parse manifest JSON
       ansible.builtin.set_fact:
-        _existing_manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
-      when: _manifest_stat.stat.exists
+        __image_build_existing_manifest: "{{ __image_build_manifest_raw.content | b64decode | from_json }}"
+      when: __image_build_manifest_stat.stat.exists
   rescue:
     - name: Note manifest unparseable — will rebuild
       ansible.builtin.debug:
-        msg: "Existing manifest at {{ _manifest_path }} is unparseable; treating as missing"
+        msg: "Existing manifest at {{ __image_build_manifest_path }} is unparseable; treating as missing"
     - name: Reset to empty manifest
       ansible.builtin.set_fact:
-        _existing_manifest: {}
+        __image_build_existing_manifest: {}
 
 - name: Verify the image file referenced by the manifest still exists
   ansible.builtin.stat:
-    path: "{{ __image_build_output_dir_host }}/{{ _existing_manifest.image_filename | default('') }}"
-  register: _existing_image_stat
-  when: _existing_manifest.image_filename is defined
+    path: "{{ __image_build_output_dir_host }}/{{ __image_build_existing_manifest.image_filename | default('') }}"
+  register: __image_build_existing_image_stat
+  when: __image_build_existing_manifest.image_filename is defined
 
 - name: Decide whether to skip the build
   ansible.builtin.set_fact:
     __image_build_skip_build: >-
       {{ (not (armbian_build_force | bool))
-         and (_existing_manifest.patch_hash | default('') == __image_build_manifest_inputs.patch_hash)
-         and (_existing_manifest.armbian_build_ref | default('') == __image_build_manifest_inputs.armbian_build_ref)
-         and (_existing_manifest.board | default('') == __image_build_manifest_inputs.board)
-         and (_existing_manifest.host  | default('') == __image_build_manifest_inputs.host)
-         and (_existing_manifest.branch | default('') == __image_build_manifest_inputs.branch)
-         and (_existing_manifest.release | default('') == __image_build_manifest_inputs.release)
-         and (_existing_image_stat.stat.exists | default(false)) }}
+         and (__image_build_existing_manifest.patch_hash | default('') == __image_build_manifest_inputs.patch_hash)
+         and (__image_build_existing_manifest.armbian_build_ref | default('') == __image_build_manifest_inputs.armbian_build_ref)
+         and (__image_build_existing_manifest.board | default('') == __image_build_manifest_inputs.board)
+         and (__image_build_existing_manifest.host  | default('') == __image_build_manifest_inputs.host)
+         and (__image_build_existing_manifest.branch | default('') == __image_build_manifest_inputs.branch)
+         and (__image_build_existing_manifest.release | default('') == __image_build_manifest_inputs.release)
+         and (__image_build_existing_image_stat.stat.exists | default(false)) }}
 
 - name: Report skip-build decision
   ansible.builtin.debug:
     msg: >-
       armbian_build for {{ armbian_build_board }}:
       {{ 'skipping (manifest matches)' if __image_build_skip_build else 'will build (manifest mismatch or forced)' }}
+    verbosity: 1

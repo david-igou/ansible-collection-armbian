@@ -6,22 +6,22 @@
 
 - name: Capture build timestamp (UTC, ISO 8601)
   ansible.builtin.set_fact:
-    _built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_date_time.epoch | default(lookup('pipe', 'date -u +%s'))) }}"
+    __image_build_built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_date_time.epoch | default(lookup('pipe', 'date -u +%s'))) }}"
 
 - name: Assemble final manifest
   ansible.builtin.set_fact:
-    _manifest:
+    __image_build_manifest:
       patch_hash: "{{ __image_build_manifest_inputs.patch_hash }}"
       armbian_build_ref: "{{ __image_build_manifest_inputs.armbian_build_ref }}"
       board: "{{ __image_build_manifest_inputs.board }}"
       host: "{{ __image_build_manifest_inputs.host }}"
       branch: "{{ __image_build_manifest_inputs.branch }}"
       release: "{{ __image_build_manifest_inputs.release }}"
-      image_filename: "{{ _image_filename }}"
-      built_at: "{{ _built_at }}"
+      image_filename: "{{ __image_build_image_filename }}"
+      built_at: "{{ __image_build_built_at }}"
 
 - name: Write manifest.json atomically
   ansible.builtin.copy:
     dest: "{{ __image_build_output_dir_host }}/manifest.json"
-    content: "{{ _manifest | to_nice_json(sort_keys=true) }}\n"
+    content: "{{ __image_build_manifest | to_nice_json(sort_keys=true) }}\n"
     mode: "0644"
