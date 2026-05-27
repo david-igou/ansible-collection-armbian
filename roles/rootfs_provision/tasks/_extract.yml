@@ -1,0 +1,42 @@
+# roles/rootfs_provision/tasks/_extract.yml
+#
+# Mirrors image_extract's _extract_inner.yml but writes directly into
+# the per-host target_dir (no template indirection).
+
+- name: Ensure mount dir + target_dir exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ armbian_rootfs_mount_dir }}"
+    - "{{ armbian_rootfs_target_dir }}"
+
+- name: Decompress image (creates {{ __rootfs_provision_img_raw }})
+  ansible.builtin.shell: |
+    xz -dk "{{ __rootfs_provision_img_xz }}"
+  args:
+    creates: "{{ __rootfs_provision_img_raw }}"
+
+- name: Attach .img to a loop device with partition scan
+  ansible.builtin.shell: |
+    losetup --find --show --partscan "{{ __rootfs_provision_img_raw }}"
+  register: __rootfs_provision_loop_dev
+  changed_when: true
+
+- name: Mount the largest (rootfs) partition
+  ansible.builtin.shell: |
+    set -o pipefail
+    PART=$(lsblk -ln -o NAME {{ __rootfs_provision_loop_dev.stdout }} | tail -1)
+    mount "/dev/${PART}" "{{ armbian_rootfs_mount_dir }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Rsync rootfs into target_dir
+  ansible.builtin.shell: |
+    rsync -aHAX \
+      --exclude '/proc/*' --exclude '/sys/*' \
+      --exclude '/dev/*' --exclude '/run/*' \
+      "{{ armbian_rootfs_mount_dir }}/" "{{ armbian_rootfs_target_dir }}/"
+  changed_when: true
