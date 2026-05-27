@@ -1,8 +1,12 @@
 ---
-# Assert /ip tftp rows exist on RouterOS for each (model, asset) pair.
+# Assert /ip tftp rows exist on RouterOS for each (host, asset) pair.
+# TFTP rows are keyed by inventory_hostname (per-host layout).
 #
 # Required var:
-#   armbian_tftp_check_models: list of models to verify
+#   armbian_tftp_check_models: list of inventory_hostname values to verify
+#                              (the parameter name is kept for backwards
+#                              compatibility; values must be hostnames, not
+#                              model strings)
 #   armbian_tftp_flash_dir:    top-level dir on router flash
 
 - name: Assert /ip tftp rows exist on RouterOS
@@ -11,7 +15,7 @@
   vars:
     _assets: [vmlinuz, initrd.img, board.dtb]
   tasks:
-    - name: Count /ip tftp rows per (model, asset) pair
+    - name: Count /ip tftp rows per (host, asset) pair
       community.routeros.command:
         commands:
           - >-
