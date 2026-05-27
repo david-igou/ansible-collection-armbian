@@ -2,6 +2,15 @@
 # disk_image — stream an image to a block device.
 # See meta/argument_specs.yml for the contract.
 
+- name: Refuse to run in check mode (disk_image performs irreversible writes)
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+    fail_msg: >-
+      disk_image streams .img.xz to a block device — there is no
+      dry-run mode. Run without --check, or wrap consumers in a
+      `when: not ansible_check_mode` guard.
+
 - name: "Block A — validate inputs (no side effects)"
   ansible.builtin.import_tasks: _validate.yml
 
