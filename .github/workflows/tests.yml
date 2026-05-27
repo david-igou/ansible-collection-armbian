@@ -132,6 +132,16 @@ jobs:
             ovmf \
             sshpass
 
+      - name: Expose Ubuntu OVMF firmware at the path molecule_provisioners expects
+        # Ubuntu ships OVMF at /usr/share/OVMF/, molecule_provisioners defaults
+        # to /usr/share/edk2/ovmf/ (Fedora/RHEL path). Symlink rather than
+        # override per-scenario so this scales to future UEFI scenarios.
+        run: |
+          sudo mkdir -p /usr/share/edk2/ovmf
+          sudo ln -sf /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd
+          sudo ln -sf /usr/share/OVMF/OVMF_VARS.fd /usr/share/edk2/ovmf/OVMF_VARS.fd
+          ls -la /usr/share/edk2/ovmf/
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
