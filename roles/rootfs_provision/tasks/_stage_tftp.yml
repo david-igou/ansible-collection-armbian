@@ -8,8 +8,11 @@
 
 - name: Copy kernel and initrd to tftp_dir
   ansible.builtin.shell: |
+    set -euo pipefail
     cp "{{ armbian_rootfs_mount_dir }}"/boot/vmlinuz-* "{{ armbian_rootfs_tftp_dir }}/vmlinuz"
     cp "{{ armbian_rootfs_mount_dir }}"/boot/initrd.img-* "{{ armbian_rootfs_tftp_dir }}/initrd.img"
+  args:
+    executable: /bin/bash
   changed_when: true
 
 - name: Copy board DTB to tftp_dir (try multiple candidate paths)
