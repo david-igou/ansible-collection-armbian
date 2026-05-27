@@ -12,7 +12,7 @@
 #
 # Locate the produced .img.xz (kernel version is unknown ahead of time,
 # so regex+age-filter), and move both the image and its .sha sidecar into
-# the per-board output directory.
+# the per-host output directory.
 
 - name: Assert armbian_build_compile_args values are shell-token-safe
   ansible.builtin.assert:
@@ -66,17 +66,17 @@
   ansible.builtin.set_fact:
     _image_filename: "{{ _produced_images.files[0].path | basename }}"
 
-- name: Ensure per-board output directory exists
+- name: Ensure per-host output directory exists
   ansible.builtin.file:
-    path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}"
+    path: "{{ __image_build_output_dir_host }}"
     state: directory
     mode: "0755"
 
-- name: Move produced image into the per-board output directory
+- name: Move produced image into the per-host output directory
   ansible.builtin.command:
     cmd: >-
       mv {{ _produced_images.files[0].path }}
-         {{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _image_filename }}
+         {{ __image_build_output_dir_host }}/{{ _image_filename }}
   changed_when: true
 
 - name: Stat the .sha sidecar (may not exist depending on COMPRESS_OUTPUTIMAGE)
@@ -88,6 +88,6 @@
   ansible.builtin.command:
     cmd: >-
       mv {{ _produced_images.files[0].path }}.sha
-         {{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
+         {{ __image_build_output_dir_host }}/{{ _image_filename }}.sha
   changed_when: true
   when: _sha_stat.stat.exists

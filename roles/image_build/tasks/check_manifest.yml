@@ -1,12 +1,12 @@
 ---
-# Read any existing per-board manifest and decide whether a rebuild is
+# Read any existing per-host manifest and decide whether a rebuild is
 # needed. __image_build_skip_build is true only when ALL six decision fields match.
 # Anything else (file missing, parse error, partial match,
 # armbian_build_force) → rebuild.
 
-- name: Compute per-board manifest path
+- name: Compute per-host manifest path
   ansible.builtin.set_fact:
-    _manifest_path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}/manifest.json"
+    _manifest_path: "{{ __image_build_output_dir_host }}/manifest.json"
 
 - name: Stat existing manifest
   ansible.builtin.stat:
@@ -39,7 +39,7 @@
 
 - name: Verify the image file referenced by the manifest still exists
   ansible.builtin.stat:
-    path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _existing_manifest.image_filename | default('') }}"
+    path: "{{ __image_build_output_dir_host }}/{{ _existing_manifest.image_filename | default('') }}"
   register: _existing_image_stat
   when: _existing_manifest.image_filename is defined
 

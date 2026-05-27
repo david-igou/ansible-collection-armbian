@@ -11,7 +11,14 @@
     that:
       - armbian_build_board | length > 0
       - armbian_build_host  | length > 0
-    fail_msg: "armbian_build_board and armbian_build_host are required"
+      - "'/' not in armbian_build_host"
+      - "'..' not in armbian_build_host"
+    fail_msg: >-
+      armbian_build_board and armbian_build_host are required. Set
+      armbian_build_host to the inventory_hostname of the target board
+      (e.g. via host_vars or the calling playbook's vars block).
+      armbian_build_host must not contain '/' or '..' — it is
+      interpolated directly into filesystem paths.
 
 - name: Compute per-host cache + output paths
   ansible.builtin.set_fact:
