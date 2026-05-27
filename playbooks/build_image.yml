@@ -41,8 +41,8 @@
     # Userpatches passed to the image_build role. The LOCAL_KERNEL_CHAIN
     # and EXPECTED_STORAGE entries below are hardcoded for the board
     # named above; edit them in tandem when you change armbian_build_board.
-    # See inventory/group_vars/armbian.yml for the fleet variant that
-    # templates these from vars/boards.yml at runtime.
+    # See inventory/group_vars/rk3588.yml for the fleet variant that
+    # templates these from armbian_board_config at build time.
     armbian_build_userpatches:
       - dest: config/sources/families/rockchip-rk3588.conf
         content: |
