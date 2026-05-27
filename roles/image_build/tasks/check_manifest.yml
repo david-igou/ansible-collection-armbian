@@ -1,6 +1,6 @@
 ---
 # Read any existing per-board manifest and decide whether a rebuild is
-# needed. __image_build_skip_build is true only when ALL five decision fields match.
+# needed. __image_build_skip_build is true only when ALL six decision fields match.
 # Anything else (file missing, parse error, partial match,
 # armbian_build_force) → rebuild.
 
@@ -50,6 +50,7 @@
          and (_existing_manifest.patch_hash | default('') == __image_build_manifest_inputs.patch_hash)
          and (_existing_manifest.armbian_build_ref | default('') == __image_build_manifest_inputs.armbian_build_ref)
          and (_existing_manifest.board | default('') == __image_build_manifest_inputs.board)
+         and (_existing_manifest.host  | default('') == __image_build_manifest_inputs.host)
          and (_existing_manifest.branch | default('') == __image_build_manifest_inputs.branch)
          and (_existing_manifest.release | default('') == __image_build_manifest_inputs.release)
          and (_existing_image_stat.stat.exists | default(false)) }}

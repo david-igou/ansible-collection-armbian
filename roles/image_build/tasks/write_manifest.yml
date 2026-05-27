@@ -14,6 +14,7 @@
       patch_hash: "{{ __image_build_manifest_inputs.patch_hash }}"
       armbian_build_ref: "{{ __image_build_manifest_inputs.armbian_build_ref }}"
       board: "{{ __image_build_manifest_inputs.board }}"
+      host: "{{ __image_build_manifest_inputs.host }}"
       branch: "{{ __image_build_manifest_inputs.branch }}"
       release: "{{ __image_build_manifest_inputs.release }}"
       image_filename: "{{ _image_filename }}"
