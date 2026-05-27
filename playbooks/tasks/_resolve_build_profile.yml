@@ -13,6 +13,13 @@
 #   scalars (branch, release, ref, ...): last-defined-wins via combine()
 #   userpatches: list-concatenated; duplicate dest = hard fail
 #   compile_args: dict-merged; last layer wins per key
+#
+# Caller contract: callers MUST load vars/build_defaults.yml via include_vars
+# BEFORE invoking this file. Example:
+#   - include_vars: { file: "{{ playbook_dir }}/../vars/build_defaults.yml" }
+#   - include_tasks: tasks/_resolve_build_profile.yml
+# If omitted, the defaults layer silently becomes {} and all collection-shipped
+# defaults (release, ref, baseline compile_args, ...) are lost without error.
 
 - name: Merge scalars + compile_args via recursive combine
   # combine(recursive=true) handles scalars and nested dicts (compile_args)
