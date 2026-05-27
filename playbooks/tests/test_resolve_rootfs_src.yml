@@ -1,0 +1,43 @@
+# playbooks/tests/test_resolve_rootfs_src.yml
+#
+# Tests _resolve_rootfs_src.yml precedence:
+#   1. host_vars armbian_rootfs_src set → use as-is
+#   2. published manifest exists → derive URL
+#   3. neither → fail with actionable message
+
+- name: Case 1 — host_vars armbian_rootfs_src wins when set
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_rootfs_src: "https://example.com/test.img.xz"
+    armbian_nfs_assets_export: "/tmp/does-not-exist"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
+
+    - name: Assert host_vars value was preserved verbatim
+      ansible.builtin.assert:
+        that: armbian_rootfs_src == "https://example.com/test.img.xz"
+
+- name: Case 3 — neither host_vars nor manifest → fail
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_nfs_assets_export: "/tmp/does-not-exist"
+  tasks:
+    - name: Run resolver (expected to fail with actionable message)
+      block:
+        - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
+        - ansible.builtin.fail:
+            msg: "Resolver should have failed when no src available; did not."
+      rescue:
+        - name: Assert the failure message mentions both remediation paths
+          ansible.builtin.assert:
+            that:
+              - "'armbian_rootfs_src' in (ansible_failed_result.msg | default(''))"
+              - "'build_and_publish_from_inventory' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              Failure message should mention both armbian_rootfs_src
+              host_var and build_and_publish_from_inventory.yml.
+              Got: {{ ansible_failed_result | default('no result') }}
