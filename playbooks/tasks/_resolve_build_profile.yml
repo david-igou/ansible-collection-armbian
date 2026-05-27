@@ -1,0 +1,58 @@
+# playbooks/tasks/_resolve_build_profile.yml
+#
+# Per-host resolver: merges four layers into the resolved fact
+# armbian_build. Run once per host that produces a custom build.
+#
+# Layers (precedence low → high):
+#   armbian_build_defaults — collection vars/build_defaults.yml
+#   armbian_build_family   — inventory/group_vars/<family>.yml
+#   armbian_build_model    — inventory/group_vars/<model_group>.yml
+#   armbian_build_host     — inventory/host_vars/<host>.yml
+#
+# Merge contract per key:
+#   scalars (branch, release, ref, ...): last-defined-wins via combine()
+#   userpatches: list-concatenated; duplicate dest = hard fail
+#   compile_args: dict-merged; last layer wins per key
+
+- name: Merge scalars + compile_args via recursive combine
+  # combine(recursive=true) handles scalars and nested dicts (compile_args)
+  # correctly. The userpatches list is REPLACED by combine — we rebuild it
+  # explicitly below via list concatenation.
+  ansible.builtin.set_fact:
+    __armbian_build_scalars: >-
+      {{
+        (armbian_build_defaults | default({}))
+        | combine(armbian_build_family  | default({}), recursive=true)
+        | combine(armbian_build_model   | default({}), recursive=true)
+        | combine(armbian_build_host    | default({}), recursive=true)
+      }}
+
+- name: Concatenate userpatches across layers (defaults → family → model → host)
+  ansible.builtin.set_fact:
+    __armbian_build_userpatches_concat: >-
+      {{
+        (armbian_build_defaults.userpatches | default([]))
+        + (armbian_build_family.userpatches  | default([]))
+        + (armbian_build_model.userpatches   | default([]))
+        + (armbian_build_host.userpatches    | default([]))
+      }}
+
+- name: Fail if any dest appears more than once across layers
+  ansible.builtin.assert:
+    that:
+      - >-
+        (__armbian_build_userpatches_concat | map(attribute='dest') | list
+         | unique | length)
+        == (__armbian_build_userpatches_concat | length)
+    fail_msg: >-
+      Host {{ inventory_hostname }}: duplicate userpatch dest across
+      armbian_build layers. dests = {{ __armbian_build_userpatches_concat | map(attribute='dest') | list }}.
+      Resolve by renaming one or refactoring the lower layer.
+
+- name: Assemble resolved armbian_build
+  ansible.builtin.set_fact:
+    armbian_build: >-
+      {{
+        __armbian_build_scalars
+        | combine({'userpatches': __armbian_build_userpatches_concat})
+      }}
