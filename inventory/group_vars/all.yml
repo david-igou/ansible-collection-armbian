@@ -23,8 +23,8 @@
 #   HTTP for images → Any HTTP/HTTPS server reachable from both the
 #                     netboot_server (for image_extract during Phase 1
 #                     of test_fleet_e2e.yml) and the boards (for
-#                     disk_image during Phase 3). URL set per-model in
-#                     `armbian_image_urls` below.
+#                     disk_image during Phase 3). URL set per-host in
+#                     your real inventory's host_vars or group_vars.
 #
 # `next-server` for the SBC subnet must point at the RouterOS router's
 # IP for that subnet. This collection does NOT manage next-server — set
@@ -38,21 +38,6 @@
 # boot will fail visibly at boot time.
 # armbian_server_ip: "192.0.2.10"
 # armbian_nfs_server_ip: "192.0.2.10"
-
-# Per-board Armbian .img.xz source, keyed by armbian_board_model.
-# Each value is an https:// URL, http:// URL, or absolute path. Consumed
-# by both the image_extract role on the netboot_server (Phase 1 of
-# test_fleet_e2e.yml, and stage_netboot_assets.yml) and the disk_image
-# role on each board (Phase 3 dd-to-SD); whichever value you set must be
-# reachable from both consumers. Required — leaving an entry as null
-# will fail in image_extract's argument_specs check ("armbian_image_src
-# is required"). Add only the models you actually use.
-armbian_image_urls:
-  orange-pi-5-pro: null   # e.g. "https://example.com/path/to/Armbian-...Orangepi5pro_..._minimal.img.xz"
-  rock-5b: null           # e.g. "https://example.com/path/to/Armbian-...Rock-5b_..._minimal.img.xz"
-  orange-pi-5: null
-  rock-5a: null
-  orange-pi-5-max: null
 
 # U-Boot branch — informational; the canonical branch source is each
 # armbian_board_configs.<model>.uboot_apt_package field in the
