@@ -1,0 +1,49 @@
+# roles/rootfs_provision/molecule/default/verify.yml
+---
+- name: Verify rootfs_provision artifacts
+  hosts: all
+  become: true
+  tasks:
+    - name: Resolve test paths
+      ansible.builtin.set_fact:
+        _target: "{{ armbian_nfs_rootfs_path }}/{{ inventory_hostname }}"
+        _tftp:   "{{ armbian_image_cache }}/sbc-tftp/{{ inventory_hostname }}"
+
+    - name: Assert target_dir + tftp_dir exist and have expected files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _stats
+      loop:
+        - "{{ _target }}/etc/hostname"
+        - "{{ _target }}/etc/machine-id"
+        - "{{ _target }}/.armbian_rootfs_provision_complete"
+        - "{{ _tftp }}/vmlinuz"
+        - "{{ _tftp }}/initrd.img"
+        - "{{ _tftp }}/board.dtb"
+
+    - name: Assert every expected file is present
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "{{ item.item }} is missing"
+      loop: "{{ _stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert hostname file contains the inventory_hostname
+      ansible.builtin.command: cat "{{ _target }}/etc/hostname"
+      register: _hostname_content
+      changed_when: false
+
+    - name: Assert hostname matches
+      ansible.builtin.assert:
+        that: _hostname_content.stdout == inventory_hostname
+
+    - name: Assert machine-id is empty
+      ansible.builtin.stat:
+        path: "{{ _target }}/etc/machine-id"
+      register: _mid_stat
+
+    - name: Confirm machine-id size is 0
+      ansible.builtin.assert:
+        that: _mid_stat.stat.size == 0
+        fail_msg: "machine-id should be zero-byte; got {{ _mid_stat.stat.size }}"

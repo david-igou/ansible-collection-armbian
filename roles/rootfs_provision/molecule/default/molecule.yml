@@ -1,0 +1,26 @@
+# roles/rootfs_provision/molecule/default/molecule.yml
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: rootfs-provision-test
+    image: docker.io/library/debian:bookworm
+    privileged: true
+    pre_build_image: false
+    command: /lib/systemd/systemd
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  inventory:
+    host_vars:
+      rootfs-provision-test:
+        armbian_nfs_rootfs_path: /var/lib/armbian/test-nfs
+        armbian_image_cache: /var/lib/armbian/test-cache
+verifier:
+  name: ansible

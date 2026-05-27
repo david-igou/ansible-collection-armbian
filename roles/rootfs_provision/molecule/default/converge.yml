@@ -1,0 +1,42 @@
+# roles/rootfs_provision/molecule/default/converge.yml
+---
+- name: Converge
+  hosts: all
+  become: true
+  tasks:
+    - name: Install build deps for the synthetic image
+      ansible.builtin.apt:
+        name: [xz-utils, e2fsprogs, dosfstools, rsync]
+        state: present
+        update_cache: true
+
+    - name: Create synthetic 64MB raw image with one ext4 partition
+      ansible.builtin.shell: |
+        set -euo pipefail
+        IMG=/tmp/synthetic.img
+        rm -f "$IMG"
+        truncate -s 64M "$IMG"
+        echo -e 'o\nn\np\n1\n\n\nw\n' | fdisk "$IMG"
+        LOOP=$(losetup --find --show --partscan "$IMG")
+        mkfs.ext4 "${LOOP}p1"
+        mkdir -p /tmp/mnt
+        mount "${LOOP}p1" /tmp/mnt
+        mkdir -p /tmp/mnt/boot /tmp/mnt/etc/ssh /tmp/mnt/root /tmp/mnt/var/lib/dbus
+        touch /tmp/mnt/boot/vmlinuz-6.0.0-test
+        touch /tmp/mnt/boot/initrd.img-6.0.0-test
+        mkdir -p /tmp/mnt/boot/dtb/rockchip
+        touch /tmp/mnt/boot/dtb/rockchip/rk3588-test.dtb
+        umount /tmp/mnt
+        losetup -d "$LOOP"
+        xz -k "$IMG"
+      args:
+        executable: /bin/bash
+        creates: /tmp/synthetic.img.xz
+
+    - name: Run rootfs_provision against the synthetic image
+      ansible.builtin.include_role:
+        name: rootfs_provision
+      vars:
+        armbian_rootfs_src:  /tmp/synthetic.img.xz
+        armbian_rootfs_host: rootfs-provision-test
+        armbian_rootfs_dtb:  rockchip/rk3588-test.dtb
