@@ -38,17 +38,17 @@
       BRANCH={{ armbian_build_branch }}
       RELEASE={{ armbian_build_release }}
       {% for k, v in armbian_build_compile_args.items() %}{{ k }}={{ v }} {% endfor %}
-    chdir: "{{ armbian_build_cache_dir }}/build"
+    chdir: "{{ __image_build_cache_dir_host }}/build"
   become: false
   environment:
-    GIT_CONFIG_GLOBAL: "{{ armbian_build_cache_dir }}/.gitconfig"
+    GIT_CONFIG_GLOBAL: "{{ __image_build_cache_dir_host }}/.gitconfig"
   async: "{{ armbian_build_timeout }}"
   poll: 30
   changed_when: true
 
 - name: Locate the produced .img.xz from this run
   ansible.builtin.find:
-    paths: "{{ armbian_build_cache_dir }}/build/output/images"
+    paths: "{{ __image_build_cache_dir_host }}/build/output/images"
     patterns: "(?i)Armbian.*{{ armbian_build_board }}.*{{ armbian_build_release }}.*{{ armbian_build_branch }}.*\\.img\\.xz$"
     use_regex: true
     age: -10m
@@ -68,7 +68,7 @@
 
 - name: Ensure per-board output directory exists
   ansible.builtin.file:
-    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}"
+    path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}"
     state: directory
     mode: "0755"
 
@@ -76,7 +76,7 @@
   ansible.builtin.command:
     cmd: >-
       mv {{ _produced_images.files[0].path }}
-         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}
+         {{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _image_filename }}
   changed_when: true
 
 - name: Stat the .sha sidecar (may not exist depending on COMPRESS_OUTPUTIMAGE)
@@ -88,6 +88,6 @@
   ansible.builtin.command:
     cmd: >-
       mv {{ _produced_images.files[0].path }}.sha
-         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
+         {{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
   changed_when: true
   when: _sha_stat.stat.exists

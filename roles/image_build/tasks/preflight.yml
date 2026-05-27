@@ -22,7 +22,7 @@
     _cache_mount: >-
       {{ ansible_mounts
          | sort(attribute='mount', reverse=true)
-         | selectattr('mount', 'in', armbian_build_cache_dir + '/')
+         | selectattr('mount', 'in', __image_build_cache_dir_host + '/')
          | list | first }}
 
 - name: Assert sufficient free space at the cache dir
@@ -31,7 +31,7 @@
       - _cache_mount is defined
       - (_cache_mount.size_available | int) >= (armbian_build_min_free_gb | int * 1024 * 1024 * 1024)
     fail_msg: >-
-      Insufficient free space at {{ armbian_build_cache_dir }}
+      Insufficient free space at {{ __image_build_cache_dir_host }}
       ({{ (_cache_mount.size_available | int / 1024 / 1024 / 1024) | round(1) }} GB available,
        {{ armbian_build_min_free_gb }} GB required)
 

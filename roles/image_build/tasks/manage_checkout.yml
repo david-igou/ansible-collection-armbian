@@ -17,13 +17,13 @@
     state: directory
     mode: "0755"
   loop:
-    - "{{ armbian_build_cache_dir }}"
-    - "{{ armbian_build_output_dir }}"
+    - "{{ __image_build_cache_dir_host }}"
+    - "{{ __image_build_output_dir_host }}"
 
 - name: Clone or update armbian/build at the pinned ref
   ansible.builtin.git:
     repo: https://github.com/armbian/build.git
-    dest: "{{ armbian_build_cache_dir }}/build"
+    dest: "{{ __image_build_cache_dir_host }}/build"
     version: "{{ armbian_build_ref }}"
     force: false
     update: true

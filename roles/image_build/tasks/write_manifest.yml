@@ -21,6 +21,6 @@
 
 - name: Write manifest.json atomically
   ansible.builtin.copy:
-    dest: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/manifest.json"
+    dest: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}/manifest.json"
     content: "{{ _manifest | to_nice_json(sort_keys=true) }}\n"
     mode: "0644"

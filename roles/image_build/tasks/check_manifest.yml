@@ -6,7 +6,7 @@
 
 - name: Compute per-board manifest path
   ansible.builtin.set_fact:
-    _manifest_path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/manifest.json"
+    _manifest_path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}/manifest.json"
 
 - name: Stat existing manifest
   ansible.builtin.stat:
@@ -39,7 +39,7 @@
 
 - name: Verify the image file referenced by the manifest still exists
   ansible.builtin.stat:
-    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _existing_manifest.image_filename | default('') }}"
+    path: "{{ __image_build_output_dir_host }}/{{ armbian_build_board }}/{{ _existing_manifest.image_filename | default('') }}"
   register: _existing_image_stat
   when: _existing_manifest.image_filename is defined
 
