@@ -8,6 +8,23 @@
   become: true
 
   tasks:
+    # Belt-and-suspenders: the role's _validate_inputs.yml has an
+    # [ -d ] guard before the mountpoint check, but some VMs expose
+    # /var/lib/armbian/test-nfs/<host> as a phantom path or the
+    # mountpoint binary returns 0 in unusual cases. Pre-emptively
+    # nuke the target path so the role starts from a clean slate.
+    - name: Ensure rootfs target path does not exist before the role runs
+      ansible.builtin.shell: |
+        set -e
+        TARGET=/var/lib/armbian/test-nfs/{{ inventory_hostname }}
+        if mountpoint -q "$TARGET" 2>/dev/null; then
+          umount "$TARGET" || true
+        fi
+        rm -rf "$TARGET"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
     - name: Ensure xz-utils, e2fsprogs, dosfstools, rsync are installed
       ansible.builtin.apt:
         name: [xz-utils, e2fsprogs, dosfstools, rsync]
