@@ -1,0 +1,65 @@
+# playbooks/tests/test_resolve_board_config.yml
+#
+# Localhost test for tasks/_resolve_board_config.yml. Builds synthetic
+# host vars for a fake board, runs the resolver, asserts the merged
+# fact matches expected values per-key (family → model → host).
+
+- name: Resolve effective armbian_board_config and assert merge semantics
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_board_config_family:
+      console: ttyS2,1500000n8
+      earlycon: uart8250,mmio32,0xfeb50000
+      local_kernel:
+        storage: "nvme 0:1"
+        storage_scan: "nvme scan"
+      uboot_env:
+        storage: nowhere
+    armbian_board_config_model:
+      armbian_board_name: rock-5b
+      dtb: rockchip/rk3588-rock-5b.dtb
+      uboot_env:
+        storage: spi_flash
+        fw_env_config:
+          device: /dev/mtd0
+          offset: "0xc00000"
+    armbian_board_config_host:
+      local_kernel:
+        storage: "nvme 0:4"
+
+  tasks:
+    - name: Run resolver
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_board_config.yml"
+
+    - name: Assert family-scoped console survives
+      ansible.builtin.assert:
+        that: armbian_board_config.console == "ttyS2,1500000n8"
+        fail_msg: "console not inherited from family"
+
+    - name: Assert model-scoped armbian_board_name is set
+      ansible.builtin.assert:
+        that: armbian_board_config.armbian_board_name == "rock-5b"
+        fail_msg: "armbian_board_name not set from model"
+
+    - name: Assert host-scoped local_kernel.storage overrides family
+      ansible.builtin.assert:
+        that: armbian_board_config.local_kernel.storage == "nvme 0:4"
+        fail_msg: "host should override family local_kernel.storage"
+
+    - name: Assert family-scoped local_kernel.storage_scan survives host override
+      # Recursive combine merges nested keys without wiping siblings
+      ansible.builtin.assert:
+        that: armbian_board_config.local_kernel.storage_scan == "nvme scan"
+        fail_msg: "recursive merge should preserve sibling keys"
+
+    - name: Assert model-scoped uboot_env replaces family entirely
+      # Model's uboot_env block is the canonical SPI shape; the family's
+      # `storage: nowhere` should be overridden by the model's
+      # `storage: spi_flash` and the model's fw_env_config should appear.
+      ansible.builtin.assert:
+        that:
+          - armbian_board_config.uboot_env.storage == "spi_flash"
+          - armbian_board_config.uboot_env.fw_env_config.device == "/dev/mtd0"
+        fail_msg: "model uboot_env should override family"
