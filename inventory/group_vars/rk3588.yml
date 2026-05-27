@@ -33,6 +33,7 @@ armbian_build_family:
         function pre_config_uboot_target__999_local_kernel_bake() {
             [[ "${BRANCH}" != "edge" ]] && return 0
             {% if armbian_board_config.local_kernel is defined %}
+            # U-Boot env values cannot contain embedded newlines; this string MUST remain on one line.
             local chain='setenv bootargs root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console={{ armbian_board_config.console }}; {{ armbian_board_config.local_kernel.storage_scan }}; ext4load {{ armbian_board_config.local_kernel.storage }} ${kernel_addr_r} /boot/Image; ext4load {{ armbian_board_config.local_kernel.storage }} ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load {{ armbian_board_config.local_kernel.storage }} ${fdt_addr_r} /boot/dtb/{{ armbian_board_config.dtb }}; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
             {% else %}
             return 0
