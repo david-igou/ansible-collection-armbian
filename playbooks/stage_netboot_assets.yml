@@ -7,7 +7,7 @@
 # 2. For each board host: extract its rootfs (per-host), stage TFTP, reset identity.
 
 - name: Resolve effective board configs and rootfs sources per board host
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   tasks:
     - name: Resolve effective armbian_board_config
@@ -16,7 +16,7 @@
       ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
 
 - name: Provision per-host NFS rootfs + TFTP artifacts
-  hosts: netboot_server
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   become: true
   gather_facts: false
   tasks:

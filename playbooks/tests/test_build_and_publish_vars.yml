@@ -16,7 +16,7 @@
 # the same update.
 
 - name: Resolve per-host build vars and assert expected values
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   connection: local
   tasks:

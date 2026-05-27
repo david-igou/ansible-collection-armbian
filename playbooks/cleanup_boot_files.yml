@@ -7,7 +7,7 @@
 # Dry-run: ansible-playbook playbooks/cleanup_boot_files.yml --check
 
 - name: Prune stale .img.xz files from boot-files/images/
-  hosts: netboot_server
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   become: true
   gather_facts: false
   vars:

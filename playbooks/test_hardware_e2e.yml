@@ -44,7 +44,7 @@
 # `playbooks/scripts/run-iter.sh <iter-number> -- <ansible-playbook extras>`.
 
 - name: Hardware E2E always-netboot boot-mode test
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   vars:
     leave_state: false

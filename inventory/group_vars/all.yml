@@ -74,8 +74,8 @@ armbian_bootstrap_ssh_keys: []
 armbian_pxe_verbose: false
 
 # Path on the netboot_server that holds the HTTP-served boot files
-# (per-model image directories under ./images/<model>/). build_image.yml
-# rsyncs the built .img.xz + manifest into here. Override to your
+# (per-host image directories under ./images/<host>/). build_and_publish_from_inventory.yml's
+# publish play rsyncs the built .img.xz + manifest into here. Override to your
 # netboot_server's actual exported directory.
 armbian_nfs_assets_export: /srv/netboot/boot-files
 
@@ -123,7 +123,8 @@ armbian_image_cache: /var/lib/armbian/cache
 #
 # persist_via:
 #   hook — use the U-Boot binary's compile-time default localcmd (baked
-#          by playbooks/build_image.yml's __999_local_kernel_bake hook).
+#          by the image_build role's family-overlay __999_local_kernel_bake hook
+#          (invoked from build_and_publish_from_inventory.yml)).
 #          No runtime fw_setenv step. Default.
 #   spi  — write per-host localcmd to SPI via fw_setenv at convergence
 #          time. Only valid on boards with uboot_env.storage: spi_flash.

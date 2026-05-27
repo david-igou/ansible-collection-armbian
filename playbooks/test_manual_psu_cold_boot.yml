@@ -33,7 +33,7 @@
 #     -e armbian_default_password=1234
 
 - name: Manual-PSU cold-boot test (single cold boot per run)
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   vars:
     capture_serial: true

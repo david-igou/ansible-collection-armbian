@@ -9,13 +9,13 @@
 # Output lands at armbian_build_output_dir/<board>/ on the builder.
 #
 # Companion to playbooks/build_and_publish_from_inventory.yml, which
-# composes the same role inputs across every board in groups['boards']
+# composes the same role inputs across every board in armbian_boards_group
 # and also publishes to the netboot server. Use this simplified
 # variant for one-off builds where reading the playbook tells you
 # exactly what gets built.
 
 - name: Build one Armbian image
-  hosts: armbian_builders
+  hosts: "{{ armbian_builders_group | default('armbian_builders') }}"
   gather_facts: false
 
   vars:

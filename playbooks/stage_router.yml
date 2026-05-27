@@ -8,7 +8,7 @@
 # (defaults to /var/lib/armbian/cache/sbc-tftp/<host>/).
 
 - name: Fetch TFTP artifacts from netboot server to controller cache
-  hosts: netboot_server
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   become: true
   gather_facts: false
   vars:

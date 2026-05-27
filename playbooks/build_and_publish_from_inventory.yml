@@ -2,18 +2,18 @@
 # playbooks/build_and_publish_from_inventory.yml
 #
 # Per-host custom Armbian image build pipeline. Three plays:
-#   1. hosts: boards — resolve effective armbian_board_config and
+#   1. hosts: armbian_boards_group — resolve effective armbian_board_config and
 #      armbian_build per host; identify which hosts opt INTO custom builds.
-#   2. hosts: armbian_builders — invoke image_build per opted-in host
+#   2. hosts: armbian_builders_group — invoke image_build per opted-in host
 #      and rsync per-host output dir to controller staging.
-#   3. hosts: netboot_server — push per-host dir to images/<host>/.
+#   3. hosts: armbian_netboot_server_group — push per-host dir to images/<host>/.
 #
 # A host opts in by having any of armbian_build_{family,model,host} set.
 # A host with only armbian_rootfs_src (stock upstream) has no opt-in and
 # is skipped by this playbook.
 
 - name: Resolve effective configs per board host
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   tasks:
     - name: Resolve effective armbian_board_config
@@ -30,7 +30,7 @@
              or (armbian_build_host is defined) }}
 
 - name: Build custom Armbian images per opted-in host; stage on controller
-  hosts: armbian_builders
+  hosts: "{{ armbian_builders_group | default('armbian_builders') }}"
   gather_facts: false
   vars:
     __build_hosts: >-
@@ -83,7 +83,7 @@
       loop: "{{ __build_hosts }}"
 
 - name: Publish staged per-host directories to netboot server
-  hosts: netboot_server
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   gather_facts: false
   tasks:
     # ansible.posix.synchronize splits --rsh on whitespace, causing -o flags
