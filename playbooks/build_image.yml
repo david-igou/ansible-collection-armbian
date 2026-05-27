@@ -132,3 +132,5 @@
     - name: Build image
       ansible.builtin.include_role:
         name: image_build
+      vars:
+        armbian_build_host: "build-{{ armbian_build_board }}"
