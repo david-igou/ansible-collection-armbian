@@ -10,17 +10,14 @@
       rootfs_provision requires armbian_rootfs_src, armbian_rootfs_host,
       and armbian_rootfs_dtb. See meta/argument_specs.yml.
 
-# A non-existent path can't be a mountpoint; on the first run we
-# short-circuit to NOT_MOUNTED via the -d guard. Defensive: some
-# mountpoint builds return 0 unexpectedly on paths in certain mount
-# namespaces, so this guard prevents a false-positive abort.
+# Use /proc/mounts directly — `mountpoint -q` has surprising behavior
+# in some VMs (returns 0 for non-existent paths or in certain mount
+# namespaces). An EXACT match on column 2 of /proc/mounts is the
+# unambiguous test for "this path is currently mounted".
 - name: Refuse to overwrite a mounted target_dir
   ansible.builtin.shell: |
-    if [ -d "{{ armbian_rootfs_target_dir }}" ] && mountpoint -q "{{ armbian_rootfs_target_dir }}" 2>/dev/null; then
-        echo "MOUNTED"
-    else
-        echo "NOT_MOUNTED"
-    fi
+    awk -v p='{{ armbian_rootfs_target_dir }}' '$2 == p { found=1; exit } END { exit !found }' /proc/mounts \
+        && echo MOUNTED || echo NOT_MOUNTED
   args:
     executable: /bin/bash
   register: __rootfs_provision_target_mount_state
