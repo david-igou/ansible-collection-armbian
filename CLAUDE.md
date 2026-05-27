@@ -124,7 +124,7 @@ david_igou/armbian/   (this repo root)
 │   ├── hosts.yml             # orange-pi-5-pro example
 │   └── group_vars/
 │       ├── all.yml                # Global vars (IPs, paths, cross-role defaults)
-│       ├── armbian.yml            # Family-shared build patches (build_userpatches_common key gone; per-family hooks live in <family>.yml)
+│       ├── armbian.yml            # Parent group vars for armbian_builders + boards (family hooks now live in <family>.yml)
 │       ├── boards.yml             # netboot inputs (armbian_router, retry knobs)
 │       ├── <family>.yml           # Per-SoC-family vars: armbian_board_config_family, armbian_build_family
 │       ├── <model_group>.yml      # Per-model vars: armbian_board_config_model, armbian_build_model
@@ -317,7 +317,7 @@ configured.
 ## Per-host build profile layering
 
 Board metadata and build configuration are expressed as three mergeable
-inventory layers rather than a single collection-level `vars/boards.yml`
+inventory layers rather than a single collection-level boards metadata
 dict. The resolver primitives in `playbooks/tasks/` merge them at
 playbook-run time into a single fact per board.
 

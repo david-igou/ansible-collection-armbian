@@ -7,7 +7,7 @@ galaxy_info:
     extracts the rootfs into a per-host directory on the netboot server,
     stages kernel/initrd/dtb to a TFTP cache, and resets host identity
     (hostname, machine-id, SSH host keys). Single primitive that replaces
-    the old image_extract → rootfs_clone two-step.
+    the previous two-step provisioning flow.
   license: MIT
   min_ansible_version: "2.15"
   platforms:

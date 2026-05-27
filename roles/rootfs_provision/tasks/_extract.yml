@@ -1,7 +1,7 @@
 # roles/rootfs_provision/tasks/_extract.yml
 #
-# Mirrors image_extract's _extract_inner.yml but writes directly into
-# the per-host target_dir (no template indirection).
+# Extracts an Armbian .img.xz rootfs partition directly into the
+# per-host target_dir (no template indirection).
 
 - name: Ensure mount dir + target_dir exist
   ansible.builtin.file:

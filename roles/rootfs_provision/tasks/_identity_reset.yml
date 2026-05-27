@@ -1,9 +1,9 @@
 # roles/rootfs_provision/tasks/_identity_reset.yml
 #
-# Verbatim port of roles/rootfs_clone/tasks/_identity_reset.yml with
-# the two variable renames:
-#   target_dir → armbian_rootfs_target_dir
-#   hostname   → armbian_rootfs_host
+# Resets per-host identity inside a rootfs directory.
+# Variable names used:
+#   armbian_rootfs_target_dir — path to the per-host rootfs on the netboot server
+#   armbian_rootfs_host       — inventory_hostname of the board
 
 - name: Set per-host /etc/hostname
   ansible.builtin.copy:

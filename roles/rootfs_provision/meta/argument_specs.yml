@@ -10,10 +10,10 @@ argument_specs:
         kernel/initrd/dtb to a TFTP cache directory, and resets host
         identity (hostname, machine-id, SSH host keys).
       - >-
-        Replaces the previous image_extract + rootfs_clone pair. With per-host
-        builds there is no rootfs-template sharing across hosts, so the
-        template/clone separation has no purpose; this role does both in
-        one invocation.
+        With per-host builds there is no rootfs-template sharing across
+        hosts of different images, so extract-and-clone happens in one
+        invocation. A shared per-model template is still written for same-
+        model hosts to amortize extraction cost via reflink-copy.
     options:
       armbian_rootfs_src:
         type: str

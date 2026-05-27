@@ -41,8 +41,8 @@
 # armbian_nfs_server_ip: "192.0.2.10"
 
 # U-Boot branch — informational; the canonical branch source is each
-# armbian_board_configs.<model>.uboot_apt_package field in the
-# collection.
+# armbian_board_config_model.uboot_apt_package field in the model's
+# inventory/group_vars/<model_group>.yml.
 armbian_branch: "current"
 
 # Public SSH keys installed on a board's freshly-flashed Armbian image
@@ -103,7 +103,7 @@ armbian_tftp_flash_dir: sbc
 # via POSIX symlink-follow, so the two tasks land on different
 # physical paths when `..` crosses a symlink.
 armbian_tftp_cache_dir: "{{ inventory_dir }}/../.cache/sbc-tftp"
-# Scratch dir on the netboot_server where image_extract caches .img.xz / .img
+# Scratch dir on the netboot_server where rootfs_provision caches .img.xz / .img
 # downloads and writes per-model TFTP artefacts (sbc-tftp/<model>/vmlinuz, ...).
 # Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
 # value below if this is not set in your real inventory.
@@ -117,7 +117,7 @@ armbian_image_cache: /var/lib/armbian/cache
 # and an optional override block:
 #   armbian_local_kernel:
 #     persist_via: hook       # 'hook' (default) | 'spi'
-#     # storage: "nvme 0:4"   # default from vars/boards.yml's local_kernel.storage
+#     # storage: "nvme 0:4"   # default from armbian_board_config_model.local_kernel.storage
 #     # storage_scan: "nvme scan"
 #     # root_label: armbi_root_local
 #

@@ -80,7 +80,8 @@ ansible-playbook playbooks/build_and_publish_from_inventory.yml
 ```
 
 …or place a pre-built `.img.xz` in your netboot server's HTTP assets
-directory and point `armbian_image_urls[<model>]` at it. The
+directory and set `armbian_rootfs_src` on the host or model group to its
+URL. The
 `image_build` role patches `armbian/build`'s
 `pre_config_uboot_target__<board>_*` hook to set PXE first in U-Boot's
 `BOOT_TARGETS`.
@@ -134,7 +135,7 @@ Repeated once per physical board.
 
 Use any tool you like — `xzcat | dd`, `etcher`, the Armbian installer
 — to write the `.img.xz` produced by `build_and_publish_from_inventory.yml` (or whichever
-pre-built image you put in `armbian_image_urls[<model>]`) to an SD
+pre-built image is resolved via `armbian_rootfs_src` / the published manifest) to an SD
 card. This is the only step in the lifecycle that this collection does
 not automate; everything from here on runs over SSH.
 

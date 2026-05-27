@@ -3,7 +3,7 @@
    the `local_kernel` boot mode.
 
    Inputs:
-     board_cfg: an entry from armbian_board_configs (must have
+     board_cfg: the resolved armbian_board_config fact (must have
                 local_kernel.{storage,storage_scan}, dtb, console).
      overrides: optional dict with keys that override the board defaults.
                 Supported override keys: storage, storage_scan,
