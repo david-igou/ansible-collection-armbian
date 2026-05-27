@@ -18,9 +18,14 @@
   become: false
 
   vars:
-    _output_dir: /var/lib/armbian_build/output/orangepi5pro
-    _build_logs_dir: /var/lib/armbian_build/build/output/logs
-    _userpatch_path: /var/lib/armbian_build/build/userpatches/config/boards/orangepi5pro.conf
+    # All paths use the per-host suffix (armbian_build_host=build-orangepi5pro)
+    # that the role appends to armbian_build_cache_dir and armbian_build_output_dir
+    # in 4.0.0. converge.yml passes the host name; we mirror it here.
+    _build_host: build-orangepi5pro
+    _cache_dir_host: "/var/lib/armbian_build/{{ _build_host }}"
+    _output_dir: "/var/lib/armbian_build/output/{{ _build_host }}"
+    _build_logs_dir: "{{ _cache_dir_host }}/build/output/logs"
+    _userpatch_path: "{{ _cache_dir_host }}/build/userpatches/config/boards/orangepi5pro.conf"
     _sentinel_built_at: 2026-01-01T00:00:00Z-PRESEED
 
   tasks:
