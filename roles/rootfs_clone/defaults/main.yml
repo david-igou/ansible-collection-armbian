@@ -1,4 +1,0 @@
----
-# rootfs_clone has no optional knobs; defaults file kept for
-# argument_specs symmetry with other roles.
-force_refresh: false

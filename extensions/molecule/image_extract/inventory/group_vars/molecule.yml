@@ -1,2 +1,0 @@
----
-mp_backend: "{{ lookup('env', 'PROVISIONER') | default('qemu', true) }}"
