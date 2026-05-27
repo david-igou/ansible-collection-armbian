@@ -2,15 +2,21 @@
 # Build a custom Armbian image with the supplied userpatches.
 #
 # Single-purpose, intent-agnostic role. The caller (typically a workflow
-# playbook) supplies the board, branch, release, and userpatches list;
+# playbook) supplies the board, host, branch, release, and userpatches list;
 # this role enforces the desired output state under
-# armbian_build_output_dir/<board>/.
+# armbian_build_output_dir/<host>/.
 
 - name: Validate required inputs
   ansible.builtin.assert:
     that:
       - armbian_build_board | length > 0
-    fail_msg: "armbian_build_board is required"
+      - armbian_build_host  | length > 0
+    fail_msg: "armbian_build_board and armbian_build_host are required"
+
+- name: Compute per-host cache + output paths
+  ansible.builtin.set_fact:
+    __image_build_cache_dir_host:  "{{ armbian_build_cache_dir }}/{{ armbian_build_host }}"
+    __image_build_output_dir_host: "{{ armbian_build_output_dir }}/{{ armbian_build_host }}"
 
 - name: Preflight (docker, disk, egress)
   ansible.builtin.include_tasks: preflight.yml

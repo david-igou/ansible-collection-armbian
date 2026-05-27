@@ -15,8 +15,8 @@ argument_specs:
     description:
       - >-
         Single-purpose, intent-agnostic role. The caller supplies the board,
-        branch, release, and userpatches list; the role enforces the desired
-        output state under armbian_build_output_dir/<board>/.
+        host, branch, release, and userpatches list; the role enforces the
+        desired output state under armbian_build_output_dir/<host>/.
       - >-
         Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml) pre-compute
         _local_kernel_dispatch_table and _uboot_env_storage_table in their
@@ -31,6 +31,16 @@ argument_specs:
           Armbian board identifier passed as BOARD= to compile.sh.
           Must match a supported board in the armbian/build tree at
           armbian_build_ref.
+
+      armbian_build_host:
+        type: str
+        required: true
+        description: >-
+          inventory_hostname of the host this build is for. Drives the
+          per-host output path under armbian_build_output_dir/<host>/
+          and the per-host checkout dir under armbian_build_cache_dir/<host>/.
+          Used so concurrent per-host builds don't collide and so secret-
+          bearing userpatches in one host's tree never see another host's.
 
       armbian_build_branch:
         type: str
@@ -54,8 +64,12 @@ argument_specs:
         description: >-
           List of userpatches to apply before the build. Each entry is a
           mapping with keys dest (path relative to USERPATCHES_DIR, no
-          leading slash, no ..) and content (raw file text). The role is
-          fully agnostic to what the patches do.
+          leading slash, no ..) and content (raw file text).
+          Patch content MAY contain Jinja referencing the host's resolved
+          armbian_board_config fact (e.g. `{{ armbian_board_config.console }}`);
+          apply_userpatches.yml's ansible.builtin.copy with `content:`
+          renders these references at the point the file lands on the
+          builder. The role itself is fully agnostic to what the patches do.
         elements: dict
 
       armbian_build_ref:

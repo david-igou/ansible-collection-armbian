@@ -14,11 +14,15 @@ armbian_build_output_dir: "/var/lib/armbian_build/output"    # final .img.xz + m
 # reachable — this is the standard build method per Armbian docs.
 armbian_build_user: ""
 
-# Per-build inputs. Caller sets board; branch/release defaulted to a
+# Per-build inputs. Caller sets board and host; branch/release defaulted to a
 # CLI-friendly modern Armbian Rockchip image.
 armbian_build_board: ""
 armbian_build_branch: "current"
 armbian_build_release: "bookworm"
+
+# inventory_hostname this build targets. Must be supplied by the caller;
+# no default. Drives per-host output + cache paths.
+armbian_build_host: ""
 
 # Userpatches to apply before the build. Each entry is { dest, content }
 # where `dest` is a path relative to USERPATCHES_DIR (no leading slash,
