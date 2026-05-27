@@ -114,6 +114,7 @@
 - name: "Apply repart: report what repart did"
   ansible.builtin.debug:
     msg: "{{ __disk_provision_repart_run.stdout_lines | join('\n') }}"
+    verbosity: 1
 
 - name: "Apply repart: force partition-table re-read"
   ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"
