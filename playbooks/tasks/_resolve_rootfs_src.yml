@@ -19,16 +19,16 @@
 - name: Stat published manifest on netboot server (delegated)
   ansible.builtin.stat:
     path: "{{ __published_manifest_path }}"
-  delegate_to: "{{ groups['netboot_server'][0] | default('localhost') }}"
-  become: "{{ groups['netboot_server'] is defined and (groups['netboot_server'] | length > 0) }}"
+  delegate_to: "{{ groups[armbian_netboot_server_group][0] | default('localhost') }}"
+  become: "{{ groups[armbian_netboot_server_group] is defined and (groups[armbian_netboot_server_group] | length > 0) }}"
   register: __published_manifest_stat
   when: not __armbian_rootfs_src_was_set
 
 - name: Slurp published manifest if present
   ansible.builtin.slurp:
     src: "{{ __published_manifest_path }}"
-  delegate_to: "{{ groups['netboot_server'][0] | default('localhost') }}"
-  become: "{{ groups['netboot_server'] is defined and (groups['netboot_server'] | length > 0) }}"
+  delegate_to: "{{ groups[armbian_netboot_server_group][0] | default('localhost') }}"
+  become: "{{ groups[armbian_netboot_server_group] is defined and (groups[armbian_netboot_server_group] | length > 0) }}"
   register: __published_manifest_raw
   when:
     - not __armbian_rootfs_src_was_set

@@ -145,3 +145,9 @@ armbian_image_cache: /var/lib/armbian/cache
 # Override per-host in inventory if a future board's SD slot enumerates
 # differently (see CLAUDE.md "MMC controller index varies per board").
 armbian_sd_device: /dev/mmcblk0
+
+# ── Inventory group names ────────────────────────────────────────────────────
+# Override if your inventory uses different group names.
+armbian_boards_group: boards
+armbian_netboot_server_group: netboot_server
+armbian_builders_group: armbian_builders

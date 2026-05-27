@@ -21,23 +21,23 @@
         mode: "0755"
       delegate_to: localhost
       become: false
-      loop: "{{ groups['boards'] }}"
+      loop: "{{ groups[armbian_boards_group] }}"
 
     - name: Fetch each (host, asset) from netboot server
       ansible.builtin.fetch:
         src: "{{ armbian_image_cache | default('/var/lib/armbian/cache') }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
         dest: "{{ armbian_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
         flat: true
-      loop: "{{ groups['boards'] | product(_assets) | list }}"
+      loop: "{{ groups[armbian_boards_group] | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
 
 - name: Upload TFTP assets to router (reference playbook)
   import_playbook: "{{ armbian_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
   vars:
-    armbian_tftp_upload_models: "{{ groups['boards'] }}"
+    armbian_tftp_upload_models: "{{ groups[armbian_boards_group] }}"
 
 - name: Plumbing check — verify /ip tftp rows landed
   import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
-    armbian_tftp_check_models: "{{ groups['boards'] }}"
+    armbian_tftp_check_models: "{{ groups[armbian_boards_group] }}"

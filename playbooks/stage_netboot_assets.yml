@@ -28,4 +28,4 @@
         armbian_rootfs_host:          "{{ item }}"
         armbian_rootfs_dtb:           "{{ hostvars[item].armbian_board_config.dtb }}"
         armbian_rootfs_force_refresh: "{{ armbian_force_refresh | default(false) }}"
-      loop: "{{ groups['boards'] }}"
+      loop: "{{ groups[armbian_boards_group] }}"
