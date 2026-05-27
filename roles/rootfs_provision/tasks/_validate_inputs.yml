@@ -28,4 +28,7 @@
     msg: >-
       armbian_rootfs_target_dir={{ armbian_rootfs_target_dir }} is currently
       a mountpoint. Refusing to overwrite. Unmount it before re-provisioning.
-  when: "'MOUNTED' in __rootfs_provision_target_mount_state.stdout"
+  # Exact-match comparison — substring `in` would match BOTH 'MOUNTED'
+  # and 'NOT_MOUNTED' since the latter contains the former (the bug
+  # that fired spuriously throughout 0.0.x).
+  when: (__rootfs_provision_target_mount_state.stdout | trim) == 'MOUNTED'
