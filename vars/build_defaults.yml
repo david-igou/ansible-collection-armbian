@@ -1,0 +1,22 @@
+# vars/build_defaults.yml
+#
+# Collection-shipped layer 0 defaults for the armbian_build profile.
+# Operators override via three explicit named layers in inventory:
+#   armbian_build_family — group_vars/<family>.yml
+#   armbian_build_model  — group_vars/<model_group>.yml
+#   armbian_build_host   — host_vars/<host>.yml
+# The resolver (playbooks/tasks/_resolve_build_profile.yml) merges all
+# four layers into the per-host `armbian_build` fact.
+---
+armbian_build_defaults:
+  release: bookworm
+  ref: "v26.2.0-trunk.844"
+  min_free_gb: 50
+  timeout: 7200
+  compile_args:
+    KERNEL_CONFIGURE: "no"
+    BUILD_DESKTOP: "no"
+    BUILD_MINIMAL: "yes"
+    COMPRESS_OUTPUTIMAGE: "sha,xz"
+    EXPERT: "yes"
+  userpatches: []
