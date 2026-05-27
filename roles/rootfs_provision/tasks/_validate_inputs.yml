@@ -12,7 +12,13 @@
 
 - name: Refuse to overwrite a mounted target_dir
   ansible.builtin.shell: |
-    if mountpoint -q "{{ armbian_rootfs_target_dir }}" 2>/dev/null; then
+    # A non-existent path can't be a mountpoint; on the first run we
+    # short-circuit to NOT_MOUNTED. On re-runs (existing dir), use
+    # mountpoint -q to decide. (Defensive: some `mountpoint` builds
+    # return 0 unexpectedly on paths in certain mount namespaces, so
+    # the `-d` guard prevents a false-positive abort.)
+    if [ -d "{{ armbian_rootfs_target_dir }}" ] \
+       && mountpoint -q "{{ armbian_rootfs_target_dir }}" 2>/dev/null; then
         echo "MOUNTED"
     else
         echo "NOT_MOUNTED"
