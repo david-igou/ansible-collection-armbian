@@ -1,11 +1,11 @@
 ---
 # Defaults mirror meta/argument_specs.yml so the role is callable
 # without argument-spec validation enabled.
-source: "/"
-armbian_installed_marker: true
-reset_identity: false
-mount_dir_base: "/var/lib/armbian/disk_provision_mnt"
-render_only: false
+disk_provision_source: "/"
+disk_provision_installed_marker: true
+disk_provision_reset_identity: false
+disk_provision_mount_dir_base: "/var/lib/armbian/disk_provision_mnt"
+disk_provision_render_only: false
 
 # Default mount_opts per fstype, used by the fstab template when a
 # layout entry does not specify mount_opts explicitly.

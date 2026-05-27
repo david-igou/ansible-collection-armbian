@@ -10,7 +10,7 @@
 
 - name: "Return early in render-only mode"
   ansible.builtin.meta: end_host
-  when: render_only | bool
+  when: disk_provision_render_only | bool
 
 - name: "Scan for preserved partitions"
   ansible.builtin.import_tasks: _preserve_scan.yml

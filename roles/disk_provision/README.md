@@ -22,11 +22,11 @@ contract. Summary:
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `disk_binding` | yes | — | One entry from `armbian_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
-| `source` | no | `/` | Source rootfs to rsync into the populated root partition. |
-| `armbian_installed_marker` | no | `true` | Write `INSTALLED=true` to `/etc/armbian-image-release` to suppress `armbian-resize-filesystem`. |
-| `reset_identity` | no | `false` | Zero machine-id files on the target. Default false because the typical caller wants the same identity across boot modes. |
-| `mount_dir_base` | no | `/var/lib/armbian/disk_provision_mnt` | Base for per-device temporary mount points. |
-| `render_only` | no | `false` | Render `.repart.d` configs + validate, then return without mutating the disk. Used by Layer 1 molecule tests. |
+| `disk_provision_source` | no | `/` | Source rootfs to rsync into the populated root partition. |
+| `disk_provision_installed_marker` | no | `true` | Write `INSTALLED=true` to `/etc/armbian-image-release` to suppress `armbian-resize-filesystem`. |
+| `disk_provision_reset_identity` | no | `false` | Zero machine-id files on the target. Default false because the typical caller wants the same identity across boot modes. |
+| `disk_provision_mount_dir_base` | no | `/var/lib/armbian/disk_provision_mnt` | Base for per-device temporary mount points. |
+| `disk_provision_render_only` | no | `false` | Render `.repart.d` configs + validate, then return without mutating the disk. Used by Layer 1 molecule tests. |
 
 The per-partition `layout` entry shape — `id`, `size`, `type`, `format`,
 `label`, `mount`, `mount_opts`, `preserve_on_reprovision` — is fully
@@ -95,6 +95,6 @@ After a successful run:
         name: david_igou.armbian.disk_provision
       vars:
         disk_binding: "{{ armbian_local_disks[0] }}"
-        source: /
-        reset_identity: false
+        disk_provision_source: /
+        disk_provision_reset_identity: false
 ```
