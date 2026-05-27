@@ -45,6 +45,7 @@
     - name: Report build targets
       ansible.builtin.debug:
         msg: "Will build images for: {{ __build_hosts }}"
+        verbosity: 1
 
     - name: Build per opted-in host
       ansible.builtin.include_role:
