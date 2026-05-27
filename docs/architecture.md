@@ -94,7 +94,7 @@ detail); this table is the dependency graph.
 
 | # | Playbook | `hosts:` | Composes (roles) | Imports (reference playbooks) |
 |---|---|---|---|---|
-| 0 | [`build_image.yml`](../playbooks/build_image.yml) | `armbian_builders` | `image_build` | — |
+| 0 | [`build_and_publish_from_inventory.yml`](../playbooks/build_and_publish_from_inventory.yml) | `armbian_builders` | `image_build` | — |
 | 1 | [`bootstrap_armbian.yml`](../playbooks/bootstrap_armbian.yml) | `boards` (as `root`) | `bootstrap_armbian` | — |
 | 2 | [`routeros/bootstrap_user.yml`](../playbooks/routeros/bootstrap_user.yml) | `routeros_netboot` | — (uses `community.routeros.command`) | — |
 | 3 | [`stage_netboot_assets.yml`](../playbooks/stage_netboot_assets.yml) | `netboot_server` | `image_extract`, `rootfs_clone` | — |

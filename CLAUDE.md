@@ -25,7 +25,7 @@ parameters, in what order.
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_image.yml` publishes to the netboot server) |
+| `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server) |
 | `image_extract` | netboot server (host with sudo+losetup) | One rootfs template + per-model TFTP artifacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
 | `disk_image` | a board (or any host owning the target) | One block device imaged via streaming `xz \| dd`; mount-aware refusal |
 | `disk_provision` | a board | Declarative GPT layout via `systemd-repart` + rsync source rootfs + LABEL-keyed fstab regen; idempotent, supports `preserve_on_reprovision` per partition |
@@ -82,7 +82,7 @@ david_igou/armbian/   (this repo root)
 │   ├── bootstrap_armbian.yml        # Provision SSH-key user on flashed boards
 │   ├── stage_netboot_assets.yml     # Extract templates + clone per-host rootfs on netboot server
 │   ├── stage_router.yml             # Fetch TFTP cache to controller → push to router + verify rows
-│   ├── build_image.yml              # Build custom Armbian .img.xz + publish to netboot server
+│   ├── build_and_publish_from_inventory.yml  # Build custom Armbian .img.xz + publish to netboot server
 │   ├── cleanup_boot_files.yml       # Remove stale per-host pxelinux.cfg + per-model TFTP rows
 │   ├── converge_boot_mode.yml       # Converge board(s) to inventory-declared boot mode
 │   ├── set_boot_mode.yml            # Thin wrapper around converge for -e override
@@ -106,7 +106,7 @@ david_igou/armbian/   (this repo root)
 │   │       ├── poe_cycle.yml          # Shared primitive: off → drain → on
 │   │       └── upload_pxelinux_one.yml # Per-host pxelinux upload (for in-play use)
 │   ├── tests/
-│   │   └── test_build_image_vars.yml   # Localhost inventory-contract test for build_image.yml's per-model vars
+│   │   └── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-model vars
 │   └── tasks/
 │       ├── _converge_boot_mode.yml         # Inner converge primitive used by lifecycle wrappers
 │       ├── _lifecycle_set_and_verify.yml   # Converge + verify with diagnostic-bundle on failure
@@ -146,7 +146,7 @@ ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
 # (0) Build the custom Armbian image on a builder host. Publishes the
 # resulting .img.xz to the netboot server's HTTP assets directory.
-ansible-playbook playbooks/build_image.yml
+ansible-playbook playbooks/build_and_publish_from_inventory.yml
 
 # (1) Bootstrap a freshly flashed Armbian board: create the inventory's
 # `ansible_user` with passwordless sudo + SSH-key auth.
@@ -346,7 +346,7 @@ netboot server during boot-mode convergence.
 | `routeros/bootstrap_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
 | `stage_netboot_assets.yml` | **netboot server** (image extraction, NFS rootfs, per-host clones) |
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
-| `build_image.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
+| `build_and_publish_from_inventory.yml` | **`armbian_builders`** (Docker-capable build host); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
 | `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
 | `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
@@ -439,14 +439,14 @@ Minimum touched files for a new board:
    `armbian_board_userpatches`: list of `{dest, content}`
    patches the image_build role drops into `userpatches/` for this
    board's build. Add only after confirming `build_userpatches_common`
-   in `playbooks/build_image.yml` (the cross-board rk3588 family
+   in `inventory/group_vars/armbian.yml` (the cross-board rk3588 family
    overlay) doesn't already cover the case.
 
 ### Where to put a new armbian/build hook
 
 Two overlay paths are available; choose by SCOPE:
 
-- **Family-shared** — the hook applies identically to every board in a SoC family (e.g. rk3588). Add it to `build_userpatches_common` in `playbooks/build_image.yml` under `dest: config/sources/families/<family>.conf`. Today's examples: `__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`.
+- **Family-shared** — the hook applies identically to every board in a SoC family (e.g. rk3588). Add it to `build_userpatches_common` in `inventory/group_vars/armbian.yml` (the `armbian` parent group covers `armbian_builders` + `boards`) under `dest: config/sources/families/<family>.conf`. Today's examples: `__999_pxe_first`, `__999_local_kernel_bake`, `__999_no_bcmdhd_for_netboot`.
 - **Per-board** — the hook applies to ONE board (different `BOOTBRANCH`, different `UBOOT_TARGET_MAP`, different patchdir, etc.). Add it to `inventory/group_vars/<model_group>.yml` under `armbian_board_userpatches` with `dest: config/boards/<board>.conf`. armbian/build only sources that overlay when building the matching board, so the per-board scope is structural — no `if BOARD == ...` filter needed. Today's examples: `__999_rock5a_use_mainline_uboot`, `__999_rock5b_uboot_v2026_04`.
 
 If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `build_userpatches_common`, that's the cue to write a per-board overlay instead.
@@ -521,7 +521,7 @@ filtering.
 - `playbooks/routeros/bootstrap_user.yml` — provision ansible-netboot user/group/SSH keys
 - `inventory/group_vars/all.yml` — IPs, NFS paths, image URLs, cross-role defaults (edit before first run)
 - `inventory/group_vars/boards.yml` — `armbian_router` + retry-knob overrides
-- `playbooks/build_image.yml` — custom Armbian image build pipeline
+- `playbooks/build_and_publish_from_inventory.yml` — custom Armbian image build pipeline
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
 - `docs/boot-mode-override.md` — three boot mode override methods (inventory, -e, U-Boot env)
 - `docs/retry-configuration.md` — retry/timeout knob recipes

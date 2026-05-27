@@ -4,18 +4,18 @@
 # (armbian-cache, armbian-ccache) persist across runs for incremental
 # builds; the role only manages the checkout and output directories.
 #
-# All file operations run as the ansible_user (become: false) because
-# compile.sh requires user ownership of the build tree for Docker
-# auto-delegation. Only directory creation uses become (in case the
-# parent path like /var/lib/ is root-owned).
+# All operations in this role run as the connecting user (no become)
+# because compile.sh requires user ownership of the build tree for
+# Docker auto-delegation. The role assumes armbian_build_cache_dir and
+# armbian_build_output_dir are writable by ansible_user — either point
+# them at a user-home path, or pre-create + chown them once if you
+# want them under /var/lib/ or similar.
 
 - name: Ensure cache and output directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ armbian_build_user | default(ansible_user, true) | default(ansible_ssh_user, true) }}"
     mode: "0755"
-  become: true
   loop:
     - "{{ armbian_build_cache_dir }}"
     - "{{ armbian_build_output_dir }}"

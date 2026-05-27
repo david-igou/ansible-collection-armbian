@@ -1,6 +1,6 @@
 ---
 # Localhost-only test harness that exercises the same per-model
-# variable resolution build_image.yml uses, then asserts the resolved
+# variable resolution build_and_publish_from_inventory.yml uses, then asserts the resolved
 # values match what the example inventory should carry.
 #
 # This is a static check — no SSH, no Docker, no armbian/build clone.
@@ -8,11 +8,11 @@
 #
 # Run with:
 #   unset ANSIBLE_INVENTORY
-#   ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
+#   ansible-playbook -i inventory/ playbooks/tests/test_build_and_publish_vars.yml
 #
 # Failures here indicate either (a) drift between the playbook's
 # expected variable contract and the example inventory's group_vars,
-# or (b) the resolver logic in build_image.yml needs the same update.
+# or (b) the resolver logic in build_and_publish_from_inventory.yml needs the same update.
 
 - name: Resolve per-model build vars and assert expected values
   hosts: localhost
@@ -86,7 +86,7 @@
       loop: "{{ _board_models }}"
 
     - name: Assert all hosts of each model agree on armbian_board_branch
-      # Mirrors the runtime assert in playbooks/build_image.yml so the
+      # Mirrors the runtime assert in playbooks/build_and_publish_from_inventory.yml so the
       # example inventory contract documents the per-model rule even
       # when each model currently has only one host.
       ansible.builtin.assert:
@@ -115,6 +115,36 @@
         fail_msg: >-
           Model '{{ item }}' has hosts with divergent
           armbian_board_userpatches in the example inventory.
+      loop: "{{ _board_models }}"
+
+    - name: Assert build_userpatches_common reaches boards hosts via the armbian parent group
+      # Fleet-wide userpatches live in inventory/group_vars/armbian.yml,
+      # inherited by every host in `armbian_builders` + `boards` through
+      # the `armbian` parent group. Asserting on a boards host exercises
+      # the group inheritance — if the armbian parent group is missing
+      # or the var is misnamed, this fails before any build would have
+      # failed silently on the builder.
+      #
+      # We do NOT validate the rendered content here: build_userpatches_common
+      # contains `{{ _local_kernel_dispatch_table }}` /
+      # `{{ _uboot_env_storage_table }}` Jinja that's only defined on the
+      # armbian_builders host (set by build_and_publish_from_inventory.yml's pre_tasks).
+      # Cross-host access via hostvars[boards_host] would template in the
+      # wrong namespace and trigger false-positive failures.
+      ansible.builtin.assert:
+        that:
+          - "hostvars[_board_model_first_host[item]].build_userpatches_common is defined"
+          - "hostvars[_board_model_first_host[item]].build_userpatches_common is iterable"
+          - "hostvars[_board_model_first_host[item]].build_userpatches_common is not string"
+          - "hostvars[_board_model_first_host[item]].build_userpatches_common | length >= 1"
+          - >-
+            hostvars[_board_model_first_host[item]].build_userpatches_common
+            | selectattr('dest', 'undefined') | list | length == 0
+        fail_msg: >-
+          build_userpatches_common is not visible on '{{ _board_model_first_host[item] }}'
+          (model {{ item }}). Expected the `armbian` parent group to
+          carry it via inventory/group_vars/armbian.yml — check that
+          group structure and the group_vars file are in place.
       loop: "{{ _board_models }}"
 
     - name: Assert orange-pi-5-max ships the RTL8125 MAC userpatch

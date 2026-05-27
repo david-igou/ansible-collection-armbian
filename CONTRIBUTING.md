@@ -27,7 +27,7 @@ The repository ships a `Makefile` with the common targets:
 make install        # Install runtime collection dependencies
 make install-lint   # Install everything ansible-lint needs
 make lint           # yamllint + ansible-lint over roles/ + playbooks/ + inventory/
-make test           # lint + the build_image vars contract test + molecule
+make test           # lint + the build_and_publish vars contract test + molecule
 make molecule       # Run molecule scenarios (SCENARIO=<name> for one)
 make collection-build       # Build the .tar.gz collection artifact
 make collection-install     # Build and install locally

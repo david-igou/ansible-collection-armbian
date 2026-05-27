@@ -31,7 +31,7 @@ same user.
 flowchart TB
     subgraph P0["Phase 0 — control plane (once per environment)"]
         direction TB
-        BI["<b>build_image</b><br/>hosts: armbian_builders<br/>playbook: build_image.yml<br/>roles invoked: image_build<br/>output: &lt;board&gt;.img.xz on netboot_server<br/>(2-hop rsync: builder → controller → nfs)"]
+        BI["<b>build_and_publish_from_inventory</b><br/>hosts: armbian_builders<br/>playbook: build_and_publish_from_inventory.yml<br/>roles invoked: image_build<br/>output: &lt;board&gt;.img.xz on netboot_server<br/>(2-hop rsync: builder → controller → nfs)"]
         BU["<b>routeros/bootstrap_user</b><br/>hosts: routeros_netboot<br/>playbook: routeros/bootstrap_user.yml<br/>roles invoked: —<br/>output: ansible-netboot user + SSH key on RouterOS"]
         SN0["<b>stage_netboot_assets</b><br/>hosts: netboot_server<br/>playbook: stage_netboot_assets.yml<br/>roles invoked: image_extract, rootfs_clone<br/>output: rootfs templates + per-host clones<br/>+ TFTP cache (local on netboot_server)"]
         SR0["<b>stage_router</b><br/>hosts: netboot_server (fetch) + router (push)<br/>playbook: stage_router.yml<br/>roles invoked: — (imports upload_tftp_assets + plumbing_check)<br/>output: kernel/initrd/dtb in flash:/sbc/armbian/&lt;model&gt;/<br/>+ /ip tftp rows on router"]
@@ -76,7 +76,7 @@ collection relies on. Either build the image yourself:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
-ansible-playbook playbooks/build_image.yml
+ansible-playbook playbooks/build_and_publish_from_inventory.yml
 ```
 
 …or place a pre-built `.img.xz` in your netboot server's HTTP assets
@@ -133,7 +133,7 @@ Repeated once per physical board.
 ### 1.1 Flash the custom Armbian image to an SD card (manual)
 
 Use any tool you like — `xzcat | dd`, `etcher`, the Armbian installer
-— to write the `.img.xz` produced by `build_image.yml` (or whichever
+— to write the `.img.xz` produced by `build_and_publish_from_inventory.yml` (or whichever
 pre-built image you put in `armbian_image_urls[<model>]`) to an SD
 card. This is the only step in the lifecycle that this collection does
 not automate; everything from here on runs over SSH.
