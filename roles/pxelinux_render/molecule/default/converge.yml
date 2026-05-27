@@ -23,4 +23,7 @@
         pxelinux_render_nfs_server_ip: "192.0.2.10"
         pxelinux_render_nfs_root_path: "/mnt/ssd/netboot/rootfs"
         pxelinux_render_hostname: "test-board-01"
+        pxelinux_render_tftp_kernel: "armbian/test-board-01/vmlinuz"
+        pxelinux_render_tftp_initrd: "armbian/test-board-01/initrd.img"
+        pxelinux_render_tftp_dtb: "armbian/test-board-01/board.dtb"
         pxelinux_render_output_dir: /tmp/molecule_pxelinux_render_out

@@ -9,23 +9,23 @@ prompt  0
 
 label nfs
   menu label Armbian NFS root (test-board-01)
-  kernel armbian/localhost/vmlinuz
-  initrd armbian/localhost/initrd.img
-  fdt    armbian/localhost/board.dtb
+  kernel armbian/test-board-01/vmlinuz
+  initrd armbian/test-board-01/initrd.img
+  fdt    armbian/test-board-01/board.dtb
   append root=/dev/nfs nfsroot=192.0.2.10:/mnt/ssd/netboot/rootfs/test-board-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000 rootwait rw
 
 label sd
   menu label Armbian on SD (test-board-01)
-  kernel armbian/localhost/vmlinuz
-  initrd armbian/localhost/initrd.img
-  fdt    armbian/localhost/board.dtb
+  kernel armbian/test-board-01/vmlinuz
+  initrd armbian/test-board-01/initrd.img
+  fdt    armbian/test-board-01/board.dtb
   append root=LABEL=armbi_root rootfstype=ext4 rootwait rw console=ttyS2,1500000
 
 label local
   menu label Armbian on local disk (test-board-01)
-  kernel armbian/localhost/vmlinuz
-  initrd armbian/localhost/initrd.img
-  fdt    armbian/localhost/board.dtb
+  kernel armbian/test-board-01/vmlinuz
+  initrd armbian/test-board-01/initrd.img
+  fdt    armbian/test-board-01/board.dtb
   append root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=ttyS2,1500000
 
 label local_kernel
