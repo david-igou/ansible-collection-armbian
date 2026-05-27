@@ -1,0 +1,64 @@
+# roles/rootfs_provision/tasks/_identity_reset.yml
+#
+# Verbatim port of roles/rootfs_clone/tasks/_identity_reset.yml with
+# the two variable renames:
+#   target_dir → armbian_rootfs_target_dir
+#   hostname   → armbian_rootfs_host
+
+- name: Set per-host /etc/hostname
+  ansible.builtin.copy:
+    dest: "{{ armbian_rootfs_target_dir }}/etc/hostname"
+    content: "{{ armbian_rootfs_host }}\n"
+    mode: "0644"
+
+- name: Set per-host /etc/hosts entry
+  ansible.builtin.lineinfile:
+    path: "{{ armbian_rootfs_target_dir }}/etc/hosts"
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1\t{{ armbian_rootfs_host }}"
+    create: false
+  failed_when: false
+
+- name: Zero out machine-id files (first-boot trigger for sshd-keygen)
+  ansible.builtin.copy:
+    dest: "{{ armbian_rootfs_target_dir }}/{{ item }}"
+    content: ""
+    mode: "0444"
+    force: true
+  loop:
+    - etc/machine-id
+    - var/lib/dbus/machine-id
+
+- name: Find stale SSH host keys before regeneration
+  ansible.builtin.find:
+    paths: "{{ armbian_rootfs_target_dir }}/etc/ssh"
+    patterns: "ssh_host_*"
+    file_type: any
+  register: __rootfs_provision_stale_hostkeys
+
+- name: Remove stale SSH host keys before regeneration
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ __rootfs_provision_stale_hostkeys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Generate per-host SSH host keys
+  ansible.builtin.command: >-
+    ssh-keygen -q -f {{ armbian_rootfs_target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key
+    -N "" -t {{ item.type }} {{ item.extra | default('') }}
+  args:
+    creates: "{{ armbian_rootfs_target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key"
+  loop:
+    - { type: rsa, extra: "-b 4096" }
+    - { type: ecdsa, extra: "-b 521" }
+    - { type: ed25519, extra: "" }
+  loop_control:
+    label: "{{ item.type }}"
+
+- name: Touch /root/.no_armbian_first_login to skip first-login prompt
+  ansible.builtin.file:
+    path: "{{ armbian_rootfs_target_dir }}/root/.no_armbian_first_login"
+    state: touch
+    mode: "0644"
