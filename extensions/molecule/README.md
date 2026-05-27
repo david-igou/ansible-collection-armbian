@@ -30,12 +30,12 @@ it because it is absent from the root `requirements.yml`.
 | `bootstrap_armbian` | `bootstrap_armbian` | qemu (UEFI) | Armbian Trixie UEFI x86 cloud_minimal |
 | `disk_image` | `disk_image` | qemu | Debian 13 (Trixie) genericcloud |
 | `disk_provision` | `disk_provision` | qemu | Debian 13 (Trixie) genericcloud |
-| `image_extract` | `image_extract` | qemu | Debian 13 (Trixie) genericcloud |
 | `image_build` | `image_build` (skip-build short-circuit) | qemu | Debian 13 (Trixie) genericcloud |
 | `local_kernel_render` | `image_build` (template macro) | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
-| `rootfs_clone` | `rootfs_clone` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
+
+The `rootfs_provision` role (which replaced the old `image_extract` + `rootfs_clone` pair in 4.0.0) lives at the role-level scenario `roles/rootfs_provision/molecule/default/` rather than under `extensions/molecule/`. It exercises losetup + mount + rsync inside a privileged container, which is closer to the disk_image scenario style; it does not need the `extensions/molecule/` collection-level inventory.
 
 Switch backend per invocation (only meaningful when the scenario's
 inventory ships multiple `mp.<backend>` blocks):
