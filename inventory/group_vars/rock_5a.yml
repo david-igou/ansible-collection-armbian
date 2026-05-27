@@ -8,8 +8,8 @@
 # hook gates on BRANCH=edge — this entry is what activates it.
 # Without it, rock-5a would build against the Radxa fork's
 # BOOT_TARGET_DEVICES X-macro form, which the `__999_pxe_first` sed
-# (in playbooks/build_image.yml's build_userpatches_common) cannot
-# patch — PXE stays at the end of the boot order and SD wins.
+# (in inventory/group_vars/armbian.yml's build_userpatches_common)
+# cannot patch — PXE stays at the end of the boot order and SD wins.
 armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────

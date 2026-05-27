@@ -61,22 +61,25 @@ hard-fails if any prerequisite is missing.
 
 - Docker ≥17.06 is installed and runnable by the connecting user.
 - Privileged containers work (`docker run --privileged hello-world`).
+- `armbian_build_cache_dir` and `armbian_build_output_dir` are writable
+  by the connecting user. The role runs entirely without `become` — if
+  you keep the defaults under `/var/lib/`, pre-create + chown the two
+  directories once before the first run.
 - Free space at `armbian_build_cache_dir` ≥ `armbian_build_min_free_gb` GB.
 - `armbian_build_required_egress_hosts` are HTTPS-reachable.
 
-## Publish prerequisites (when used with `playbooks/build_image.yml`)
+## Publish prerequisites (when used with `playbooks/build_and_publish_from_inventory.yml`)
 
 The role itself only writes to `armbian_build_output_dir` on the builder. The
-companion `playbooks/build_image.yml` publishes the artifacts builder→netboot
-server using `ansible.posix.synchronize` (mode pull, delegated to the builder).
-That publish step requires:
+companion `playbooks/build_and_publish_from_inventory.yml` publishes the artifacts builder→netboot
+server using rsync over SSH (the controller mediates the transfer). That
+publish step requires:
 
-- The builder's SSH user has an SSH key authorised on the `netboot_server` as
-  a user that exists there (typically the same `ansible_user`).
-- That user has passwordless sudo on the netboot server (the publish task uses
-  `rsync_path: 'sudo rsync'` so the receive side runs as root, matching the
-  directory created by `playbooks/build_image.yml`'s `become: true` `file:`
-  task).
+- The controller can SSH to both the builder and the netboot server as
+  the inventory-declared `ansible_user`.
+- The netboot server's `ansible_user` has passwordless sudo (the publish
+  task uses `--rsync-path=sudo rsync` so the receive side runs as root,
+  writing the root-owned per-board directories with `--mkpath`).
 
 ## Example
 

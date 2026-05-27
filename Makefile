@@ -60,10 +60,10 @@ molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all)
 molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
 	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)
 
-test-build-image-vars: ## Run the localhost-only build_image vars contract test
-	ansible-playbook -i inventory/ playbooks/tests/test_build_image_vars.yml
+test-build-and-publish-vars: ## Run the localhost-only build_and_publish_from_inventory vars contract test
+	ansible-playbook -i inventory/ playbooks/tests/test_build_and_publish_vars.yml
 
-test: lint test-build-image-vars molecule ## Run lint, build_image vars contract test, and molecule
+test: lint test-build-and-publish-vars molecule ## Run lint, build_and_publish vars contract test, and molecule
 
 collection-build: ## Build the collection tarball
 	ansible-galaxy collection build --force

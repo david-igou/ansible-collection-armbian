@@ -6,7 +6,7 @@
 # so the role's check_manifest decides to skip invoke_build.
 #
 # Real-image production is intentionally out of scope; that belongs to
-# playbooks/build_image.yml against the armbian_builders inventory.
+# playbooks/build_and_publish_from_inventory.yml against the armbian_builders inventory.
 #
 # Run with:  molecule test --scenario-name image_build
 #

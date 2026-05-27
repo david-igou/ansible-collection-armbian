@@ -9,7 +9,7 @@
 #   - Left manifest.json valid against the expected schema.
 #
 # This scenario deliberately does NOT assert a real .img.xz was produced;
-# real-image verification belongs to playbooks/build_image.yml on the
+# real-image verification belongs to playbooks/build_and_publish_from_inventory.yml on the
 # armbian_builders inventory.
 
 - name: Verify

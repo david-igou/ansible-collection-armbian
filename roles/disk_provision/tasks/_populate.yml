@@ -67,7 +67,7 @@
 
     - name: "Populate: rsync source into mounted root"
       # ansible.posix.synchronize has known --rsh splitting bugs in this
-      # collection (see playbooks/build_image.yml:525), so we keep
+      # collection (see playbooks/build_and_publish_from_inventory.yml), so we keep
       # command: rsync but use argv form (declarative tokenisation) and
       # --itemize-changes so changed_when reflects whether any file
       # actually transferred.

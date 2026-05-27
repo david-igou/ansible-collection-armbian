@@ -12,7 +12,7 @@
 #   armbian_dl_dir       dl.armbian.com subdirectory (documentation
 #                        pointer; not used by code post-slim)
 #   armbian_board_name   armbian/build BOARD= target. Used by
-#                        playbooks/build_image.yml to map board_model
+#                        playbooks/build_and_publish_from_inventory.yml to map board_model
 #                        to the build target string.
 #   armbian_support      Armbian support tier (standard / community /
 #                        wip / unsupported). Documentation only.
@@ -41,7 +41,7 @@
 #                        for any board the collection builds.
 #                        - storage: REQUIRED. 'nowhere' | 'spi_flash' | 'mmc'.
 #                          Verified against the U-Boot defconfig at build
-#                          time (see playbooks/build_image.yml's
+#                          time (see playbooks/build_and_publish_from_inventory.yml's
 #                          __999_uboot_env_check hook).
 #                        - fw_env_config: device/offset/size/sect_size for
 #                          /etc/fw_env.config. Only when storage allows

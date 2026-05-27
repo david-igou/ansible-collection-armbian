@@ -189,7 +189,7 @@ already-provisioned board.
 Variant of `local` in which the **kernel itself** is loaded from the
 NVMe rootfs, not from the router's TFTP. The pxelinux.cfg's
 `local_kernel` label has only a `localboot 0` body; U-Boot's `localcmd`
-env (baked into the binary by `playbooks/build_image.yml`'s
+env (baked into the binary by `playbooks/build_and_publish_from_inventory.yml`'s
 `__999_orangepi5max_localcmd` hook) runs `bootflow scan -b`, which
 hands off to the extlinux bootmeth on the NVMe and follows
 `/boot/extlinux/extlinux.conf` (Armbian's standard `apt`-managed boot
@@ -233,7 +233,7 @@ after image rebuilds or role changes.
 
 | # | Playbook | Frequency |
 |---|---|---|
-| 0 | `build_image.yml` | Per `armbian/build` ref or patch-table change |
+| 0 | `build_and_publish_from_inventory.yml` | Per `armbian/build` ref or patch-table change |
 | 1 | `bootstrap_armbian.yml --limit <host>` | Once per board, right after flashing |
 | 2 | `routeros/bootstrap_user.yml -e ansible_user=<existing-admin>` | Once per RouterOS device |
 | 3 | `stage_netboot_assets.yml` | NFS templates + per-host rootfs on netboot server |

@@ -35,7 +35,9 @@
      root_label:   armbi_root_local  (overridable; matches pxelinux_render default)
 
    Consumed by:
-     - playbooks/build_image.yml's __999_local_kernel_bake hook (Task 4)
+     - the __999_local_kernel_bake hook in inventory/group_vars/armbian.yml's
+       build_userpatches_common (Task 4); the dispatch table itself is
+       templated by playbooks/build_and_publish_from_inventory.yml's pre_tasks.
      - playbooks/tasks/compose_uboot_env_vars.yml (Task 6)
 #}
 {%- macro render_localcmd_chain(board_cfg, overrides={}) -%}

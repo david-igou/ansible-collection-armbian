@@ -14,8 +14,8 @@ armbian_board_branch: edge
 
 # ── per-board userpatches ────────────────────────────────────────────
 # None — the rk3588 family-level overlay
-# (build_userpatches_common.__999_pxe_first in build_image.yml) covers
-# PXE-first ordering and CONFIG_PCI_INIT_R backfill. Add per-board
-# entries here only after confirming the family hook does not cover
-# your case.
+# (build_userpatches_common.__999_pxe_first in group_vars/armbian.yml)
+# covers PXE-first ordering and CONFIG_PCI_INIT_R backfill. Add
+# per-board entries here only after confirming the family hook does
+# not cover your case.
 # armbian_board_userpatches: []

@@ -87,7 +87,7 @@ This collection patches U-Boot to put PXE first so a board reliably
 netboots from a fresh power-up.
 
 ```bash
-ansible-playbook playbooks/build_image.yml
+ansible-playbook playbooks/build_and_publish_from_inventory.yml
 ```
 
 Produces a `.img.xz` on `armbian_builders` and publishes it to the
@@ -156,7 +156,7 @@ takes `armbian_poe_action=off` / `=on`. See
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_image.yml` publishes to the netboot server) |
+| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server) |
 | [`image_extract`](roles/image_extract/) | netboot server | One rootfs template + per-model TFTP artefacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
 | [`rootfs_clone`](roles/rootfs_clone/) | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset (hostname / machine-id / SSH host keys) |
 | [`disk_image`](roles/disk_image/) | a board | Stream an `.img.xz` or `.img` (URL or absolute path) to a whole-disk block device via `curl \| xz -dc \| dd` with a mount-aware refusal guard |

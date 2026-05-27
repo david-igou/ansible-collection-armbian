@@ -1,0 +1,278 @@
+---
+# Builds custom Armbian images for every unique armbian_board_model in
+# groups['boards'], then publishes the resulting artifact directories to
+# the netboot server's HTTP export.
+#
+# Two plays:
+#   1. hosts: armbian_builders — invoke the image_build role per
+#      unique armbian_board_model, then stage each <board>/ directory on the
+#      controller at /tmp/armbian_publish/<board>/.
+#   2. hosts: netboot_server — push each staged <board>/ directory from
+#      the controller into armbian_nfs_assets_export/images/<board>/.
+#
+# The controller mediates the transfer so the only SSH trust required is
+# controller→builder and controller→netboot_server (already needed for
+# Ansible to reach them). No builder↔netboot_server SSH key is required.
+#
+# Prerequisites for the publish play:
+#   - netboot_server's ansible_user must have passwordless sudo (the
+#     publish task uses rsync_path: 'sudo rsync' so the receive side
+#     writes the root-owned per-board directories with --mkpath).
+#
+# Fleet-wide userpatches live in inventory: the `armbian` parent group
+# (covers armbian_builders + boards) carries build_userpatches_common in
+# group_vars/armbian.yml. The image_build role itself is intent-agnostic.
+# Per-board userpatches and U-Boot branch live in
+# inventory/group_vars/<model_group>.yml as armbian_board_userpatches
+# and armbian_board_branch.
+# Add a new board by:
+#   1. Adding host(s) under groups['boards'] in inventory with an
+#      armbian_board_model that exists in vars/boards.yml.
+#   2. (Optional) Creating inventory/group_vars/<model_group>.yml with
+#      armbian_board_branch (default 'current') and any
+#      per-board armbian_board_userpatches.
+#
+# Usage:
+#   ansible-playbook playbooks/build_and_publish_from_inventory.yml
+
+- name: Build custom Armbian images and stage them on the controller
+  hosts: armbian_builders
+  gather_facts: false
+  pre_tasks:
+    - name: Load board configs for board name lookup
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/boards.yml"
+
+    - name: Resolve unique armbian_board_model values from groups['boards']
+      ansible.builtin.set_fact:
+        _board_models: >-
+          {{ groups['boards']
+             | map('extract', hostvars, 'armbian_board_model')
+             | unique
+             | list }}
+
+    - name: Resolve a representative host per board model
+      # Per-model build vars (armbian_board_userpatches,
+      # armbian_board_branch) come from
+      # inventory/group_vars/<model_group>.yml. Hosts of the same model
+      # all inherit those group_vars, so picking any one host is
+      # sufficient — we use the first host listed in groups['boards']
+      # for each model. Used by the include_role vars: block below.
+      # `| first` is safe: _board_models is derived from groups['boards'],
+      # so every model is guaranteed at least one matching host.
+      ansible.builtin.set_fact:
+        _board_model_first_host: >-
+          {{
+            _board_model_first_host | default({})
+            | combine({
+                item: (
+                  groups['boards']
+                  | map('extract', hostvars)
+                  | selectattr('armbian_board_model', 'equalto', item)
+                  | map(attribute='inventory_hostname')
+                  | first
+                )
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+    - name: Assert every armbian_board_model has an armbian_board_configs entry
+      # Must run before any task that dereferences
+      # armbian_board_configs[<model>] — otherwise an unknown
+      # model fails with an opaque Jinja key error instead of this
+      # explicit fail_msg. Earliest dereferencer is the
+      # _build_target_to_model reverse-map set_fact below; later ones
+      # are the local_kernel / uboot_env render blocks and
+      # _build_targets resolution.
+      ansible.builtin.assert:
+        that:
+          - item in armbian_board_configs
+        fail_msg: >-
+          armbian_board_model '{{ item }}' (from groups['boards']) has no entry in
+          vars/boards.yml. Add it there or remove the host from the
+          boards group.
+      loop: "{{ _board_models }}"
+
+    - name: Resolve armbian_board_name → board_model reverse map
+      # _build_target_to_model maps from the armbian/build BOARD= value
+      # (the key used by _build_targets, e.g. 'orangepi5pro') back to
+      # the inventory's armbian_board_model value (e.g.
+      # 'orange-pi-5-pro'). The build loop iterates _build_targets;
+      # this map lets it resolve back to a representative host whose
+      # group_vars carry armbian_board_branch +
+      # armbian_board_userpatches.
+      ansible.builtin.set_fact:
+        _build_target_to_model: >-
+          {{
+            _build_target_to_model | default({})
+            | combine({
+                armbian_board_configs[item].armbian_board_name: item
+              })
+          }}
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_board_branch
+      # build_and_publish_from_inventory.yml builds one .img.xz per model — divergent
+      # branch declarations across hosts of the same model would
+      # silently use only the first host's value. Per-host build
+      # divergence would require keying builds by (model + patch-hash)
+      # and a host-keyed armbian_image_urls map; out of scope
+      # for v3. Fail loudly so the operator consolidates into
+      # inventory/group_vars/<model_group>.yml, or opens a follow-on
+      # spec for genuinely per-host builds.
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_branch', default='current')
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_board_branch values. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
+
+    - name: Assert all hosts of each model agree on armbian_board_userpatches
+      # Same per-model build rule as the branch assert above. The
+      # to_json(sort_keys=true) canonicalisation makes the comparison
+      # deterministic across dict-key ordering differences within each
+      # patch entry; it does NOT canonicalise list-item order, so two
+      # hosts declaring the same patches in different sequence would
+      # falsely diverge. Acceptable in practice because all hosts of a
+      # model inherit from the same group_vars YAML (identical parse
+      # order).
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['boards']
+             | map('extract', hostvars)
+             | selectattr('armbian_board_model', 'equalto', item)
+             | map(attribute='armbian_board_userpatches', default=[])
+             | map('to_json', sort_keys=true)
+             | unique | list | length) == 1
+        fail_msg: >-
+          Model '{{ item }}' has hosts with divergent
+          armbian_board_userpatches. Move the override into
+          inventory/group_vars/<model_group>.yml (per-model) or remove
+          the host_vars override. Per-host builds are not supported in
+          v3.
+      loop: "{{ _board_models }}"
+
+    - name: Render local_kernel dispatch table for the build hook
+      # Macro inlined here because Jinja's set_fact context blocks
+      # absolute-path imports via {%- from ... -%}. The canonical macro
+      # lives at roles/image_build/templates/render_localcmd_chain.j2
+      # and the molecule local_kernel_render scenario verifies the
+      # rendered output.
+      #
+      # Chain uses per-board hardcoded partition numbers via cfg.local_kernel.storage
+      # (full U-Boot device address including partition, e.g. "nvme 0:2" or "nvme 0:4").
+      # Per-board values in vars/boards.yml:
+      #   - opi5max: "nvme 0:4" (outlier 4-partition layout, proven via #82 LK1)
+      #   - all others: "nvme 0:2" (disk_provision: var=p1, root=p2)
+      # Universal lookup approaches (part number + gpt setenv) both failed on
+      # opi5pro hardware without UART visibility; reverted to hardcoded per #82 design.
+      ansible.builtin.set_fact:
+        _local_kernel_dispatch_table: |
+          {% for board_model in _board_models %}
+          {% set cfg = armbian_board_configs[board_model] %}
+          {% if cfg.local_kernel is defined %}
+          {%- set lk = cfg.local_kernel -%}
+          {%- set storage      = lk.storage -%}
+          {%- set storage_scan = lk.storage_scan -%}
+          {%- set root_label   = 'armbi_root_local' -%}
+          {%- set console      = cfg.console -%}
+          {%- set dtb          = cfg.dtb -%}
+              [{{ cfg.armbian_board_name }}]='setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }}; {{ storage_scan }}; ext4load {{ storage }} ${kernel_addr_r} /boot/Image; ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd; setenv ramdisk_size ${filesize}; ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }}; booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}'
+          {% endif %}
+          {% endfor %}
+
+    - name: Render expected uboot_env.storage table for the assertion hook
+      ansible.builtin.set_fact:
+        _uboot_env_storage_table: |
+          {% for board_model in _board_models %}
+          {% set cfg = armbian_board_configs[board_model] %}
+          {% if cfg.uboot_env is defined %}
+              [{{ cfg.armbian_board_name }}]='{{ cfg.uboot_env.storage }}'
+          {% endif %}
+          {% endfor %}
+
+    - name: Resolve build targets from armbian_board_configs
+      ansible.builtin.set_fact:
+        _build_targets: >-
+          {{ _board_models
+             | map('extract', armbian_board_configs, 'armbian_board_name')
+             | list }}
+
+    - name: Report build targets
+      ansible.builtin.debug:
+        msg: "Will build images for: {{ _build_targets }}"
+
+  tasks:
+    - name: Build image per inventory board
+      ansible.builtin.include_role:
+        name: image_build
+      vars:
+        _first_host: "{{ _board_model_first_host[_build_target_to_model[item]] }}"
+        armbian_build_board: "{{ item }}"
+        armbian_build_userpatches: >-
+          {{
+            build_userpatches_common
+            + (hostvars[_first_host].armbian_board_userpatches | default([]))
+          }}
+        armbian_build_branch: "{{ hostvars[_first_host].armbian_board_branch | default('current') }}"
+      loop: "{{ _build_targets }}"
+
+    # rsync invoked via command (not ansible.posix.synchronize) so it
+    # always uses SSH — synchronize short-circuits to a local copy when
+    # both endpoints are localhost, which is wrong if the controller and
+    # the builder don't share a filesystem (e.g. controller in a
+    # container, builder on the host reachable via ssh igou@localhost).
+    # connection: local forces this task to run on the controller itself,
+    # not via SSH back to an inventory entry named localhost.
+    - name: Stage built image directory on the controller
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --compress
+          - --delete
+          - --mkpath
+          - --rsh
+          - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
+          - "{{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ armbian_build_output_dir }}/{{ item }}/"
+          - "/tmp/armbian_publish/{{ item }}/"
+      delegate_to: localhost
+      connection: local
+      changed_when: true
+      loop: "{{ _build_targets }}"
+
+- name: Publish staged images to the netboot server
+  hosts: netboot_server
+  gather_facts: false
+  vars:
+    _builder: "{{ groups['armbian_builders'][0] }}"
+  tasks:
+    # ansible.posix.synchronize splits --rsh on whitespace, causing -o flags
+    # to escape the ssh argument scope and break agent-disabled auth.
+    # Use direct rsync via command: with argv: so --rsh is a discrete token.
+    - name: Push staged image + manifest to netboot server (sudo on receive)
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --compress
+          - --mkpath
+          - --rsync-path=sudo rsync
+          - --rsh
+          - "ssh -p {{ ansible_port | default(22) }} -o IdentityAgent=none -o StrictHostKeyChecking=accept-new"
+          - "/tmp/armbian_publish/{{ item }}/"
+          - "{{ ansible_user }}@{{ inventory_hostname }}:{{ armbian_nfs_assets_export }}/images/{{ item }}/"
+      delegate_to: localhost
+      connection: local
+      changed_when: true
+      loop: "{{ hostvars[_builder]._build_targets }}"

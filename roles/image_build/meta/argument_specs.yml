@@ -3,7 +3,7 @@
 #
 # image_build expects callers to pre-render the local_kernel dispatch
 # table into _local_kernel_dispatch_table and _uboot_env_storage_table
-# (see playbooks/build_image.yml's pre_tasks). These facts are
+# (see playbooks/build_and_publish_from_inventory.yml's pre_tasks). These facts are
 # templated into build_userpatches_common's __999_local_kernel_bake
 # and __999_uboot_env_check hooks at playbook run time.
 
@@ -18,7 +18,7 @@ argument_specs:
         branch, release, and userpatches list; the role enforces the desired
         output state under armbian_build_output_dir/<board>/.
       - >-
-        Workflow playbooks (e.g. playbooks/build_image.yml) pre-compute
+        Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml) pre-compute
         _local_kernel_dispatch_table and _uboot_env_storage_table in their
         pre_tasks and inject the results into armbian_build_userpatches
         before invoking this role. The role itself is agnostic to the
@@ -72,14 +72,19 @@ argument_specs:
         default: /var/lib/armbian_build
         description: >-
           Directory on the builder host for the armbian/build checkout,
-          cache, and userpatches tree.
+          cache, and userpatches tree. Must be writable by the
+          connecting user — the role does not escalate privileges. If
+          you keep the /var/lib/ default, pre-create + chown the path
+          before the first run.
 
       armbian_build_output_dir:
         type: str
         required: false
         default: /var/lib/armbian_build/output
         description: >-
-          Directory where the final .img.xz and manifest.json are written.
+          Directory where the final .img.xz and manifest.json are
+          written. Same writability requirement as
+          armbian_build_cache_dir.
 
       armbian_build_user:
         type: str
