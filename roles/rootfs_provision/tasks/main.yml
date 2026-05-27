@@ -33,6 +33,12 @@
   register: __rootfs_provision_sentinel_raw
   when: __rootfs_provision_sentinel.stat.exists
 
+# NOTE: skip comparison uses src (URL) and host only — not src_sha256.
+# The src_sha256 IS written to the sentinel for debugging, but reading it
+# back for skip would require re-hashing on every run, defeating the cache.
+# If the upstream URL serves NEW bytes at the same URL (in-place update),
+# the role would skip silently. Operator must set
+# armbian_rootfs_force_refresh=true to bust the cache in that case.
 - name: Set fact for sentinel matching
   ansible.builtin.set_fact:
     __rootfs_provision_should_skip: >-
@@ -55,11 +61,23 @@
 - name: Provision (skipped when sentinel matches)
   when: not __rootfs_provision_should_skip
   block:
-    - ansible.builtin.include_tasks: _download_or_copy.yml
-    - ansible.builtin.include_tasks: _extract.yml
-    - ansible.builtin.include_tasks: _stage_tftp.yml
-    - ansible.builtin.include_tasks: _strip_fstab.yml
-    - ansible.builtin.include_tasks: _identity_reset.yml
-    - ansible.builtin.include_tasks: _write_sentinel.yml
+    - name: Download or copy source image
+      ansible.builtin.include_tasks: _download_or_copy.yml
+
+    - name: Extract rootfs from source image
+      ansible.builtin.include_tasks: _extract.yml
+
+    - name: Stage kernel/initrd/dtb to TFTP cache
+      ansible.builtin.include_tasks: _stage_tftp.yml
+
+    - name: Strip /dev fstab entries
+      ansible.builtin.include_tasks: _strip_fstab.yml
+
+    - name: Reset host identity (hostname, machine-id, ssh keys)
+      ansible.builtin.include_tasks: _identity_reset.yml
+
+    - name: Write provision sentinel
+      ansible.builtin.include_tasks: _write_sentinel.yml
   always:
-    - ansible.builtin.include_tasks: _cleanup.yml
+    - name: Clean up loop device and mount
+      ansible.builtin.include_tasks: _cleanup.yml
