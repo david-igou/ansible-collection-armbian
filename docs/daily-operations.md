@@ -107,7 +107,7 @@ The `disk_provision` role's source is hardcoded to the board's running
 gets copied to the disk. The pre-step above
 (`set_boot_mode=nfs`) is what makes that `/` be the per-host NFS clone
 (with hostname, machine-id, and SSH host keys already reset by
-`rootfs_clone`) rather than the raw, identity-less SD rootfs from the
+`rootfs_provision`) rather than the raw, identity-less SD rootfs from the
 flashed image. The playbook will refuse to run if the target disk is
 the same device the board is currently booted from.
 
@@ -116,27 +116,24 @@ The full lineage from upstream Armbian to a bootable local partition:
 ```mermaid
 flowchart TB
     UPSTREAM(["armbian/build upstream"])
-    IB["<b>image_build</b> role<br/><i>hosts: armbian_builders</i><br/>one-time build per model<br/>(PXE-first U-Boot baked in)"]
-    IB_OUT[("&lt;model&gt;.img.xz<br/>rsynced to netboot server's HTTP root")]
-    IE["<b>image_extract</b> role<br/><i>hosts: netboot_server</i><br/>decompress + loop-mount,<br/>rsync rootfs partition"]
-    IE_OUT[("/srv/netboot/rootfs/_templates/&lt;model&gt;/<br/>per-model rootfs template")]
-    RC["<b>rootfs_clone</b> role<br/><i>hosts: netboot_server</i><br/>cp --reflink=auto + identity reset<br/>(hostname / machine-id / SSH host keys)"]
-    RC_OUT[("/srv/netboot/rootfs/&lt;hostname&gt;/<br/>per-host NFS clone")]
+    IB["<b>image_build</b> role<br/><i>hosts: armbian_builders</i><br/>per-host build (PXE-first U-Boot baked in)"]
+    IB_OUT[("&lt;model&gt;.img.xz + manifest.json<br/>rsynced to netboot server's HTTP root")]
+    RP["<b>rootfs_provision</b> role<br/><i>hosts: netboot_server</i><br/>resolve armbian_rootfs_src → extract template →<br/>cp --reflink=auto + identity reset<br/>(hostname / machine-id / SSH host keys)"]
+    RP_OUT[("/srv/netboot/rootfs/_templates/&lt;model&gt;/ (shared)<br/>/srv/netboot/rootfs/&lt;hostname&gt;/ (per-host NFS clone)")]
     NFSEXP["NFS export over the network<br/><i>netboot_server:/srv/netboot/rootfs/&lt;hostname&gt;</i>"]
     BOARD_ROOT[("board's <code>/</code><br/>mounted via NFS (boot_mode=nfs)")]
     DP["<b>disk_provision</b> role<br/><i>hosts: boards</i><br/>rsync -aAX from <code>/</code>,<br/>regen fstab (LABEL=...),<br/>INSTALLED=true marker"]
     DP_OUT(["/dev/&lt;disk&gt;p1<br/>LABEL=armbi_root_local"])
 
-    UPSTREAM --> IB --> IB_OUT --> IE --> IE_OUT --> RC --> RC_OUT --> NFSEXP --> BOARD_ROOT --> DP --> DP_OUT
+    UPSTREAM --> IB --> IB_OUT --> RP --> RP_OUT --> NFSEXP --> BOARD_ROOT --> DP --> DP_OUT
 ```
 
 Each layer adds something specific: `image_build` bakes PXE-first
-U-Boot into a per-model image; `image_extract` turns the image into a
-per-model rootfs template; `rootfs_clone` makes a per-host CoW copy
-with the right identity; the NFS mount delivers that rootfs as the
-board's `/`; and `disk_provision` materializes the *currently-running*
-`/` onto a local block device with a fresh `/etc/fstab` pointing root
-at `LABEL=<label>`.
+U-Boot into a per-host image; `rootfs_provision` extracts the per-model
+template and makes a per-host CoW copy with the right identity; the NFS
+mount delivers that rootfs as the board's `/`; and `disk_provision`
+materializes the *currently-running* `/` onto a local block device with
+a fresh `/etc/fstab` pointing root at `LABEL=<label>`.
 
 If the board had been SD-booted when you ran
 `provision_local_disk.yml`, the source would have been the SD's ext4 —

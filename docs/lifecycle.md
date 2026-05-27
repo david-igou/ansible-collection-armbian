@@ -33,7 +33,7 @@ flowchart TB
         direction TB
         BI["<b>build_and_publish_from_inventory</b><br/>hosts: armbian_builders<br/>playbook: build_and_publish_from_inventory.yml<br/>roles invoked: image_build<br/>output: &lt;board&gt;.img.xz on netboot_server<br/>(2-hop rsync: builder → controller → nfs)"]
         BU["<b>routeros/bootstrap_user</b><br/>hosts: routeros_netboot<br/>playbook: routeros/bootstrap_user.yml<br/>roles invoked: —<br/>output: ansible-netboot user + SSH key on RouterOS"]
-        SN0["<b>stage_netboot_assets</b><br/>hosts: netboot_server<br/>playbook: stage_netboot_assets.yml<br/>roles invoked: image_extract, rootfs_clone<br/>output: rootfs templates + per-host clones<br/>+ TFTP cache (local on netboot_server)"]
+        SN0["<b>stage_netboot_assets</b><br/>hosts: netboot_server<br/>playbook: stage_netboot_assets.yml<br/>roles invoked: rootfs_provision (per host)<br/>output: per-model rootfs templates + per-host clones<br/>+ TFTP cache (local on netboot_server)"]
         SR0["<b>stage_router</b><br/>hosts: netboot_server (fetch) + router (push)<br/>playbook: stage_router.yml<br/>roles invoked: — (imports upload_tftp_assets + plumbing_check)<br/>output: kernel/initrd/dtb in flash:/sbc/armbian/&lt;model&gt;/<br/>+ /ip tftp rows on router"]
         BI --> SN0
         SN0 --> SR0
@@ -105,13 +105,13 @@ and SSH keys. From this point on every other playbook authenticates as
 ansible-playbook playbooks/stage_netboot_assets.yml
 ```
 
-Against the netboot server over SSH: for each unique
-`armbian_board_model` in inventory, the `image_extract` role downloads
-(or reads locally) the image, extracts the rootfs into
-`armbian_nfs_rootfs_path/_templates/<model>/`, and emits per-model TFTP
-artefacts. For each host, `rootfs_clone` reflink-clones a per-host
-rootfs into `armbian_nfs_rootfs_path/<inventory_hostname>/` and resets
-hostname / machine-id / SSH host keys.
+Against the netboot server over SSH: for each board host,
+`rootfs_provision` resolves the `.img.xz` source (via
+`_resolve_rootfs_src.yml`), extracts the rootfs into
+`armbian_nfs_rootfs_path/_templates/<model>/` (shared across all hosts of
+the same model), and reflink-clones a per-host rootfs into
+`armbian_nfs_rootfs_path/<inventory_hostname>/`, resetting hostname /
+machine-id / SSH host keys. Per-model TFTP artefacts are also emitted.
 
 ### 0.4 Stage TFTP assets on the router
 
@@ -151,8 +151,8 @@ Edit `inventory/hosts.yml`. Each host needs `armbian_board_mac`,
 or `local_kernel`). For `sd` mode the rendered kernel cmdline defaults
 to `root=LABEL=armbi_root`; override with `armbian_sd_root` only when
 a board has multiple drives carrying that label and the default would
-be ambiguous. The board model must match a key under
-`armbian_board_configs` in [`vars/boards.yml`](../vars/boards.yml):
+be ambiguous. The board model must match an `armbian_board_config_model` entry in the
+model group's `inventory/group_vars/<model_group>.yml`:
 
 ```yaml
 boards:
@@ -196,9 +196,9 @@ ansible-playbook playbooks/stage_netboot_assets.yml
 ansible-playbook playbooks/stage_router.yml
 ```
 
-Creates the per-host rootfs clone for the new host. Existing boards are
-unaffected; the per-model template extraction step is skipped if it's
-already populated.
+Creates the per-host rootfs clone for the new host via `rootfs_provision`.
+Existing boards are unaffected; the per-model template extraction step is
+skipped if it's already populated.
 
 The board is now **fully onboarded**. It will participate in the
 toggle-and-revert lifecycle in [daily-operations.md](daily-operations.md)

@@ -21,9 +21,9 @@ substitute a parallel directory to target a different ecosystem.
 Targeted at homelab / lab operators running a fleet of Armbian-supported
 SBCs with PXE-netboot from a router and NFS-from-NAS topology.
 
-> **Status: early-stage (0.0.x) — expect breaking changes.** Inventory
+> **Status: early-stage (4.x) — expect breaking changes.** Inventory
 > variables, defaults, group names, role names, and playbook names may
-> shift between 0.0.x releases without long deprecation windows. Pin a
+> shift between 4.x releases without long deprecation windows. Pin a
 > specific version in your `requirements.yml`.
 
 ## Requirements
@@ -156,9 +156,8 @@ takes `armbian_poe_action=off` / `=on`. See
 
 | Role | Runs on | Enforces / produces |
 |---|---|---|
-| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server) |
-| [`image_extract`](roles/image_extract/) | netboot server | One rootfs template + per-model TFTP artefacts (vmlinuz/initrd/board.dtb) from a `.img.xz` (local path or URL) |
-| [`rootfs_clone`](roles/rootfs_clone/) | netboot server | Per-host rootfs clone (reflink-copy of a template) with identity reset (hostname / machine-id / SSH host keys) |
+| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server; runs per-host after resolving the `armbian_build` profile) |
+| [`rootfs_provision`](roles/rootfs_provision/) | netboot server | Per-host NFS rootfs: resolves `armbian_rootfs_src`, extracts per-model template from `.img.xz`, reflink-clones per-host rootfs, resets identity (hostname / machine-id / SSH host keys), emits TFTP artefacts |
 | [`disk_image`](roles/disk_image/) | a board | Stream an `.img.xz` or `.img` (URL or absolute path) to a whole-disk block device via `curl \| xz -dc \| dd` with a mount-aware refusal guard |
 | [`disk_provision`](roles/disk_provision/) | a board | Apply a declarative GPT layout to one block device via `systemd-repart`, rsync `source` rootfs onto it, regenerate `/etc/fstab` (root by `LABEL=`). Idempotent on filesystem label; supports `preserve_on_reprovision: true` per partition for state preservation (e.g. `/var` for k3s). Single-disk contract — multi-disk hosts loop the role. |
 | [`pxelinux_render`](roles/pxelinux_render/) | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
@@ -175,7 +174,7 @@ containers or real VMs.
 
 ```bash
 make molecule                       # podman driver, all scenarios
-make molecule SCENARIO=rootfs_clone
+make molecule SCENARIO=rootfs_provision
 make molecule-kubevirt              # KubeVirt driver (heavier scenarios)
 ```
 
