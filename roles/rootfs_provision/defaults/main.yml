@@ -6,7 +6,7 @@
 #   armbian_rootfs_dtb
 
 armbian_rootfs_target_dir: "{{ armbian_nfs_rootfs_path }}/{{ armbian_rootfs_host }}"
-armbian_rootfs_tftp_dir:   "{{ armbian_image_cache }}/sbc-tftp/{{ armbian_rootfs_host }}"
+armbian_rootfs_tftp_dir: "{{ armbian_image_cache }}/sbc-tftp/{{ armbian_rootfs_host }}"
 
 # URL-keyed shared download cache. Hosts pointing at the same upstream URL
 # share the .img.xz download; extraction is always per-host.

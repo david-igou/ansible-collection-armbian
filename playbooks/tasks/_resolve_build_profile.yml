@@ -1,3 +1,4 @@
+---
 # playbooks/tasks/_resolve_build_profile.yml
 #
 # Per-host resolver: merges four layers into the resolved fact

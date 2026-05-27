@@ -47,15 +47,15 @@
       ansible.builtin.include_role:
         name: image_build
       vars:
-        armbian_build_host:         "{{ item }}"
-        armbian_build_board:        "{{ hostvars[item].armbian_board_config.armbian_board_name }}"
-        armbian_build_branch:       "{{ hostvars[item].armbian_build.branch }}"
-        armbian_build_release:      "{{ hostvars[item].armbian_build.release }}"
-        armbian_build_ref:          "{{ hostvars[item].armbian_build.ref }}"
-        armbian_build_userpatches:  "{{ hostvars[item].armbian_build.userpatches }}"
+        armbian_build_host: "{{ item }}"
+        armbian_build_board: "{{ hostvars[item].armbian_board_config.armbian_board_name }}"
+        armbian_build_branch: "{{ hostvars[item].armbian_build.branch }}"
+        armbian_build_release: "{{ hostvars[item].armbian_build.release }}"
+        armbian_build_ref: "{{ hostvars[item].armbian_build.ref }}"
+        armbian_build_userpatches: "{{ hostvars[item].armbian_build.userpatches }}"
         armbian_build_compile_args: "{{ hostvars[item].armbian_build.compile_args }}"
-        armbian_build_timeout:      "{{ hostvars[item].armbian_build.timeout }}"
-        armbian_build_min_free_gb:  "{{ hostvars[item].armbian_build.min_free_gb }}"
+        armbian_build_timeout: "{{ hostvars[item].armbian_build.timeout }}"
+        armbian_build_min_free_gb: "{{ hostvars[item].armbian_build.min_free_gb }}"
       loop: "{{ __build_hosts }}"
 
     # rsync invoked via command (not ansible.posix.synchronize) so it

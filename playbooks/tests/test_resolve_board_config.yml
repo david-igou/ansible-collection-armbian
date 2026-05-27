@@ -1,3 +1,4 @@
+---
 # playbooks/tests/test_resolve_board_config.yml
 #
 # Localhost test for tasks/_resolve_board_config.yml. Builds synthetic

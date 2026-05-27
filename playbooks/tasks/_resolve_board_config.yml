@@ -1,3 +1,4 @@
+---
 # playbooks/tasks/_resolve_board_config.yml
 #
 # Per-host resolver: merges three explicit named layers into the

@@ -70,10 +70,10 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - rootfs_clone
           - pxelinux_render
           - local_kernel_render
           - persist_uboot_env
+          - board_boot_wait
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -109,7 +109,9 @@ jobs:
         scenario:
           - disk_image
           - disk_provision
-          - image_extract
+          - image_build
+          - rootfs_provision
+          - board_boot_verify
           - bootstrap_armbian
     steps:
       - name: Check out repository

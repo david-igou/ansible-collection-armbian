@@ -1,3 +1,4 @@
+---
 # playbooks/tests/test_resolve_build_profile.yml
 #
 # Localhost test for tasks/_resolve_build_profile.yml. Verifies:

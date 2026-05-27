@@ -201,9 +201,9 @@
           ansible.builtin.include_role:
             name: rootfs_provision
           vars:
-            armbian_rootfs_src:           "{{ hostvars[_board].armbian_rootfs_src }}"
-            armbian_rootfs_host:          "{{ _board }}"
-            armbian_rootfs_dtb:           "{{ hostvars[_board].armbian_board_config.dtb }}"
+            armbian_rootfs_src: "{{ hostvars[_board].armbian_rootfs_src }}"
+            armbian_rootfs_host: "{{ _board }}"
+            armbian_rootfs_dtb: "{{ hostvars[_board].armbian_board_config.dtb }}"
             armbian_rootfs_force_refresh: true
           loop: "{{ _target_boards }}"
           loop_control:

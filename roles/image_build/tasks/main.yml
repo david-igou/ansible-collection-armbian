@@ -22,7 +22,7 @@
 
 - name: Compute per-host cache + output paths
   ansible.builtin.set_fact:
-    __image_build_cache_dir_host:  "{{ armbian_build_cache_dir }}/{{ armbian_build_host }}"
+    __image_build_cache_dir_host: "{{ armbian_build_cache_dir }}/{{ armbian_build_host }}"
     __image_build_output_dir_host: "{{ armbian_build_output_dir }}/{{ armbian_build_host }}"
 
 - name: Preflight (docker, disk, egress)
