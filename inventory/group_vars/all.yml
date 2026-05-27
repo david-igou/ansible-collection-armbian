@@ -21,10 +21,11 @@
 #                     to the SBC subnet. Identified in inventory by the
 #                     `netboot_server` group (see inventory/hosts.yml).
 #   HTTP for images → Any HTTP/HTTPS server reachable from both the
-#                     netboot_server (for image_extract during Phase 1
+#                     netboot_server (for rootfs_provision during Phase 1
 #                     of test_fleet_e2e.yml) and the boards (for
-#                     disk_image during Phase 3). URL set per-host in
-#                     your real inventory's host_vars or group_vars.
+#                     disk_image during Phase 3). URL resolved per-host
+#                     via _resolve_rootfs_src.yml (host_vars
+#                     armbian_rootfs_src or published manifest).
 #
 # `next-server` for the SBC subnet must point at the RouterOS router's
 # IP for that subnet. This collection does NOT manage next-server — set

@@ -17,11 +17,14 @@
 #
 # Playbook-level preconditions (not validated by the role itself):
 #
-# image_build expects callers to pre-render the local_kernel dispatch
-# table into _local_kernel_dispatch_table and _uboot_env_storage_table
-# (see playbooks/build_and_publish_from_inventory.yml's pre_tasks). These facts are
-# templated into build_userpatches_common's __999_local_kernel_bake
-# and __999_uboot_env_check hooks at playbook run time.
+# image_build expects callers to pre-resolve the per-host build profile
+# via playbooks/tasks/_resolve_build_profile.yml and the per-host board
+# config via playbooks/tasks/_resolve_board_config.yml before invoking
+# this role. The resolved armbian_build and armbian_board_config facts
+# drive armbian_build_userpatches content (e.g. __999_local_kernel_bake
+# and __999_uboot_env_check hooks reference armbian_board_config fields).
+# See playbooks/build_and_publish_from_inventory.yml for the canonical
+# caller pattern.
 
 argument_specs:
   main:
@@ -34,11 +37,11 @@ argument_specs:
         host, branch, release, and userpatches list; the role enforces the
         desired output state under armbian_build_output_dir/<host>/.
       - >-
-        Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml) pre-compute
-        _local_kernel_dispatch_table and _uboot_env_storage_table in their
-        pre_tasks and inject the results into armbian_build_userpatches
-        before invoking this role. The role itself is agnostic to the
-        content of those patches.
+        Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml)
+        pre-resolve armbian_build and armbian_board_config via the resolver
+        primitives in playbooks/tasks/ and inject the resolved
+        armbian_build_userpatches before invoking this role. The role
+        itself is agnostic to the content of those patches.
     options:
       armbian_build_board:
         type: str

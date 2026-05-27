@@ -7,9 +7,9 @@
 #
 #   Phase 0 — PoE-off all target boards (clean slate; no live rootfs at
 #             risk during Phase 1's NFS reset).
-#   Phase 1 — Force-refresh per-model NFS template + per-host NFS clone
-#             on netboot_server (image_extract + rootfs_clone, both
-#             force_refresh=true). Boards stay powered off.
+#   Phase 1 — Force-refresh per-host NFS rootfs on netboot_server
+#             (rootfs_provision with force_refresh=true per host;
+#             re-extracts template and re-clones). Boards stay powered off.
 #   Phase 2 — Converge to NFS, PoE-on + wait, run bootstrap_armbian
 #             unconditionally (fresh NFS clone has only root+password),
 #             persist SPI U-Boot env for spi_flash boards (no-op for
