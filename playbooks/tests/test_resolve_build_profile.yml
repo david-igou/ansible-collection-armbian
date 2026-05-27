@@ -1,0 +1,92 @@
+# playbooks/tests/test_resolve_build_profile.yml
+#
+# Localhost test for tasks/_resolve_build_profile.yml. Verifies:
+#   - scalars (branch, release) follow last-defined-wins
+#   - userpatches concat across layers in order
+#   - compile_args dict-merges
+#   - duplicate userpatch dest across layers is a hard fail
+
+- name: Resolve armbian_build and assert merge semantics
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_build_defaults:
+      release: bookworm
+      ref: "v26.2.0-trunk.844"
+      min_free_gb: 50
+      timeout: 7200
+      compile_args:
+        KERNEL_CONFIGURE: "no"
+        BUILD_MINIMAL: "yes"
+      userpatches: []
+    armbian_build_family:
+      userpatches:
+        - dest: config/sources/families/rockchip-rk3588.conf
+          content: "family hook"
+    armbian_build_model:
+      branch: edge
+      userpatches:
+        - dest: config/boards/rock-5b.conf
+          content: "model hook"
+    armbian_build_host:
+      userpatches:
+        - dest: customize-image.sh
+          content: "host hook"
+      compile_args:
+        BUILD_MINIMAL: "no"   # host overrides defaults
+
+  tasks:
+    - name: Run resolver
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_build_profile.yml"
+
+    - name: Assert branch from model layer wins
+      ansible.builtin.assert:
+        that: armbian_build.branch == "edge"
+
+    - name: Assert release from defaults survives
+      ansible.builtin.assert:
+        that: armbian_build.release == "bookworm"
+
+    - name: Assert userpatches concatenated in family→model→host order
+      ansible.builtin.assert:
+        that:
+          - armbian_build.userpatches | length == 3
+          - armbian_build.userpatches[0].dest == "config/sources/families/rockchip-rk3588.conf"
+          - armbian_build.userpatches[1].dest == "config/boards/rock-5b.conf"
+          - armbian_build.userpatches[2].dest == "customize-image.sh"
+
+    - name: Assert compile_args dict-merged with host winning
+      ansible.builtin.assert:
+        that:
+          - armbian_build.compile_args.KERNEL_CONFIGURE == "no"
+          - armbian_build.compile_args.BUILD_MINIMAL == "no"
+
+- name: Assert duplicate userpatch dest across layers fails the build
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_build_defaults: { userpatches: [] }
+    armbian_build_family:
+      userpatches:
+        - dest: customize-image.sh
+          content: "family version"
+    armbian_build_host:
+      userpatches:
+        - dest: customize-image.sh
+          content: "host version (collision)"
+
+  tasks:
+    - name: Run resolver (expected to fail)
+      block:
+        - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_build_profile.yml"
+        - ansible.builtin.fail:
+            msg: "Resolver should have failed on duplicate dest but did not"
+      rescue:
+        - name: Assert the failure message names duplicate dest
+          ansible.builtin.assert:
+            that: "'customize-image.sh' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              Expected duplicate-dest hard fail naming customize-image.sh;
+              got: {{ ansible_failed_result | default('no failure result') }}
