@@ -1,7 +1,7 @@
 ---
 # Compose the per-host uboot_env_vars dict from three sources in this
 # precedence (low → high):
-#   1. armbian_board_configs[<model>].uboot_env.defaults
+#   1. armbian_board_config.uboot_env.defaults
 #      (board static SPI defaults, e.g. rock-5b's addr_r vars)
 #   2. Collection-managed keys: ethaddr (from armbian_board_mac),
 #      and localcmd (rendered, only when persist_via == 'spi')
@@ -10,9 +10,8 @@
 # Output (registered fact): _uboot_env_vars — flat dict of name→value.
 #
 # Inputs (must be defined on the host before include):
-#   armbian_board_model   — model key for vars/boards.yml lookup
+#   armbian_board_config  — resolved board config (from _resolve_board_config.yml)
 #   armbian_board_mac     — colon-separated MAC (xx:xx:xx:xx:xx:xx)
-#   armbian_board_configs — usually from vars/boards.yml
 #   armbian_boot_mode     — 'local_kernel' triggers localcmd render
 #   armbian_local_kernel  — optional dict with .persist_via and field overrides
 #   armbian_uboot_env_extra — optional flat dict (operator escape hatch)
@@ -23,7 +22,7 @@
 
 - name: Pull board config for this host
   ansible.builtin.set_fact:
-    _board_cfg: "{{ armbian_board_configs[armbian_board_model] }}"
+    _board_cfg: "{{ armbian_board_config }}"
 
 # Source 1: board-level SPI env defaults (e.g. addr_r vars for rock-5b).
 # Boards with no SPI flash (uboot_env.storage: nowhere) leave this empty.
