@@ -65,8 +65,6 @@ david_igou/armbian/   (this repo root)
 ├── ansible.cfg               # Ansible config for direct-from-root runs
 ├── requirements.yml          # Runtime deps (roles/ only — ansible.posix)
 ├── meta/runtime.yml          # Minimum Ansible version (>=2.15)
-├── vars/
-│   └── build_defaults.yml    # Build-time defaults (armbian_build_release, armbian_build_ref, etc.)
 ├── roles/                    # All single-host, single-purpose, transport-agnostic
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
 │   ├── rootfs_provision/          # Extract .img.xz → per-model template + per-host clone + identity reset
@@ -551,7 +549,7 @@ filtering.
 
 ## Key files
 
-- `vars/build_defaults.yml` — build-time defaults (armbian_build_release, armbian_build_ref, etc.)
+- `inventory/group_vars/all.yml` (armbian_build_defaults) — build-time defaults (armbian_build_release, armbian_build_ref, etc.); loaded automatically by inventory, no include_vars needed
 - `roles/rootfs_provision/tasks/main.yml` — per-host: resolve src → extract template → reflink-clone → identity reset
 - `roles/rootfs_provision/tasks/_identity_reset.yml` — reset hostname/machine-id/SSH host keys in a rootfs
 - `roles/disk_image/tasks/main.yml` — orchestrate validate → write → settle for the disk-imaging role

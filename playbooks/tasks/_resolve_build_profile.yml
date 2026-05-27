@@ -4,7 +4,7 @@
 # armbian_build. Run once per host that produces a custom build.
 #
 # Layers (precedence low → high):
-#   armbian_build_defaults — collection vars/build_defaults.yml
+#   armbian_build_defaults — inventory/group_vars/all.yml (operator-overridable)
 #   armbian_build_family   — inventory/group_vars/<family>.yml
 #   armbian_build_model    — inventory/group_vars/<model_group>.yml
 #   armbian_build_host     — inventory/host_vars/<host>.yml
@@ -14,12 +14,20 @@
 #   userpatches: list-concatenated; duplicate dest = hard fail
 #   compile_args: dict-merged; last layer wins per key
 #
-# Caller contract: callers MUST load vars/build_defaults.yml via include_vars
-# BEFORE invoking this file. Example:
-#   - include_vars: { file: "{{ playbook_dir }}/../vars/build_defaults.yml" }
-#   - include_tasks: tasks/_resolve_build_profile.yml
-# If omitted, the defaults layer silently becomes {} and all collection-shipped
-# defaults (release, ref, baseline compile_args, ...) are lost without error.
+# armbian_build_defaults must be defined in inventory/group_vars/all.yml
+# (or a file it includes). No include_vars is needed — it is loaded
+# automatically as part of inventory resolution. If it is undefined,
+# the assert below fails loudly naming the expected source.
+
+- name: Assert armbian_build_defaults is defined (expected from inventory/group_vars/all.yml)
+  ansible.builtin.assert:
+    that:
+      - armbian_build_defaults is defined
+      - armbian_build_defaults | length > 0
+    fail_msg: >-
+      armbian_build_defaults is undefined. It must be set in
+      inventory/group_vars/all.yml (or equivalent). Expected keys:
+      release, ref, min_free_gb, timeout, compile_args, userpatches.
 
 - name: Merge scalars + compile_args via recursive combine
   # combine(recursive=true) handles scalars and nested dicts (compile_args)

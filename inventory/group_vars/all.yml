@@ -151,3 +151,23 @@ armbian_sd_device: /dev/mmcblk0
 armbian_boards_group: boards
 armbian_netboot_server_group: netboot_server
 armbian_builders_group: armbian_builders
+
+# ── Default armbian_build profile ───────────────────────────────────────────
+# Consumed by playbooks/tasks/_resolve_build_profile.yml. Override
+# armbian_build_defaults.<field> in group_vars or host_vars to change
+# baseline values for all hosts (or a specific group/host).
+# This was formerly collection-shipped via vars/build_defaults.yml (loaded
+# via include_vars); moving it here makes it operator-overridable and
+# removes the include_vars caller-contract.
+armbian_build_defaults:
+  release: bookworm
+  ref: "v26.2.0-trunk.844"
+  min_free_gb: 50
+  timeout: 7200
+  compile_args:
+    KERNEL_CONFIGURE: "no"
+    BUILD_DESKTOP: "no"
+    BUILD_MINIMAL: "yes"
+    COMPRESS_OUTPUTIMAGE: "sha,xz"
+    EXPERT: "yes"
+  userpatches: []

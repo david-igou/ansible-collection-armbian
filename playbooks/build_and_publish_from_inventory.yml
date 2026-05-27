@@ -16,10 +16,6 @@
   hosts: boards
   gather_facts: false
   tasks:
-    - name: Load collection-shipped build defaults
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/build_defaults.yml"
-
     - name: Resolve effective armbian_board_config
       ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
 

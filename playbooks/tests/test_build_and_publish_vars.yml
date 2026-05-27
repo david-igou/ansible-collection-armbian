@@ -20,10 +20,6 @@
   gather_facts: false
   connection: local
   tasks:
-    - name: Load collection-shipped build defaults
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../../vars/build_defaults.yml"
-
     - name: Resolve effective armbian_board_config per host
       ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
 
