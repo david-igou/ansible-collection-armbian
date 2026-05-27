@@ -13,8 +13,11 @@
         name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: orange-pi-5-pro
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: "uart8250,mmio32,0xfeb50000"
+          armbian_board_name: "orangepi5pro"
+          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
         pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
         pxelinux_render_hostname: smoke-host
@@ -26,8 +29,11 @@
         name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: orange-pi-5-pro
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: "uart8250,mmio32,0xfeb50000"
+          armbian_board_name: "orangepi5pro"
+          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
         pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
         pxelinux_render_hostname: smoke-host
@@ -39,23 +45,28 @@
         name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: orange-pi-5-pro
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: "uart8250,mmio32,0xfeb50000"
+          armbian_board_name: "orangepi5pro"
+          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
         pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
         pxelinux_render_hostname: smoke-host
         pxelinux_render_boot_mode: nfs
         pxelinux_render_output_dir: "{{ _output_base }}_verbose"
         pxelinux_render_pxe_verbose: true
-        pxelinux_render_earlycon: "uart8250,mmio32,0xfeb50000"
 
     - name: Render in local_kernel mode (localboot-only label active)
       ansible.builtin.include_role:
         name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: orange-pi-5-max
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: "uart8250,mmio32,0xfeb50000"
+          armbian_board_name: "orangepi5max"
+          dtb: "rockchip/rk3588-orangepi-5-max.dtb"
         pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
         pxelinux_render_hostname: smoke-host
@@ -67,8 +78,11 @@
         name: david_igou.armbian.pxelinux_render
       vars:
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        board_console: "ttyS2,1500000"
-        pxelinux_render_model_name: test-model
+        armbian_board_config:
+          console: "ttyS2,1500000"
+          earlycon: ""
+          armbian_board_name: "test-model"
+          dtb: "test/test-model.dtb"
         pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /srv/nfs
         pxelinux_render_hostname: test-board
@@ -87,8 +101,11 @@
             name: david_igou.armbian.pxelinux_render
           vars:
             pxelinux_render_board_mac: "11:22:33:44:55:66"
-            board_console: "ttyS2,1500000"
-            pxelinux_render_model_name: test-model
+            armbian_board_config:
+              console: "ttyS2,1500000"
+              earlycon: ""
+              armbian_board_name: "test-model"
+              dtb: "test/test-model.dtb"
             pxelinux_render_nfs_server_ip: "10.0.0.10"
             pxelinux_render_nfs_root_path: /srv/nfs
             pxelinux_render_hostname: test-board
