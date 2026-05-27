@@ -134,13 +134,25 @@ jobs:
 
       - name: Expose Ubuntu OVMF firmware at the path molecule_provisioners expects
         # Ubuntu ships OVMF at /usr/share/OVMF/, molecule_provisioners defaults
-        # to /usr/share/edk2/ovmf/ (Fedora/RHEL path). Symlink rather than
-        # override per-scenario so this scales to future UEFI scenarios.
+        # to /usr/share/edk2/ovmf/ (Fedora/RHEL path). On Ubuntu 24.04 noble
+        # the files are OVMF_CODE_4M.fd / OVMF_VARS_4M.fd (the 4M-flash
+        # variant); older 22.04 used OVMF_CODE.fd / OVMF_VARS.fd. Detect
+        # whichever the package shipped and symlink it.
         run: |
+          set -e
+          ls /usr/share/OVMF/
           sudo mkdir -p /usr/share/edk2/ovmf
-          sudo ln -sf /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd
-          sudo ln -sf /usr/share/OVMF/OVMF_VARS.fd /usr/share/edk2/ovmf/OVMF_VARS.fd
-          ls -la /usr/share/edk2/ovmf/
+          # Pick the file that actually exists (newer 4M variant preferred).
+          for base in OVMF_CODE OVMF_VARS; do
+            for src in "/usr/share/OVMF/${base}_4M.fd" "/usr/share/OVMF/${base}.fd"; do
+              if [ -f "$src" ]; then
+                sudo ln -sf "$src" "/usr/share/edk2/ovmf/${base}.fd"
+                echo "Linked $src -> /usr/share/edk2/ovmf/${base}.fd"
+                break
+              fi
+            done
+          done
+          ls -laL /usr/share/edk2/ovmf/   # -L resolves symlinks; fails if target missing
 
       - name: Install dependencies
         run: |
