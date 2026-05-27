@@ -1,0 +1,10 @@
+# roles/rootfs_provision/tasks/_strip_fstab.yml
+---
+# Strip /dev/ fstab entries from the extracted rootfs — NFS root makes
+# them harmful, and disk_provision regenerates them via LABEL= when
+# the rootfs is later booted locally.
+- name: Strip /dev entries from rootfs fstab (idempotent)
+  ansible.builtin.lineinfile:
+    path: "{{ armbian_rootfs_target_dir }}/etc/fstab"
+    regexp: "^/dev/"
+    state: absent
