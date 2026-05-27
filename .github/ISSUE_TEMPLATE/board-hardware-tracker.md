@@ -55,7 +55,7 @@ labels: ["hardware", "board-tracker"]
 
 **Impact**: <which playbook phases / e2e tasks fail; whether it manifests as silent fall-through or hard hang>
 
-**Confused-with signatures** (false friends — looks similar but different cause): <e.g. "looks like the BOOTP-loop hardware flake but reaches rb5009; if /interface/bridge/host/print on the upstream switch DOES show the MAC, it's a software bug not this">
+**Confused-with signatures** (false friends — looks similar but different cause): <e.g. "looks like the BOOTP-loop hardware flake but reaches the router; if /interface/bridge/host/print on the upstream switch DOES show the MAC, it's a software bug not this">
 
 **Workaround in this collection**: <link to commit/role/variable, or "none — operator-side only">
 

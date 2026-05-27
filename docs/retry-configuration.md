@@ -12,11 +12,10 @@ primitives that live as task files under `playbooks/tasks/`:
 
 These primitives are composed by the orchestration playbooks
 (`converge_boot_mode.yml`, `set_boot_mode.yml`, `test_hardware_e2e.yml`,
-`test_fleet_e2e.yml`) — there is no role-level wrapper any more (the
-v2 `boot_mode` role was removed during the v3 role refactor). The
-inventory variables (`armbian_boot_retry_attempts`,
-`armbian_boot_attempt_timeout`, etc.) are read directly by the
-task files. This doc maps scenarios to recommended settings.
+`test_fleet_e2e.yml`). The inventory variables
+(`armbian_boot_retry_attempts`, `armbian_boot_attempt_timeout`, etc.)
+are read directly by the task files. This doc maps scenarios to
+recommended settings.
 
 For why the retry stack exists at all, see issue [#38] and the
 discussion of PoE-HAT brown-out behavior. Short version: on flaky

@@ -69,7 +69,7 @@
         pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
         board_console: "ttyS2,1500000"
         pxelinux_render_model_name: test-model
-        pxelinux_render_nfs_server_ip: "10.10.9.213"
+        pxelinux_render_nfs_server_ip: "10.0.0.10"
         pxelinux_render_nfs_root_path: /srv/nfs
         pxelinux_render_hostname: test-board
         pxelinux_render_boot_mode: usb_rescue
@@ -89,7 +89,7 @@
             pxelinux_render_board_mac: "11:22:33:44:55:66"
             board_console: "ttyS2,1500000"
             pxelinux_render_model_name: test-model
-            pxelinux_render_nfs_server_ip: "10.10.9.213"
+            pxelinux_render_nfs_server_ip: "10.0.0.10"
             pxelinux_render_nfs_root_path: /srv/nfs
             pxelinux_render_hostname: test-board
             pxelinux_render_boot_mode: nonexistent_mode

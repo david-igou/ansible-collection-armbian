@@ -9,7 +9,7 @@
 Ansible collection (early-stage, `0.0.x` — expect breaking changes between releases) for managing Armbian-based ARM SBCs end-to-end:
 build a custom Armbian image with PXE-first U-Boot, stage NFS rootfs templates
 and per-host clones on a netboot server, push per-model kernel/initrd/dtb plus
-per-board `pxelinux.cfg/01-<MAC>` files to a MikroTik rb5009, then flip each
+per-board `pxelinux.cfg/01-<MAC>` files to a MikroTik RouterOS router, then flip each
 board between SD and NFS rootfs by editing one `default` directive in its
 pxelinux.cfg. Roles are single-purpose state enforcers; playbooks compose them
 into workflows. RouterOS-specific behaviour lives in swappable reference
@@ -129,7 +129,7 @@ flowchart TB
 `image_extract`'s TFTP artefacts and `pxelinux_render`'s pxelinux.cfg
 both leave the role boundary via orchestration playbooks
 (`stage_router.yml`, `routeros/upload_pxelinux_cfg.yml`) that `net_put`
-them to rb5009. `rootfs_clone`'s output is read directly by the netboot
+them to the router. `rootfs_clone`'s output is read directly by the netboot
 server's NFS export — no further copy. The three board-side roles are
 parameterised by inventory and the live board's state; they don't
 participate in the dependency chain.
@@ -261,7 +261,7 @@ defaults to `root=LABEL=armbi_root` (override per-host via
   `flash:/sbc/` (override path segment via `armbian_tftp_flash_dir`,
   default `sbc`) and registers corresponding
   `/ip tftp` rows; no DHCP option-sets or lease mutations. The SBC subnet's
-  `next-server` must already point at rb5009 (owned externally — typically
+  `next-server` must already point at the router (owned externally — typically
   by your routeros-config repo).
 - A Docker-capable build host (for `build_image.yml`) reachable as the
   `armbian_builders` inventory group.
@@ -389,14 +389,14 @@ TFTP artefacts. For each host, `rootfs_clone` reflink-clones a per-host
 rootfs into `armbian_nfs_rootfs_path/<inventory_hostname>/` and
 resets hostname / machine-id / SSH host keys.
 
-#### 0.4 Stage TFTP assets (rb5009)
+#### 0.4 Stage TFTP assets on the router
 
 ```bash
 ansible-playbook playbooks/stage_router.yml
 ```
 
 Three plays: fetch kernel/initrd/DTB from the netboot server to the
-controller's `armbian_tftp_cache_dir`, push them to rb5009 via
+controller's `armbian_tftp_cache_dir`, push them to the router via
 `routeros/upload_tftp_assets.yml`, then verify `/ip tftp` rows landed via
 `routeros/plumbing_check.yml`.
 
@@ -444,8 +444,8 @@ boards:
 ```
 
 Group vars under `inventory/group_vars/boards.yml` must define
-`armbian_router` (the RouterOS host that owns TFTP state for these
-boards — typically your rb5009 inventory name).
+`armbian_router` (the inventory name of the RouterOS host that owns
+TFTP state for these boards).
 
 For PoE-powered boards, also set `armbian_poe_switch` (inventory
 hostname of the RouterOS switch supplying power) and
@@ -492,7 +492,7 @@ ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pr
 
 Reads each host's `armbian_boot_mode` from inventory, renders
 `pxelinux.cfg/01-<MAC>` (with `default` pointing at the nfs or sd label),
-uploads it to rb5009, ensures the `/ip tftp` row exists, PoE-cycles where
+uploads it to the router, ensures the `/ip tftp` row exists, PoE-cycles where
 applicable, and verifies the board reaches SSH with the expected rootfs.
 
 ```mermaid
@@ -658,7 +658,7 @@ cause and re-runs.
 ### `local_kernel` boot mode (OPi5Max-only, v1 bring-up)
 
 Variant of `local` in which the **kernel itself** is loaded from the
-NVMe rootfs, not from rb5009's TFTP. The pxelinux.cfg's `local_kernel`
+NVMe rootfs, not from the router's TFTP. The pxelinux.cfg's `local_kernel`
 label has only a `localboot 0` body; U-Boot's `localcmd` env (baked
 into the binary by `playbooks/build_image.yml`'s
 `__999_orangepi5max_localcmd` hook) runs `bootflow scan -b`, which
@@ -704,7 +704,7 @@ lines at every checkpoint.
 | 1 | `bootstrap_armbian.yml --limit <host>` | Once per board, right after flashing |
 | 2 | `routeros/bootstrap_user.yml -e ansible_user=<existing-admin>` | Once per RouterOS device |
 | 3 | `stage_netboot_assets.yml` | NFS templates + per-host rootfs on netboot server |
-| 4 | `stage_router.yml` | Kernel/initrd/dtb + plumbing check on rb5009 |
+| 4 | `stage_router.yml` | Kernel/initrd/dtb + plumbing check on the router |
 | 5 | `converge_boot_mode.yml -e target_hosts=<host>` | Converge to inventory `armbian_boot_mode` |
 | 6 | `set_boot_mode.yml -e target_hosts=<host> -e armbian_boot_mode=nfs` (or `=sd`) | Ad-hoc boot mode override |
 | 7 | `poe_control.yml --limit <host> -e armbian_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |

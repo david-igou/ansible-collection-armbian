@@ -18,6 +18,8 @@ description: >-
   playbooks/<transport>/. Early-stage 0.0.x — expect breaking changes
   between releases.
 
+license:
+  - MIT
 license_file: LICENSE
 
 tags:
@@ -55,7 +57,8 @@ build_ignore:
   - test-requirements.txt
   - devfile.yaml
   - AGENTS.md
-  - CONTRIBUTING
+  - CLAUDE.md
+  - CONTRIBUTING.md
   - MAINTAINERS
   - Makefile
   - ansible-creator.log

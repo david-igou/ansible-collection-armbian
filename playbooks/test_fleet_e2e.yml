@@ -29,11 +29,11 @@
 #
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `netboot_server`,
-#     `rb5009`, and each PoE switch.
+#     the RouterOS router, and each PoE switch.
 #   - Inventory's `armbian_image_urls[<model>]` set per model
 #     (https://, http://, or absolute path; consumed by both Phase 1
 #     image_extract on netboot_server and Phase 3 disk_image on boards).
-#   - stage_router.yml has been run (per-model TFTP rows on rb5009).
+#   - stage_router.yml has been run (per-model TFTP rows on the router).
 #   - Inventory's `armbian_local_disks` set per board (Phase 5).
 #   - Inventory's `armbian_poe_switch` + `armbian_poe_port`
 #     set per board.
@@ -47,7 +47,7 @@
 #   ansible-playbook playbooks/test_fleet_e2e.yml
 #
 #   # Subset of hosts (use -e target_hosts=, not --limit, because the
-#   # plays delegate to rb5009/netboot_server/PoE switches):
+#   # plays delegate to the router/netboot_server/PoE switches):
 #   ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01.example.lan
 #
 #   # Skip phases you've already proven on a previous run:

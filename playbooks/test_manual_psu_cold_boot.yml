@@ -10,7 +10,7 @@
 #
 # Pre-conditions:
 #   - PSU is DISCONNECTED (board is off) at invocation.
-#   - rb5009 is reachable.
+#   - The RouterOS router is reachable.
 #   - Serial UART (USB-FTDI) is connected on serial_host's
 #     /dev/ttyUSB0 if capture_serial is true (default).
 #   - Board's Ethernet is wired (PoE port is fine even though no
@@ -18,7 +18,7 @@
 #
 # Workflow per invocation (one cold boot per run):
 #   1. Pre-flight serial capture starts on serial_host.
-#   2. Per-board pxelinux.cfg converged to nfs mode on rb5009.
+#   2. Per-board pxelinux.cfg converged to nfs mode on the router.
 #   3. PAUSE: prompt operator to plug in PSU.
 #   4. wait_for TCP/22 (board cold-boots via PXE → NFS).
 #   5. wait_for_connection (inv user SSH ready).
@@ -120,7 +120,7 @@
 
     - name: Cold-boot test (cleanup runs in always)
       block:
-        - name: Setup — converge pxelinux.cfg to nfs mode on rb5009
+        - name: Setup — converge pxelinux.cfg to nfs mode on the router
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: nfs
@@ -170,11 +170,11 @@
               Cold boot completed but rootfs is {{ _root_fstype }}
               ({{ _root_device }}) — expected NFS. Board did not
               PXE-boot despite pxelinux.cfg with default=nfs being on
-              rb5009. Diagnostic bundle above has /proc/cmdline,
+              the router. Diagnostic bundle above has /proc/cmdline,
               findmnt, etc.
 
       always:
-        - name: Cleanup — converge pxelinux.cfg to sd mode on rb5009
+        - name: Cleanup — converge pxelinux.cfg to sd mode on the router
           ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: sd

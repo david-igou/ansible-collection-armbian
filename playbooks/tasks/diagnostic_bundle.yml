@@ -51,20 +51,20 @@
   failed_when: false
   register: _diag_journal
 
-# rb5009-side TFTP log entries help disambiguate failures that look
+# Router-side TFTP log entries help disambiguate failures that look
 # similar from the board side: signature #5 (NetbootXYZ-fallback —
-# U-Boot's PXE bootmeth lands on rb5009's default `netboot.xyz.kpxe`
+# U-Boot's PXE bootmeth lands on the router's default `netboot.xyz.kpxe`
 # rule because the per-board pxelinux.cfg lookup didn't match) vs.
-# signature #2 (PHY DMA stuck — board never sent BOOTP, so rb5009
+# signature #2 (PHY DMA stuck — board never sent BOOTP, so the router
 # never logged a TFTP hit at all). The board-side diag can't tell
-# those apart; rb5009's log can. failed_when:false keeps the bundle
+# those apart; the router's log can. failed_when:false keeps the bundle
 # tolerant of a transient routeros disconnect or absent log entries.
 # `when` guard so the bundle stays usable from playbooks that don't
 # define `armbian_router` (currently only test_hardware_e2e.yml
 # does, via the boards group_vars). delegate_to is evaluated before
 # `when`, so we ALSO `| default(omit)` it to keep this task no-op-safe
 # when the var is absent.
-- name: Diagnostic bundle — rb5009 TFTP log entries
+- name: Diagnostic bundle — router TFTP log entries
   community.routeros.command:
     commands:
       - '/log print without-paging where topics~"tftp"'
@@ -74,11 +74,11 @@
   changed_when: false
   when: armbian_router is defined
 
-- name: Diagnostic bundle — normalize rb5009 TFTP log output
+- name: Diagnostic bundle — normalize router TFTP log output
   ansible.builtin.set_fact:
     _diag_tftp_lines: >-
       {{ ((_diag_tftp | default({})).stdout_lines | default([[]]))[0]
-         | default(['(rb5009 unreachable, /log access blocked, or no /system/logging entry for tftp topic)']) }}
+         | default(['(router unreachable, /log access blocked, or no /system/logging entry for tftp topic)']) }}
 
 # Slurped from the serial host (the machine running socat), not the
 # board. The log is owned root:root mode 0644 (pre-created in
@@ -95,8 +95,8 @@
 # counter-override those propagate to the delegated localhost SSH
 # and cause `ssh root@localhost: Permission denied (publickey)` —
 # observed as iter 9's only failure (#38)). Resolve back to whatever
-# the serial host's inventory entry defines (typically `igou` on
-# localhost), and clear the inherited password + ssh_common_args.
+# the serial host's inventory entry defines, and clear the inherited
+# password + ssh_common_args.
 - name: Diagnostic bundle — read recent serial log (serial host)
   ansible.builtin.slurp:
     src: "{{ _serial_log | default('/tmp/serial-' ~ inventory_hostname ~ '.log') }}"
@@ -126,7 +126,7 @@
       - "lsblk:            {{ _diag_lsblk.stdout_lines | default([]) }}"
       - "linux-u-boot-*:   {{ _diag_uboot.stdout_lines | default(['(none installed)']) }}"
       - "journal (b 0):    {{ _diag_journal.stdout_lines | default([]) }}"
-      - "rb5009 TFTP log:  {{ _diag_tftp_lines | default(['(skipped — armbian_router undefined)']) }}"
+      - "router TFTP log:  {{ _diag_tftp_lines | default(['(skipped — armbian_router undefined)']) }}"
 
 - name: Diagnostic bundle — print serial tail (last 200 lines)
   ansible.builtin.debug:

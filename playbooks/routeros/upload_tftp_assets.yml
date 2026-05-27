@@ -5,7 +5,7 @@
 # Required vars:
 #   armbian_tftp_upload_models: list of model strings
 #   armbian_tftp_cache_dir:     controller cache holding per-model files
-#   armbian_tftp_flash_dir:     top-level dir on rb5009 flash
+#   armbian_tftp_flash_dir:     top-level dir on the router's flash
 
 - name: Upload SBC TFTP assets to RouterOS
   hosts: routeros_router
@@ -42,7 +42,7 @@
 
     # Force-remove router-side files so net_put always pushes fresh
     # content — silently skipping by size has caused stale vmlinuz/
-    # rootfs-modules mismatches (rb5009 served old kernel; initramfs
+    # rootfs-modules mismatches (router served old kernel; initramfs
     # modprobe failed inside the new rootfs). Always-stage is ~6s/file
     # and removes the silent-mismatch class entirely.
     - name: Force-remove router-side asset

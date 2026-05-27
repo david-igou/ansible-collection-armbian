@@ -17,8 +17,7 @@
 #                     rules registered by stage_router.yml +
 #                     converge_boot_mode.yml.
 #   NFS rootfs      → A separate netboot host (anything that exports
-#                     NFSv4; the collection has been validated on
-#                     TrueNAS). Exports `armbian_nfs_rootfs_path`
+#                     NFSv4). Exports `armbian_nfs_rootfs_path`
 #                     to the SBC subnet. Identified in inventory by the
 #                     `netboot_server` group (see inventory/hosts.yml).
 #   HTTP for images → Any HTTP/HTTPS server reachable from both the

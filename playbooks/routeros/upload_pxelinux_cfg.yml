@@ -8,7 +8,7 @@
 #                                           whose pxelinux files should be uploaded
 #   armbian_tftp_cache_dir:         controller-side directory holding the
 #                                           rendered 01-<mac> files (under pxelinux.cfg/)
-#   armbian_tftp_flash_dir:         top-level dir on rb5009's flash (e.g. sbc)
+#   armbian_tftp_flash_dir:         top-level dir on the router's flash (e.g. sbc)
 
 - name: Upload pxelinux.cfg files to RouterOS
   hosts: routeros_router
