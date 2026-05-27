@@ -2,33 +2,36 @@
 # Validate per-host local_kernel inventory consistency. Called by
 # converge_boot_mode.yml at entry (gated to hosts where boot_mode ==
 # local_kernel). Fails fast with operator-friendly messages.
+#
+# Pre-condition: _resolve_board_config.yml has been run so
+# armbian_board_config is populated on the host.
 
 - name: Validate board supports local_kernel mode
   ansible.builtin.assert:
     that:
-      - armbian_board_configs[armbian_board_model].local_kernel is defined
+      - armbian_board_config.local_kernel is defined
     fail_msg: >-
       {{ inventory_hostname }}: boot_mode=local_kernel but board
-      {{ armbian_board_model }} has no local_kernel block in
-      vars/boards.yml. Either pick a different boot_mode or add a
-      local_kernel:{storage,storage_scan} block to vars/boards.yml.
+      has no local_kernel block in armbian_board_config. Either pick a
+      different boot_mode or add a local_kernel:{storage,storage_scan}
+      block to the board's armbian_board_config_model group_vars.
 
 - name: Validate persist_via against board env storage
   vars:
     _persist_via: "{{ armbian_local_kernel.persist_via | default('hook') }}"
-    _env_storage: "{{ armbian_board_configs[armbian_board_model].uboot_env.storage | default('nowhere') }}"
+    _env_storage: "{{ armbian_board_config.uboot_env.storage | default('nowhere') }}"
   ansible.builtin.assert:
     that:
       - _persist_via != 'spi' or _env_storage == 'spi_flash'
     fail_msg: >-
       {{ inventory_hostname }}: local_kernel.persist_via=spi but board
-      {{ armbian_board_model }} uboot_env.storage={{ _env_storage }};
+      uboot_env.storage={{ _env_storage }};
       change persist_via to 'hook' or pick a board with SPI env.
 
 - name: Validate fw_env_config is complete when persist_via=spi
   vars:
     _persist_via: "{{ armbian_local_kernel.persist_via | default('hook') }}"
-    _fw: "{{ armbian_board_configs[armbian_board_model].uboot_env.fw_env_config | default({}) }}"
+    _fw: "{{ armbian_board_config.uboot_env.fw_env_config | default({}) }}"
   ansible.builtin.assert:
     that:
       - _persist_via != 'spi' or (_fw.device is defined and _fw.offset is defined and _fw.size is defined and _fw.sect_size is defined)
