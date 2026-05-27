@@ -42,23 +42,26 @@ issues: https://github.com/david-igou/ansible-collection-armbian/issues
 
 build_ignore:
   - .ansible
-  - .gitignore
+  - .ansible-lint
+  - .cache
   - .devcontainer
   - .github
-  - .vscode
-  - .pre-commit-config.yaml
+  - .gitignore
   - .isort.cfg
+  - .pre-commit-config.yaml
   - .prettierignore
-  - changelogs/.plugin-cache.yaml
-  - extensions
-  - tox-ansible.ini
-  - pyproject.toml
-  - requirements.txt
-  - test-requirements.txt
-  - devfile.yaml
+  - .vscode
+  - .worktrees
   - AGENTS.md
   - CLAUDE.md
   - CONTRIBUTING.md
   - MAINTAINERS
   - Makefile
   - ansible-creator.log
+  - changelogs/.plugin-cache.yaml
+  - devfile.yaml
+  - extensions
+  - pyproject.toml
+  - requirements.txt
+  - test-requirements.txt
+  - tox-ansible.ini

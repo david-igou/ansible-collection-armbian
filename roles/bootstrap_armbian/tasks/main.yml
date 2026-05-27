@@ -12,6 +12,10 @@
     create_home: true
     state: present
 
+# NOPASSWD: ALL is intentional — the bootstrap user is the
+# automation user, equivalent to root. Tighten via your own
+# inventory post-deploy if you want a narrower scope; the role
+# itself never re-touches this file once written.
 - name: Grant passwordless sudo
   ansible.builtin.copy:
     dest: "/etc/sudoers.d/{{ armbian_bootstrap_user }}"

@@ -64,6 +64,7 @@ for the first time or adding a board to an already-set-up environment.
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
+ansible-galaxy collection install -r playbooks/routeros/requirements.yml   # RouterOS-talking deps
 ansible-playbook playbooks/routeros/bootstrap_user.yml -e ansible_user=<existing-admin>   # → §0.2
 ansible-playbook playbooks/stage_netboot_assets.yml                                       # → §0.3
 ansible-playbook playbooks/stage_router.yml                                               # → §0.4
@@ -768,4 +769,4 @@ molecule verify -s default
 
 ## License
 
-GNU General Public License v3.0 or later. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).

@@ -67,6 +67,15 @@ armbian_branch: "current"
 # destructive). Set in your real inventory's group_vars/all/<file>.yml
 # with your own operator-side public keys; leaving as `[]` will fail
 # loudly in bootstrap_armbian before any user is created.
+#
+# Example:
+#   armbian_bootstrap_ssh_keys:
+#     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... operator@host"
+#     - "ssh-rsa AAAAB3NzaC1yc2EAAAA... otheroperator@otherhost"
+#
+# Or override at the command line:
+#   ansible-playbook playbooks/bootstrap_armbian.yml \
+#     -e 'armbian_bootstrap_ssh_keys=["ssh-ed25519 AAAAC3... me@host"]'
 armbian_bootstrap_ssh_keys: []
 
 # Verbose / diagnostic kernel cmdline for PXE-booted boards.

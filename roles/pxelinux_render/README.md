@@ -15,31 +15,6 @@ rendered file to the TFTP server — typically via `delegate_to:
 localhost` inside a `hosts: boards` play, so each board's hostvars are
 in scope and one invocation per board renders one file.
 
-## v4.0.0 breaking rename
-
-Every external pxelinux_render variable is now `pxelinux_render_*`-prefixed.
-Update your `vars:` blocks per this table:
-
-| v3.x (old) | v4.0.0 (new) |
-|---|---|
-| `board_mac` | `pxelinux_render_board_mac` |
-| `boot_mode` | `pxelinux_render_boot_mode` |
-| `extra_modes` | `pxelinux_render_extra_modes` |
-| `model_name` | `pxelinux_render_model_name` |
-| `nfs_server_ip` | `pxelinux_render_nfs_server_ip` |
-| `nfs_root_path` | `pxelinux_render_nfs_root_path` |
-| `hostname` | `pxelinux_render_hostname` |
-| `output_dir` | `pxelinux_render_output_dir` |
-| `sd_root` | `pxelinux_render_sd_root` |
-| `local_root` | `pxelinux_render_local_root` |
-| `pxe_verbose` | `pxelinux_render_pxe_verbose` |
-| `earlycon` | `pxelinux_render_earlycon` |
-| `tftp_kernel` | `pxelinux_render_tftp_kernel` |
-| `tftp_initrd` | `pxelinux_render_tftp_initrd` |
-| `tftp_dtb` | `pxelinux_render_tftp_dtb` |
-
-`board_console` is unchanged (already board-scoped, not role-scoped).
-
 ## Inputs
 
 See [`meta/argument_specs.yml`](meta/argument_specs.yml).

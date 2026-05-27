@@ -51,6 +51,22 @@ default `"1234"`) supplies the password.
 Most users invoke this role indirectly via
 `playbooks/bootstrap_armbian.yml`.
 
+## Security note
+
+The created user gets unrestricted `NOPASSWD: ALL` sudo via
+`/etc/sudoers.d/<user>`. This is intentional — the role exists to
+provide an automation user that's root-equivalent over SSH key auth.
+If your threat model wants narrower scope, tighten that sudoers entry
+out-of-band after bootstrap. Don't bake a tighter scope into this
+role; the cost is real (your own subsequent playbooks need to know
+which commands the user can run unprivileged), and the gain is
+limited (anyone with shell as this user controls the configuration
+that tightens the scope).
+
+The board also has `PasswordAuthentication no` set in sshd_config
+after this role runs, so loss of the SSH private key is loss of the
+board.
+
 ## License
 
-GPL-3.0-or-later
+MIT
