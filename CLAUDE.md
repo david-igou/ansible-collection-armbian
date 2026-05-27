@@ -42,14 +42,14 @@ playbooks (`converge_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`
 compose roles + reference playbooks. See
 [`docs/boot-mode-override.md`](docs/boot-mode-override.md).
 
-## Status: early-stage (4.x) — expect breaking changes
+## Status: early-stage (0.0.x) — expect breaking changes
 
 Roles are single-purpose, single-host, and transport-agnostic; all
 RouterOS-specific code lives as swappable reference playbooks under
 `playbooks/routeros/`. The collection is in active development with
 breaking changes between releases — inventory variables, default
 values, group names, role names, and playbook names may all shift
-between 4.x releases without long deprecation windows. Pin to a
+between 0.0.x releases without long deprecation windows. Pin to a
 specific version in your `requirements.yml`.
 
 The always-netboot model: every onboarded board always has a
@@ -102,7 +102,7 @@ david_igou/armbian/   (this repo root)
 │   │       ├── poe_cycle.yml          # Shared primitive: off → drain → on
 │   │       └── upload_pxelinux_one.yml # Per-host pxelinux upload (for in-play use)
 │   ├── tests/
-│   │   └── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-model vars
+│   │   └── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
 │   └── tasks/
 │       ├── _converge_boot_mode.yml         # Inner converge primitive used by lifecycle wrappers
 │       ├── _lifecycle_set_and_verify.yml   # Converge + verify with diagnostic-bundle on failure
@@ -349,7 +349,7 @@ Family-level `userpatches` and model-level `userpatches` are concatenated
 **`armbian_rootfs_src` resolution** (`_resolve_rootfs_src.yml`):
 
 1. Host `armbian_rootfs_src` (host_vars) — explicit per-host pin.
-2. Published manifest on the netboot server (`armbian_nfs_assets_export/images/<model>/manifest.json`) — derived from the last successful `build_and_publish_from_inventory.yml` run.
+2. Published manifest on the netboot server (`armbian_nfs_assets_export/images/<inventory_hostname>/manifest.json`) — derived from the last successful `build_and_publish_from_inventory.yml` run.
 3. Fail with a clear message listing the two lookup paths.
 
 ## How netboot content is managed
@@ -579,4 +579,4 @@ filtering.
 - `docs/boot-mode-override.md` — three boot mode override methods (inventory, -e, U-Boot env)
 - `docs/retry-configuration.md` — retry/timeout knob recipes
 - `docs/runbooks/reprovision-local-disk.md` — disk_provision lifecycle runbook
-- `galaxy.yml` — collection namespace, version (4.0.0), external dependencies
+- `galaxy.yml` — collection namespace, version (0.0.2-alpha), external dependencies

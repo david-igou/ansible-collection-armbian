@@ -21,9 +21,9 @@ substitute a parallel directory to target a different ecosystem.
 Targeted at homelab / lab operators running a fleet of Armbian-supported
 SBCs with PXE-netboot from a router and NFS-from-NAS topology.
 
-> **Status: early-stage (4.x) — expect breaking changes.** Inventory
+> **Status: early-stage (0.0.x) — expect breaking changes.** Inventory
 > variables, defaults, group names, role names, and playbook names may
-> shift between 4.x releases without long deprecation windows. Pin a
+> shift between 0.0.x releases without long deprecation windows. Pin a
 > specific version in your `requirements.yml`.
 
 ## Requirements
