@@ -108,6 +108,7 @@
         src: fstab.j2
         dest: "{{ __disk_provision_mount_root }}/etc/fstab"
         mode: "0644"
+        backup: true
       become: true
 
     - name: "Populate: rewrite /boot/extlinux/extlinux.conf root= if present"

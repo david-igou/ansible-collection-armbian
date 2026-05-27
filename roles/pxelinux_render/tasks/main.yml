@@ -39,3 +39,4 @@
     src: pxelinux_cfg.j2
     dest: "{{ pxelinux_render_output_dir }}/{{ __pxelinux_render_pxe_filename }}"
     mode: "0644"
+    backup: true
