@@ -1,0 +1,56 @@
+---
+- name: Verify — board_boot_verify asserted correctly in all 4 modes
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Stat the two rescue marker files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _stats
+      loop:
+        - /tmp/board_boot_verify_nfs_rescue
+        - /tmp/board_boot_verify_local_kernel_rescue
+
+    - name: Assert both negative-case rescue markers exist
+      # If the role had silently passed boot_mode=nfs or local_kernel,
+      # the rescue block in converge would never have run and these
+      # markers would be missing.
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing — the role did NOT assert against
+          the wrong-mode rootfs. board_boot_verify's mode guards
+          regressed.
+      loop: "{{ _stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Slurp the nfs-rescue message
+      ansible.builtin.slurp:
+        src: /tmp/board_boot_verify_nfs_rescue
+      register: _nfs_msg
+
+    - name: Slurp the local_kernel-rescue message
+      ansible.builtin.slurp:
+        src: /tmp/board_boot_verify_local_kernel_rescue
+      register: _lk_msg
+
+    - name: Assert nfs-rescue message names the expected mismatch
+      ansible.builtin.assert:
+        that:
+          - "'boot_mode[nfs]' in (_nfs_msg.content | b64decode)"
+          - "'expected NFS rootfs' in (_nfs_msg.content | b64decode)"
+        fail_msg: >-
+          nfs-rescue message did not contain the expected guidance.
+          Got: {{ _nfs_msg.content | b64decode }}
+
+    - name: Assert local_kernel-rescue message names the expected mismatch
+      ansible.builtin.assert:
+        that:
+          - "'boot_mode[local_kernel]' in (_lk_msg.content | b64decode)"
+          - "'expected NVMe rootfs' in (_lk_msg.content | b64decode)"
+        fail_msg: >-
+          local_kernel-rescue message did not contain the expected guidance.
+          Got: {{ _lk_msg.content | b64decode }}

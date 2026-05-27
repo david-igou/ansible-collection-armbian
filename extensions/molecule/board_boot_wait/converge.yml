@@ -1,0 +1,45 @@
+---
+# board_boot_wait waits for TCP/22 then SSH against the inventory host.
+# Molecule has already prepared the instance with sshd reachable, so
+# the happy-path completes near-instantly. We also exercise the
+# failure path against an unroutable host to assert the role does
+# raise (not hang silently) when nothing is listening.
+
+- name: Converge — happy-path and timeout-path for board_boot_wait
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    # ---------- Happy path: instance is up; role should pass quickly ----------
+    - name: Happy path — board_boot_wait should complete cleanly
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        # Short timeouts — the host is already reachable, no need to wait.
+        armbian_boot_attempt_timeout: 30
+        armbian_post_boot_wait_timeout: 30
+
+    - name: Happy path — record success marker
+      ansible.builtin.copy:
+        dest: /tmp/board_boot_wait_happy_path
+        content: "ok\n"
+        mode: "0644"
+
+    # ---------- Timeout path: unroutable host; TCP/22 wait must fail ----------
+    - name: Timeout path — wait_for against unroutable host MUST fail
+      block:
+        - ansible.builtin.include_role:
+            name: david_igou.armbian.board_boot_wait
+          vars:
+            # 198.51.100.0/24 is TEST-NET-2 (RFC 5737) — guaranteed unroutable.
+            ansible_host: 198.51.100.99
+            armbian_boot_attempt_timeout: 3
+            armbian_post_boot_wait_timeout: 3
+        - ansible.builtin.fail:
+            msg: "board_boot_wait accepted an unroutable host"
+      rescue:
+        - ansible.builtin.copy:
+            dest: /tmp/board_boot_wait_timeout_rescue
+            content: "{{ ansible_failed_result.msg | default('') }}\n"
+            mode: "0644"

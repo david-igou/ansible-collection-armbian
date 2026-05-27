@@ -1,0 +1,24 @@
+---
+- name: Verify — board_boot_wait covered both happy and timeout paths
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Stat both markers
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _stats
+      loop:
+        - /tmp/board_boot_wait_happy_path
+        - /tmp/board_boot_wait_timeout_rescue
+
+    - name: Assert both markers exist
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing — board_boot_wait either failed the
+          happy path or silently accepted the unroutable host.
+      loop: "{{ _stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
