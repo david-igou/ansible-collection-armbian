@@ -8,17 +8,19 @@
 # scaffolding differs. The four logical phases of the orchestration
 # playbook are preserved in order:
 #   1. Pre-flight plumbing check (router, delegated + run_once)
-#   2. Render pxelinux.cfg locally + upload to router (per-host)
-#   3. PoE cold-boot retry (optional, armbian_cycle_board)
-#   4. Post-boot SSH wait (optional, armbian_cycle_board)
-#   5. Verify rootfs matches declared mode (optional, armbian_verify_state)
+#   2. Resolve armbian_board_config per host
+#   3. Render pxelinux.cfg locally + upload to router (per-host)
+#   4. PoE cold-boot retry (optional, armbian_cycle_board)
+#   5. Post-boot SSH wait (optional, armbian_cycle_board)
+#   6. Verify rootfs matches declared mode (optional, armbian_verify_state)
 #
 # Caller contract:
 #   - Include from a play whose hosts: is the target board (or board group).
 #   - armbian_boot_mode must be set (from inventory or -e).
 #   - armbian_router must be set (inventory hostvar pointing at the
 #     RouterOS router to use for plumbing-check and pxelinux upload).
-#   - vars/boards.yml must already be loaded (include_vars) before calling.
+#   - armbian_board_config_family / _model / _host must be set in inventory
+#     (resolved here via _resolve_board_config.yml).
 #
 # Transport overrides (swappable, consistent with converge_boot_mode.yml):
 #   armbian_plumbing_check_tasks  absolute path to tasks file for plumbing check
@@ -41,13 +43,8 @@
         {{ armbian_plumbing_check_tasks
            | default('../routeros/tasks/plumbing_check_one.yml') }}
 
-# pxelinux_render reads armbian_board_configs from
-# vars/boards.yml. Original converge_boot_mode.yml loads it in its
-# render play; we replicate that here so this tasks file is
-# self-sufficient regardless of caller.
-- name: "converge[{{ armbian_boot_mode }}] — load board configs"
-  ansible.builtin.include_vars:
-    file: "{{ playbook_dir }}/../vars/boards.yml"
+- name: "converge[{{ armbian_boot_mode }}] — resolve effective armbian_board_config"
+  ansible.builtin.include_tasks: _resolve_board_config.yml
 
 - name: "converge[{{ armbian_boot_mode }}] — render pxelinux.cfg + upload"
   ansible.builtin.include_tasks: >-
