@@ -1,15 +1,16 @@
 {#
   Wrapper template for the local_kernel_render molecule scenario.
 
-  Renders the bash dispatch-table fragment that build_and_publish_from_inventory.yml would
-  embed in the __999_local_kernel_bake hook.  Imports the shared macro
+  Renders the bash dispatch-table fragment that the __999_local_kernel_bake
+  hook embeds into U-Boot's EXTRA_ENV_SETTINGS. Imports the shared macro
   from roles/image_build/templates/ via the symlink at
   templates/render_localcmd_chain.j2 — Jinja2's FileSystemLoader resolves
   imports relative to the template's own directory.
+
+  Consumes _board_configs: list of per-host armbian_board_config dicts.
 #}
 {%- from 'render_localcmd_chain.j2' import render_localcmd_chain -%}
-{% for board in _board_models -%}
-{%- set cfg = armbian_board_configs[board] -%}
+{% for cfg in _board_configs -%}
 {%- if cfg.local_kernel is defined %}
 [{{ cfg.armbian_board_name }}]='{{ render_localcmd_chain(cfg) }}'
 {%- endif %}
