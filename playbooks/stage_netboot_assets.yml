@@ -10,8 +10,10 @@
   hosts: boards
   gather_facts: false
   tasks:
-    - ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
-    - ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+    - name: Resolve effective armbian_board_config
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+    - name: Resolve armbian_rootfs_src per host
+      ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
 
 - name: Provision per-host NFS rootfs + TFTP artifacts
   hosts: netboot_server

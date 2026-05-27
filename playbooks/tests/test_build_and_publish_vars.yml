@@ -18,16 +18,17 @@
 - name: Resolve per-host build vars and assert expected values
   hosts: boards
   gather_facts: false
+  connection: local
   tasks:
     - name: Load collection-shipped build defaults
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../vars/build_defaults.yml"
 
     - name: Resolve effective armbian_board_config per host
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
 
     - name: Resolve effective armbian_build per host
-      ansible.builtin.include_tasks: tasks/_resolve_build_profile.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_build_profile.yml
 
     - name: Assert armbian_board_config.armbian_board_name is populated
       ansible.builtin.assert:
@@ -76,16 +77,20 @@
   connection: local
   gather_facts: false
   tasks:
-    - name: Assert all tracked boards default to edge branch in example inventory
+    - name: Assert rk3588 + rock_5a boards use edge branch in example inventory
       ansible.builtin.assert:
         that:
           - hostvars[item].armbian_build.branch == 'edge'
         fail_msg: >-
           Board {{ item }} has armbian_build.branch =
           '{{ hostvars[item].armbian_build.branch }}';
-          example-inventory contract expects 'edge' for all currently
-          tracked rk3588(s) boards.
-      loop: "{{ groups['boards'] }}"
+          example-inventory contract expects 'edge' for rk3588 + rock_5a
+          boards (PCIe NICs / SPI U-Boot require mainline u-boot from edge).
+          Note: orange_pi_5 (rk3588s, RTL/YT8531C via GMAC) legitimately
+          uses 'current' and is excluded from this check.
+      loop: >-
+        {{ (groups.get('rk3588', []) + groups.get('rock_5a', []))
+           | unique | list }}
 
     - name: Assert rock-5b ships its v2026.04 u-boot bump via per-board conf overlay
       ansible.builtin.assert:
