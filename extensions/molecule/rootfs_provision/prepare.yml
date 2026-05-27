@@ -1,10 +1,14 @@
-# roles/rootfs_provision/molecule/default/converge.yml
 ---
-- name: Converge
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Build the synthetic .img.xz fixture inside the VM
   hosts: all
+  gather_facts: true
   become: true
+
   tasks:
-    - name: Install build deps for the synthetic image
+    - name: Ensure xz-utils, e2fsprogs, dosfstools, rsync are installed
       ansible.builtin.apt:
         name: [xz-utils, e2fsprogs, dosfstools, rsync]
         state: present
@@ -32,11 +36,3 @@
       args:
         executable: /bin/bash
         creates: /tmp/synthetic.img.xz
-
-    - name: Run rootfs_provision against the synthetic image
-      ansible.builtin.include_role:
-        name: rootfs_provision
-      vars:
-        armbian_rootfs_src:  /tmp/synthetic.img.xz
-        armbian_rootfs_host: rootfs-provision-test
-        armbian_rootfs_dtb:  rockchip/rk3588-test.dtb

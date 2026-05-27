@@ -1,0 +1,12 @@
+---
+- hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Converge: invoke rootfs_provision with the synthetic fixture"
+      ansible.builtin.include_role:
+        name: david_igou.armbian.rootfs_provision
+      vars:
+        armbian_rootfs_src:  /tmp/synthetic.img.xz
+        armbian_rootfs_host: "{{ inventory_hostname }}"
+        armbian_rootfs_dtb:  rockchip/rk3588-test.dtb

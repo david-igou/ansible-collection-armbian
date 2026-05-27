@@ -1,7 +1,6 @@
-# roles/rootfs_provision/molecule/default/verify.yml
 ---
-- name: Verify rootfs_provision artifacts
-  hosts: all
+- hosts: all
+  gather_facts: true
   become: true
   tasks:
     - name: Resolve test paths
@@ -9,7 +8,7 @@
         _target: "{{ armbian_nfs_rootfs_path }}/{{ inventory_hostname }}"
         _tftp:   "{{ armbian_image_cache }}/sbc-tftp/{{ inventory_hostname }}"
 
-    - name: Assert target_dir + tftp_dir exist and have expected files
+    - name: Stat expected rootfs and TFTP artifact paths
       ansible.builtin.stat:
         path: "{{ item }}"
       register: _stats
@@ -29,21 +28,34 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Assert hostname file contains the inventory_hostname
-      ansible.builtin.command: cat "{{ _target }}/etc/hostname"
+    - name: Read hostname file content
+      ansible.builtin.command: "cat {{ _target }}/etc/hostname"
       register: _hostname_content
       changed_when: false
 
-    - name: Assert hostname matches
+    - name: Assert hostname file contains inventory_hostname
       ansible.builtin.assert:
         that: _hostname_content.stdout == inventory_hostname
+        fail_msg: >-
+          Expected hostname {{ inventory_hostname }};
+          got {{ _hostname_content.stdout }}
 
-    - name: Assert machine-id is empty
+    - name: Stat machine-id for size check
       ansible.builtin.stat:
         path: "{{ _target }}/etc/machine-id"
       register: _mid_stat
 
-    - name: Confirm machine-id size is 0
+    - name: Assert machine-id is zero-byte
       ansible.builtin.assert:
         that: _mid_stat.stat.size == 0
         fail_msg: "machine-id should be zero-byte; got {{ _mid_stat.stat.size }}"
+
+    - name: Stat SSH host key (ed25519)
+      ansible.builtin.stat:
+        path: "{{ _target }}/etc/ssh/ssh_host_ed25519_key"
+      register: _ssh_key_stat
+
+    - name: Assert SSH host key was generated
+      ansible.builtin.assert:
+        that: _ssh_key_stat.stat.exists
+        fail_msg: "ssh_host_ed25519_key is missing under {{ _target }}/etc/ssh/"
