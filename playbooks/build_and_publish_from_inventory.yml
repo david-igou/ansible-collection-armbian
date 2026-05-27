@@ -88,12 +88,15 @@
 - name: Publish staged per-host directories to netboot server
   hosts: netboot_server
   gather_facts: false
-  vars:
-    _builder: "{{ groups['armbian_builders'][0] }}"
   tasks:
     # ansible.posix.synchronize splits --rsh on whitespace, causing -o flags
     # to escape the ssh argument scope and break agent-disabled auth.
     # Use direct rsync via command: with argv: so --rsh is a discrete token.
+    #
+    # __wants_custom_build is a set_fact from play 1 and persists in hostvars[].
+    # __build_hosts was a play-scoped vars: in play 2 and does NOT persist, so
+    # we recompute the same expression here rather than referencing it via
+    # hostvars[_builder].__build_hosts.
     - name: Push staged per-host image + manifest (sudo on receive)
       ansible.builtin.command:
         argv:
@@ -109,4 +112,7 @@
       delegate_to: localhost
       connection: local
       changed_when: true
-      loop: "{{ hostvars[_builder].__build_hosts }}"
+      loop: >-
+        {{ groups['boards'] | map('extract', hostvars)
+           | selectattr('__wants_custom_build', 'equalto', true)
+           | map(attribute='inventory_hostname') | list }}
