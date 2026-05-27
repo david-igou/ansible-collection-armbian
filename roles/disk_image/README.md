@@ -14,7 +14,7 @@ partition table currently backs a mounted filesystem.
 ## Inputs
 
 See `meta/argument_specs.yml`. Required: `image_source`, `target_device`.
-Optional: `dd_bs` (default `4M`).
+Optional: `disk_image_dd_bs` (default `4M`).
 
 ## Example
 

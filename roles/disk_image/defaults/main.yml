@@ -4,4 +4,4 @@
 # are only for optional knobs.
 
 # dd block size. 4 MiB is a good default for SD and NVMe.
-dd_bs: "4M"
+disk_image_dd_bs: "4M"
