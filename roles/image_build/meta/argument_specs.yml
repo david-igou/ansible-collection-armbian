@@ -85,7 +85,7 @@ argument_specs:
           mapping with keys dest (path relative to USERPATCHES_DIR, no
           leading slash, no ..) and content (raw file text).
           Patch content MAY contain Jinja referencing the host's resolved
-          armbian_board_config fact (e.g. `{{ armbian_board_config.console }}`);
+          armbian_board_config fact (e.g. armbian_board_config.console);
           apply_userpatches.yml's ansible.builtin.copy with `content:`
           renders these references at the point the file lands on the
           builder. The role itself is fully agnostic to what the patches do.
