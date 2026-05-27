@@ -38,6 +38,11 @@
         that: armbian_board_config.console == "ttyS2,1500000n8"
         fail_msg: "console not inherited from family"
 
+    - name: Assert family-scoped earlycon survives
+      ansible.builtin.assert:
+        that: armbian_board_config.earlycon == "uart8250,mmio32,0xfeb50000"
+        fail_msg: "earlycon not inherited from family"
+
     - name: Assert model-scoped armbian_board_name is set
       ansible.builtin.assert:
         that: armbian_board_config.armbian_board_name == "rock-5b"
