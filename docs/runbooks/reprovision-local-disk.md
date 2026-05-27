@@ -153,7 +153,7 @@ ansible <fqdn> -m shell -a 'cat /proc/cmdline'
 
 # Confirm running kernel comes from TFTP (not the disk's /boot)
 ansible <fqdn> -m shell -a 'uname -r'
-# this is whatever's on rb5009's TFTP, not necessarily what's in /boot
+# this is whatever's on the router's TFTP, not necessarily what's in /boot
 # on the local disk (passthrough boot decouples them)
 
 # Confirm fstab has LABEL= entries for every mount in the layout
@@ -169,7 +169,7 @@ The lifecycle's Phase 3 (local boot + verify) is wrapped in
 `block/rescue`. If local boot fails, the playbook automatically:
 
 1. Captures `./diagnostics/<host>-<iso8601>/` with findmnt, cmdline,
-   lsblk, route, resolv.conf, U-Boot debs, journal, rb5009 TFTP log,
+   lsblk, route, resolv.conf, U-Boot debs, journal, router TFTP log,
    and last 200 UART lines if `capture_serial=true`.
 2. Sets boot mode back to `nfs` and PoE-cycles.
 3. Verifies the board is back on NFS.
@@ -326,8 +326,6 @@ don't affect boot or system behavior.
 
 - DSL reference: `roles/disk_provision/meta/argument_specs.yml`
 - Lifecycle source: `playbooks/reprovision_to_local.yml`
-- Design spec: `docs/superpowers/specs/2026-05-17-disk-provision-dsl-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-05-17-disk-provision-dsl.md`
 - Hardware E2E: `playbooks/test_reprovision_e2e.yml`
 - Boot-mode override methods (inventory / -e / U-Boot env):
   `docs/boot-mode-override.md`

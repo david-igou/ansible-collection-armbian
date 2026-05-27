@@ -66,7 +66,3 @@ Two roles are deliberately not exercised by molecule:
 - **`image_build`** exercises the role's check_manifest short-circuit instead of running a real Armbian build. `prepare.yml` pre-seeds `manifest.json` plus a placeholder `.img.xz` with a `patch_hash` matching the userpatches list declared in `inventory/group_vars/molecule.yml`; the role then runs preflight + manage_checkout + apply_userpatches + compute_inputs + check_manifest and skips `invoke_build`. Real-image production is left to `playbooks/build_image.yml` against the `armbian_builders` inventory — that is where you validate changes that affect actual compile.sh output.
 - **`bootstrap_armbian`** is the only qemu scenario using the actual Armbian image. Other qemu scenarios use Debian Trixie genericcloud because the Armbian cloud_minimal variant ships **without** cloud-init, which molecule_provisioners' qemu role uses for SSH-key injection. The bootstrap_armbian scenario bypasses that injection and connects as `root` with the Armbian default password `1234` — exactly what the role is built to take over.
 
-## Spec & plan
-
-- Design: [`docs/superpowers/specs/2026-05-22-qemu-molecule-scenarios-design.md`](../../docs/superpowers/specs/2026-05-22-qemu-molecule-scenarios-design.md)
-- Implementation plan: [`docs/superpowers/plans/2026-05-22-qemu-molecule-scenarios.md`](../../docs/superpowers/plans/2026-05-22-qemu-molecule-scenarios.md)

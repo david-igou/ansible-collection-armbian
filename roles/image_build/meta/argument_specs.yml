@@ -5,8 +5,7 @@
 # table into _local_kernel_dispatch_table and _uboot_env_storage_table
 # (see playbooks/build_image.yml's pre_tasks). These facts are
 # templated into build_userpatches_common's __999_local_kernel_bake
-# and __999_uboot_env_check hooks at playbook run time. See the spec
-# at docs/superpowers/specs/2026-05-18-local-kernel-generalization-design.md.
+# and __999_uboot_env_check hooks at playbook run time.
 
 argument_specs:
   main:

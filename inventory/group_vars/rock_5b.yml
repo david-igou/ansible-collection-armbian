@@ -39,7 +39,6 @@ armbian_board_branch: edge
 # v2026.01 patches applied to a v2026.04 tree, which would risk
 # rejects).
 #
-# Per the explainer (docs/uboot-armbian-build-explainer.html §8.2),
 # v2026.04 does NOT clear any of rock-5b's three PXE failure layers
 # on its own — Approach B (playbooks/persist_uboot_env.yml) still has
 # to run to populate SPI env. The bump is just to track upstream.

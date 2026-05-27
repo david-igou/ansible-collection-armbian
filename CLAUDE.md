@@ -58,12 +58,6 @@ pxelinux.cfg on the RouterOS router, boot mode is controlled by the
 `default` directive inside it, and the `sd` label defaults to
 `root=LABEL=armbi_root` (override per-host via `armbian_sd_root`).
 
-Historical design specs and migration notes live under
-[`docs/superpowers/specs/`](docs/superpowers/specs/) and
-[`docs/superpowers/plans/`](docs/superpowers/plans/) — useful for
-context on why current shapes exist, but they describe past work and
-are not authoritative for current behaviour.
-
 ## Collection structure
 
 ```
@@ -132,12 +126,10 @@ david_igou/armbian/   (this repo root)
 │       ├── boards.yml        # netboot inputs (armbian_router, retry knobs)
 │       └── routeros.yml      # network_cli connection plumbing
 └── docs/
-    ├── architecture.md
     ├── boot-mode-override.md      # Three override methods (inventory, -e, U-Boot env)
     ├── retry-configuration.md     # Retry/timeout knob tuning recipes
-    ├── examples/
-    │   └── maintainer-topology.md # Maintainer-specific RouterOS example
-    └── superpowers/specs/         # Design specs
+    └── runbooks/
+        └── reprovision-local-disk.md  # disk_provision lifecycle runbook
 ```
 
 ## Running playbooks
@@ -459,7 +451,7 @@ Two overlay paths are available; choose by SCOPE:
 
 If you find yourself adding `[[ "${BOARD}" != "..." ]] && return 0` inside `build_userpatches_common`, that's the cue to write a per-board overlay instead.
 
-**Userpatches overlay files persist across rebuilds.** The `image_build` role writes `userpatches/config/{sources/families,boards}/<file>.conf` via `ansible.builtin.copy` (overwrite-style), so renaming an existing overlay file or removing it from inventory leaves a stale file on the builder host that armbian/build will continue to source. After such a change, manually delete the orphan from `${armbian_build_cache_dir}/build/userpatches/` on the builder, or run the next build with a fresh `armbian_build_cache_dir`. See `docs/superpowers/specs/.rock5b-friction-notes.md` for a prior incident this caused.
+**Userpatches overlay files persist across rebuilds.** The `image_build` role writes `userpatches/config/{sources/families,boards}/<file>.conf` via `ansible.builtin.copy` (overwrite-style), so renaming an existing overlay file or removing it from inventory leaves a stale file on the builder host that armbian/build will continue to source. After such a change, manually delete the orphan from `${armbian_build_cache_dir}/build/userpatches/` on the builder, or run the next build with a fresh `armbian_build_cache_dir`.
 
 ## rb5009 SBC TFTP layout
 
@@ -533,5 +525,5 @@ filtering.
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
 - `docs/boot-mode-override.md` — three boot mode override methods (inventory, -e, U-Boot env)
 - `docs/retry-configuration.md` — retry/timeout knob recipes
-- `docs/uboot-armbian-build-explainer.html` — §8 "Fixing rock-5b's autonomous-PXE problem"
+- `docs/runbooks/reprovision-local-disk.md` — disk_provision lifecycle runbook
 - `galaxy.yml` — collection namespace, version (3.0.0), external dependencies

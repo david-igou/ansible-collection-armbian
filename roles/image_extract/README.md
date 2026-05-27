@@ -44,8 +44,7 @@ After a successful run:
   block.
 - A sentinel file `.armbian_extract_complete` is written inside
   `template_dir` at the end of the success path (consumed by the
-  role's own idempotency probe on subsequent runs — landing in
-  [WS-4 of the best-practices fixes pass](../../docs/superpowers/specs/2026-05-20-best-practices-fixes-design.md)).
+  role's own idempotency probe on subsequent runs).
 
 ## Idempotency & check mode
 

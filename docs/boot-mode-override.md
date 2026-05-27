@@ -7,14 +7,14 @@ inventory's `armbian_boot_mode` selects which becomes `default`):
 
 | Mode | Kernel/initrd/dtb source | Rootfs source | Notes |
 |---|---|---|---|
-| `nfs` | TFTP (rb5009) | NFS export `/<host>/` | Default. Stateless rebuild via `stage_netboot_assets`. |
-| `sd` | TFTP (rb5009) | SD card `LABEL=armbi_root` | Survives rb5009 outage on SD-resident rootfs. |
-| `local` | TFTP (rb5009) | Local disk `LABEL=armbi_root_local` | Passthrough: kernel still central; rootfs local (e.g. NVMe via `provision_local_disk.yml`). |
-| `local_kernel` | **NVMe** `/boot/extlinux/extlinux.conf` | NVMe (whatever extlinux.conf declares) | OPi5Max-only in v1. Hands off via `localboot 0` → U-Boot `localcmd`. Decouples kernel updates from rb5009. |
+| `nfs` | TFTP (router) | NFS export `/<host>/` | Default. Stateless rebuild via `stage_netboot_assets`. |
+| `sd` | TFTP (router) | SD card `LABEL=armbi_root` | Survives router outage on SD-resident rootfs. |
+| `local` | TFTP (router) | Local disk `LABEL=armbi_root_local` | Passthrough: kernel still central; rootfs local (e.g. NVMe via `provision_local_disk.yml`). |
+| `local_kernel` | **NVMe** `/boot/extlinux/extlinux.conf` | NVMe (whatever extlinux.conf declares) | Hands off via `localboot 0` → U-Boot `localcmd`. Decouples kernel updates from the router's TFTP. |
 
 ## Comparison
 
-| Method | Durability | Touches rb5009? | Use case |
+| Method | Durability | Touches the router? | Use case |
 |---|---|---|---|
 | Inventory (`armbian_boot_mode`) | Permanent | Yes (on converge) | Fleet-level default |
 | Ansible `-e` (`set_boot_mode.yml`) | Until next converge | Yes | Ad-hoc testing, one-off flip |
@@ -34,7 +34,7 @@ armbian_boot_mode: sd
 ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
 ```
 
-The rendered pxelinux.cfg on rb5009 is updated to `default sd`. Every
+The rendered pxelinux.cfg on the router is updated to `default sd`. Every
 subsequent `converge_boot_mode.yml` run re-reads the inventory value, so
 the change persists across automation runs.
 
@@ -65,11 +65,11 @@ ansible-playbook playbooks/set_boot_mode.yml \
 ```
 
 The `-e` value wins over inventory for this run. The pxelinux.cfg on
-rb5009 is re-rendered with the override. On the *next* run of
+the router is re-rendered with the override. On the *next* run of
 `converge_boot_mode.yml` (which reads from inventory), the inventory
 value takes effect again.
 
-To write rb5009 state without cycling the board:
+To write router state without cycling the board:
 
 ```bash
 ansible-playbook playbooks/set_boot_mode.yml \

@@ -69,8 +69,7 @@
 # this, the slow path runs through systemd-repart's loop-device
 # view of the disk whose BLKDISCARD chunk is hard-capped at 128 KiB
 # — for a 477 GiB NVMe that's ~3.7M ioctls × wbt_wait throttling,
-# clocking ~30 min instead of ~2 min. See
-# docs/end-to-end-fleet-test.html §6 deep-dive.
+# clocking ~30 min instead of ~2 min.
 - name: "Apply repart: pre-discard whole disk (fast_wipe)"
   ansible.builtin.command:
     cmd: "blkdiscard {{ disk_binding.device }}"

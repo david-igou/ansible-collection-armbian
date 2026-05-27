@@ -45,7 +45,7 @@ Plus the existing flow-control knobs:
 | `capture_serial` | `false` | Start a background socat capture on the serial host. |
 | `skip_baseline` | `false` | Skip Phase 1 (the disk-boot baseline + assertion). Useful when SD-side boot is broken and you only want to validate the PXE path. |
 | `leave_state` | `false` | Skip Phase 3 / Cleanup. Board left in whatever state Phase 2 / current phase ended in. |
-| `armbian_cycle_board` | `true` (defaults when using `playbooks/converge_boot_mode.yml` / `playbooks/set_boot_mode.yml`) | When `false`, skips the PoE cycle + verify in `playbooks/converge_boot_mode.yml` / `playbooks/set_boot_mode.yml`. Use when the board is currently powered off and you just want to write the rb5009 config. |
+| `armbian_cycle_board` | `true` (defaults when using `playbooks/converge_boot_mode.yml` / `playbooks/set_boot_mode.yml`) | When `false`, skips the PoE cycle + verify in `playbooks/converge_boot_mode.yml` / `playbooks/set_boot_mode.yml`. Use when the board is currently powered off and you just want to write the router config. |
 
 ## Recommended combinations
 
@@ -177,7 +177,7 @@ The two layers cover different failure-window sizes:
   rather than a cold-boot failure; the retry stack doesn't trigger.
   Would need a third retry layer around Phase 2's verify step
   (re-write pxelinux.cfg + re-cycle on assertion failure).
-- **rb5009 configuration drift** — e.g. the per-board `/ip tftp` row
+- **Router configuration drift** — e.g. the per-board `/ip tftp` row
   isn't where the playbook expects. Surfaced by the pre-flight
   plumbing-check, fails the play immediately.
 - **Network-layer issues outside the board** — switch port disabled,

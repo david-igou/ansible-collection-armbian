@@ -118,10 +118,8 @@
           # Approach B per #82's LK1 evidence — explicit ext4load + booti
           # because U-Boot bootstd's bootflow scan skips
           # disk_provision-generated GPT partitions carrying the systemd-
-          # repart "GrowFs" attribute bit 59. See the closing notes in
-          # docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md
-          # for the rationale; this hook just makes the mechanism board-
-          # agnostic.
+          # repart "GrowFs" attribute bit 59. This hook makes the
+          # mechanism board-agnostic.
           #
           # Idempotent: the literal `localcmd=setenv bootargs root=LABEL=`
           # substring is the marker; repeat builds against a cached tree

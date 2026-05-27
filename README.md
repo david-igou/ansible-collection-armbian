@@ -39,13 +39,11 @@ Before any playbook runs, the following must already be true in your environment
   for per-host rootfs trees (default: `/srv/netboot/rootfs`) and an HTTP
   assets root for serving `.img.xz` artifacts (default:
   `/srv/netboot/boot-files`). The collection creates `_templates/<model>/`
-  and `<inventory_hostname>/` subtrees inside the NFS root. See
-  [`docs/architecture.md`](docs/architecture.md).
-- **MikroTik rb5009 (or equivalent RouterOS device)** reachable via
+  and `<inventory_hostname>/` subtrees inside the NFS root.
+- **MikroTik RouterOS device** (or equivalent) reachable via
   `ansible.netcommon.network_cli`. The SBC subnet's DHCP `next-server` must
   point at this device — that DHCP config is owned externally (typically by
-  your RouterOS-config repo) and is not asserted by this collection. See
-  [`docs/examples/maintainer-topology.md`](docs/examples/maintainer-topology.md).
+  your RouterOS-config repo) and is not asserted by this collection.
 - **Docker-capable build host** in the `armbian_builders` inventory group —
   only needed if you build your own images. Pre-built images can be served
   directly from the netboot server's HTTP root.
@@ -248,19 +246,14 @@ controlled by the `default` directive inside it, and the `sd` label
 defaults to `root=LABEL=armbi_root` (override per-host via
 `armbian_sd_root`).
 
-Historical design specs and migration notes live under
-[`docs/superpowers/`](docs/superpowers/) — useful for context on why
-current shapes exist, but not authoritative for current behaviour.
-
 ## Requirements
 
 - Ansible >= 2.15
 - A netboot server reachable over SSH that exports the per-host NFS rootfs
-  to the boards. The collection has been validated on TrueNAS but anything
-  that speaks NFSv4 and SSH should work. The default HTTP/NFS root paths
-  in `inventory/group_vars/all.yml` (`armbian_nfs_assets_export`,
-  `armbian_nfs_rootfs_path`) are examples — override them to
-  match your server's actual exported directories.
+  to the boards. Anything that speaks NFSv4 and SSH should work. The default
+  HTTP/NFS root paths in `inventory/group_vars/all.yml`
+  (`armbian_nfs_assets_export`, `armbian_nfs_rootfs_path`) are examples —
+  override them to match your server's actual exported directories.
 - A MikroTik RouterOS router (or any device speaking the RouterOS API
   the `community.routeros` collection supports) with SSH access. The
   collection writes per-board `pxelinux.cfg/01-<MAC>` (always present;
@@ -366,8 +359,7 @@ ansible-playbook playbooks/build_image.yml
 …or place a pre-built `.img.xz` in your netboot server's HTTP assets
 directory and point `armbian_image_urls[<model>]` at it. The
 `image_build` role patches `armbian/build`'s `pre_config_uboot_target__<board>_*`
-hook to set PXE first in U-Boot's `BOOT_TARGETS`. See
-[`docs/uboot-armbian-build-explainer.html`](docs/uboot-armbian-build-explainer.html).
+hook to set PXE first in U-Boot's `BOOT_TARGETS`.
 
 #### 0.2 Provision the RouterOS user
 
@@ -673,15 +665,12 @@ into the binary by `playbooks/build_image.yml`'s
 hands off to the extlinux bootmeth on the NVMe and follows
 `/boot/extlinux/extlinux.conf` (Armbian's standard `apt`-managed
 boot path). Selecting this mode means `apt upgrade linux-image-*`
-on the board is the kernel update mechanism — no rb5009 TFTP
+on the board is the kernel update mechanism — no router TFTP
 refresh, no per-board module rsync from a central template.
 
-v1 scope is bring-up on `orange-pi-5-max-01` only; other boards
-keep the existing modes. The mode requires a rebuilt image (the
-`localcmd` value is baked into U-Boot because OPi5Max ships
-`CONFIG_ENV_IS_NOWHERE=y` and has no persistent env). See
-[`docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md`](docs/superpowers/specs/2026-05-17-localboot-nvme-kernel-design.md)
-for the design, bring-up plan, and verification approach.
+The mode requires a rebuilt image (the `localcmd` value is baked
+into U-Boot because boards like the OPi5Max ship
+`CONFIG_ENV_IS_NOWHERE=y` and have no persistent env).
 
 See [`docs/runbooks/reprovision-local-disk.md`](docs/runbooks/reprovision-local-disk.md)
 for the full operator runbook: pre-flight checks, what the lifecycle
@@ -773,12 +762,9 @@ molecule verify -s default
 
 ## Documentation
 
-- [Architecture and boot flow](docs/architecture.md)
 - [Boot mode override methods](docs/boot-mode-override.md)
 - [Retry / timeout knob recipes](docs/retry-configuration.md)
-- [RouterOS setup guide](docs/examples/maintainer-topology.md)
-- [U-Boot + armbian/build deep-dive](docs/uboot-armbian-build-explainer.html)
-- [v3 role refactor spec](docs/superpowers/specs/2026-05-16-role-refactor-v3-design.md)
+- [Reprovision a board's local disk](docs/runbooks/reprovision-local-disk.md)
 
 ## License
 
