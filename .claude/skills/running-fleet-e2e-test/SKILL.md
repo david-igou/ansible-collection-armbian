@@ -23,7 +23,7 @@ phase-specific diagnostic bundle (auto-captured by
 
 ## When to use
 
-- After **any change to**: `image_build`, `image_extract`, `rootfs_clone`,
+- After **any change to**: `image_build`, `rootfs_provision`,
   `disk_image`, `disk_provision`, `bootstrap_armbian`, `persist_uboot_env`,
   `pxelinux_render`, or `board_boot_verify` roles.
 - After a **new board** bring-up (run alongside `adding-armbian-board`).
@@ -57,41 +57,35 @@ ansible <board> --list-vars 2>/dev/null \
 
 Required:
 - `armbian_board_mac` — DHCP lease lookup
-- `armbian_board_model` — keys into `vars/boards.yml`
+- `armbian_board_model` — names the model-group whose `armbian_board_config_model` carries the board's hardware facts (in `inventory/group_vars/<model_group>.yml`)
 - `armbian_poe_switch` + `armbian_poe_port` — Phase 0 PoE-off + Phase 2/4/5 PoE-cycle
 - `armbian_local_disks` — Phase 5 NVMe layout (a list-of-dicts; see `roles/disk_provision/meta/argument_specs.yml`)
 
 Missing any → playbook fails in the relevant phase. Add them to inventory
 before running.
 
-### A.2 — `armbian_image_urls[<model>]`
+### A.2 — Per-host rootfs source (`armbian_rootfs_src` or manifest)
 
-One inventory var feeds the `.img.xz` to both consumers:
+Each board host needs a resolvable rootfs source. The resolver
+(`_resolve_rootfs_src.yml`) tries two paths in order:
 
-- `image_extract` on the netboot_server (Phase 1) — reads the value as
-  either an `http(s)://` URL or an absolute path.
-- `disk_image` on each board (Phase 3) — same var, must be reachable
-  from the board's network. Local paths only work if the board can
-  reach them (rare; typically use a URL).
+1. `armbian_rootfs_src` set explicitly in host_vars — an explicit per-host pin.
+2. A published manifest at `<armbian_nfs_assets_export>/images/<host>/manifest.json` — written by the last successful `build_and_publish_from_inventory.yml` run.
 
-Whichever value you set must be reachable from both. Confirm it's set:
+If neither is set for a board, the play fails with a clear message at
+Phase 1 before touching any hardware.
 
-```bash
-ansible-inventory --list 2>/dev/null \
-  | jq -er '.all.vars.armbian_image_urls'
-```
-
-Probe reachability from BOTH consumers:
+Probe each board's resolution:
 
 ```bash
-# netboot_server reads via image_extract — works for URL or absolute path
-ansible netboot_server -m uri -a 'url={{ armbian_image_urls["<model>"] }} method=HEAD return_content=no'
-# Or, if you use absolute paths:
-ansible netboot_server -b -m stat -a 'path={{ armbian_image_urls["<model>"] }}'
-
-# Boards stream via disk_image — URL must be reachable from the board
-ansible <board> -m uri -a 'url={{ armbian_image_urls[armbian_board_model] }} method=HEAD return_content=no'
+for board in $(ansible-inventory --list | jq -r '.boards.hosts // .boards.children | .. | strings'); do
+  ansible "$board" -m debug -a 'var=armbian_rootfs_src' || true
+done
 ```
+
+If `armbian_rootfs_src` is undefined and no manifest exists on the netboot
+server, run `playbooks/build_and_publish_from_inventory.yml` first to
+produce the manifest, then re-probe.
 
 ### A.3 — Router TFTP plumbing
 
@@ -122,7 +116,7 @@ ansible-inventory --host <spi-board> --list 2>/dev/null \
   | jq -er '.armbian_local_kernel.persist_via'
 ```
 
-- SPI boards (rock-5b etc., `uboot_env.storage: spi_flash` in `vars/boards.yml`):
+- SPI boards (rock-5b etc., `armbian_board_config_model.uboot_env.storage: spi_flash` in `inventory/group_vars/<model_group>.yml` (e.g. `rock_5b.yml`)):
   expect `spi` here (or unset — defaults to `hook` which is fine).
 - Non-SPI boards (opi5max etc., `uboot_env.storage: nowhere`):
   must be `hook` (set in inventory). Setting it to `spi` will fail
@@ -138,7 +132,7 @@ Still, leave headroom:
 ansible netboot_server -m shell -a "df -h $(ansible-inventory --list | jq -r '.all.vars.armbian_nfs_rootfs_path') 2>&1 | tail -1"
 ```
 
-A full NFS dataset → rootfs_clone fails mid-flight. Cap previous
+A full NFS dataset → rootfs_provision fails mid-flight. Cap previous
 campaigns' leftover dirs (`/mnt/ssd/netboot/rootfs/<old-board>/`) first.
 
 ### A.6 — Controller has SSH keys to everywhere
@@ -314,7 +308,7 @@ errored, or the switch was unreachable.
 
 ### D.1 — Phase 1 (NFS reset)
 
-Failure mode: `image_extract` (xz/loop/rsync) or `rootfs_clone` (cp/reflink) errored on netboot_server.
+Failure mode: `rootfs_provision` errored (xz/loop/rsync/identity-reset) on netboot_server.
 
 - `xz` failed → the image URL is unreachable from netboot_server (A.2),
   or the .img.xz is corrupt — try a fresh download outside of ansible.
@@ -464,7 +458,7 @@ multiple boards and the per-board tracker model doesn't 1:1 with them.
 | Trust the Summary table on a partial run | Boards that failed early show `-` in later columns; that's not "they passed those phases by skip" — they never reached them | Cross-check Summary with `grep "PLAY RECAP" /tmp/fleet-run-<ts>/e2e.log -A1` to see which boards actually failed |
 | Skip Phase 1 (NFS reset) routinely | The deterministic guarantee weakens; cross-iteration drift can re-enter the loop | Use `--skip 1` only when you've just run Phase 1 in a prior run and the fleet has stayed powered-off since |
 | Run with stale `stage_router.yml` state | Phase 5's TFTP-flat check fails on missing `/ip tftp` rows even though the rest of the run is fine | Pre-flight A.3 catches this; re-run `stage_router.yml` first |
-| Mix-and-match `armbian_local_kernel.persist_via` against `uboot_env.storage` | Phase 5 local_kernel boot fails on either: SPI board with `persist_via: hook` (localcmd never written to SPI), or NOWHERE board with `persist_via: spi` (persist_uboot_env assertion fires) | Pre-flight A.4 catches both; `vars/boards.yml` is authoritative on `uboot_env.storage` |
+| Mix-and-match `armbian_local_kernel.persist_via` against `uboot_env.storage` | Phase 5 local_kernel boot fails on either: SPI board with `persist_via: hook` (localcmd never written to SPI), or NOWHERE board with `persist_via: spi` (persist_uboot_env assertion fires) | Pre-flight A.4 catches both; `inventory/group_vars/<model_group>.yml`'s `armbian_board_config_model.uboot_env.storage` is authoritative |
 | Run the fleet test against a board that's mid-recovery (`recovering-uboot-spi-state`) | Phase 2 will fail at boot-verify; you waste the slot debugging the wrong layer | Finish the per-board recovery skill first, then run the fleet test with `--target-hosts <that-board>` first to confirm before sweeping |
 | Forget to push image changes before running | Phase 1 pulls a stale `.img.xz`; Phase 3's dd writes the wrong content; everything passes verify but the fleet ends up on yesterday's image | After `image_build.yml`, confirm the new image is published before kicking off the fleet test |
 
@@ -473,7 +467,7 @@ multiple boards and the per-board tracker model doesn't 1:1 with them.
 ```bash
 # Pre-flight probes (Phase A)
 ansible <board> --list-vars | grep armbian_
-ansible-inventory --list | jq '.all.vars.armbian_image_urls'
+ansible <board> -m debug -a 'var=armbian_rootfs_src'  # per-host rootfs source probe
 ansible <armbian_router> -m community.routeros.command -a 'commands="/ip tftp print count-only"'
 ansible boards:netboot_server:routeros_switch:routeros_router -m ping | grep -E "FAILED|UNREACHABLE|SUCCESS" | sort | uniq -c
 
@@ -513,7 +507,7 @@ grep "delta=" /tmp/iter-FLEET-<host>/5-nvme-localkernel/nvme-localkernel-evidenc
 - `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` — wrapper that creates per-run artifact dirs + archives per-board state + saves the Summary.
 - `playbooks/persist_uboot_env.yml` — imported as Phase 2b; idempotent SPI env converge (no-op for non-SPI boards).
 - `playbooks/stage_router.yml` — pre-requisite; populates rb5009's `/ip tftp` rows.
-- `playbooks/stage_netboot_assets.yml` — pre-requisite; runs `image_extract` + `rootfs_clone` initially (Phase 1 is the deterministic re-run with force_refresh).
+- `playbooks/stage_netboot_assets.yml` — pre-requisite; runs `rootfs_provision` initially (Phase 1 is the deterministic re-run with force_refresh).
 - `playbooks/tasks/_lifecycle_set_and_verify.yml` — the converge + verify primitive used in Phases 2/4/5, with auto-revert on failure + diagnostic bundle.
 - `roles/disk_image/` — the role consumed in Phase 3 for the SD imaging step.
 - `roles/disk_provision/` — the role consumed in Phase 5 for NVMe wipe + repartition + rsync.
