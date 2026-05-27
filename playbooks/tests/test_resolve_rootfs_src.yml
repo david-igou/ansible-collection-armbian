@@ -19,6 +19,51 @@
       ansible.builtin.assert:
         that: armbian_rootfs_src == "https://example.com/test.img.xz"
 
+- name: Case 2 — published manifest exists → derive armbian_rootfs_src
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_nfs_assets_export: "/tmp/armbian_rootfs_src_test"
+    # Do NOT set armbian_rootfs_src — that's the precondition for this case.
+  tasks:
+    - name: Create synthetic manifest tree
+      ansible.builtin.file:
+        path: "{{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write synthetic manifest.json
+      ansible.builtin.copy:
+        dest: "{{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}/manifest.json"
+        content: |
+          {
+            "image_filename": "Armbian-test_image.img.xz",
+            "host": "{{ inventory_hostname }}",
+            "board": "test",
+            "branch": "current",
+            "release": "bookworm",
+            "patch_hash": "sha256:test",
+            "armbian_build_ref": "vtest",
+            "built_at": "2026-05-27T00:00:00Z"
+          }
+        mode: "0644"
+
+    - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
+
+    - name: Assert armbian_rootfs_src was derived from manifest's image_filename
+      ansible.builtin.assert:
+        that:
+          - armbian_rootfs_src is defined
+          - armbian_rootfs_src.endswith('Armbian-test_image.img.xz')
+          - armbian_rootfs_src.startswith(armbian_nfs_assets_export)
+        fail_msg: "Case 2: armbian_rootfs_src not derived correctly; got: {{ armbian_rootfs_src | default('UNSET') }}"
+
+    - name: Clean up synthetic tree
+      ansible.builtin.file:
+        path: "{{ armbian_nfs_assets_export }}"
+        state: absent
+
 - name: Case 3 — neither host_vars nor manifest → fail
   hosts: localhost
   connection: local
@@ -26,6 +71,11 @@
   vars:
     armbian_nfs_assets_export: "/tmp/does-not-exist"
   tasks:
+    - name: Clear armbian_rootfs_src fact carried over from previous cases
+      # set_fact to empty string; resolver checks `length > 0` so empty = "not set"
+      ansible.builtin.set_fact:
+        armbian_rootfs_src: ""
+
     - name: Run resolver (expected to fail with actionable message)
       block:
         - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
