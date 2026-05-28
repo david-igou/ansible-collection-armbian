@@ -79,6 +79,13 @@ armbian_pxe_verbose: false
 # netboot_server's actual exported directory.
 armbian_nfs_assets_export: /srv/netboot/boot-files
 
+# Public HTTP base URL serving the same boot-files tree. _resolve_rootfs_src.yml
+# derives each board's image URL as
+# {{ armbian_assets_base_url }}/images/<host>/<image_filename>, fetched by both
+# rootfs_provision (netboot_server) and disk_image (boards). Required whenever a
+# host relies on the published manifest rather than a host_vars armbian_rootfs_src.
+armbian_assets_base_url: http://netboot.example.lan/boot-files
+
 # Root password on a freshly flashed Armbian image. Used by
 # playbooks/bootstrap_armbian.yml to connect as root via password
 # auth before the SSH-key user is provisioned. "1234" is the

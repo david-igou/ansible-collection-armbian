@@ -373,11 +373,10 @@
           ansible.builtin.set_fact:
             _t_phase_3_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # disk_image runs on the board and must reach the image itself.
-        # armbian_rootfs_src is the per-host resolved image URL/path,
-        # consumed by both Phase 1 rootfs_provision (on netboot_server)
-        # and this Phase 3 disk_image (on the board). The value must be
-        # reachable from whichever host consumes it.
+        # disk_image runs on the board and fetches the image itself.
+        # armbian_rootfs_src is the per-host HTTP URL resolved from the
+        # published manifest (or a host_vars pin); both the netboot_server
+        # (Phase 1 rootfs_provision) and the boards here consume it.
         - name: "Phase 3 — dd canonical image to SD"
           ansible.builtin.include_role:
             name: disk_image

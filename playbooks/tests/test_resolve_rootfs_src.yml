@@ -3,8 +3,13 @@
 #
 # Tests _resolve_rootfs_src.yml precedence:
 #   1. host_vars armbian_rootfs_src set → use as-is
-#   2. published manifest exists → derive URL
-#   3. neither → fail with actionable message
+#   2. published manifest exists + armbian_assets_base_url set → derive URL
+#   3. neither host_vars nor manifest → fail with actionable message
+#   4. manifest exists but armbian_assets_base_url unset → fail (guard)
+#
+# Run in isolation (no real inventory): the base-URL-unset guard in Case 4
+# requires armbian_assets_base_url to be undefined, which group_vars/all
+# in a real inventory would otherwise define. Invoke with `-i localhost,`.
 
 - name: Case 1 — host_vars armbian_rootfs_src wins when set
   hosts: localhost
@@ -20,12 +25,13 @@
       ansible.builtin.assert:
         that: armbian_rootfs_src == "https://example.com/test.img.xz"
 
-- name: Case 2 — published manifest exists → derive armbian_rootfs_src
+- name: Case 2 — manifest exists + base URL set → derive HTTP URL
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
     armbian_nfs_assets_export: "/tmp/armbian_rootfs_src_test"
+    armbian_assets_base_url: "https://assets.example.com/boot-files"
     # Do NOT set armbian_rootfs_src — that's the precondition for this case.
   tasks:
     - name: Create synthetic manifest tree
@@ -52,12 +58,14 @@
 
     - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
 
-    - name: Assert armbian_rootfs_src was derived from manifest's image_filename
+    - name: Assert armbian_rootfs_src is the full HTTP URL from base URL + manifest
       ansible.builtin.assert:
         that:
           - armbian_rootfs_src is defined
-          - armbian_rootfs_src.endswith('Armbian-test_image.img.xz')
-          - armbian_rootfs_src.startswith(armbian_nfs_assets_export)
+          - >-
+            armbian_rootfs_src ==
+            armbian_assets_base_url ~ '/images/' ~ inventory_hostname
+            ~ '/Armbian-test_image.img.xz'
         fail_msg: "Case 2: armbian_rootfs_src not derived correctly; got: {{ armbian_rootfs_src | default('UNSET') }}"
 
     - name: Clean up synthetic tree
@@ -92,3 +100,56 @@
               Failure message should mention both armbian_rootfs_src
               host_var and build_and_publish_from_inventory.yml.
               Got: {{ ansible_failed_result | default('no result') }}
+
+- name: Case 4 — manifest exists but armbian_assets_base_url unset → fail
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    armbian_nfs_assets_export: "/tmp/armbian_rootfs_src_test_no_baseurl"
+    # armbian_assets_base_url intentionally undefined — the guard precondition.
+  tasks:
+    - name: Clear armbian_rootfs_src fact carried over from previous cases
+      ansible.builtin.set_fact:
+        armbian_rootfs_src: ""
+
+    - name: Create synthetic manifest tree
+      ansible.builtin.file:
+        path: "{{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write synthetic manifest.json
+      ansible.builtin.copy:
+        dest: "{{ armbian_nfs_assets_export }}/images/{{ inventory_hostname }}/manifest.json"
+        content: |
+          {
+            "image_filename": "Armbian-test_image.img.xz",
+            "host": "{{ inventory_hostname }}",
+            "board": "test",
+            "branch": "current",
+            "release": "bookworm",
+            "patch_hash": "sha256:test",
+            "armbian_build_ref": "vtest",
+            "built_at": "2026-05-27T00:00:00Z"
+          }
+        mode: "0644"
+
+    - name: Run resolver (expected to fail because base URL is unset)
+      block:
+        - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_rootfs_src.yml"
+        - ansible.builtin.fail:
+            msg: "Resolver should have failed when manifest exists but base URL unset; did not."
+      rescue:
+        - name: Assert the failure message names armbian_assets_base_url
+          ansible.builtin.assert:
+            that:
+              - "'armbian_assets_base_url' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              Guard failure message should name armbian_assets_base_url.
+              Got: {{ ansible_failed_result | default('no result') }}
+
+    - name: Clean up synthetic tree
+      ansible.builtin.file:
+        path: "{{ armbian_nfs_assets_export }}"
+        state: absent
