@@ -51,6 +51,25 @@ default `"1234"`) supplies the password.
 Most users invoke this role indirectly via
 `playbooks/bootstrap_armbian.yml`.
 
+## Generated assets
+
+With `armbian_bootstrap_user: armbian`, the role leaves these files on
+the board:
+
+```text
+/home/armbian/.ssh/authorized_keys     # the supplied public key(s)
+/etc/sudoers.d/armbian                  # mode 0440, visudo-validated
+```
+
+`/etc/sudoers.d/armbian` contains a single line:
+
+```text
+armbian ALL=(ALL) NOPASSWD: ALL
+```
+
+It also removes `/root/.not_logged_in_yet` (drops Armbian's first-login
+TUI) and sets `PasswordAuthentication no` in `/etc/ssh/sshd_config`.
+
 ## Idempotency & check mode
 
 Re-running against an already-bootstrapped board reconciles
