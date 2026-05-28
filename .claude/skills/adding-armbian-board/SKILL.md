@@ -31,7 +31,7 @@ Capture before touching code:
 
 ## Phase 1 — Inventory
 
-Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_board_mac`, `armbian_board_model` (must match the key used in `armbian_board_config_model` in the model group_vars), `armbian_poe_switch`, `armbian_poe_port`.
+Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_board_mac`, `armbian_board_model` (must match the key used in `armbian_board_config_model` in the model group_vars), `armbian_boot_mode`; and for PoE-powered boards only: `armbian_poe_switch`, `armbian_poe_port`.
 
 ## Phase 2 — Board metadata in inventory group_vars
 

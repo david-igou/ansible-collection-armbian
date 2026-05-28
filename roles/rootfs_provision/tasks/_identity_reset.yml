@@ -4,6 +4,7 @@
 # Variable names used:
 #   armbian_rootfs_target_dir — path to the per-host rootfs on the netboot server
 #   armbian_rootfs_host       — inventory_hostname of the board
+---
 
 - name: Set per-host /etc/hostname
   ansible.builtin.copy:

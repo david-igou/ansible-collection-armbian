@@ -19,8 +19,6 @@ in scope and one invocation per board renders one file.
 
 See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
 **Prerequisite:** the calling playbook must resolve `armbian_board_config` on the running host (via `playbooks/tasks/_resolve_board_config.yml`) before invoking this role. The template reads `armbian_board_config.console`, `armbian_board_config.earlycon`, and `armbian_board_config.armbian_board_name` directly.
 
 | Variable | Required | Default | Purpose |

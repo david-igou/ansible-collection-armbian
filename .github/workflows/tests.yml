@@ -152,7 +152,13 @@ jobs:
               fi
             done
           done
-          ls -laL /usr/share/edk2/ovmf/   # -L resolves symlinks; fails if target missing
+          for required in OVMF_CODE OVMF_VARS; do
+            if [ ! -f "/usr/share/edk2/ovmf/${required}.fd" ]; then
+              echo "::error::Missing /usr/share/edk2/ovmf/${required}.fd"
+              exit 1
+            fi
+          done
+          ls -laL /usr/share/edk2/ovmf/
 
       - name: Install dependencies
         run: |

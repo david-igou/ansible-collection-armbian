@@ -22,3 +22,23 @@
       loop: "{{ _stats.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    # Marker existence alone is insufficient: if the role regresses and
+    # does NOT fail on the unroutable host, the converge's explicit
+    # sentinel `fail` ("accepted an unroutable host") still triggers
+    # rescue and writes this marker. Assert the marker came from the
+    # role's own failure, not the sentinel.
+    - name: Slurp the timeout-rescue marker
+      ansible.builtin.slurp:
+        src: /tmp/board_boot_wait_timeout_rescue
+      register: _timeout_msg
+
+    - name: Assert the timeout came from board_boot_wait, not the sentinel fail
+      ansible.builtin.assert:
+        that:
+          - "'accepted an unroutable host' not in (_timeout_msg.content | b64decode)"
+          - "(_timeout_msg.content | b64decode | trim) | length > 0"
+        fail_msg: >-
+          board_boot_wait did not raise on the unroutable host — the
+          rescue marker holds the converge sentinel message, indicating
+          the role silently accepted an unreachable target.

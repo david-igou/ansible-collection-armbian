@@ -6,7 +6,7 @@
     - name: Resolve test paths
       ansible.builtin.set_fact:
         _target: "{{ armbian_nfs_rootfs_path }}/{{ inventory_hostname }}"
-        _tftp:   "{{ armbian_image_cache }}/sbc-tftp/{{ inventory_hostname }}"
+        _tftp: "{{ armbian_image_cache }}/sbc-tftp/{{ inventory_hostname }}"
 
     - name: Stat expected rootfs and TFTP artifact paths
       ansible.builtin.stat:

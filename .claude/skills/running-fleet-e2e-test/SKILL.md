@@ -78,7 +78,8 @@ Phase 1 before touching any hardware.
 Probe each board's resolution:
 
 ```bash
-for board in $(ansible-inventory --list | jq -r '.boards.hosts // .boards.children | .. | strings'); do
+group="${armbian_boards_group:-boards}"
+for board in $(ansible-inventory --list | jq -r --arg g "$group" '.[$g].hosts // .[$g].children | .. | strings'); do
   ansible "$board" -m debug -a 'var=armbian_rootfs_src' || true
 done
 ```

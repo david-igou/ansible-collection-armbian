@@ -9,8 +9,13 @@
 - name: Copy kernel and initrd to tftp_dir
   ansible.builtin.shell: |
     set -euo pipefail
-    cp "{{ armbian_rootfs_mount_dir }}"/boot/vmlinuz-* "{{ armbian_rootfs_tftp_dir }}/vmlinuz"
-    cp "{{ armbian_rootfs_mount_dir }}"/boot/initrd.img-* "{{ armbian_rootfs_tftp_dir }}/initrd.img"
+    shopt -s nullglob
+    kernels=( "{{ armbian_rootfs_mount_dir }}"/boot/vmlinuz-* )
+    initrds=( "{{ armbian_rootfs_mount_dir }}"/boot/initrd.img-* )
+    (( ${#kernels[@]} == 1 )) || { echo "Expected exactly one kernel, found ${#kernels[@]}" >&2; exit 1; }
+    (( ${#initrds[@]} == 1 )) || { echo "Expected exactly one initrd, found ${#initrds[@]}" >&2; exit 1; }
+    cp "${kernels[0]}" "{{ armbian_rootfs_tftp_dir }}/vmlinuz"
+    cp "${initrds[0]}" "{{ armbian_rootfs_tftp_dir }}/initrd.img"
   args:
     executable: /bin/bash
   changed_when: true

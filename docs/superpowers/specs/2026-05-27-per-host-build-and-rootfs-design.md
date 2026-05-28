@@ -77,7 +77,7 @@ Hard fail on duplicate `dest` is deliberate: silent override of a family-level `
 
 ### 5.3 Symmetry
 
-```
+```text
                      family               model               host           resolved
 armbian_board_config _family ─► .yml      _model ─► .yml      _host ─► .yml  armbian_board_config
 armbian_build        _family ─► .yml      _model ─► .yml      _host ─► .yml  armbian_build
@@ -154,7 +154,7 @@ Argument shape:
 
 Task layout:
 
-```
+```text
 roles/rootfs_provision/tasks/
 ├── main.yml
 ├── _validate_inputs.yml
@@ -284,7 +284,7 @@ All loops over `groups['boards']` (per-host instead of `_unique_models`).
 
 New router TFTP layout:
 
-```
+```text
 flash:/sbc/
 ├── pxelinux.cfg/
 │   └── 01-<MAC>              # per-board, unchanged

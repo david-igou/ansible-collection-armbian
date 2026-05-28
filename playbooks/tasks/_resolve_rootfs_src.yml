@@ -52,6 +52,28 @@
     - not __armbian_rootfs_src_was_set
     - __published_manifest_stat.stat.exists | default(false)
 
+# Extract image_filename separately so a manifest that exists but is
+# malformed (no/empty image_filename) fails with an actionable message
+# instead of a raw templating error inside the URL derivation.
+- name: Extract image_filename from published manifest
+  ansible.builtin.set_fact:
+    __published_image_filename: >-
+      {{ (__published_manifest_raw.content | b64decode | from_json).image_filename | default('') }}
+  when:
+    - not __armbian_rootfs_src_was_set
+    - __published_manifest_stat.stat.exists | default(false)
+
+- name: Fail when the manifest has no image_filename
+  ansible.builtin.fail:
+    msg: >-
+      Host {{ inventory_hostname }}: manifest at {{ __published_manifest_path }}
+      has no image_filename. Republish with build_and_publish_from_inventory.yml,
+      or pin armbian_rootfs_src in host_vars.
+  when:
+    - not __armbian_rootfs_src_was_set
+    - __published_manifest_stat.stat.exists | default(false)
+    - (__published_image_filename | default('') | length) == 0
+
 # Single HTTP URL consumed by both rootfs_provision (netboot_server) and
 # disk_image (boards). Requires armbian_assets_base_url; the guard task
 # below fails clearly when a manifest exists but no base URL is set.
@@ -59,7 +81,7 @@
   ansible.builtin.set_fact:
     armbian_rootfs_src: >-
       {{ armbian_assets_base_url }}/images/{{ inventory_hostname
-         }}/{{ (__published_manifest_raw.content | b64decode | from_json).image_filename }}
+         }}/{{ __published_image_filename }}
   when:
     - not __armbian_rootfs_src_was_set
     - __published_manifest_stat.stat.exists | default(false)
