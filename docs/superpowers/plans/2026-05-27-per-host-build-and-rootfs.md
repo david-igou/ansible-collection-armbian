@@ -4,7 +4,7 @@
 
 **Goal:** Refactor the `david_igou.armbian` collection from per-model to per-host as the unit of work for image building and rootfs provisioning. Operators express the full build profile in inventory via a three-layer family/model/host merge mirroring the same pattern for hardware configuration.
 
-**Architecture:** Two resolvers (`_resolve_board_config.yml`, `_resolve_build_profile.yml`) merge three named layers per host into resolved facts (`armbian_board_config`, `armbian_build`). `image_extract` + `rootfs_clone` collapse into a new `rootfs_provision` role. `image_build` re-keyed by `inventory_hostname` instead of BOARD=. `vars/boards.yml` deleted; per-model hardware facts move to operator inventory under `inventory/group_vars/<family|model>.yml`. Clean break in one PR — galaxy.yml bumps 3.0.0 → 4.0.0.
+**Architecture:** Two resolvers (`_resolve_board_config.yml`, `_resolve_build_profile.yml`) merge three named layers per host into resolved facts (`armbian_board_config`, `armbian_build`). `image_extract` + `rootfs_clone` collapse into a new `rootfs_provision` role. `image_build` re-keyed by `inventory_hostname` instead of BOARD=. `vars/boards.yml` deleted; per-model hardware facts move to operator inventory under `inventory/group_vars/<family|model>.yml`. Clean break in one PR — galaxy.yml stays in the 0.0.x early-stage band (0.0.2-alpha).
 
 **Tech Stack:** Ansible 2.15+, armbian/build (Docker mode), Jinja2 templating (recursive default), losetup + xz + rsync for image extraction, RouterOS network_cli for TFTP plumbing.
 
@@ -1977,7 +1977,7 @@ Find the `boards:` block and restructure to add rk3588 / rk3588s parents:
 # of the armbian fleet (armbian_builders + boards).
 #
 # Fleet-wide build content moved to the family layer (group_vars/rk3588.yml,
-# rk3588s.yml) as armbian_build_family in 4.0.0. If you need genuinely
+# rk3588s.yml) as armbian_build_family in the per-host refactor. If you need genuinely
 # fleet-wide build content (every family, not just rk3588), define it
 # here as `armbian_build_family:` — the resolver also reads from this
 # scope because `armbian` is a parent of every board model group.
@@ -2582,26 +2582,18 @@ git commit -m "docs: rewrite for per-host build + resolver layering"
 grep -n 'version:' galaxy.yml
 ```
 
-- [ ] **Step 2: Change `version: 3.0.0` to `version: 4.0.0`**
+- [ ] **Step 2: Confirm the version stays in the 0.0.x early-stage band**
 
-```bash
-sed -i 's/^version: .*/version: 4.0.0/' galaxy.yml
-```
+The collection is early-stage; breaking changes do not warrant a major
+bump. Leave `version: 0.0.2-alpha` unchanged — no edit needed.
 
-- [ ] **Step 3: Verify the change**
+- [ ] **Step 3: Verify**
 
 ```bash
 grep -n 'version:' galaxy.yml
 ```
 
-Expected: `version: 4.0.0`.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add galaxy.yml
-git commit -m "chore(galaxy): bump to 4.0.0 (breaking refactor)"
-```
+Expected: `version: 0.0.2-alpha` (unchanged).
 
 ---
 

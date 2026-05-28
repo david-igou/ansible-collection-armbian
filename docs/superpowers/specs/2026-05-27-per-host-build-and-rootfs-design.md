@@ -447,7 +447,7 @@ Clean break in one PR (project is 0.0.x, intentional breakage band).
 4. **Port roles.** `image_build` adds `armbian_build_host` + per-host suffix logic. `pxelinux_render` template + role vars rewritten. `disk_image` adds `armbian_disk_image_src` input.
 5. **Delete superseded roles.** `roles/image_extract/`, `roles/rootfs_clone/`. Purge `armbian_image_urls` references.
 6. **Docs.** CLAUDE.md updated. `adding-armbian-board` skill rewritten. `docs/boot-mode-override.md` adjusted for `armbian_board_config` references. README updated.
-7. **Bump galaxy.yml.** 3.0.0 → 4.0.0 (signals the break per 0.0.x band conventions).
+7. **Galaxy version.** Stays in the early-stage 0.0.x band (0.0.2-alpha); breaking changes are expected without a major bump per project conventions.
 
 ## 11. Testing strategy
 
@@ -460,4 +460,4 @@ Clean break in one PR (project is 0.0.x, intentional breakage band).
 
 - **Default `armbian_build_cache_dir`** stays at `/var/lib/armbian_build` (pre-create + chown for ansible_user). An `inventory_dir`-relative default was considered but rejected because it breaks when builder ≠ controller (the path is controller-side; the builder must have it writable).
 - **Build deduplication.** Explicitly out of scope — user chose pure per-host. A future spec could add profile-hash-based dedup if N hosts on identical profiles becomes a real cost.
-- **Galaxy version bump.** 4.0.0 is suggested but the user has final say on numbering.
+- **Galaxy version.** Stays in the 0.0.x early-stage band (0.0.2-alpha) — no major bump; the user has final say on numbering.

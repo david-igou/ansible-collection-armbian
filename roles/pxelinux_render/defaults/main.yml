@@ -2,8 +2,8 @@
 # Render-time knobs. All inputs that have inventory-level analogues
 # default to undefined here and are validated as required in argspec.
 #
-# v4.0.0 breaking change: every external pxelinux_render variable
-# is now `pxelinux_render_*`-prefixed. Callers must update their
+# Breaking change (per-host refactor): every external pxelinux_render
+# variable is now `pxelinux_render_*`-prefixed. Callers must update their
 # `vars:` blocks accordingly. See the role README for the full table.
 
 # Per-board kernel command-line knob: which device specifier the

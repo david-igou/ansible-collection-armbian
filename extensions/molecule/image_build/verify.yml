@@ -19,8 +19,8 @@
 
   vars:
     # All paths use the per-host suffix (armbian_build_host=build-orangepi5pro)
-    # that the role appends to armbian_build_cache_dir and armbian_build_output_dir
-    # in 4.0.0. converge.yml passes the host name; we mirror it here.
+    # that the role appends to armbian_build_cache_dir and armbian_build_output_dir.
+    # converge.yml passes the host name; we mirror it here.
     _build_host: build-orangepi5pro
     _cache_dir_host: "/var/lib/armbian_build/{{ _build_host }}"
     _output_dir: "/var/lib/armbian_build/output/{{ _build_host }}"

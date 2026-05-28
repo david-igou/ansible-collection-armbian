@@ -4,7 +4,7 @@
 # of the armbian fleet (armbian_builders + boards).
 #
 # Fleet-wide build content moved to the family layer (group_vars/rk3588.yml,
-# rk3588s.yml) as armbian_build_family in 4.0.0. If you need genuinely
+# rk3588s.yml) as armbian_build_family in the per-host refactor. If you need genuinely
 # fleet-wide build content (every family, not just rk3588), define it
 # here as `armbian_build_family:` — the resolver also reads from this
 # scope because `armbian` is a parent of every board model group.

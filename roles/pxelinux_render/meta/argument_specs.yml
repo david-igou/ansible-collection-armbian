@@ -19,8 +19,8 @@ argument_specs:
         pre_tasks). The template reads `armbian_board_config.console`
         and `armbian_board_config.earlycon` directly.
       - >-
-        v4.0.0 breaking change: every external input is now
-        `pxelinux_render_*`-prefixed (was unprefixed in v3.x). See the
+        Breaking change (per-host refactor): every external input is now
+        `pxelinux_render_*`-prefixed (previously unprefixed). See the
         role README for the full rename table.
 
     options:

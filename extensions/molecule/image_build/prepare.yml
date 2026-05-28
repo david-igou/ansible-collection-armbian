@@ -20,8 +20,8 @@
   become: true
 
   vars:
-    # Path uses armbian_build_host (per-host re-key in 4.0.0 refactor),
-    # NOT armbian_build_board. The converge passes
+    # Path uses armbian_build_host (per-host re-key), NOT
+    # armbian_build_board. The converge passes
     # armbian_build_host=build-orangepi5pro so the role's per-host suffix
     # writes to /var/lib/armbian_build/output/build-orangepi5pro/.
     _build_host: build-orangepi5pro
