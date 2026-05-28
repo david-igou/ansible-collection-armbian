@@ -1,0 +1,48 @@
+---
+# Build one custom Armbian .img.xz with a PXE-first U-Boot, using
+# armbian/build in Docker mode on a builder host. Minimal demo of the
+# image_build role: the output (.img.xz + manifest.json) lands at
+# <armbian_build_output_dir>/<armbian_build_host>/ on the builder.
+#
+# Usage:
+#   ansible-playbook playbooks/image_build.yml --limit builder-01
+#
+# Role variables (see roles/image_build/README.md):
+#   armbian_build_board        — armbian/build BOARD= value (required)
+#   armbian_build_host         — per-host output subdir key (required)
+#   armbian_build_branch       — current | edge | legacy | vendor (default current)
+#   armbian_build_release      — userspace release (default bookworm)
+#   armbian_build_output_dir   — where <host>/<file>.img.xz + manifest.json land
+#   armbian_build_userpatches  — list of {dest, content} overlay files
+#
+# Companions: playbooks/build_image.yml (verbose single-board build with
+# the full local_kernel-bake userpatch) and
+# playbooks/build_and_publish_from_inventory.yml (every board +
+# publish to the netboot server). Use this one to read, at a glance,
+# the minimal known-good role call.
+
+- name: Build a custom PXE-first Armbian image
+  hosts: "{{ armbian_builders_group | default('armbian_builders') }}"
+  gather_facts: true
+
+  tasks:
+    - name: Build the image
+      ansible.builtin.include_role:
+        name: image_build
+      vars:
+        armbian_build_board: orangepi5pro
+        armbian_build_host: orange-pi-5-pro-01
+        armbian_build_branch: current
+        armbian_build_release: bookworm
+        armbian_build_cache_dir: "/home/{{ ansible_user }}/armbian_build"
+        armbian_build_output_dir: "/home/{{ ansible_user }}/armbian_build/output"
+        armbian_build_userpatches:
+          - dest: config/sources/families/rockchip-rk3588.conf
+            content: |
+              # PXE-first U-Boot boot order for the rk3588(s) family —
+              # required for the collection's netboot-first model.
+              function pre_config_uboot_target__999_pxe_first() {
+                  declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                  sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                      include/configs/rockchip-common.h
+              }

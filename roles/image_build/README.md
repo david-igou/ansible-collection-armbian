@@ -117,6 +117,7 @@ publish step requires:
         name: david_igou.armbian.image_build
       vars:
         armbian_build_board: orangepi5pro
+        armbian_build_host: orange-pi-5-pro-01   # required: per-host output subdir
         armbian_build_branch: current
         armbian_build_release: bookworm
         armbian_build_output_dir: /var/lib/armbian_build/output
