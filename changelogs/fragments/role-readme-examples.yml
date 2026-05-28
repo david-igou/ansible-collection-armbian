@@ -1,0 +1,19 @@
+---
+doc_changes:
+  - |
+    Every role README example is now a complete, runnable playbook.
+    The ``disk_image`` and ``image_build`` examples gained the missing
+    play scaffolding (``hosts``/``become``/``gather_facts`` and explicit
+    ``vars``) and use the fully-qualified role name; ``board_boot_verify``
+    and ``board_boot_wait`` examples make their fact/timeout inputs
+    explicit.
+  - |
+    Roles that generate files now document what they produce, with an
+    example file tree plus a snippet of the generated content:
+    ``pxelinux_render`` (the rendered ``01-<mac>`` pxelinux.cfg with
+    per-host TFTP paths), ``rootfs_provision`` (per-host rootfs identity
+    files, TFTP staging, and the provision sentinel JSON),
+    ``disk_provision`` (the transient ``.repart.d`` configs and the
+    generated ``/etc/fstab``), ``image_build`` (the per-host output
+    directory), and ``bootstrap_armbian`` (``authorized_keys`` and the
+    ``sudoers.d`` drop-in).
