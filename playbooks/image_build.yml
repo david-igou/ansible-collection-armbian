@@ -37,11 +37,15 @@
         armbian_build_cache_dir: "/home/{{ ansible_user }}/armbian_build"
         armbian_build_output_dir: "/home/{{ ansible_user }}/armbian_build/output"
         armbian_build_userpatches:
-          - dest: config/sources/families/rockchip-rk3588.conf
+          # Board-scoped overlay (mirrors roles/image_build/README.md):
+          # armbian/build only sources config/boards/<board>.conf when
+          # building that board, so no `if BOARD == ...` guard is needed.
+          # PXE-first is genuinely family-shared in the real fleet — see
+          # build_userpatches_common in inventory/group_vars/<family>.yml
+          # and playbooks/build_image.yml for the family-level form.
+          - dest: config/boards/orangepi5pro.conf
             content: |
-              # PXE-first U-Boot boot order for the rk3588(s) family —
-              # required for the collection's netboot-first model.
-              function pre_config_uboot_target__999_pxe_first() {
+              function pre_config_uboot_target__orangepi5pro_pxe_first() {
                   declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
                   sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                       include/configs/rockchip-common.h
