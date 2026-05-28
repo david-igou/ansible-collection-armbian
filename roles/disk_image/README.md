@@ -23,18 +23,14 @@ Optional: `disk_image_dd_bs` (default `4M`).
   hosts: orange-pi-5-pro-01
   become: true
   gather_facts: false
-  vars:
-    image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
-    target_device: /dev/mmcblk0
-    disk_image_dd_bs: 4M
   tasks:
     - name: Stream the image onto the target device
       ansible.builtin.include_role:
         name: david_igou.armbian.disk_image
       vars:
-        image_source: "{{ image_source }}"
-        target_device: "{{ target_device }}"
-        disk_image_dd_bs: "{{ disk_image_dd_bs }}"
+        image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
+        target_device: /dev/mmcblk0
+        disk_image_dd_bs: 4M
 ```
 
 ## Prerequisites

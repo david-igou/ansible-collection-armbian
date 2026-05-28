@@ -111,27 +111,21 @@ publish step requires:
 - name: Build a custom PXE-first Armbian image
   hosts: armbian_builders
   gather_facts: true
-  vars:
-    armbian_build_board: orangepi5pro
-    armbian_build_branch: current
-    armbian_build_release: bookworm
-    armbian_build_output_dir: /var/lib/armbian_build/output
-    armbian_build_userpatches:
-      - dest: "config/boards/orangepi5pro.conf"
-        content: |
-          function pre_config_uboot_target__orangepi5pro_pxe_first() {
-              declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-              sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                  include/configs/rockchip-common.h
-          }
   tasks:
     - name: Build the image
       ansible.builtin.include_role:
         name: david_igou.armbian.image_build
       vars:
-        armbian_build_board: "{{ armbian_build_board }}"
-        armbian_build_branch: "{{ armbian_build_branch }}"
-        armbian_build_release: "{{ armbian_build_release }}"
-        armbian_build_output_dir: "{{ armbian_build_output_dir }}"
-        armbian_build_userpatches: "{{ armbian_build_userpatches }}"
+        armbian_build_board: orangepi5pro
+        armbian_build_branch: current
+        armbian_build_release: bookworm
+        armbian_build_output_dir: /var/lib/armbian_build/output
+        armbian_build_userpatches:
+          - dest: "config/boards/orangepi5pro.conf"
+            content: |
+              function pre_config_uboot_target__orangepi5pro_pxe_first() {
+                  declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                  sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                      include/configs/rockchip-common.h
+              }
 ```
