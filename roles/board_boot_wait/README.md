@@ -49,6 +49,9 @@ After a successful run:
   tasks:
     - ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_wait
+      vars:
+        armbian_boot_attempt_timeout: 180
+        armbian_post_boot_wait_timeout: 300
 ```
 
 Typically reached via `playbooks/converge_boot_mode.yml` after the

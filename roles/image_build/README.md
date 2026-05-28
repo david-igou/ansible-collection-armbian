@@ -31,6 +31,19 @@ the patch list and consume the resulting `.img.xz` + `manifest.json` from
 - `Armbian_<version>_<board>_<release>_<branch>_<kernel>.img.xz.sha` (when `COMPRESS_OUTPUTIMAGE` includes `sha`)
 - `manifest.json`
 
+With the defaults (`armbian_build_output_dir: /var/lib/armbian_build/output`)
+and a host `orange-pi-5-pro-01`, a completed build leaves this per-host
+tree on the builder (the output dir is keyed by `inventory_hostname`, so
+two hosts that build the same board don't collide):
+
+```text
+/var/lib/armbian_build/output/
+└── orange-pi-5-pro-01/
+    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz
+    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz.sha
+    └── manifest.json
+```
+
 ## Manifest schema
 
 ```json
@@ -95,16 +108,24 @@ publish step requires:
 ## Example
 
 ```yaml
-- ansible.builtin.include_role:
-    name: image_build
-  vars:
-    armbian_build_board: orangepi5pro
-    armbian_build_userpatches:
-      - dest: "config/boards/orangepi5pro.conf"
-        content: |
-          function pre_config_uboot_target__orangepi5pro_pxe_first() {
-              declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
-              sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
-                  include/configs/rockchip-common.h
-          }
+- name: Build a custom PXE-first Armbian image
+  hosts: armbian_builders
+  gather_facts: true
+  tasks:
+    - name: Build the image
+      ansible.builtin.include_role:
+        name: david_igou.armbian.image_build
+      vars:
+        armbian_build_board: orangepi5pro
+        armbian_build_branch: current
+        armbian_build_release: bookworm
+        armbian_build_output_dir: /var/lib/armbian_build/output
+        armbian_build_userpatches:
+          - dest: "config/boards/orangepi5pro.conf"
+            content: |
+              function pre_config_uboot_target__orangepi5pro_pxe_first() {
+                  declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
+                  sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
+                      include/configs/rockchip-common.h
+              }
 ```

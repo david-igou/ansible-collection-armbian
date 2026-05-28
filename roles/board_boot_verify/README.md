@@ -51,6 +51,7 @@ After a successful run:
 ```yaml
 - name: Verify the board is on the declared boot mode
   hosts: orange-pi-5-pro-01
+  gather_facts: true   # role inspects ansible_mounts['/']
   tasks:
     - ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_verify

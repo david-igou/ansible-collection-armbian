@@ -70,6 +70,49 @@ detaches loop devices and unmounts any in-progress mount. The
 2. Re-run with `armbian_rootfs_force_refresh: true` to bypass any stale
    sentinel and start fresh.
 
+## Generated assets
+
+Per host, the role populates two directories. The NFS rootfs target gets
+the extracted rootfs with identity rewritten inside it; the TFTP staging
+dir gets the three boot artefacts U-Boot needs. With the defaults and
+`armbian_rootfs_host: orange-pi-5-pro-01`:
+
+```text
+/srv/netboot/rootfs/orange-pi-5-pro-01/          # armbian_rootfs_target_dir
+├── etc/
+│   ├── hostname                                  # → orange-pi-5-pro-01
+│   ├── hosts                                     # + 127.0.1.1 line (best-effort)
+│   ├── machine-id                                # zeroed (first-boot trigger)
+│   └── ssh/
+│       ├── ssh_host_rsa_key(.pub)                # freshly regenerated
+│       ├── ssh_host_ecdsa_key(.pub)
+│       └── ssh_host_ed25519_key(.pub)
+├── var/lib/dbus/machine-id                        # zeroed
+├── root/.no_armbian_first_login                   # touched
+├── ...                                            # rest of extracted rootfs
+└── .armbian_rootfs_provision_complete             # idempotency sentinel (JSON)
+
+<armbian_image_cache>/sbc-tftp/orange-pi-5-pro-01/   # armbian_rootfs_tftp_dir
+├── vmlinuz
+├── initrd.img
+└── board.dtb                                       # located via armbian_rootfs_dtb
+```
+
+The DTB is always staged under the fixed name `board.dtb` (the
+`armbian_rootfs_dtb` value only locates the source under `/boot/dtb/`).
+The sentinel records what it was provisioned from (the `src` + `host`
+fields are what subsequent runs compare against to decide whether to
+skip):
+
+```json
+{
+  "host": "orange-pi-5-pro-01",
+  "provisioned_at": "2026-05-28T12:34:56Z",
+  "src": "https://images.example.org/orange-pi-5-pro.img.xz",
+  "src_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+}
+```
+
 ## Example
 
 ```yaml

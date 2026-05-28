@@ -19,11 +19,18 @@ Optional: `disk_image_dd_bs` (default `4M`).
 ## Example
 
 ```yaml
-- ansible.builtin.include_role:
-    name: disk_image
-  vars:
-    image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
-    target_device: /dev/mmcblk0
+- name: Reimage a board's SD card from a published .img.xz
+  hosts: orange-pi-5-pro-01
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Stream the image onto the target device
+      ansible.builtin.include_role:
+        name: david_igou.armbian.disk_image
+      vars:
+        image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
+        target_device: /dev/mmcblk0
+        disk_image_dd_bs: 4M
 ```
 
 ## Prerequisites

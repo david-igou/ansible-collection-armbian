@@ -82,3 +82,60 @@ After a successful run:
 Typically reached via `playbooks/converge_boot_mode.yml`, which then
 hands the rendered files off to the RouterOS upload reference
 playbook.
+
+## Generated asset
+
+The role writes exactly one file per invocation, named `01-<mac>` (the
+MAC lower-cased with `:` replaced by `-`), into
+`pxelinux_render_output_dir`:
+
+```text
+{{ pxelinux_render_output_dir }}/
+└── 01-aa-bb-cc-dd-ee-ff       # one per board; selects nfs/sd/local/...
+```
+
+With `pxelinux_render_boot_mode: nfs`, `pxelinux_render_hostname:
+orange-pi-5-pro-01`, and a resolved `armbian_board_config` whose
+`console` is `ttyS2,1500000`, the rendered `01-aa-bb-cc-dd-ee-ff` looks
+like this. Note the TFTP paths default to the per-host layout
+`armbian/<hostname>/...` (built-in labels shown; one extra `label` block
+is appended per key in `pxelinux_render_extra_modes`):
+
+```text
+# Ansible managed
+# pxelinux.cfg for orange-pi-5-pro-01 (Orange Pi 5 Pro)
+# MAC: aa:bb:cc:dd:ee:ff
+# Active mode: nfs
+
+default nfs
+timeout 50
+prompt  0
+
+label nfs
+  menu label Armbian NFS root (orange-pi-5-pro-01)
+  kernel armbian/orange-pi-5-pro-01/vmlinuz
+  initrd armbian/orange-pi-5-pro-01/initrd.img
+  fdt    armbian/orange-pi-5-pro-01/board.dtb
+  append root=/dev/nfs nfsroot=192.0.2.10:/srv/netboot/rootfs/orange-pi-5-pro-01,nfsvers=3,rw ip=dhcp console=ttyS2,1500000 rootwait rw
+
+label sd
+  menu label Armbian on SD (orange-pi-5-pro-01)
+  kernel armbian/orange-pi-5-pro-01/vmlinuz
+  initrd armbian/orange-pi-5-pro-01/initrd.img
+  fdt    armbian/orange-pi-5-pro-01/board.dtb
+  append root=LABEL=armbi_root rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local
+  menu label Armbian on local disk (orange-pi-5-pro-01)
+  kernel armbian/orange-pi-5-pro-01/vmlinuz
+  initrd armbian/orange-pi-5-pro-01/initrd.img
+  fdt    armbian/orange-pi-5-pro-01/board.dtb
+  append root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local_kernel
+  menu label Boot local kernel from NVMe (orange-pi-5-pro-01)
+  localboot 0
+```
+
+Switching `pxelinux_render_boot_mode` to `sd` re-renders the same file
+with `default sd` — the label blocks themselves are unchanged.
