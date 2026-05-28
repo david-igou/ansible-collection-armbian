@@ -148,6 +148,7 @@ truncate_for_inline() {
 }
 
 {
+  # shellcheck disable=SC2016  # Literal backticks for markdown rendering, not command substitution.
   printf '**Iteration %s** — `%s`\n\n' "${ITER}" "$(date -u +'%Y-%m-%d %H:%M UTC')"
   echo "**Configuration**:"
   echo

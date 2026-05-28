@@ -1,0 +1,49 @@
+# roles/rootfs_provision/tasks/_stage_tftp.yml
+---
+- name: Ensure tftp_dir exists
+  ansible.builtin.file:
+    path: "{{ armbian_rootfs_tftp_dir }}"
+    state: directory
+    mode: "0755"
+
+# Count via positional params ($# / $1) rather than bash array-length
+# syntax: that form embeds a brace-hash pair Ansible's Jinja pass
+# mistakes for a comment opener, which breaks templating. nullglob makes
+# a non-matching glob expand to zero args instead of the literal pattern.
+- name: Copy kernel and initrd to tftp_dir
+  ansible.builtin.shell: |
+    set -euo pipefail
+    shopt -s nullglob
+    set -- "{{ armbian_rootfs_mount_dir }}"/boot/vmlinuz-*
+    [ "$#" -eq 1 ] || { echo "Expected exactly one kernel, found $#" >&2; exit 1; }
+    kernel="$1"
+    set -- "{{ armbian_rootfs_mount_dir }}"/boot/initrd.img-*
+    [ "$#" -eq 1 ] || { echo "Expected exactly one initrd, found $#" >&2; exit 1; }
+    initrd="$1"
+    cp "$kernel" "{{ armbian_rootfs_tftp_dir }}/vmlinuz"
+    cp "$initrd" "{{ armbian_rootfs_tftp_dir }}/initrd.img"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Copy board DTB to tftp_dir (try multiple candidate paths)
+  ansible.builtin.shell: |
+    set -e
+    ROOT="{{ armbian_rootfs_mount_dir }}"
+    DTB="{{ armbian_rootfs_dtb }}"
+    for CANDIDATE in \
+        "${ROOT}/boot/dtb/${DTB}" \
+        "${ROOT}/boot/dtbs/${DTB}" \
+        $(ls "${ROOT}"/boot/dtb-*/"${DTB}" 2>/dev/null) \
+        $(ls "${ROOT}"/boot/dtbs/*/"${DTB}" 2>/dev/null); do
+      if [ -f "${CANDIDATE}" ]; then
+        cp "${CANDIDATE}" "{{ armbian_rootfs_tftp_dir }}/board.dtb"
+        echo "DTB copied from ${CANDIDATE}"
+        exit 0
+      fi
+    done
+    echo "ERROR: DTB ${DTB} not found under ${ROOT}/boot/{dtb,dtbs,dtb-*}" >&2
+    exit 1
+  args:
+    executable: /bin/bash
+  changed_when: true

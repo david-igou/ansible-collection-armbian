@@ -1,7 +1,7 @@
 ---
 # Persist per-host U-Boot env state to SPI flash via fw_setenv. Generalized
 # from the rock-5b-specific Approach B (per #82's design). Any board whose
-# vars/boards.yml entry declares uboot_env.storage: spi_flash gets convergence;
+# armbian_board_config declares uboot_env.storage: spi_flash gets convergence;
 # NOWHERE boards (e.g. opi5max) skip silently.
 #
 # Composes the per-host uboot_env_vars dict from three sources in precedence
@@ -31,14 +31,13 @@
     armbian_persist_uboot_env_cycle: true
 
   pre_tasks:
-    - name: Load board configs (needed for per-host lookups)
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
+    - name: Resolve effective armbian_board_config
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
 
     - name: Skip hosts whose board has no SPI flash env
       ansible.builtin.meta: end_host
       when: >-
-        armbian_board_configs[armbian_board_model].uboot_env.storage
+        armbian_board_config.uboot_env.storage
         | default('nowhere') != 'spi_flash'
 
     - name: Validate persist_via against board env storage
@@ -46,24 +45,23 @@
         that:
           - >-
             (armbian_local_kernel.persist_via | default('hook')) == 'hook'
-            or armbian_board_configs[armbian_board_model].uboot_env.storage == 'spi_flash'
+            or armbian_board_config.uboot_env.storage == 'spi_flash'
         fail_msg: >-
           {{ inventory_hostname }}: local_kernel.persist_via=spi but board
-          {{ armbian_board_model }} uboot_env.storage={{
-            armbian_board_configs[armbian_board_model].uboot_env.storage }};
+          uboot_env.storage={{ armbian_board_config.uboot_env.storage }};
           change persist_via to 'hook' or pick a board with SPI env.
 
     - name: Validate fw_env_config completeness when persist_via=spi
       ansible.builtin.assert:
         that:
           - >-
-            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.device is defined
+            armbian_board_config.uboot_env.fw_env_config.device is defined
           - >-
-            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.offset is defined
+            armbian_board_config.uboot_env.fw_env_config.offset is defined
           - >-
-            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.size is defined
+            armbian_board_config.uboot_env.fw_env_config.size is defined
           - >-
-            armbian_board_configs[armbian_board_model].uboot_env.fw_env_config.sect_size is defined
+            armbian_board_config.uboot_env.fw_env_config.sect_size is defined
         fail_msg: >-
           {{ inventory_hostname }}: uboot_env.fw_env_config missing required keys
           (device/offset/size/sect_size) for SPI persistence.

@@ -4,50 +4,40 @@
 #
 # Pre-condition: stage_netboot_assets.yml has been run so the
 # kernel/initrd/dtb are populated under
-# {{ armbian_image_cache }}/sbc-tftp/<model>/ on netboot_server
-# (defaults to /var/lib/armbian/cache/sbc-tftp/<model>/).
+# {{ armbian_image_cache }}/sbc-tftp/<host>/ on netboot_server
+# (defaults to /var/lib/armbian/cache/sbc-tftp/<host>/).
 
 - name: Fetch TFTP artifacts from netboot server to controller cache
-  hosts: netboot_server
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   become: true
   gather_facts: false
   vars:
-    _unique_models: >-
-      {{ groups['boards']
-         | map('extract', hostvars, 'armbian_board_model')
-         | list | unique }}
     _assets: [vmlinuz, initrd.img, board.dtb]
   tasks:
-    - name: Ensure controller cache dir exists per model
+    - name: Ensure controller cache dir exists per host
       ansible.builtin.file:
         path: "{{ armbian_tftp_cache_dir }}/{{ item }}"
         state: directory
         mode: "0755"
       delegate_to: localhost
       become: false
-      loop: "{{ _unique_models }}"
+      loop: "{{ groups[armbian_boards_group] }}"
 
-    - name: Fetch each (model, asset) from netboot server
+    - name: Fetch each (host, asset) from netboot server
       ansible.builtin.fetch:
         src: "{{ armbian_image_cache | default('/var/lib/armbian/cache') }}/sbc-tftp/{{ item.0 }}/{{ item.1 }}"
         dest: "{{ armbian_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"
         flat: true
-      loop: "{{ _unique_models | product(_assets) | list }}"
+      loop: "{{ groups[armbian_boards_group] | product(_assets) | list }}"
       loop_control:
         label: "{{ item.0 }}/{{ item.1 }}"
 
 - name: Upload TFTP assets to router (reference playbook)
   import_playbook: "{{ armbian_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
   vars:
-    armbian_tftp_upload_models: >-
-      {{ groups['boards']
-         | map('extract', hostvars, 'armbian_board_model')
-         | list | unique }}
+    armbian_tftp_upload_models: "{{ groups[armbian_boards_group] }}"
 
 - name: Plumbing check — verify /ip tftp rows landed
   import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
-    armbian_tftp_check_models: >-
-      {{ groups['boards']
-         | map('extract', hostvars, 'armbian_board_model')
-         | list | unique }}
+    armbian_tftp_check_models: "{{ groups[armbian_boards_group] }}"

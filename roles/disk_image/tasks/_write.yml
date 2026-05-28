@@ -17,7 +17,7 @@
   ansible.builtin.shell:
     cmd: >-
       dd if={{ image_source | quote }} of={{ target_device | quote }}
-      bs={{ dd_bs | quote }} conv=fsync status=progress
+      bs={{ disk_image_dd_bs | quote }} conv=fsync status=progress
     executable: /bin/bash
   become: true
   when:
@@ -34,7 +34,7 @@
       set -o pipefail;
       xz -dc {{ image_source | quote }}
       | dd of={{ target_device | quote }}
-      bs={{ dd_bs | quote }} conv=fsync status=progress
+      bs={{ disk_image_dd_bs | quote }} conv=fsync status=progress
     executable: /bin/bash
   become: true
   when:
@@ -51,7 +51,7 @@
       set -o pipefail;
       curl -fsSL {{ image_source | quote }}
       | dd of={{ target_device | quote }}
-      bs={{ dd_bs | quote }} conv=fsync status=progress
+      bs={{ disk_image_dd_bs | quote }} conv=fsync status=progress
     executable: /bin/bash
   become: true
   when:
@@ -69,7 +69,7 @@
       curl -fsSL {{ image_source | quote }}
       | xz -dc
       | dd of={{ target_device | quote }}
-      bs={{ dd_bs | quote }} conv=fsync status=progress
+      bs={{ disk_image_dd_bs | quote }} conv=fsync status=progress
     executable: /bin/bash
   become: true
   when:

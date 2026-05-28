@@ -12,7 +12,7 @@
 #
 # Locate the produced .img.xz (kernel version is unknown ahead of time,
 # so regex+age-filter), and move both the image and its .sha sidecar into
-# the per-board output directory.
+# the per-host output directory.
 
 - name: Assert armbian_build_compile_args values are shell-token-safe
   ansible.builtin.assert:
@@ -38,56 +38,56 @@
       BRANCH={{ armbian_build_branch }}
       RELEASE={{ armbian_build_release }}
       {% for k, v in armbian_build_compile_args.items() %}{{ k }}={{ v }} {% endfor %}
-    chdir: "{{ armbian_build_cache_dir }}/build"
+    chdir: "{{ __image_build_cache_dir_host }}/build"
   become: false
   environment:
-    GIT_CONFIG_GLOBAL: "{{ armbian_build_cache_dir }}/.gitconfig"
+    GIT_CONFIG_GLOBAL: "{{ __image_build_cache_dir_host }}/.gitconfig"
   async: "{{ armbian_build_timeout }}"
   poll: 30
   changed_when: true
 
 - name: Locate the produced .img.xz from this run
   ansible.builtin.find:
-    paths: "{{ armbian_build_cache_dir }}/build/output/images"
+    paths: "{{ __image_build_cache_dir_host }}/build/output/images"
     patterns: "(?i)Armbian.*{{ armbian_build_board }}.*{{ armbian_build_release }}.*{{ armbian_build_branch }}.*\\.img\\.xz$"
     use_regex: true
     age: -10m
-  register: _produced_images
+  register: __image_build_produced_images
 
 - name: Assert exactly one image was produced
   ansible.builtin.assert:
-    that: _produced_images.files | length == 1
+    that: __image_build_produced_images.files | length == 1
     fail_msg: >-
       Expected exactly one .img.xz produced for
       {{ armbian_build_board }}/{{ armbian_build_release }}/{{ armbian_build_branch }},
-      found {{ _produced_images.files | length }}
+      found {{ __image_build_produced_images.files | length }}
 
 - name: Set produced image filename
   ansible.builtin.set_fact:
-    _image_filename: "{{ _produced_images.files[0].path | basename }}"
+    __image_build_image_filename: "{{ __image_build_produced_images.files[0].path | basename }}"
 
-- name: Ensure per-board output directory exists
+- name: Ensure per-host output directory exists
   ansible.builtin.file:
-    path: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}"
+    path: "{{ __image_build_output_dir_host }}"
     state: directory
     mode: "0755"
 
-- name: Move produced image into the per-board output directory
+- name: Move produced image into the per-host output directory
   ansible.builtin.command:
     cmd: >-
-      mv {{ _produced_images.files[0].path }}
-         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}
+      mv {{ __image_build_produced_images.files[0].path }}
+         {{ __image_build_output_dir_host }}/{{ __image_build_image_filename }}
   changed_when: true
 
 - name: Stat the .sha sidecar (may not exist depending on COMPRESS_OUTPUTIMAGE)
   ansible.builtin.stat:
-    path: "{{ _produced_images.files[0].path }}.sha"
-  register: _sha_stat
+    path: "{{ __image_build_produced_images.files[0].path }}.sha"
+  register: __image_build_sha_stat
 
 - name: Move the .sha sidecar if present
   ansible.builtin.command:
     cmd: >-
-      mv {{ _produced_images.files[0].path }}.sha
-         {{ armbian_build_output_dir }}/{{ armbian_build_board }}/{{ _image_filename }}.sha
+      mv {{ __image_build_produced_images.files[0].path }}.sha
+         {{ __image_build_output_dir_host }}/{{ __image_build_image_filename }}.sha
   changed_when: true
-  when: _sha_stat.stat.exists
+  when: __image_build_sha_stat.stat.exists

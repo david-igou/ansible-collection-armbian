@@ -1,0 +1,21 @@
+# roles/rootfs_provision/tasks/_resolve_src.yml
+---
+# Classify src as URL vs local path, compute a stable cache key
+# (sha256 of the resolved src string), and set the cache filename.
+
+- name: Detect source flavour (URL vs local)
+  ansible.builtin.set_fact:
+    __rootfs_provision_is_url: "{{ armbian_rootfs_src is match('^https?://') }}"
+
+- name: Compute URL-keyed cache subdir name (sha256 of src)
+  ansible.builtin.set_fact:
+    __rootfs_provision_cache_key: "{{ armbian_rootfs_src | hash('sha256') }}"
+
+- name: Compute cached .img.xz path
+  ansible.builtin.set_fact:
+    __rootfs_provision_img_xz: >-
+      {{ armbian_rootfs_image_cache }}/{{ __rootfs_provision_cache_key }}/{{ armbian_rootfs_src | basename }}
+
+- name: Compute decompressed .img path (sibling of .img.xz)
+  ansible.builtin.set_fact:
+    __rootfs_provision_img_raw: "{{ __rootfs_provision_img_xz[:-3] }}"

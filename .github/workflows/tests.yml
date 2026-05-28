@@ -70,10 +70,10 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - rootfs_clone
           - pxelinux_render
           - local_kernel_render
           - persist_uboot_env
+          - board_boot_wait
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -109,7 +109,9 @@ jobs:
         scenario:
           - disk_image
           - disk_provision
-          - image_extract
+          - image_build
+          - rootfs_provision
+          - board_boot_verify
           - bootstrap_armbian
     steps:
       - name: Check out repository
@@ -129,6 +131,34 @@ jobs:
             cloud-image-utils \
             ovmf \
             sshpass
+
+      - name: Expose Ubuntu OVMF firmware at the path molecule_provisioners expects
+        # Ubuntu ships OVMF at /usr/share/OVMF/, molecule_provisioners defaults
+        # to /usr/share/edk2/ovmf/ (Fedora/RHEL path). On Ubuntu 24.04 noble
+        # the files are OVMF_CODE_4M.fd / OVMF_VARS_4M.fd (the 4M-flash
+        # variant); older 22.04 used OVMF_CODE.fd / OVMF_VARS.fd. Detect
+        # whichever the package shipped and symlink it.
+        run: |
+          set -e
+          ls /usr/share/OVMF/
+          sudo mkdir -p /usr/share/edk2/ovmf
+          # Pick the file that actually exists (newer 4M variant preferred).
+          for base in OVMF_CODE OVMF_VARS; do
+            for src in "/usr/share/OVMF/${base}_4M.fd" "/usr/share/OVMF/${base}.fd"; do
+              if [ -f "$src" ]; then
+                sudo ln -sf "$src" "/usr/share/edk2/ovmf/${base}.fd"
+                echo "Linked $src -> /usr/share/edk2/ovmf/${base}.fd"
+                break
+              fi
+            done
+          done
+          for required in OVMF_CODE OVMF_VARS; do
+            if [ ! -f "/usr/share/edk2/ovmf/${required}.fd" ]; then
+              echo "::error::Missing /usr/share/edk2/ovmf/${required}.fd"
+              exit 1
+            fi
+          done
+          ls -laL /usr/share/edk2/ovmf/
 
       - name: Install dependencies
         run: |

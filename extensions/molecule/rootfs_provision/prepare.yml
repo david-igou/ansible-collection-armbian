@@ -1,0 +1,55 @@
+---
+- name: Prepare molecule instances
+  import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Build the synthetic .img.xz fixture inside the VM
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    # Belt-and-suspenders: the role's _validate_inputs.yml has an
+    # [ -d ] guard before the mountpoint check, but some VMs expose
+    # /var/lib/armbian/test-nfs/<host> as a phantom path or the
+    # mountpoint binary returns 0 in unusual cases. Pre-emptively
+    # nuke the target path so the role starts from a clean slate.
+    - name: Ensure rootfs target path does not exist before the role runs
+      ansible.builtin.shell: |
+        set -e
+        TARGET=/var/lib/armbian/test-nfs/{{ inventory_hostname }}
+        if mountpoint -q "$TARGET" 2>/dev/null; then
+          umount "$TARGET" || true
+        fi
+        rm -rf "$TARGET"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Ensure xz-utils, e2fsprogs, dosfstools, rsync are installed
+      ansible.builtin.apt:
+        name: [xz-utils, e2fsprogs, dosfstools, rsync]
+        state: present
+        update_cache: true
+
+    - name: Create synthetic 64MB raw image with one ext4 partition
+      ansible.builtin.shell: |
+        set -euo pipefail
+        IMG=/tmp/synthetic.img
+        rm -f "$IMG"
+        truncate -s 64M "$IMG"
+        echo -e 'o\nn\np\n1\n\n\nw\n' | fdisk "$IMG"
+        LOOP=$(losetup --find --show --partscan "$IMG")
+        mkfs.ext4 "${LOOP}p1"
+        mkdir -p /tmp/mnt
+        mount "${LOOP}p1" /tmp/mnt
+        mkdir -p /tmp/mnt/boot /tmp/mnt/etc/ssh /tmp/mnt/root /tmp/mnt/var/lib/dbus
+        touch /tmp/mnt/boot/vmlinuz-6.0.0-test
+        touch /tmp/mnt/boot/initrd.img-6.0.0-test
+        mkdir -p /tmp/mnt/boot/dtb/rockchip
+        touch /tmp/mnt/boot/dtb/rockchip/rk3588-test.dtb
+        umount /tmp/mnt
+        losetup -d "$LOOP"
+        xz -k "$IMG"
+      args:
+        executable: /bin/bash
+        creates: /tmp/synthetic.img.xz

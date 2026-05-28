@@ -1,11 +1,30 @@
 ---
+# Naming note — armbian_build_host (role input vs. inventory variable):
+#
+# This role accepts an argument named armbian_build_host (type: str).
+# As a ROLE INPUT it is the inventory_hostname string of the board being
+# built for (e.g. "orange-pi-5-pro-01"). It drives the per-host output
+# path (armbian_build_output_dir/<host>/) and per-host checkout dir so
+# concurrent builds don't collide.
+#
+# Separately, the inventory layer may define an armbian_build_host
+# HOST VARIABLE (a dict) on each board host. That dict is consumed by
+# _resolve_build_profile.yml to merge per-host build overrides on top of
+# the family/model layers. The two usages are safe because Ansible's
+# role-vars task-scope shadows inventory-vars for the duration of an
+# include_role: call — the role never sees the inventory dict under the
+# same name.
+#
 # Playbook-level preconditions (not validated by the role itself):
 #
-# image_build expects callers to pre-render the local_kernel dispatch
-# table into _local_kernel_dispatch_table and _uboot_env_storage_table
-# (see playbooks/build_and_publish_from_inventory.yml's pre_tasks). These facts are
-# templated into build_userpatches_common's __999_local_kernel_bake
-# and __999_uboot_env_check hooks at playbook run time.
+# image_build expects callers to pre-resolve the per-host build profile
+# via playbooks/tasks/_resolve_build_profile.yml and the per-host board
+# config via playbooks/tasks/_resolve_board_config.yml before invoking
+# this role. The resolved armbian_build and armbian_board_config facts
+# drive armbian_build_userpatches content (e.g. __999_local_kernel_bake
+# and __999_uboot_env_check hooks reference armbian_board_config fields).
+# See playbooks/build_and_publish_from_inventory.yml for the canonical
+# caller pattern.
 
 argument_specs:
   main:
@@ -15,14 +34,14 @@ argument_specs:
     description:
       - >-
         Single-purpose, intent-agnostic role. The caller supplies the board,
-        branch, release, and userpatches list; the role enforces the desired
-        output state under armbian_build_output_dir/<board>/.
+        host, branch, release, and userpatches list; the role enforces the
+        desired output state under armbian_build_output_dir/<host>/.
       - >-
-        Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml) pre-compute
-        _local_kernel_dispatch_table and _uboot_env_storage_table in their
-        pre_tasks and inject the results into armbian_build_userpatches
-        before invoking this role. The role itself is agnostic to the
-        content of those patches.
+        Workflow playbooks (e.g. playbooks/build_and_publish_from_inventory.yml)
+        pre-resolve armbian_build and armbian_board_config via the resolver
+        primitives in playbooks/tasks/ and inject the resolved
+        armbian_build_userpatches before invoking this role. The role
+        itself is agnostic to the content of those patches.
     options:
       armbian_build_board:
         type: str
@@ -31,6 +50,16 @@ argument_specs:
           Armbian board identifier passed as BOARD= to compile.sh.
           Must match a supported board in the armbian/build tree at
           armbian_build_ref.
+
+      armbian_build_host:
+        type: str
+        required: true
+        description: >-
+          inventory_hostname of the host this build is for. Drives the
+          per-host output path under armbian_build_output_dir/<host>/
+          and the per-host checkout dir under armbian_build_cache_dir/<host>/.
+          Used so concurrent per-host builds don't collide and so secret-
+          bearing userpatches in one host's tree never see another host's.
 
       armbian_build_branch:
         type: str
@@ -54,8 +83,12 @@ argument_specs:
         description: >-
           List of userpatches to apply before the build. Each entry is a
           mapping with keys dest (path relative to USERPATCHES_DIR, no
-          leading slash, no ..) and content (raw file text). The role is
-          fully agnostic to what the patches do.
+          leading slash, no ..) and content (raw file text).
+          Patch content MAY contain Jinja referencing the host's resolved
+          armbian_board_config fact (e.g. armbian_board_config.console);
+          apply_userpatches.yml's ansible.builtin.copy with `content:`
+          renders these references at the point the file lands on the
+          builder. The role itself is fully agnostic to what the patches do.
         elements: dict
 
       armbian_build_ref:

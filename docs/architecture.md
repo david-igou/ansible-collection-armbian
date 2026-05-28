@@ -43,8 +43,9 @@ class, takes a small input set, and produces one output. Most roles are
 independent — they consume inventory metadata or live-board state, not
 artefacts from other roles. The only direct role-to-role chain is
 **image production**: `image_build` produces a `.img.xz` that
-`image_extract` consumes, and `image_extract`'s rootfs template is the
-input to `rootfs_clone`. Everything else either feeds external systems
+`rootfs_provision` consumes (each host resolves its own source via
+`_resolve_rootfs_src.yml`, then `rootfs_provision` extracts the template
+and clones it per-host). Everything else either feeds external systems
 (TFTP / NFS servers, written by orchestration playbooks like
 `stage_router.yml`) or acts on a running board.
 
@@ -56,8 +57,7 @@ flowchart TB
 
     subgraph H2["Roles run on the netboot server"]
         direction TB
-        R_IE["<b>image_extract</b><br/>input: .img.xz (URL or local path)<br/>output: rootfs template directory<br/>+ vmlinuz/initrd/dtb (TFTP artefacts)"]
-        R_RC["<b>rootfs_clone</b><br/>input: rootfs template directory<br/>output: per-host rootfs clone<br/>(reflink + hostname/machine-id/<br/>SSH host keys reset)"]
+        R_RP["<b>rootfs_provision</b><br/>input: per-host armbian_rootfs_src (URL or local path)<br/>output: per-model rootfs template directory<br/>+ per-host rootfs clone (reflink + hostname/<br/>machine-id/SSH host keys reset)<br/>+ vmlinuz/initrd/dtb (TFTP artefacts)"]
     end
 
     subgraph H3["Roles run on the controller (localhost)"]
@@ -73,17 +73,16 @@ flowchart TB
         R_DP["<b>disk_provision</b><br/>input: declarative GPT layout,<br/>rsync source rootfs, target block device<br/>output: partitions applied via systemd-repart,<br/>fstab rewritten by LABEL, idempotent"]
     end
 
-    R_IB -- ".img.xz" --> R_IE
-    R_IE -- "rootfs template" --> R_RC
+    R_IB -- ".img.xz" --> R_RP
 ```
 
-`image_extract`'s TFTP artefacts and `pxelinux_render`'s pxelinux.cfg
+`rootfs_provision`'s TFTP artefacts and `pxelinux_render`'s pxelinux.cfg
 both leave the role boundary via orchestration playbooks
 (`stage_router.yml`, `routeros/upload_pxelinux_cfg.yml`) that `net_put`
-them to the router. `rootfs_clone`'s output is read directly by the
-netboot server's NFS export — no further copy. The three board-side
-roles are parameterised by inventory and the live board's state; they
-don't participate in the dependency chain.
+them to the router. `rootfs_provision`'s per-host clone output is read
+directly by the netboot server's NFS export — no further copy. The
+board-side roles are parameterised by inventory and the live board's
+state; they don't participate in the dependency chain.
 
 ## Playbooks
 
@@ -97,7 +96,7 @@ detail); this table is the dependency graph.
 | 0 | [`build_and_publish_from_inventory.yml`](../playbooks/build_and_publish_from_inventory.yml) | `armbian_builders` | `image_build` | — |
 | 1 | [`bootstrap_armbian.yml`](../playbooks/bootstrap_armbian.yml) | `boards` (as `root`) | `bootstrap_armbian` | — |
 | 2 | [`routeros/bootstrap_user.yml`](../playbooks/routeros/bootstrap_user.yml) | `routeros_netboot` | — (uses `community.routeros.command`) | — |
-| 3 | [`stage_netboot_assets.yml`](../playbooks/stage_netboot_assets.yml) | `netboot_server` | `image_extract`, `rootfs_clone` | — |
+| 3 | [`stage_netboot_assets.yml`](../playbooks/stage_netboot_assets.yml) | `netboot_server` | `rootfs_provision` (per host) | — |
 | 4 | [`stage_router.yml`](../playbooks/stage_router.yml) | `netboot_server` (fetch) → `routeros_router` (push) | — | `routeros/upload_tftp_assets.yml`, `routeros/plumbing_check.yml` |
 | 5 | [`converge_boot_mode.yml`](../playbooks/converge_boot_mode.yml) | `routeros_router` (plumbing) → `boards` (render + boot) | `pxelinux_render`, `board_boot_wait`, `board_boot_verify` | `routeros/plumbing_check.yml`, `routeros/upload_pxelinux_cfg.yml` |
 | 6 | [`set_boot_mode.yml`](../playbooks/set_boot_mode.yml) | (import wrapper) | — | `converge_boot_mode.yml` |

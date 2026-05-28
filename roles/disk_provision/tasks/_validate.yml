@@ -19,7 +19,7 @@
     path: "{{ disk_binding.device }}"
   register: __disk_provision_device_stat
   become: true
-  when: not (render_only | default(false) | bool)
+  when: not (disk_provision_render_only | default(false) | bool)
 
 - name: "Validate: device stat returned a block device"
   ansible.builtin.assert:
@@ -29,12 +29,12 @@
     fail_msg: |
       device {{ disk_binding.device }}: exists={{ __disk_provision_device_stat.stat.exists }}, isblk={{ __disk_provision_device_stat.stat.isblk | default(false) }}.
       Confirm the device path with `lsblk` on the target host.
-  when: not (render_only | default(false) | bool)
+  when: not (disk_provision_render_only | default(false) | bool)
 
 - name: "Validate: find source of running rootfs"
   ansible.builtin.set_fact:
     __disk_provision_root_source: "{{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
-  when: not (render_only | default(false) | bool)
+  when: not (disk_provision_render_only | default(false) | bool)
 
 - name: "Validate: refuse to wipe the disk the board is booted from"
   ansible.builtin.assert:
@@ -45,7 +45,7 @@
       {{ disk_binding.device }} (the disk this binding would wipe).
       Boot the board into a different rootfs (NFS or another local
       disk) before provisioning this one.
-  when: not (render_only | default(false) | bool)
+  when: not (disk_provision_render_only | default(false) | bool)
 
 - name: "Validate: every preserve_on_reprovision: true partition has a label"
   ansible.builtin.assert:

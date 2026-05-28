@@ -18,7 +18,7 @@
 #   armbian_bootstrap_ssh_keys  — list of public-key strings (required)
 
 - name: Bootstrap Armbian user with SSH key auth
-  hosts: boards
+  hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
 
   vars:

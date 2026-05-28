@@ -4,7 +4,7 @@
 # armbian_build_userpatches list — pure function of what the caller
 # passed in.
 #
-# The five decision fields (patch_hash, armbian_build_ref, board,
+# The six decision fields (patch_hash, armbian_build_ref, board, host,
 # branch, release) are exactly what check_manifest.yml will compare.
 
 - name: Compute patch_hash from userpatches
@@ -17,5 +17,6 @@
       patch_hash: "{{ __image_build_patch_hash }}"
       armbian_build_ref: "{{ armbian_build_ref }}"
       board: "{{ armbian_build_board }}"
+      host: "{{ armbian_build_host }}"
       branch: "{{ armbian_build_branch }}"
       release: "{{ armbian_build_release }}"

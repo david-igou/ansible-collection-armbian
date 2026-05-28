@@ -93,6 +93,6 @@
         name: disk_provision
       vars:
         device: "{{ armbian_local_disk_device }}"
-        source: "/"
+        disk_provision_source: "/"
         label: "{{ armbian_local_disk_label }}"
         force: "{{ armbian_local_disk_force | bool }}"

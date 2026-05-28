@@ -1,21 +1,8 @@
+# inventory/group_vars/orange_pi_5_pro.yml
 ---
-# Per-model vars for the orange_pi_5_pro group. Loaded by
-# playbooks/build_image.yml when building the orange-pi-5-pro
-# armbian image. See playbooks/build_image.yml's pre_tasks block for
-# the resolver mechanism (how per-model group_vars get wired into the
-# build).
+armbian_board_config_model:
+  armbian_board_name: orangepi5pro
+  dtb: rockchip/rk3588s-orangepi-5-pro.dtb
 
-# ── armbian/build BRANCH ─────────────────────────────────────────────
-# orange-pi-5-pro uses the YT6801 PCIe NIC, which is supported only by
-# armbian/build's `orangepi5pro` board config on the edge branch
-# (mainline u-boot v2026.04). The current branch's family-default
-# Radxa fork lacks the YT6801 driver entirely.
-armbian_board_branch: edge
-
-# ── per-board userpatches ────────────────────────────────────────────
-# None — the rk3588 family-level overlay
-# (build_userpatches_common.__999_pxe_first in group_vars/armbian.yml)
-# covers PXE-first ordering and CONFIG_PCI_INIT_R backfill. Add
-# per-board entries here only after confirming the family hook does
-# not cover your case.
-# armbian_board_userpatches: []
+armbian_build_model:
+  branch: edge   # YT6801 PCIe NIC requires mainline u-boot v2026.04 from edge

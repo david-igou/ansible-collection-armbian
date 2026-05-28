@@ -9,15 +9,19 @@
       Defined extra_modes keys:
       {{ pxelinux_render_extra_modes | default({}) | dict2items | map(attribute='key') | list }}.
 
-- name: Validate pxelinux_render_earlycon is set when pxelinux_render_pxe_verbose is true
+- name: Validate armbian_board_config.earlycon is set when pxelinux_render_pxe_verbose is true
   ansible.builtin.assert:
     that:
-      - pxelinux_render_earlycon | length > 0
+      - armbian_board_config is defined
+      - armbian_board_config.earlycon | default('') | length > 0
     fail_msg: >-
       pxelinux_render_pxe_verbose=true was requested but
-      pxelinux_render_earlycon was not supplied. Set it to
-      <driver>,<bus>,<mmio_addr> (e.g. uart8250,mmio32,0xfeb50000
-      for RK3588S UART2) or unset pxelinux_render_pxe_verbose.
+      armbian_board_config.earlycon was not resolved. Either ensure
+      the calling playbook ran _resolve_board_config.yml before
+      pxelinux_render so the host's family-layer earlycon flows
+      through, or unset pxelinux_render_pxe_verbose.
+      Expected format: <driver>,<bus>,<mmio_addr>
+      (e.g. uart8250,mmio32,0xfeb50000 for RK3588S UART2).
   when: pxelinux_render_pxe_verbose | bool
 
 - name: Compute pxelinux filename
@@ -35,3 +39,4 @@
     src: pxelinux_cfg.j2
     dest: "{{ pxelinux_render_output_dir }}/{{ __pxelinux_render_pxe_filename }}"
     mode: "0644"
+    backup: true

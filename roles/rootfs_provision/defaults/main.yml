@@ -1,0 +1,18 @@
+# roles/rootfs_provision/defaults/main.yml
+---
+# Required from caller — no defaults:
+#   armbian_rootfs_src
+#   armbian_rootfs_host
+#   armbian_rootfs_dtb
+
+armbian_rootfs_target_dir: "{{ armbian_nfs_rootfs_path }}/{{ armbian_rootfs_host }}"
+armbian_rootfs_tftp_dir: "{{ armbian_image_cache }}/sbc-tftp/{{ armbian_rootfs_host }}"
+
+# URL-keyed shared download cache. Hosts pointing at the same upstream URL
+# share the .img.xz download; extraction is always per-host.
+armbian_rootfs_image_cache: "{{ armbian_image_cache }}/downloads"
+
+# Where the .img.xz gets mounted during extraction (loop device target).
+armbian_rootfs_mount_dir: "/mnt/armbian_rootfs_provision"
+
+armbian_rootfs_force_refresh: false

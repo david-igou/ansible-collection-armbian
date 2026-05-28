@@ -6,3 +6,9 @@ mp_defaults:
     # ssh_user is irrelevant here — molecule_provisioners writes its runtime
     # inventory using cloud-user but we override that in prepare.yml.
     ssh_user: cloud-user
+    # molecule_provisioners' UEFI launch path defaults cpu_model to
+    # 'qemu64-v2' under TCG, which qemu < 8.0 (RHEL 10's bundled qemu)
+    # doesn't ship. Nehalem is the oldest named model that satisfies
+    # the x86-64-v2 ABI glibc requires on RHEL/Rocky/CentOS 9+ and is
+    # available across all qemu versions we care about.
+    cpu_model: Nehalem

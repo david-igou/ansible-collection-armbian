@@ -5,7 +5,7 @@
 
 - name: "Populate: define per-device mount root"
   ansible.builtin.set_fact:
-    __disk_provision_mount_root: "{{ mount_dir_base }}/{{ __disk_provision_device_basename }}"
+    __disk_provision_mount_root: "{{ disk_provision_mount_dir_base }}/{{ __disk_provision_device_basename }}"
 
 - name: "Populate: ensure mount root exists"
   ansible.builtin.file:
@@ -82,7 +82,7 @@
           - --delete
           - --itemize-changes
           - "--exclude-from={{ __disk_provision_mount_root }}.excludes"
-          - "{{ source }}/"
+          - "{{ disk_provision_source }}/"
           - "{{ __disk_provision_mount_root }}/"
       register: __disk_provision_rsync
       changed_when: (__disk_provision_rsync.stdout_lines | length) > 0
@@ -108,6 +108,7 @@
         src: fstab.j2
         dest: "{{ __disk_provision_mount_root }}/etc/fstab"
         mode: "0644"
+        backup: true
       become: true
 
     - name: "Populate: rewrite /boot/extlinux/extlinux.conf root= if present"
@@ -126,7 +127,7 @@
         regexp: "^INSTALLED="
         line: "INSTALLED=true"
         create: false
-      when: armbian_installed_marker | bool
+      when: disk_provision_installed_marker | bool
       failed_when: false
       become: true
 
@@ -139,7 +140,7 @@
       loop:
         - etc/machine-id
         - var/lib/dbus/machine-id
-      when: reset_identity | bool
+      when: disk_provision_reset_identity | bool
       become: true
 
     - name: "Populate: sync to flush rsync data"

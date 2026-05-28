@@ -41,6 +41,7 @@
       Preserve scan: existing labels on {{ disk_binding.device }}:
       {{ __disk_provision_existing_labels }}; partitions to preserve (skip wipe):
       {{ __disk_provision_preserve_ids }}; force={{ disk_binding.force | default(false) }}
+    verbosity: 1
 
 - name: "Preserve scan: when force=true, clear preserve list (operator escape hatch)"
   ansible.builtin.set_fact:

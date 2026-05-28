@@ -1,51 +1,33 @@
 ---
-# Stage netboot assets on the netboot server:
-#   1. Extract one rootfs template + TFTP artifact set per unique board model
-#   2. Reflink-clone the per-host rootfs for every board in inventory
+# playbooks/stage_netboot_assets.yml
 #
-# All artifacts land at known paths on the netboot server. The follow-up
-# stage_router.yml playbook fetches the TFTP artifacts to the controller
-# and pushes them to the router.
+# Per-host rootfs provisioning on the netboot server.
+#
+# 1. Resolve armbian_board_config and armbian_rootfs_src per board host.
+# 2. For each board host: extract its rootfs (per-host), stage TFTP, reset identity.
 
-- name: Stage netboot assets on netboot server
-  hosts: netboot_server
+- name: Resolve effective board configs and rootfs sources per board host
+  hosts: "{{ armbian_boards_group | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - name: Resolve effective armbian_board_config
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+    - name: Resolve armbian_rootfs_src per host
+      ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+
+- name: Provision per-host NFS rootfs + TFTP artifacts
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   become: true
   gather_facts: false
-  vars:
-    _unique_models: >-
-      {{ groups['boards']
-         | map('extract', hostvars, 'armbian_board_model')
-         | list | unique }}
   tasks:
-    - name: Load board configs from collection vars
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
-
-    - name: Extract per-model templates + TFTP artifacts
+    - name: Run rootfs_provision per board host
       ansible.builtin.include_role:
-        name: image_extract
+        name: rootfs_provision
       vars:
-        armbian_image_src: "{{ armbian_image_urls[item] }}"
-        model_name: "{{ item }}"
-        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ item }}"
-        tftp_dir: "{{ armbian_image_cache | default('/var/lib/armbian/cache') }}/sbc-tftp/{{ item }}"
-        board_dtb: "{{ armbian_board_configs[item].dtb }}"
-        force_refresh: "{{ armbian_force_refresh | default(false) }}"
-      loop: "{{ _unique_models }}"
-
-    - name: Clone per-host rootfs for every board in inventory
-      ansible.builtin.include_role:
-        name: rootfs_clone
-      vars:
-        template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[_board].armbian_board_model }}"
-        target_dir: "{{ armbian_nfs_rootfs_path }}/{{ _board }}"
-        hostname: "{{ _board }}"
-        force_refresh: "{{ armbian_force_refresh | default(false) }}"
-      # Use loop_var: _board (not the default `item`) so inner loops inside
-      # the role's identity_reset.yml don't shadow our hostname when their
-      # own loop binds `item` to "etc/machine-id" etc. — that re-evaluates
-      # target_dir to /mnt/.../etc/machine-id and the copy task fails with
-      # "Destination directory ... does not exist".
-      loop: "{{ groups['boards'] }}"
+        armbian_rootfs_src: "{{ hostvars[_board].armbian_rootfs_src }}"
+        armbian_rootfs_host: "{{ _board }}"
+        armbian_rootfs_dtb: "{{ hostvars[_board].armbian_board_config.dtb }}"
+        armbian_rootfs_force_refresh: "{{ armbian_force_refresh | default(false) }}"
+      loop: "{{ groups[armbian_boards_group | default('boards')] }}"
       loop_control:
         loop_var: _board

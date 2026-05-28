@@ -88,18 +88,18 @@ argument_specs:
                 type: bool
                 default: false
                 description: "If true and a partition with matching label already exists, skip wipe + exclude from rsync. Requires label."
-      source:
+      disk_provision_source:
         type: path
         default: "/"
         description: >-
           Source rootfs to rsync. Typically "/" when the role runs on
           a board copying its currently-mounted rootfs; can be any
           directory containing a populated Linux rootfs.
-      armbian_installed_marker:
+      disk_provision_installed_marker:
         type: bool
         default: true
         description: "Write INSTALLED=true to /etc/armbian-image-release on the target to suppress armbian-resize-filesystem."
-      reset_identity:
+      disk_provision_reset_identity:
         type: bool
         default: false
         description: >-
@@ -109,11 +109,11 @@ argument_specs:
           machine-id across both boot modes — it's the same machine.
           Set true when provisioning a disk for a *different* host
           than the source.
-      mount_dir_base:
+      disk_provision_mount_dir_base:
         type: path
         default: "/var/lib/armbian/disk_provision_mnt"
         description: "Base for per-device temporary mount points. Each device mounts under <base>/<device-basename>/."
-      render_only:
+      disk_provision_render_only:
         type: bool
         default: false
         description: "When true, render .repart.d configs and run validation, then return. Used by Layer 1 molecule test."

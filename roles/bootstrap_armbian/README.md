@@ -51,6 +51,25 @@ default `"1234"`) supplies the password.
 Most users invoke this role indirectly via
 `playbooks/bootstrap_armbian.yml`.
 
+## Idempotency & check mode
+
+Re-running against an already-bootstrapped board reconciles
+`~/.ssh/authorized_keys` and `/etc/sudoers.d/<user>`, and is otherwise
+a no-op. The role connects as `root` with a password; if the board has
+already had `PasswordAuthentication no` set, re-runs require that the
+SSH key already be present. `--check` mode is supported for the
+assertion and key tasks, but the handler (sshd restart) will not fire.
+
+## Rollback / Recovery
+
+If the role fails mid-run, the user may or may not exist. To recover:
+connect as `root` (with the default Armbian password or a serial console),
+delete the partial user state (`userdel -r <user>`), remove
+`/etc/sudoers.d/<user>` if present, and re-run the role. Because the
+role creates the user before installing the SSH key, a failure between
+those steps leaves a passwordless-login-blocked account — safe to delete
+and retry.
+
 ## Security note
 
 The created user gets unrestricted `NOPASSWD: ALL` sudo via

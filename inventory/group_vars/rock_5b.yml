@@ -1,54 +1,32 @@
+# inventory/group_vars/rock_5b.yml
 ---
-# Per-model vars for the rock_5b group.
-#
-# NOTE: rock_5b is not declared in the example inventory/hosts.yml
-# (the doc-only inventory currently tracks four rk3588(s) boards).
-# This file serves as a template for operators whose real inventory
-# does include rock-5b — copy it into your .inventory/group_vars/
-# along with adding the rock_5b group to hosts.yml.
+armbian_board_config_model:
+  armbian_board_name: rock-5b
+  dtb: rockchip/rk3588-rock-5b.dtb
+  uboot_env:
+    storage: spi_flash
+    fw_env_config:
+      device: /dev/mtd0
+      offset: "0xc00000"
+      size: "0x20000"
+      sect_size: "0x1000"
+    defaults:
+      pxefile_addr_r: "0x00500000"
+      kernel_addr_r: "0x02080000"
+      ramdisk_addr_r: "0x06000000"
+      fdt_addr_r: "0x08000000"
+      scriptaddr: "0x00c00000"
+      bootmeths: "pxe extlinux script efi"
 
-# ── armbian/build BRANCH ─────────────────────────────────────────────
-# armbian/build's
-# `post_family_config_branch_edge__rock-5b_use_mainline_uboot` (in
-# config/boards/rock-5b.conf) swaps the Radxa next-dev-v2024.10 fork
-# (which lacks the RTL8125 PCIe NIC driver Rock 5B ships with) for
-# mainline u-boot. The family-default `current` branch builds against
-# the Radxa fork and cannot PXE on Rock 5B.
-#
-# Our `__999_rock5b_uboot_v2026_04` hook below (delivered via the
-# per-board conf overlay) bumps that upstream-hook's v2026.01 default
-# to v2026.04. Both hooks gate on BRANCH=edge.
-armbian_board_branch: edge
-
-# ── per-board userpatches ────────────────────────────────────────────
-# Delivered as a userpatches OVERLAY of config/boards/rock-5b.conf —
-# armbian/build sources userpatches/config/boards/<board>.conf AFTER
-# the upstream board conf, so this ADDS our hook function rather than
-# replacing the upstream file (which carries the v2026.01 mainline
-# pin we are bumping). The overlay is only sourced when BOARD=rock-5b
-# is being built, so this hook does not run for any other rk3588 board.
-#
-# armbian/build's extension manager registers any function matching
-# `post_family_config_branch_<branch>__*` and calls them after the
-# family config is resolved, in numeric-prefix sort order. Upstream's
-# `post_family_config_branch_edge__rock-5b_use_mainline_uboot` is
-# auto-prefixed `500_`; ours has an explicit `__999_` numeric ID so it
-# sorts after upstream and wins on the BOOTBRANCH / BOOTPATCHDIR
-# re-declaration. armbian/build ships a `patch/u-boot/v2026.04/`
-# directory, so BOOTPATCHDIR points at a real patch set (not at
-# v2026.01 patches applied to a v2026.04 tree, which would risk
-# rejects).
-#
-# v2026.04 does NOT clear any of rock-5b's three PXE failure layers
-# on its own — Approach B (playbooks/persist_uboot_env.yml) still has
-# to run to populate SPI env. The bump is just to track upstream.
-armbian_board_userpatches:
-  - dest: "config/boards/rock-5b.conf"
-    content: |
-      function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
-          [[ "${BOARD}" != "rock-5b" ]] && return 0
-          [[ "${BRANCH}" != "edge" ]] && return 0
-          display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
-          declare -g BOOTBRANCH="tag:v2026.04"
-          declare -g BOOTPATCHDIR="v2026.04"
-      }
+armbian_build_model:
+  branch: edge
+  userpatches:
+    - dest: config/boards/rock-5b.conf
+      content: |
+        function post_family_config_branch_edge__999_rock5b_uboot_v2026_04() {
+            [[ "${BOARD}" != "rock-5b" ]] && return 0
+            [[ "${BRANCH}" != "edge" ]] && return 0
+            display_alert "${BOARD}" "overriding u-boot pin to v2026.04 (was v2026.01)" "info"
+            declare -g BOOTBRANCH="tag:v2026.04"
+            declare -g BOOTPATCHDIR="v2026.04"
+        }

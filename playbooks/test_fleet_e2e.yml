@@ -7,9 +7,9 @@
 #
 #   Phase 0 — PoE-off all target boards (clean slate; no live rootfs at
 #             risk during Phase 1's NFS reset).
-#   Phase 1 — Force-refresh per-model NFS template + per-host NFS clone
-#             on netboot_server (image_extract + rootfs_clone, both
-#             force_refresh=true). Boards stay powered off.
+#   Phase 1 — Force-refresh per-host NFS rootfs on netboot_server
+#             (rootfs_provision with force_refresh=true per host;
+#             re-extracts template and re-clones). Boards stay powered off.
 #   Phase 2 — Converge to NFS, PoE-on + wait, run bootstrap_armbian
 #             unconditionally (fresh NFS clone has only root+password),
 #             persist SPI U-Boot env for spi_flash boards (no-op for
@@ -30,9 +30,9 @@
 # Pre-requirements (one-time per fleet):
 #   - SSH key in ~/.ssh authorised on `boards`, `netboot_server`,
 #     the RouterOS router, and each PoE switch.
-#   - Inventory's `armbian_image_urls[<model>]` set per model
-#     (https://, http://, or absolute path; consumed by both Phase 1
-#     image_extract on netboot_server and Phase 3 disk_image on boards).
+#   - Per-host armbian_rootfs_src set (or resolvable via published manifest)
+#     for both Phase 1 rootfs_provision on netboot_server and Phase 3
+#     disk_image on boards.
 #   - stage_router.yml has been run (per-model TFTP rows on the router).
 #   - Inventory's `armbian_local_disks` set per board (Phase 5).
 #   - Inventory's `armbian_poe_switch` + `armbian_poe_port`
@@ -166,21 +166,27 @@
             ansible_connection: local
           delegate_to: localhost
 
-- name: "Phase 1 — Force-refresh NFS templates + per-host clones (netboot_server)"
+- name: "Phase 1 — Resolve per-board configs and rootfs sources (boards play)"
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  vars:
+    skip_phase_1: false
+  tasks:
+    - name: "Phase 1 — resolve board config + rootfs src (skipped if phase skipped)"
+      when: not (skip_phase_1 | bool)
+      block:
+        - name: "Phase 1 — resolve effective armbian_board_config"
+          ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+        - name: "Phase 1 — resolve armbian_rootfs_src"
+          ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+
+- name: "Phase 1 — Force-refresh per-host NFS rootfs + TFTP (netboot_server)"
   hosts: netboot_server
   become: true
   gather_facts: false
   vars:
     skip_phase_1: false
     _target_boards: "{{ query('inventory_hostnames', target_hosts | default('boards')) }}"
-    _target_models: >-
-      {{ _target_boards
-         | map('extract', hostvars, 'armbian_board_model')
-         | list | unique }}
-  pre_tasks:
-    - name: "Phase 1 — load board configs (consumed by image_extract dtb lookup)"
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
 
   tasks:
     - name: "Phase 1 — block"
@@ -191,26 +197,14 @@
             _t_phase_1_start: "{{ lookup('pipe', 'date +%s') | int }}"
           run_once: true
 
-        - name: "Phase 1 — extract per-model templates (force_refresh)"
+        - name: "Phase 1 — provision per-host rootfs (force_refresh)"
           ansible.builtin.include_role:
-            name: image_extract
+            name: rootfs_provision
           vars:
-            armbian_image_src: "{{ armbian_image_urls[item] }}"
-            model_name: "{{ item }}"
-            template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ item }}"
-            tftp_dir: "{{ armbian_image_cache | default('/var/lib/armbian/cache') }}/sbc-tftp/{{ item }}"
-            board_dtb: "{{ armbian_board_configs[item].dtb }}"
-            force_refresh: true
-          loop: "{{ _target_models }}"
-
-        - name: "Phase 1 — clone per-host rootfs (force_refresh)"
-          ansible.builtin.include_role:
-            name: rootfs_clone
-          vars:
-            template_dir: "{{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[_board].armbian_board_model }}"
-            target_dir: "{{ armbian_nfs_rootfs_path }}/{{ _board }}"
-            hostname: "{{ _board }}"
-            force_refresh: true
+            armbian_rootfs_src: "{{ hostvars[_board].armbian_rootfs_src }}"
+            armbian_rootfs_host: "{{ _board }}"
+            armbian_rootfs_dtb: "{{ hostvars[_board].armbian_board_config.dtb }}"
+            armbian_rootfs_force_refresh: true
           loop: "{{ _target_boards }}"
           loop_control:
             loop_var: _board
@@ -231,8 +225,8 @@
             mkdir -p "${DIR}"
             cat > "${DIR}/nfs-reset-evidence.txt" <<EOF
             === Phase 1 (NFS reset) — ${HOST} ===
-            template: {{ armbian_nfs_rootfs_path }}/_templates/{{ hostvars[board].armbian_board_model }}
-            target:   {{ armbian_nfs_rootfs_path }}/${HOST}
+            rootfs_src: {{ hostvars[board].armbian_rootfs_src | default('(resolved at runtime)') }}
+            target:     {{ armbian_nfs_rootfs_path }}/${HOST}
             force_refresh: true
             EOF
             T_END=$(date +%s)
@@ -257,9 +251,8 @@
     skip_phase_2: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/2-nfs-bootstrap"
   pre_tasks:
-    - name: "Phase 2a — load board configs"
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
+    - name: "Phase 2a — resolve effective armbian_board_config"
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 2a — block"
       when: not (skip_phase_2 | bool)
@@ -368,6 +361,10 @@
   vars:
     skip_phase_3: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/3-dd-sd"
+  pre_tasks:
+    - name: "Phase 3 — resolve armbian_rootfs_src (for disk_image; idempotent if Phase 1 ran)"
+      ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+      when: not (skip_phase_3 | bool)
   tasks:
     - name: "Phase 3 — block"
       when: not (skip_phase_3 | bool)
@@ -376,23 +373,22 @@
           ansible.builtin.set_fact:
             _t_phase_3_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
-        # disk_image runs on the board and must reach the image
-        # itself. armbian_image_urls is the unified per-model
-        # source consumed by both Phase 1 image_extract (on the
-        # netboot_server) and this Phase 3 disk_image (on the board);
-        # the value must be reachable from whichever host consumes it.
+        # disk_image runs on the board and fetches the image itself.
+        # armbian_rootfs_src is the per-host HTTP URL resolved from the
+        # published manifest (or a host_vars pin); both the netboot_server
+        # (Phase 1 rootfs_provision) and the boards here consume it.
         - name: "Phase 3 — dd canonical image to SD"
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_image_urls[armbian_board_model] }}"
+            image_source: "{{ armbian_rootfs_src }}"
             target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 3 — write evidence"
           ansible.builtin.copy:
             content: |
               === Phase 3 (dd SD) — {{ inventory_hostname }} ===
-              source:  {{ armbian_image_urls[armbian_board_model] }}
+              source:  {{ armbian_rootfs_src }}
               target:  {{ armbian_sd_device | default('/dev/mmcblk0') }}
               From-state: NFS rootfs (board was bootstrapped + verified NFS in Phase 2)
             dest: "{{ fleet_artifact_dir }}/dd-sd-evidence.txt"
@@ -418,9 +414,8 @@
     skip_phase_4: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/4-sd-bootstrap"
   pre_tasks:
-    - name: "Phase 4 — load board configs"
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
+    - name: "Phase 4 — resolve effective armbian_board_config"
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 4 — block"
       when: not (skip_phase_4 | bool)
@@ -509,9 +504,8 @@
     skip_phase_5: false
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/5-nvme-localkernel"
   pre_tasks:
-    - name: "Phase 5 — load board configs"
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../vars/boards.yml"
+    - name: "Phase 5 — resolve effective armbian_board_config"
+      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 5 — block"
       when: not (skip_phase_5 | bool)
@@ -563,7 +557,7 @@
         - name: "Phase 5 — record TFTP HITS BEFORE local_kernel cycle"
           community.routeros.command:
             commands:
-              - '/ip tftp print where real-filename~"{{ armbian_board_model }}/vmlinuz"'
+              - '/ip tftp print where real-filename~"{{ inventory_hostname }}/vmlinuz"'
           delegate_to: "{{ armbian_router }}"
           register: _hits_before
           changed_when: false
@@ -577,7 +571,7 @@
         - name: "Phase 5 — record TFTP HITS AFTER local_kernel cycle"
           community.routeros.command:
             commands:
-              - '/ip tftp print where real-filename~"{{ armbian_board_model }}/vmlinuz"'
+              - '/ip tftp print where real-filename~"{{ inventory_hostname }}/vmlinuz"'
           delegate_to: "{{ armbian_router }}"
           register: _hits_after
           changed_when: false

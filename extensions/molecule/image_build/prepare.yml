@@ -20,7 +20,12 @@
   become: true
 
   vars:
-    _output_dir: /var/lib/armbian_build/output/orangepi5pro
+    # Path uses armbian_build_host (per-host re-key), NOT
+    # armbian_build_board. The converge passes
+    # armbian_build_host=build-orangepi5pro so the role's per-host suffix
+    # writes to /var/lib/armbian_build/output/build-orangepi5pro/.
+    _build_host: build-orangepi5pro
+    _output_dir: "/var/lib/armbian_build/output/{{ _build_host }}"
     _placeholder_image: Armbian_PRESEED-orangepi5pro-bookworm-current.img.xz
     # Default from roles/image_build/defaults/main.yml; must match what the
     # role will compute in compute_inputs.yml so check_manifest accepts.
@@ -111,6 +116,7 @@
           patch_hash: "{{ _preseed_patch_hash }}"
           armbian_build_ref: "{{ _armbian_build_ref }}"
           board: orangepi5pro
+          host: "{{ _build_host }}"
           branch: current
           release: bookworm
           image_filename: "{{ _placeholder_image }}"

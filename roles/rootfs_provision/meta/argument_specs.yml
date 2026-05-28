@@ -1,0 +1,54 @@
+# roles/rootfs_provision/meta/argument_specs.yml
+---
+argument_specs:
+  main:
+    short_description: Provision a per-host NFS rootfs from an .img.xz source.
+    description:
+      - >-
+        Downloads or copies an Armbian .img.xz, extracts the rootfs into a
+        per-host directory on the netboot server, stages
+        kernel/initrd/dtb to a TFTP cache directory, and resets host
+        identity (hostname, machine-id, SSH host keys).
+      - >-
+        With per-host builds there is no rootfs-template sharing across
+        hosts of different images, so extract-and-clone happens in one
+        invocation. A shared per-model template is still written for same-
+        model hosts to amortize extraction cost via reflink-copy.
+    options:
+      armbian_rootfs_src:
+        type: str
+        required: true
+        description: >-
+          .img.xz source. https:// URL, http:// URL, or absolute path.
+          Resolved by the caller per the precedence in
+          playbooks/tasks/_resolve_rootfs_src.yml.
+      armbian_rootfs_host:
+        type: str
+        required: true
+        description: >-
+          inventory_hostname this rootfs is for. Drives identity reset
+          (hostname, machine-id) and the default target_dir suffix.
+      armbian_rootfs_dtb:
+        type: str
+        required: true
+        description: >-
+          DTB path under /boot/dtb/ to stage as the TFTP board.dtb
+          (e.g. "rockchip/rk3588-rock-5b.dtb"). Comes from the host's
+          resolved armbian_board_config.dtb.
+      armbian_rootfs_target_dir:
+        type: str
+        required: false
+        description: NFS rootfs destination. Default per-host suffix under armbian_nfs_rootfs_path.
+      armbian_rootfs_tftp_dir:
+        type: str
+        required: false
+        description: Per-host TFTP staging dir. Default per-host suffix under armbian_image_cache/sbc-tftp.
+      armbian_rootfs_image_cache:
+        type: str
+        required: false
+        description: URL-keyed shared download cache. Hosts pointing at the same URL share the download.
+      armbian_rootfs_force_refresh:
+        type: bool
+        required: false
+        default: false
+        description: Force re-extract regardless of sentinel.

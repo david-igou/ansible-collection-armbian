@@ -1,0 +1,18 @@
+# roles/rootfs_provision/meta/main.yml
+---
+galaxy_info:
+  author: David Igou
+  description: >-
+    Per-host rootfs provisioning. Downloads/copies an Armbian .img.xz,
+    extracts the rootfs into a per-host directory on the netboot server,
+    stages kernel/initrd/dtb to a TFTP cache, and resets host identity
+    (hostname, machine-id, SSH host keys). Single primitive that replaces
+    the previous two-step provisioning flow.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions: [9, 10]
+    - name: Debian
+      versions: [bookworm, trixie]
+dependencies: []

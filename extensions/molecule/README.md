@@ -27,15 +27,16 @@ it because it is absent from the root `requirements.yml`.
 
 | Scenario | Role exercised | Default backend | Image |
 |---|---|---|---|
+| `board_boot_verify` | `board_boot_verify` | qemu | Debian 13 (Trixie) genericcloud |
+| `board_boot_wait` | `board_boot_wait` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `bootstrap_armbian` | `bootstrap_armbian` | qemu (UEFI) | Armbian Trixie UEFI x86 cloud_minimal |
 | `disk_image` | `disk_image` | qemu | Debian 13 (Trixie) genericcloud |
 | `disk_provision` | `disk_provision` | qemu | Debian 13 (Trixie) genericcloud |
-| `image_extract` | `image_extract` | qemu | Debian 13 (Trixie) genericcloud |
 | `image_build` | `image_build` (skip-build short-circuit) | qemu | Debian 13 (Trixie) genericcloud |
 | `local_kernel_render` | `image_build` (template macro) | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
-| `rootfs_clone` | `rootfs_clone` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
+| `rootfs_provision` | `rootfs_provision` | qemu | Debian 13 (Trixie) genericcloud |
 
 Switch backend per invocation (only meaningful when the scenario's
 inventory ships multiple `mp.<backend>` blocks):
@@ -54,12 +55,10 @@ PROVISIONER=podman molecule test
 The devcontainer (`/workspace/igou-devenv`) ships all of the above plus
 `/dev/kvm` passthrough.
 
-## Why some roles aren't covered
+## What the board_boot_* scenarios cover
 
-Two roles are deliberately not exercised by molecule:
-
-- **`board_boot_wait`** — a thin wrapper around `wait_for` + `wait_for_connection`. Asserting that the wrapper works asserts that Ansible's own modules work. `playbooks/test_hardware_e2e.yml` exercises the real concern (board comes up after a cold boot).
-- **`board_boot_verify`** — asserts `ansible_mounts['/']` matches the declared boot mode. Meaningful only against a real PXE-booted board; a stock cloud-image VM can't produce that state without standing up an NFS sidecar (and at that point we're testing the sidecar, not the role). `playbooks/test_hardware_e2e.yml` covers both NFS and local modes on real hardware.
+- **`board_boot_wait`** — happy-path (instance reachable, role completes quickly) plus timeout-path (unroutable host in TEST-NET-2, role MUST fail-into-rescue). Exercises the wrapper's contract; the real hardware concern (board comes up after a cold boot) is still covered by `playbooks/test_hardware_e2e.yml`.
+- **`board_boot_verify`** — runs against a real Debian VM (qemu) so `ansible_mounts['/']` is populated. Asserts `sd`/`local` modes pass (container/VM has a block-device `/`) and `nfs`/`local_kernel` modes correctly fail-into-rescue (rootfs is neither NFS nor `/dev/nvme*`). NFS and local_kernel happy paths still require real hardware via `playbooks/test_hardware_e2e.yml`.
 
 ## Why `image_build` and `bootstrap_armbian` are special
 

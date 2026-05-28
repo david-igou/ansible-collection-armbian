@@ -17,7 +17,7 @@
 
 - name: Ensure parent directories for userpatches files exist
   ansible.builtin.file:
-    path: "{{ (armbian_build_cache_dir + '/build/userpatches/' + item.dest) | dirname }}"
+    path: "{{ (__image_build_cache_dir_host + '/build/userpatches/' + item.dest) | dirname }}"
     state: directory
     mode: "0755"
   become: false
@@ -27,7 +27,7 @@
 
 - name: Write userpatches files
   ansible.builtin.copy:
-    dest: "{{ armbian_build_cache_dir }}/build/userpatches/{{ item.dest }}"
+    dest: "{{ __image_build_cache_dir_host }}/build/userpatches/{{ item.dest }}"
     content: "{{ item.content }}"
     mode: "0644"
   become: false

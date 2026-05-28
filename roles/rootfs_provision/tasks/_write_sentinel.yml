@@ -1,0 +1,23 @@
+# roles/rootfs_provision/tasks/_write_sentinel.yml
+---
+- name: Capture provision timestamp
+  ansible.builtin.set_fact:
+    __rootfs_provision_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(lookup('pipe', 'date -u +%s') | int) }}"
+
+- name: Compute sha256 of the cached .img.xz
+  ansible.builtin.stat:
+    path: "{{ __rootfs_provision_img_xz }}"
+    checksum_algorithm: sha256
+  register: __rootfs_provision_img_stat
+
+- name: Write sentinel JSON
+  ansible.builtin.copy:
+    dest: "{{ armbian_rootfs_target_dir }}/.armbian_rootfs_provision_complete"
+    content: |
+      {{ {
+           'src': armbian_rootfs_src,
+           'src_sha256': __rootfs_provision_img_stat.stat.checksum,
+           'host': armbian_rootfs_host,
+           'provisioned_at': __rootfs_provision_at
+         } | to_nice_json(sort_keys=true) }}
+    mode: "0644"

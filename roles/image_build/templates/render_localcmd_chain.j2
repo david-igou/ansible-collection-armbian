@@ -3,7 +3,7 @@
    the `local_kernel` boot mode.
 
    Inputs:
-     board_cfg: an entry from armbian_board_configs (must have
+     board_cfg: the resolved armbian_board_config fact (must have
                 local_kernel.{storage,storage_scan}, dtb, console).
      overrides: optional dict with keys that override the board defaults.
                 Supported override keys: storage, storage_scan,
@@ -35,10 +35,11 @@
      root_label:   armbi_root_local  (overridable; matches pxelinux_render default)
 
    Consumed by:
-     - the __999_local_kernel_bake hook in inventory/group_vars/armbian.yml's
-       build_userpatches_common (Task 4); the dispatch table itself is
-       templated by playbooks/build_and_publish_from_inventory.yml's pre_tasks.
-     - playbooks/tasks/compose_uboot_env_vars.yml (Task 6)
+     - the __999_local_kernel_bake hook in armbian_build_family.userpatches
+       (inventory/group_vars/<family>.yml); rendered per-host via
+       armbian_board_config resolved by _resolve_board_config.yml before
+       build_and_publish_from_inventory.yml invokes image_build.
+     - playbooks/tasks/compose_uboot_env_vars.yml
 #}
 {%- macro render_localcmd_chain(board_cfg, overrides={}) -%}
 {%- set lk = board_cfg.local_kernel -%}

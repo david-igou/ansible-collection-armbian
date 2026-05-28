@@ -1,61 +1,8 @@
+# inventory/group_vars/orange_pi_5_max.yml
 ---
-# Per-model vars for the orange_pi_5_max group.
+armbian_board_config_model:
+  armbian_board_name: orangepi5-max
+  dtb: rockchip/rk3588-orangepi-5-max.dtb
 
-# ── armbian/build BRANCH ─────────────────────────────────────────────
-# orangepi5-max ships an RTL8125BG PCIe 2.5GbE NIC. The family-default
-# Radxa next-dev-v2024.10 fork lacks the r8169-family driver, so PXE
-# silently fails. armbian/build's
-# `post_family_config_branch_edge__orangepi5max_use_mainline_uboot`
-# (in upstream config/boards/orangepi5-max.csc) swaps in mainline
-# u-boot v2025.04 + armbian/build's patch/u-boot/v2025.04/
-# board_orangepi5-max/ overlay, which adds CONFIG_RTL8169=y +
-# CONFIG_PCIE_DW_ROCKCHIP=y. That hook gates on BRANCH=edge.
-armbian_board_branch: edge
-
-# ── per-board userpatches ────────────────────────────────────────────
-# Skip rockchip_setup_macaddr()'s env-set on this board so the RTL8125's
-# hardware-stored MAC (read by the r8169 driver from the chip's MAC0
-# register at probe time) wins end-to-end. Without this patch:
-#   1. rockchip_setup_macaddr() runs in misc_init_r and writes
-#      SHA-of-cpuid MAC to env ethaddr.
-#   2. eth_post_probe in net/eth-uclass.c reads the chip MAC, sees env
-#      ethaddr is non-zero, overrides chip MAC with env MAC, warns
-#      "MAC addresses don't match".
-#   3. U-Boot DHCP/PXE uses env MAC; kernel reads chip MAC directly
-#      → two DHCP leases per cold boot, pxelinux.cfg/01-<mac> lookup
-#      against a MAC the operator never sees in Linux.
-#
-# The patch gates on root /compatible "xunlong,orangepi-5-max" via
-# of_machine_is_compatible(), so it has zero effect on any other rk3588
-# board sharing arch/arm/mach-rockchip/board.c.
-#
-# CONFIG_ENV_IS_NOWHERE=y on this board's defconfig, so env is
-# volatile; the chip-MAC will be re-derived by eth_post_probe on every
-# cold boot. No persistence path needed (unlike rock-5b).
-armbian_board_userpatches:
-  - dest: "u-boot/v2025.04/board_orangepi5-max/0099-prefer-chip-mac-over-cpuid.patch"
-    content: |
-      --- a/arch/arm/mach-rockchip/board.c
-      +++ b/arch/arm/mach-rockchip/board.c
-      @@ -329,6 +329,21 @@ int rockchip_setup_macaddr(void)
-       	int size = sizeof(hash);
-       	u8 mac_addr[6];
-
-      +	/*
-      +	 * Skip env-set on boards whose NIC has a hardware-stored MAC
-      +	 * (e.g. RTL8125 reads MAC from its own MAC0 register at probe
-      +	 * time). If we write a SHA-of-cpuid MAC to env here,
-      +	 * eth_post_probe in net/eth-uclass.c will override the chip
-      +	 * MAC with our env value, causing U-Boot DHCP/PXE to use a
-      +	 * different MAC than the Linux kernel uses (kernel reads
-      +	 * chip MAC directly). Symptom: two DHCP leases per cold
-      +	 * boot, pxelinux.cfg/01-<mac> miss against the MAC visible
-      +	 * from Linux. See david_igou.armbian's
-      +	 * inventory/group_vars/orange_pi_5_max.yml for rationale.
-      +	 */
-      +	if (of_machine_is_compatible("xunlong,orangepi-5-max"))
-      +		return 0;
-      +
-       	/* Only generate a MAC address, if none is set in the environment */
-       	if (env_get("ethaddr"))
-       		return 0;
+armbian_build_model:
+  branch: edge   # RTL8125BG PCIe NIC requires mainline u-boot from edge

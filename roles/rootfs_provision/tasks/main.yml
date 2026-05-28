@@ -1,0 +1,83 @@
+# roles/rootfs_provision/tasks/main.yml
+#
+# Per-host rootfs provisioning. Idempotent: a sentinel JSON written at
+# end-of-run records the resolved src URL + image sha256 + host. Skip
+# the whole provision when the sentinel matches the current inputs and
+# force_refresh is false.
+---
+- name: Validate inputs
+  ansible.builtin.include_tasks: _validate_inputs.yml
+
+- name: Resolve source classification + cache paths
+  ansible.builtin.include_tasks: _resolve_src.yml
+
+- name: Force-refresh — remove existing target_dir + cache entries when requested
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ armbian_rootfs_target_dir }}"
+    - "{{ armbian_rootfs_tftp_dir }}"
+    - "{{ __rootfs_provision_img_xz }}"
+    - "{{ __rootfs_provision_img_raw }}"
+  when: armbian_rootfs_force_refresh | bool
+
+- name: Probe sentinel from a previous successful run
+  ansible.builtin.stat:
+    path: "{{ armbian_rootfs_target_dir }}/.armbian_rootfs_provision_complete"
+  register: __rootfs_provision_sentinel
+
+- name: Parse existing sentinel
+  ansible.builtin.slurp:
+    src: "{{ armbian_rootfs_target_dir }}/.armbian_rootfs_provision_complete"
+  register: __rootfs_provision_sentinel_raw
+  when: __rootfs_provision_sentinel.stat.exists
+
+# NOTE: skip comparison uses src (URL) and host only — not src_sha256.
+# The src_sha256 IS written to the sentinel for debugging, but reading it
+# back for skip would require re-hashing on every run, defeating the cache.
+# If the upstream URL serves NEW bytes at the same URL (in-place update),
+# the role would skip silently. Operator must set
+# armbian_rootfs_force_refresh=true to bust the cache in that case.
+- name: Set fact for sentinel matching
+  ansible.builtin.set_fact:
+    __rootfs_provision_should_skip: >-
+      {{
+        __rootfs_provision_sentinel.stat.exists
+        and (
+          (__rootfs_provision_sentinel_raw.content | b64decode | from_json).src == armbian_rootfs_src
+        )
+        and (
+          (__rootfs_provision_sentinel_raw.content | b64decode | from_json).host == armbian_rootfs_host
+        )
+      }}
+  when: __rootfs_provision_sentinel.stat.exists
+
+- name: Set skip fact false when no sentinel
+  ansible.builtin.set_fact:
+    __rootfs_provision_should_skip: false
+  when: not __rootfs_provision_sentinel.stat.exists
+
+- name: Provision (skipped when sentinel matches)
+  when: not __rootfs_provision_should_skip
+  block:
+    - name: Download or copy source image
+      ansible.builtin.include_tasks: _download_or_copy.yml
+
+    - name: Extract rootfs from source image
+      ansible.builtin.include_tasks: _extract.yml
+
+    - name: Stage kernel/initrd/dtb to TFTP cache
+      ansible.builtin.include_tasks: _stage_tftp.yml
+
+    - name: Strip /dev fstab entries
+      ansible.builtin.include_tasks: _strip_fstab.yml
+
+    - name: Reset host identity (hostname, machine-id, ssh keys)
+      ansible.builtin.include_tasks: _identity_reset.yml
+
+    - name: Write provision sentinel
+      ansible.builtin.include_tasks: _write_sentinel.yml
+  always:
+    - name: Clean up loop device and mount
+      ansible.builtin.include_tasks: _cleanup.yml

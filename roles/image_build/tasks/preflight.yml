@@ -14,25 +14,25 @@
 - name: Verify Docker daemon is reachable
   ansible.builtin.command: docker info
   changed_when: false
-  register: _docker_info
-  failed_when: _docker_info.rc != 0
+  register: __image_build_docker_info
+  failed_when: __image_build_docker_info.rc != 0
 
 - name: Resolve free space at armbian_build_cache_dir
   ansible.builtin.set_fact:
-    _cache_mount: >-
+    __image_build_cache_mount: >-
       {{ ansible_mounts
          | sort(attribute='mount', reverse=true)
-         | selectattr('mount', 'in', armbian_build_cache_dir + '/')
+         | selectattr('mount', 'in', __image_build_cache_dir_host + '/')
          | list | first }}
 
 - name: Assert sufficient free space at the cache dir
   ansible.builtin.assert:
     that:
-      - _cache_mount is defined
-      - (_cache_mount.size_available | int) >= (armbian_build_min_free_gb | int * 1024 * 1024 * 1024)
+      - __image_build_cache_mount is defined
+      - (__image_build_cache_mount.size_available | int) >= (armbian_build_min_free_gb | int * 1024 * 1024 * 1024)
     fail_msg: >-
-      Insufficient free space at {{ armbian_build_cache_dir }}
-      ({{ (_cache_mount.size_available | int / 1024 / 1024 / 1024) | round(1) }} GB available,
+      Insufficient free space at {{ __image_build_cache_dir_host }}
+      ({{ (__image_build_cache_mount.size_available | int / 1024 / 1024 / 1024) | round(1) }} GB available,
        {{ armbian_build_min_free_gb }} GB required)
 
 - name: HEAD-check required egress hosts

@@ -2,8 +2,8 @@
 # Render-time knobs. All inputs that have inventory-level analogues
 # default to undefined here and are validated as required in argspec.
 #
-# v4.0.0 breaking change: every external pxelinux_render variable
-# is now `pxelinux_render_*`-prefixed. Callers must update their
+# Breaking change (per-host refactor): every external pxelinux_render
+# variable is now `pxelinux_render_*`-prefixed. Callers must update their
 # `vars:` blocks accordingly. See the role README for the full table.
 
 # Per-board kernel command-line knob: which device specifier the
@@ -19,18 +19,17 @@ pxelinux_render_sd_root: "LABEL=armbi_root"
 pxelinux_render_local_root: "LABEL=armbi_root_local"
 
 # When true, append earlycon + verbose kernel params to both labels.
+# earlycon value is read from armbian_board_config.earlycon (resolved
+# by _resolve_board_config.yml before this role runs).
 pxelinux_render_pxe_verbose: false
-
-# Required when pxelinux_render_pxe_verbose=true.
-# Format: <driver>,<bus>,<mmio_addr>.
-pxelinux_render_earlycon: ""
 
 # TFTP-relative paths written verbatim into pxelinux.cfg. These are
 # strings the netboot client passes to the TFTP server — not local FS
-# paths on the rendering host. Defaults assume armbian/<model>/<file>.
-pxelinux_render_tftp_kernel: "armbian/{{ pxelinux_render_model_name }}/vmlinuz"
-pxelinux_render_tftp_initrd: "armbian/{{ pxelinux_render_model_name }}/initrd.img"
-pxelinux_render_tftp_dtb: "armbian/{{ pxelinux_render_model_name }}/board.dtb"
+# paths on the rendering host. Defaults use inventory_hostname for the
+# per-host TFTP layout (armbian/<hostname>/<file>).
+pxelinux_render_tftp_kernel: "armbian/{{ inventory_hostname }}/vmlinuz"
+pxelinux_render_tftp_initrd: "armbian/{{ inventory_hostname }}/initrd.img"
+pxelinux_render_tftp_dtb: "armbian/{{ inventory_hostname }}/board.dtb"
 
 # User-defined extra boot modes. Each key becomes a pxelinux label
 # coexisting with nfs/sd/local. Empty by default.

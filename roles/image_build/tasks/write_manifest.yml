@@ -1,26 +1,27 @@
 ---
 # Write manifest.json next to the produced image. Atomically (temp file →
 # rename) so concurrent readers either see the old manifest or a complete
-# new one. Includes the five decision fields (used by check_manifest on
+# new one. Includes the six decision fields (used by check_manifest on
 # subsequent runs) plus image_filename and built_at for debuggability.
 
 - name: Capture build timestamp (UTC, ISO 8601)
   ansible.builtin.set_fact:
-    _built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_date_time.epoch | default(lookup('pipe', 'date -u +%s'))) }}"
+    __image_build_built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_date_time.epoch | default(lookup('pipe', 'date -u +%s'))) }}"
 
 - name: Assemble final manifest
   ansible.builtin.set_fact:
-    _manifest:
+    __image_build_manifest:
       patch_hash: "{{ __image_build_manifest_inputs.patch_hash }}"
       armbian_build_ref: "{{ __image_build_manifest_inputs.armbian_build_ref }}"
       board: "{{ __image_build_manifest_inputs.board }}"
+      host: "{{ __image_build_manifest_inputs.host }}"
       branch: "{{ __image_build_manifest_inputs.branch }}"
       release: "{{ __image_build_manifest_inputs.release }}"
-      image_filename: "{{ _image_filename }}"
-      built_at: "{{ _built_at }}"
+      image_filename: "{{ __image_build_image_filename }}"
+      built_at: "{{ __image_build_built_at }}"
 
 - name: Write manifest.json atomically
   ansible.builtin.copy:
-    dest: "{{ armbian_build_output_dir }}/{{ armbian_build_board }}/manifest.json"
-    content: "{{ _manifest | to_nice_json(sort_keys=true) }}\n"
+    dest: "{{ __image_build_output_dir_host }}/manifest.json"
+    content: "{{ __image_build_manifest | to_nice_json(sort_keys=true) }}\n"
     mode: "0644"

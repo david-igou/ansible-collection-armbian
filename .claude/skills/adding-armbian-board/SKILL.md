@@ -8,9 +8,10 @@ description: Use when adding a new ARM SBC board to the david_igou.armbian Ansib
 ## Overview
 
 End-to-end runbook through the `stage_netboot_assets.yml` and
-`stage_router.yml` staging milestones. The collection is inventory-driven: a new board is picked
-up automatically once inventory, `vars/boards.yml`, and
-`armbian_image_urls` agree.
+`stage_router.yml` staging milestones. The collection is inventory-driven: a new board requires
+**no collection edits** — only inventory changes. Board metadata
+(`armbian_board_config_model`), build profile (`armbian_build_model`),
+and optionally `armbian_rootfs_src` live entirely in inventory.
 
 **Core insight:** ARM SBCs are not uniform. Naming, U-Boot trees, NIC
 drivers, MAC sourcing, and SPI-env semantics differ per board. Never
@@ -30,11 +31,11 @@ Capture before touching code:
 
 ## Phase 1 — Inventory
 
-Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_board_mac`, `armbian_board_model` (must equal a `vars/boards.yml` key), `armbian_poe_switch`, `armbian_poe_port`.
+Add the host(s) under a new per-model subgroup of `boards` in the real (gitignored) inventory; mirror in doc-only `inventory/hosts.yml`. Required hostvars: `armbian_board_mac`, `armbian_board_model` (must match the key used in `armbian_board_config_model` in the model group_vars), `armbian_boot_mode`; and for PoE-powered boards only: `armbian_poe_switch`, `armbian_poe_port`.
 
-## Phase 2 — `vars/boards.yml`
+## Phase 2 — Board metadata in inventory group_vars
 
-Add a key under `armbian_board_configs` with every field below. All load-bearing — verify, don't guess:
+Create `inventory/group_vars/<model_group>.yml` (and the real inventory equivalent). Add `armbian_board_config_model` with every field below. All load-bearing — verify, don't guess:
 
 | Field | Source of truth |
 |---|---|
@@ -45,25 +46,41 @@ Add a key under `armbian_board_configs` with every field below. All load-bearing
 | `console` | Per board's serial-console docs (RK3588: `ttyS2,1500000n8`; Allwinner: `ttyS0,115200`). |
 | `earlycon` | UART MMIO base from SoC RM. Required when `armbian_pxe_verbose=true`. |
 
-## Phase 3 — Image URL placeholder
+Also add `armbian_build_model` with at minimum `board: <armbian_board_name>`.
+If the board has SoC-family-level fields already covered by
+`armbian_board_config_family` in `group_vars/<family>.yml`, inherit from
+there and only set the model-specific overrides in `armbian_board_config_model`.
 
-Add `armbian_image_urls[<model>]` in your real `group_vars/all.yml` (and the doc-only one). The `<model>` key must match each host's `armbian_board_model`. The exact filename is filled in after Phase 4.
+## Phase 3 — Image URL placeholder (optional)
+
+If you want to pin a specific `.img.xz` for hosts in this model group,
+add `armbian_rootfs_src` in `group_vars/<model_group>.yml`. The value is
+an `https://`, `http://`, or absolute path reachable from both the
+netboot_server and the boards. When omitted, `_resolve_rootfs_src.yml`
+derives the URL from the published manifest on the netboot server after
+`build_and_publish_from_inventory.yml` runs. The exact filename is filled
+in after Phase 4.
 
 ## Phase 4 — U-Boot branch decision
 
-Default: `current` (no `armbian_board_branch` entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_board_branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
+Default: `current` (no branch entry needed). Switch to `edge` only when the family-default U-Boot tree can't support the board's NIC — set `armbian_build_model.branch: edge` in `inventory/group_vars/<model_group>.yml` (and the same path in your real inventory). The Radxa `next-dev-*` fork (rk3588 family default) lacks the RTL8125 driver, so any rk3588 board with that NIC needs `edge`.
 
-Per-board `armbian_board_userpatches` entries are rare — `build_userpatches_common` in `playbooks/build_image.yml`'s `__999_pxe_first` family hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_board_userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
+Per-board `armbian_build_model.userpatches` entries are rare — the family-level `armbian_build_family.userpatches` in `group_vars/<family>.yml`'s `__999_pxe_first` hook covers all rk3588 boards (PXE-first BOOT_TARGETS + appends `CONFIG_PCI_INIT_R=y` when missing). Add a per-board list under `armbian_build_model.userpatches` in `inventory/group_vars/<model_group>.yml` only after verifying the existing hooks don't cover the case.
 
 For board-specific armbian/build hook FUNCTIONS (as opposed to source patches against the kernel or U-Boot tree), use `dest: config/boards/<board>.conf`. armbian/build sources that overlay file additively on top of upstream's `config/boards/<board>.conf` only when building that board, so the hook fires per-board structurally — you do not need an internal `[[ "${BOARD}" != "..." ]] && return 0` filter (keep one as defensive belt-and-suspenders if you wish). Source-tree patches still use the `userpatches/u-boot/<version>/<board>/<NNNN-name>.patch` shape — see the orange-pi-5-max RTL8125 patch in `inventory/group_vars/orange_pi_5_max.yml` for an example.
 
 ## Phase 5 — Build + audit
 
 ```bash
-ansible-playbook playbooks/build_image.yml
+ansible-playbook playbooks/build_and_publish_from_inventory.yml
 ```
 
-Iterates over all unique `armbian_board_model` values in `groups['boards']`. Cached boards skip the heavy work. **Known flake:** first build of a new board can segfault during `install_distribution_agnostic` (qemu-user-static + Python pycompile) — retry once before deeper diagnosis.
+Iterates over every board host in `groups['boards']`, resolving each
+host's `armbian_build` profile (via `_resolve_build_profile.yml`) and
+invoking `image_build` once per host. Cached boards skip the heavy work.
+**Known flake:** first build of a new board can segfault during
+`install_distribution_agnostic` (qemu-user-static + Python pycompile) —
+retry once before deeper diagnosis.
 
 After the build, audit the compiled defconfig:
 
@@ -73,7 +90,11 @@ ls /var/lib/armbian_build/build/cache/sources/u-boot-worktree/*/*/configs/<board
 
 Verify: `CONFIG_CMD_PXE=y`, `CONFIG_NET=y`, `CONFIG_PCI_INIT_R=y` (when `CONFIG_PCI=y`), and the NIC's driver (e.g. `CONFIG_PHY_REALTEK=y` for RTL8211F PHYs; for PCIe NICs confirm the driver source file actually exists under `drivers/net/`).
 
-Update `armbian_image_urls[<model>]` to the published filename — read it from `/tmp/armbian_publish/<board>/manifest.json`.
+If you want to pin this model's image URL explicitly, update
+`armbian_rootfs_src` in `group_vars/<model_group>.yml` to the published
+URL — read the exact filename from `armbian_nfs_assets_export/images/<model>/manifest.json`
+on the netboot server. When omitted, `_resolve_rootfs_src.yml` reads the
+manifest automatically on the next `stage_netboot_assets.yml` run.
 
 ## Phase 6 — Bootstrap + stage
 
@@ -102,10 +123,10 @@ See `docs/uboot-armbian-build-explainer.html` §8 for the three-layer failure mo
 
 | Mistake | Cost | Avoid by |
 |---|---|---|
-| Copy a userpatch by analogy from a "similar" board | Silent no-op — patch never matches, board boots SD, looks like a different bug | The family `__999_pxe_first` hook already covers rk3588; skip per-board userpatches unless you've grepped the actual upstream U-Boot source for the construct you're patching |
+| Copy a userpatch by analogy from a "similar" board | Silent no-op — patch never matches, board boots SD, looks like a different bug | The family-level `armbian_build_family.userpatches __999_pxe_first` hook already covers rk3588; skip per-board `armbian_build_model.userpatches` unless you've grepped the actual upstream U-Boot source for the construct you're patching |
 | Assume family-default U-Boot supports the board's NIC | 30+ min wasted; HITS=0 on rb5009 with no obvious cause | Inspect `drivers/net/` in the tree before building; opt into `edge` if missing |
 | Skip the post-build defconfig audit | Layer 0 / driver bugs hide until E2E test | Run Phase 5's grep checks before flashing the SD |
-| Mismatch case between `armbian_board_model` and `armbian_board_name` | `stage_netboot_assets.yml` / `stage_router.yml` or preflight 404s on the image URL | `armbian_board_model` is the inventory + `vars/boards.yml` key (typically dashed); `armbian_board_name` follows Armbian's `.conf` casing |
+| Mismatch case between `armbian_board_model` and `armbian_board_name` | `stage_netboot_assets.yml` / `stage_router.yml` or preflight 404s on the image URL | `armbian_board_model` is the inventory group key (typically dashed); per-model hardware facts live in `inventory/group_vars/<model_group>.yml` as `armbian_board_config_model`; `armbian_board_name` follows Armbian's `.conf` casing |
 | Forget `armbian_default_password` in real inventory | `bootstrap_armbian.yml` dies on the first secret lookup | Set in `group_vars/all/*.yml` (vault-encrypted for prod) |
 | Leave stale `userpatches/config/boards/<board>.conf` from removed per-board hooks | Old hook sources at build time as `500_*`, runs before `__999_*` | `rm -f /var/lib/armbian_build/build/userpatches/config/boards/<removed>.conf` on the builder after refactoring |
 
@@ -113,5 +134,5 @@ See `docs/uboot-armbian-build-explainer.html` §8 for the three-layer failure mo
 
 - `docs/uboot-armbian-build-explainer.html` §8 — three-layer failure model + Approach B rationale.
 - `docs/superpowers/specs/.rock5b-friction-notes.md` — empirical baseline this skill is built on.
-- `CLAUDE.md` "Adding a new board" — short pointer + minimum-touched-files list.
+- `CLAUDE.md` "Adding a new board" — short pointer + minimum-touched-files list (collection edits are not required; only inventory edits needed).
 - `docs/boot-mode-override.md`, `docs/retry-configuration.md` — boot-mode convergence + retry knobs (post-staging); the retry primitives live in `playbooks/tasks/cold_boot_with_retry.yml` and friends (no role-level wrapper any more).
