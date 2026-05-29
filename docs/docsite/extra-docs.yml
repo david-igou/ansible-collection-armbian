@@ -1,0 +1,19 @@
+---
+# Extra documentation pages included in the rendered docsite, on top of the
+# auto-generated collection / role reference. Each toctree entry is the name
+# of an .rst file under docs/docsite/rst/ (without the .rst extension).
+sections:
+  - title: Concepts
+    toctree:
+      - architecture
+  - title: Onboarding and operations
+    toctree:
+      - lifecycle
+      - daily-operations
+  - title: Reference
+    toctree:
+      - boot-mode-override
+      - retry-configuration
+  - title: Runbooks
+    toctree:
+      - reprovision-local-disk

@@ -13,7 +13,7 @@ argument_specs:
         primitives in `playbooks/tasks/cold_boot_with_retry.yml` so an
         operator can override a single inventory variable to tune both
         the cold-boot loop and this final wait. See
-        `docs/retry-configuration.md` for the full knob inventory.
+        `docs/docsite/rst/retry-configuration.rst` for the full knob inventory.
 
     options:
       armbian_boot_attempt_timeout:
@@ -23,11 +23,11 @@ argument_specs:
           Seconds to wait for the board to start accepting TCP/22
           connections (the `wait_for` port probe). Shares its name with
           the cold-boot retry primitive so one inventory override tunes
-          both. See `docs/retry-configuration.md`.
+          both. See `docs/docsite/rst/retry-configuration.rst`.
       armbian_post_boot_wait_timeout:
         type: int
         default: 300
         description: >-
           Seconds for the post-boot `wait_for_connection` SSH probe that
           runs once TCP/22 is reachable, confirming SSH can actually
-          authenticate. See `docs/retry-configuration.md`.
+          authenticate. See `docs/docsite/rst/retry-configuration.rst`.
