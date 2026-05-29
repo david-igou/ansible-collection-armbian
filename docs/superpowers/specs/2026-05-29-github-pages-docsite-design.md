@@ -11,24 +11,37 @@ Publish a GitHub Pages docsite for `david_igou.armbian` presenting the
 **auto-generated collection and role reference** — built from the 8 role
 `meta/argument_specs.yml`, role `README.md`s, and the collection `README.md`
 — using the standard `antsibull-docs` / Sphinx toolchain (the same that
-produces docs.ansible.com). Built and published by GitHub Actions on push to
-`main`.
+produces docs.ansible.com). Built and published by GitHub Actions.
 
-Result URL: `https://david-igou.github.io/ansible-collection-armbian/`.
+## Approach (canonical: `ansible-community/github-docs-build` reusable workflows)
 
-## Approach (chosen: A — self-contained Sphinx build + modern Pages deploy)
+The first cut used a self-contained, hand-rolled `sphinx-init` + `build.sh`
+workflow publishing a flat site via the OIDC Pages flow. On review against the
+antsibull-docs documentation — which explicitly recommends the
+`ansible-community/github-docs-build` reusable workflows — and the canonical
+`felixfontein/ansible-acme` example, the design was changed to adopt that
+maintainer-blessed pattern:
 
-A single `.github/workflows/docs.yml` workflow scaffolds the Sphinx project at
-CI time with `antsibull-docs sphinx-init`, builds the HTML, and publishes via
-`actions/upload-pages-artifact` + `actions/deploy-pages`. No Sphinx config
-(`conf.py`/`build.sh`/`requirements.txt`) is committed — antsibull-docs
-regenerates it fresh each run, so it always tracks the toolchain. No
-`gh-pages` branch.
+- **Build** via `_shared-docs-build-push.yml` / `_shared-docs-build-pr.yml`
+  (upstream-maintained; tracks the toolchain).
+- **Publish** via `_shared-docs-build-publish-gh-pages.yml`: pushes rendered
+  HTML to a `gh-pages` branch under **versioned paths**
+  (`branch/main`, `tag/<tag>`, `pr/<pr#>`), then deploys that branch to Pages
+  via the OIDC `actions/deploy-pages` flow (`publish-gh-pages-branch: true`).
+  The Pages **Source stays "GitHub Actions"** — the branch is just the
+  accumulation store.
+- **PR previews**: every PR gets its own docsite at `/pr/<pr#>/` plus a bot
+  comment with a link and a rendered diff of which doc files changed; torn
+  down when the PR closes.
 
-Rejected: (B) `ansible-community/github-docs-build` reusable workflows — heavier,
-needs Surge token for previews, `gh-pages` branch flow; overkill for a
-single-namespace role reference. (C) committed Sphinx scaffold + `gh-pages`
-push — more files to maintain, older deploy pattern.
+Reusable workflows are pinned to a commit SHA (the repo's SHA-pinning
+discipline) with a `# main` comment so Renovate keeps them current —
+`github-docs-build` publishes no releases/tags to pin against.
+
+Rejected alternatives: (A) self-contained Sphinx build + OIDC deploy — simpler
+but diverges from the documented best practice, no PR previews, no versioned
+publishing. (C) committed Sphinx scaffold + raw `gh-pages` push — more files to
+maintain, older deploy pattern.
 
 ## What already exists (leveraged, not modified)
 
@@ -38,57 +51,53 @@ push — more files to maintain, older deploy pattern.
 - `docs/docsite/links.yml` → picked up automatically (edit-on-GitHub links,
   "Report an issue" extra link, Ansible Forum communication channel).
 
-## New file
+## New files
 
-`.github/workflows/docs.yml` — one workflow, two jobs.
+**`.github/workflows/docs-push.yml`** — `Docs` workflow. Triggers: push to
+`main`, push tags `*`, daily `cron: '0 6 * * *'` (catches breakage from newer
+antsibull-docs/theme releases), `workflow_dispatch`.
+- `build-docs` (`contents: read`): `_shared-docs-build-push.yml` with
+  `collection-name: david_igou.armbian`, `squash-hierarchy: true`,
+  `init-lenient: false`, `init-fail-on-error: true`, and branding
+  (`init-project/-copyright/-title/-html-short-title`, `documentation_home_url`
+  → `/branch/main/`).
+- `publish-docs-gh-pages` (`contents: write`, `pages: write`,
+  `id-token: write`; gated `if: github.repository == 'david-igou/...'`):
+  `_shared-docs-build-publish-gh-pages.yml` with `publish-gh-pages-branch: true`
+  and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`.
 
-**Triggers:** `push` to `main`, `workflow_dispatch`.
+**`.github/workflows/docs-pr.yml`** — `Docs` workflow on
+`pull_request_target` (`opened/synchronize/reopened/closed`).
+- `build-docs`: `_shared-docs-build-pr.yml` (same `with:` as push) plus
+  `render-file-line` linking each changed file to its `/pr/<n>/` preview.
+- `publish-docs-gh-pages`: `action` toggles `publish`/`teardown` on close or
+  no-change.
+- `comment` (`pull-requests: write`): `actions/ansible-docs-build-comment`
+  posts/updates the PR comment with preview links + rendered file diff.
 
-**Permissions (top-level):** `contents: read`, `pages: write`,
-`id-token: write`. **Concurrency:** group `pages`, `cancel-in-progress: false`.
+## Manual prerequisites (one-time)
 
-**`build` job** (ubuntu-latest):
-1. `actions/checkout` (pinned SHA, matching existing workflows).
-2. `actions/setup-python` @ 3.13 (pinned SHA, matching existing workflows).
-3. `pip install --upgrade pip antsibull-docs` (bootstraps sphinx-init).
-4. Install the collection into the `ansible_collections/david_igou/armbian`
-   tree so `--use-current` finds it:
-   `ansible-galaxy collection install . --force`,
-   plus `ansible-galaxy collection install -r requirements.yml` and
-   `-r playbooks/routeros/requirements.yml` so doc import resolves all
-   referenced collections cleanly.
-5. `antsibull-docs sphinx-init --use-current --squash-hierarchy --dest-dir
-   build/docsite david_igou.armbian` (squash → single-collection site, no
-   all-collections nav).
-6. `pip install -r build/docsite/requirements.txt` (sphinx,
-   sphinx-ansible-theme, etc.).
-7. `build/docsite/build.sh` → HTML at `build/docsite/build/html`.
-8. `actions/upload-pages-artifact` (v5.0.0, SHA
-   `fc324d3547104276b827a68afc52ff2a11cc49c9`) with `path: build/docsite/build/html`.
-
-**`deploy` job** (ubuntu-latest, `needs: build`):
-- `environment: { name: github-pages, url: ${{ steps.deployment.outputs.page_url }} }`.
-- `actions/deploy-pages` (v5.0.0, SHA `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128`).
-
-Pinned-SHA style and Python 3.13 match the existing `tests.yml` / `release.yml`.
-
-## Manual prerequisite (already done)
-
-Repo **Settings → Pages → Source = "GitHub Actions"**. Confirmed set by the
-user. The workflow cannot configure this itself.
+1. **Settings → Pages → Source = "GitHub Actions"** — confirmed set.
+2. **An orphan `gh-pages` branch must exist** — the publish job's
+   `checkout ref: gh-pages` fails otherwise. Seeded with `.nojekyll` and a
+   root `index.html` redirecting to `branch/main/` (which doubles as the
+   site-root redirect, since versioned publishing leaves `/` empty).
 
 ## Out of scope (deferred)
 
 - RST conversion of prose docs (`architecture.md`, `lifecycle.md`,
   `daily-operations.md`, `boot-mode-override.md`, `retry-configuration.md`,
   the runbook) and `docs/docsite/extra-docs.yml` registration.
-- PR preview deploys.
 - Updating `galaxy.yml`'s `documentation:` link to the Pages URL.
-- Local `make docs` target.
 
 ## Verification
 
-- `actionlint` / YAML lint clean on the new workflow (repo runs `make yamllint`).
-- Workflow run on `main` succeeds; `deploy` job surfaces the live `page_url`.
-- Docsite renders the collection index + all 8 role reference pages with
-  edit-on-GitHub links and the extra/communication links from `links.yml`.
+- Local end-to-end build of the same toolchain (antsibull-docs 2.24.0):
+  `sphinx-init` → `build.sh` under strict `-W` mode **succeeded**; all 8 role
+  pages + index + search rendered with the `links.yml` links present.
+- Every `with:` input and `needs.*.outputs.*` reference used in the two
+  workflows verified to exist in the reusable workflows at the pinned SHA.
+- yamllint clean (warnings only; `.github/` is not covered by `make yamllint`).
+- Post-merge: `docs-push` run succeeds and the site serves at
+  `https://david-igou.github.io/ansible-collection-armbian/branch/main/`
+  (root `/` redirects there). A test PR shows a `/pr/<n>/` preview + comment.
