@@ -35,7 +35,7 @@ dependencies:
   "ansible.posix": ">=1.5.0"
 
 repository: https://github.com/david-igou/ansible-collection-armbian
-documentation: https://github.com/david-igou/ansible-collection-armbian/tree/main/docs
+documentation: https://david-igou.github.io/ansible-collection-armbian/branch/main/
 homepage: https://github.com/david-igou/ansible-collection-armbian
 issues: https://github.com/david-igou/ansible-collection-armbian/issues
 
