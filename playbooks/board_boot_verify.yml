@@ -1,0 +1,28 @@
+---
+# Assert a board's currently-mounted rootfs matches its declared boot
+# mode. Read-only: gathers facts, inspects ansible_mounts['/'], and
+# hard-fails with a mode-specific diagnostic if the fstype/device don't
+# line up. Catches silent PXE fall-through before downstream plays mutate
+# state under the wrong assumption.
+#
+# Usage:
+#   ansible-playbook playbooks/board_boot_verify.yml --limit orange-pi-5-pro-01
+#   # override the expected mode ad-hoc:
+#   ansible-playbook playbooks/board_boot_verify.yml --limit orange-pi-5-pro-01 \
+#     -e armbian_boot_mode=nfs
+#
+# Role variables (see roles/board_boot_verify/README.md):
+#   boot_mode     — one of nfs, sd, local, local_kernel, or an extra_modes key
+#   extra_modes   — user-defined modes (mirrors armbian_extra_modes)
+
+- name: Verify the board is on its declared boot mode
+  hosts: "{{ armbian_boards_group | default('boards') }}"
+  gather_facts: true   # role inspects ansible_mounts['/']
+
+  tasks:
+    - name: Assert rootfs matches boot mode
+      ansible.builtin.include_role:
+        name: board_boot_verify
+      vars:
+        boot_mode: "{{ armbian_boot_mode | default('nfs') }}"
+        extra_modes: "{{ armbian_extra_modes | default({}) }}"

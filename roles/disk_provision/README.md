@@ -67,13 +67,54 @@ After a successful run:
   `systemd-repart --dry-run` does upstream; running with `--check`
   exercises validation but skips the populate step.
 
+## Example
+
+This mirrors the canonical single-partition `local_kernel` layout for an
+Orange Pi 5 Pro (and the other rk3588/rk3588s boards): one root partition
+grown to fill the NVMe, populated by rsyncing the board's running rootfs
+(`disk_provision_source: /`). Run it while the board is booted from NFS
+(so `/` is the source, not the disk being wiped) — that's the lifecycle
+`playbooks/reprovision_to_local.yml` and the fleet e2e Phase 5 wrap around
+this role.
+
+```yaml
+- name: Provision the local NVMe for local_kernel boot
+  hosts: orange-pi-5-pro-01   # your real board, e.g. via --limit
+  become: true
+  gather_facts: true
+  vars:
+    armbian_local_disks:
+      - device: /dev/nvme0n1
+        wipe: true
+        fast_wipe: true        # skip the slow full-device zero pass
+        layout:
+          - id: root
+            size: grow
+            type: root
+            format: ext4
+            label: armbi_root_local
+            mount: /
+  tasks:
+    - ansible.builtin.include_role:
+        name: david_igou.armbian.disk_provision
+      vars:
+        disk_binding: "{{ armbian_local_disks[0] }}"
+        disk_provision_source: /
+        disk_provision_reset_identity: false
+```
+
+For the full headless lifecycle (boot NFS → provision → flip pxelinux to
+`local_kernel` → verify, auto-revert on failure), use
+`playbooks/reprovision_to_local.yml --limit <board>`, which loops this
+role over every entry in `armbian_local_disks`.
+
 ## Generated assets
 
 The role renders two kinds of files. The `systemd-repart` configs are
 transient (under `/run/` on the host running the role, one per layout
 entry); the `/etc/fstab` is written persistently onto the newly-imaged
 root partition. For the single-root `local_kernel` layout in the example
-below — one ext4 partition that grows to fill the NVMe — the role renders
+above — one ext4 partition that grows to fill the NVMe — the role renders
 exactly one repart config and a two-line fstab:
 
 ```text
@@ -119,44 +160,3 @@ SBCs don't EFI-boot — there's no ESP; `/boot` (kernel + extlinux/boot.scr)
 lives inside the ext4 root, rsynced from the running rootfs. Multi-partition
 layouts (separate `boot`/`var`, or an `esp` for EFI platforms) are
 supported by the DSL but aren't what these boards use.
-
-## Example
-
-This mirrors the canonical single-partition `local_kernel` layout for an
-Orange Pi 5 Pro (and the other rk3588/rk3588s boards): one root partition
-grown to fill the NVMe, populated by rsyncing the board's running rootfs
-(`disk_provision_source: /`). Run it while the board is booted from NFS
-(so `/` is the source, not the disk being wiped) — that's the lifecycle
-`playbooks/reprovision_to_local.yml` and the fleet e2e Phase 5 wrap around
-this role.
-
-```yaml
-- name: Provision the local NVMe for local_kernel boot
-  hosts: orange-pi-5-pro-01   # your real board, e.g. via --limit
-  become: true
-  gather_facts: true
-  vars:
-    armbian_local_disks:
-      - device: /dev/nvme0n1
-        wipe: true
-        fast_wipe: true        # skip the slow full-device zero pass
-        layout:
-          - id: root
-            size: grow
-            type: root
-            format: ext4
-            label: armbi_root_local
-            mount: /
-  tasks:
-    - ansible.builtin.include_role:
-        name: david_igou.armbian.disk_provision
-      vars:
-        disk_binding: "{{ armbian_local_disks[0] }}"
-        disk_provision_source: /
-        disk_provision_reset_identity: false
-```
-
-For the full headless lifecycle (boot NFS → provision → flip pxelinux to
-`local_kernel` → verify, auto-revert on failure), use
-`playbooks/reprovision_to_local.yml --limit <board>`, which loops this
-role over every entry in `armbian_local_disks`.

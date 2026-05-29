@@ -1,0 +1,70 @@
+---
+# Apply a declarative GPT layout to a board's local disk(s) and populate
+# from the running rootfs. Demo of the disk_provision role using the
+# canonical single-root local_kernel layout these rk3588/rk3588s boards
+# use: one ext4 partition (LABEL=armbi_root_local) grown to fill the NVMe,
+# rsynced from `/`.
+#
+# SAFETY: disk_provision wipes the target device. Run this while the
+# board is booted from NFS (so `/` is the rsync source, not the disk
+# being wiped). The role refuses to wipe a mounted device.
+#
+# Usage:
+#   ansible-playbook playbooks/disk_provision.yml --limit orange-pi-5-pro-01
+#   # ...with the board's real per-host layout from inventory:
+#   #   set armbian_local_disks in host_vars and it overrides the default below.
+#
+# Role variables (see roles/disk_provision/README.md):
+#   disk_binding                   — one {device, wipe?, fast_wipe?, force?, layout} entry (required)
+#   disk_provision_source          — source rootfs to rsync (default /)
+#   disk_provision_reset_identity  — zero machine-id on the target (default false)
+#
+# For the full headless lifecycle (boot NFS -> provision -> flip pxelinux
+# to local_kernel -> verify, auto-revert on failure), use
+# playbooks/reprovision_to_local.yml.
+
+- name: Provision a board's local disk for local_kernel boot
+  hosts: "{{ armbian_boards_group | default('boards') }}"
+  become: true
+  gather_facts: true
+  gather_subset: [mounts]
+
+  vars:
+    # Canonical single-root NVMe layout, used only when the host has no
+    # armbian_local_disks of its own. Defined as a separate var (not
+    # armbian_local_disks directly) so a real board's inventory host_vars
+    # takes precedence — play vars would otherwise outrank host_vars.
+    _default_local_disks:
+      - device: /dev/nvme0n1
+        wipe: true
+        fast_wipe: true        # skip the slow full-device zero pass
+        layout:
+          - id: root
+            size: grow
+            type: root
+            format: ext4
+            label: armbi_root_local
+            mount: /
+
+  pre_tasks:
+    - name: Refuse to wipe the disk we're booted from
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_mounts | selectattr('mount', 'equalto', '/')
+              | map(attribute='fstype') | first in ['nfs', 'nfs4']
+        fail_msg: >-
+          Board must be NFS-booted before provisioning a local disk
+          (otherwise the rsync source races the wipe). Converge to nfs first.
+
+  tasks:
+    - name: Provision each declared local disk
+      ansible.builtin.include_role:
+        name: disk_provision
+      vars:
+        disk_binding: "{{ item }}"
+        disk_provision_source: /
+        disk_provision_reset_identity: false
+      loop: "{{ armbian_local_disks | default(_default_local_disks) }}"
+      loop_control:
+        label: "{{ item.device }}"

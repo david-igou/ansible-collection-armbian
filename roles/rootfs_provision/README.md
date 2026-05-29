@@ -70,6 +70,65 @@ detaches loop devices and unmounts any in-progress mount. The
 2. Re-run with `armbian_rootfs_force_refresh: true` to bypass any stale
    sentinel and start fresh.
 
+## Example inventory
+
+The example below reads `armbian_rootfs_src` and `armbian_board_config.dtb`
+from each board's hostvars. A matching inventory (doc-safe placeholders):
+
+```yaml
+# inventory/hosts.yml
+all:
+  children:
+    netboot_server:               # exports the NFS rootfs
+      hosts:
+        truenas-01:
+          ansible_host: 192.0.2.10
+          ansible_user: admin
+          ansible_become: true
+    boards:
+      children:
+        orange_pi_5_pro:          # <model_group> — carries the model layer
+          hosts:
+            orange-pi-5-pro-01:
+              ansible_host: 192.0.2.111
+              armbian_board_model: orange-pi-5-pro
+              armbian_rootfs_src: "https://images.example.lan/orange-pi-5-pro-01.img.xz"
+
+# inventory/group_vars/orange_pi_5_pro.yml   (model layer sets the dtb)
+armbian_board_config_model:
+  armbian_board_name: orangepi5pro
+  dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+
+# inventory/group_vars/all.yml
+armbian_nfs_rootfs_path: /srv/netboot/rootfs
+armbian_image_cache: /var/lib/armbian/cache
+```
+
+`armbian_board_config` is the resolved fact produced by merging the
+family/model/host layers — run `tasks/_resolve_board_config.yml` on the
+board hosts before this role reads `armbian_board_config.dtb` (the
+`playbooks/rootfs_provision.yml` and `stage_netboot_assets.yml` plays do
+this in a first play).
+
+## Example
+
+```yaml
+- name: Provision per-host NFS rootfs on the netboot server
+  hosts: netboot_server
+  become: true
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: david_igou.armbian.rootfs_provision
+      vars:
+        armbian_rootfs_src:    "{{ hostvars[item].armbian_rootfs_src }}"
+        armbian_rootfs_host:   "{{ item }}"
+        armbian_rootfs_dtb:    "{{ hostvars[item].armbian_board_config.dtb }}"
+      loop: "{{ groups['boards'] }}"
+```
+
+Typically reached via `playbooks/stage_netboot_assets.yml`.
+
 ## Generated assets
 
 Per host, the role populates two directories. The NFS rootfs target gets
@@ -112,22 +171,3 @@ skip):
   "src_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }
 ```
-
-## Example
-
-```yaml
-- name: Provision per-host NFS rootfs on the netboot server
-  hosts: netboot_server
-  become: true
-  gather_facts: false
-  tasks:
-    - ansible.builtin.include_role:
-        name: david_igou.armbian.rootfs_provision
-      vars:
-        armbian_rootfs_src:    "{{ hostvars[item].armbian_rootfs_src }}"
-        armbian_rootfs_host:   "{{ item }}"
-        armbian_rootfs_dtb:    "{{ hostvars[item].armbian_board_config.dtb }}"
-      loop: "{{ groups['boards'] }}"
-```
-
-Typically reached via `playbooks/stage_netboot_assets.yml`.

@@ -1,0 +1,29 @@
+---
+# Wait for a board to come back over TCP/22 + SSH after a (re)boot.
+#
+# Single-purpose demo of the board_boot_wait role: probe port 22 from
+# the control node, then confirm an SSH connection. The role has no
+# knowledge of power — cycle PoE (playbooks/poe_control.yml) or press
+# the button yourself first, then gate downstream work on this.
+#
+# Usage:
+#   ansible-playbook playbooks/board_boot_wait.yml --limit orange-pi-5-pro-01
+#
+# Role variables (see roles/board_boot_wait/README.md):
+#   armbian_boot_attempt_timeout    — per-attempt TCP/22 wait, seconds
+#   armbian_post_boot_wait_timeout  — final wait_for_connection, seconds
+#
+# For the outer power-cycle + retry loop, see
+# playbooks/tasks/cold_boot_with_retry.yml.
+
+- name: Wait for a board to finish booting
+  hosts: "{{ armbian_boards_group | default('boards') }}"
+  gather_facts: false
+
+  tasks:
+    - name: Wait for TCP/22 + SSH
+      ansible.builtin.include_role:
+        name: board_boot_wait
+      vars:
+        armbian_boot_attempt_timeout: 180
+        armbian_post_boot_wait_timeout: 300

@@ -67,16 +67,21 @@ After a successful run:
   pre_tasks:
     - ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
   tasks:
-    - ansible.builtin.include_role:
-        name: david_igou.armbian.pxelinux_render
+    # delegate_to is not valid on include_role itself; wrap it in a
+    # block so the role's tasks render on the control node.
+    - name: Render pxelinux.cfg on the control node
       delegate_to: localhost
-      vars:
-        pxelinux_render_board_mac: "{{ armbian_board_mac }}"
-        pxelinux_render_boot_mode: "{{ armbian_boot_mode }}"
-        pxelinux_render_nfs_server_ip: "{{ armbian_nfs_server_ip }}"
-        pxelinux_render_nfs_root_path: "{{ armbian_nfs_rootfs_path }}"
-        pxelinux_render_hostname: "{{ inventory_hostname }}"
-        pxelinux_render_output_dir: "{{ playbook_dir }}/../.cache/pxelinux.cfg"
+      become: false
+      block:
+        - ansible.builtin.include_role:
+            name: david_igou.armbian.pxelinux_render
+          vars:
+            pxelinux_render_board_mac: "{{ armbian_board_mac }}"
+            pxelinux_render_boot_mode: "{{ armbian_boot_mode }}"
+            pxelinux_render_nfs_server_ip: "{{ armbian_nfs_server_ip }}"
+            pxelinux_render_nfs_root_path: "{{ armbian_nfs_rootfs_path }}"
+            pxelinux_render_hostname: "{{ inventory_hostname }}"
+            pxelinux_render_output_dir: "{{ playbook_dir }}/../.cache/pxelinux.cfg"
 ```
 
 Typically reached via `playbooks/converge_boot_mode.yml`, which then
