@@ -47,7 +47,7 @@ jobs:
       init-fail-on-error: true
       squash-hierarchy: true
       init-project: David_Igou.Armbian Collection
-      init-copyright: David Igou
+      init-copyright: david-igou.armbian contributors
       init-title: David_Igou.Armbian Collection Documentation
       init-html-short-title: David_Igou.Armbian Collection Docs
       init-extra-html-theme-options: |
