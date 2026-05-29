@@ -5,6 +5,10 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/david-igou/ansible-collection-armbian/tests.yml?branch=main&label=CI)
 ![License](https://img.shields.io/github/license/david-igou/ansible-collection-armbian)
 ![Last Commit](https://img.shields.io/github/last-commit/david-igou/ansible-collection-armbian)
+[![Docs](https://img.shields.io/badge/docs-online-success?logo=readthedocs)](https://david-igou.github.io/ansible-collection-armbian/)
+
+📖 **Documentation site:** <https://david-igou.github.io/ansible-collection-armbian/>
+— generated collection + role reference (rebuilt on every push to `main`).
 
 ## Description
 
@@ -220,6 +224,9 @@ shape.
   are the de-facto backlog.
 
 ## Related Information
+
+- [**Documentation site**](https://david-igou.github.io/ansible-collection-armbian/)
+  — generated collection + role reference (antsibull-docs).
 
 Documentation in this repo:
 
