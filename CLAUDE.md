@@ -41,7 +41,7 @@ directory and points the transport-hook variables at it. Top-level orchestration
 playbooks (`converge_boot_mode.yml`, `stage_router.yml`) and the E2E harnesses
 under `playbooks/tests/` (`test_hardware_e2e.yml`) compose roles + reference
 playbooks. See
-[`docs/docsite/rst/boot-mode-override.rst`](docs/docsite/rst/boot-mode-override.rst).
+[`docs/docsite/rst/guide.rst`](docs/docsite/rst/guide.rst).
 
 ## Status: early-stage (0.0.x) — expect breaking changes
 
@@ -142,13 +142,8 @@ david_igou/armbian/   (this repo root)
     └── docsite/                   # antsibull-docs docsite sources (published to GitHub Pages)
         ├── links.yml              # Edit-on-GitHub + extra/communication links
         ├── extra-docs.yml         # Sections + toctree for the extra pages below
-        └── rst/                   # Extra docsite pages (RST; single source of truth)
-            ├── architecture.rst         # Roles, data flow, mental model, playbooks table
-            ├── lifecycle.rst            # Phase 0 (control plane) + Phase 1 (per-board)
-            ├── daily-operations.rst     # Boot-mode toggling, PoE, reprovisioning, E2E
-            ├── boot-mode-override.rst   # Three override methods (inventory, -e, U-Boot env)
-            ├── retry-configuration.rst  # Retry/timeout knob tuning recipes
-            └── reprovision-local-disk.rst  # disk_provision lifecycle runbook
+        └── rst/                   # Extra docsite pages (RST)
+            └── guide.rst          # Single getting-started guide: intro + example usage
 ```
 
 **`playbooks/` layout convention** — three buckets, sorted by purpose:
@@ -605,7 +600,5 @@ filtering.
 - `inventory/group_vars/boards.yml` — `armbian_router` + retry-knob overrides
 - `playbooks/build_and_publish_from_inventory.yml` — custom Armbian image build pipeline (per-host loop)
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
-- `docs/docsite/rst/boot-mode-override.rst` — three boot mode override methods (inventory, -e, U-Boot env)
-- `docs/docsite/rst/retry-configuration.rst` — retry/timeout knob recipes
-- `docs/docsite/rst/reprovision-local-disk.rst` — disk_provision lifecycle runbook
+- `docs/docsite/rst/guide.rst` — single getting-started guide (intro + example usage); per-role detail lives in the generated role reference
 - `galaxy.yml` — collection namespace, version (0.0.2-alpha), external dependencies

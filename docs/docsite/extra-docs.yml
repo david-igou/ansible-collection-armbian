@@ -1,16 +1,8 @@
 ---
 # Extra documentation pages included in the rendered docsite, on top of the
-# auto-generated collection / role reference.
-#
-# Only the four section landing pages are listed here. Each landing page
-# (concepts, operations, reference, runbooks) carries its own nested toctree of
-# child pages, so the sidebar renders a clickable section → index page →
-# children hierarchy. Child pages must therefore NOT be repeated here, or Sphinx
-# would see them in two toctrees.
+# auto-generated collection / role reference. A single getting-started guide;
+# per-role detail lives in the generated role reference.
 sections:
   - title: Documentation
     toctree:
-      - concepts
-      - operations
-      - reference
-      - runbooks
+      - guide
