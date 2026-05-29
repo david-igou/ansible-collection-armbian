@@ -4,9 +4,17 @@
 # a deliberate role-level change.
 armbian_build_ref: "v26.2.0-trunk.844"
 
-# Filesystem layout on the builder host
-armbian_build_cache_dir: "/var/lib/armbian_build"            # armbian/build checkout + cache + userpatches
-armbian_build_output_dir: "/var/lib/armbian_build/output"    # final .img.xz + manifest.json land here
+# Filesystem layout on the builder host. Defaults under the connecting
+# user's real $HOME (ansible_env.HOME, resolved from gathered facts — so
+# it's correct for root's /root and any non-/home home, unlike a hardcoded
+# /home/<user>) so the role runs become-free out of the box — every task
+# sets become: false because compile.sh needs user (not root) ownership
+# of the build tree for Docker auto-delegation. Relocate to a roomier
+# mount if $HOME is small (preflight asserts >= armbian_build_min_free_gb);
+# if you move it under a root-owned path like /var/lib, pre-create + chown
+# it to the connecting user once — the role will not sudo to create it.
+armbian_build_cache_dir: "{{ ansible_env.HOME }}/armbian_build"         # armbian/build checkout + cache + userpatches
+armbian_build_output_dir: "{{ ansible_env.HOME }}/armbian_build/output" # final .img.xz + manifest.json land here
 
 # User that owns the build tree and runs compile.sh. Must be in the
 # `docker` group on the builder host. Defaults to ansible_user.
