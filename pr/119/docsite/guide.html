@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Concepts &mdash; David_Igou.Armbian Collection  documentation</title>
+  <title>Getting started &mdash; David_Igou.Armbian Collection  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
       <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
       <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
@@ -21,7 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Architecture and data flow" href="architecture.html" />
+    <link rel="next" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." href="../board_boot_verify_role.html" />
     <link rel="prev" title="David_Igou.Armbian" href="../index.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
@@ -73,13 +73,10 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
               <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Concepts</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="operations.html">Onboarding and operations</a></li>
-<li class="toctree-l1"><a class="reference internal" href="reference.html">Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="runbooks.html">Runbooks</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
@@ -107,7 +104,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Concepts</li>
+      <li class="breadcrumb-item active">Getting started</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -118,17 +115,70 @@
   
            <div itemprop="articleBody">
              
-  <section id="concepts">
-<span id="ansible-collections-david-igou-armbian-docsite-concepts"></span><h1>Concepts<a class="headerlink" href="#concepts" title="Link to this heading"></a></h1>
-<p>Background on how the collection is put together — the roles-plus-playbooks
-mental model, the always-netboot invariant, and the end-to-end data flow from
-image build to a booted board. Start here if you want to understand <em>why</em> the
-pieces fit the way they do before running anything.</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
-</ul>
+  <section id="getting-started">
+<span id="ansible-collections-david-igou-armbian-docsite-guide"></span><h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">david_igou.armbian</span></code> manages Armbian-based ARM SBCs end to end: building a
+custom PXE-first Armbian image, provisioning per-host NFS rootfs, converging
+boards between netboot and SD/local boot, and driving the hardware lifecycle
+over PoE.</p>
+<p>The collection is built from <strong>single-purpose, parameter-driven roles</strong> —
+each one enforces one piece of desired state on one host class — composed by
+<strong>workflow playbooks</strong> that decide which roles to run, where, and in what order.
+The guiding invariant is <em>always-netboot</em>: every onboarded board always has a
+<code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> on the router, and a single <code class="docutils literal notranslate"><span class="pre">default</span></code> directive inside it
+selects the active boot mode. Per-role inputs and outputs are documented in the
+role reference (see the Role Index below); networking-gear specifics (RouterOS
+upload, PoE) live as swappable reference playbooks under <code class="docutils literal notranslate"><span class="pre">playbooks/routeros/</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Early-stage 0.0.x — expect breaking changes between releases. Pin a specific
+version in your <code class="docutils literal notranslate"><span class="pre">requirements.yml</span></code>.</p>
 </div>
+<section id="example-usage">
+<h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading"></a></h2>
+<p>A minimal end-to-end path from nothing to a board booting over NFS on demand.
+Each board needs an inventory entry with at least <code class="docutils literal notranslate"><span class="pre">armbian_board_mac</span></code>,
+<code class="docutils literal notranslate"><span class="pre">armbian_board_model</span></code>, and <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code>; see the role reference for
+the full set of variables.</p>
+<p><strong>1. Install the collection.</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>david_igou.armbian
+
+<span class="c1"># Only if you orchestrate RouterOS (boot-mode convergence, TFTP staging):</span>
+ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>playbooks/routeros/requirements.yml
+</pre></div>
+</div>
+<p><strong>2. Build and publish the custom PXE-first image.</strong></p>
+<p>Stock Armbian images don’t boot PXE-first; this builds one that does and
+publishes the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> to the netboot server.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/build_and_publish_from_inventory.yml
+</pre></div>
+</div>
+<p><strong>3. Bootstrap a freshly flashed board.</strong></p>
+<p>Flash the image to an SD card and power the board on, then create the SSH-key
+user with passwordless sudo:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/bootstrap_armbian.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p><strong>4. Stage the netboot assets.</strong></p>
+<p>Provision the per-host NFS rootfs on the netboot server, then push the
+kernel/initrd/dtb and TFTP rows to the router:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_netboot_assets.yml
+ansible-playbook<span class="w"> </span>playbooks/stage_router.yml
+</pre></div>
+</div>
+<p><strong>5. Converge the board to its declared boot mode.</strong></p>
+<p>Renders the per-board <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code>, uploads it, power-cycles the board, and
+verifies it comes up on the expected rootfs:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/converge_boot_mode.yml<span class="w"> </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p><strong>6. Toggle boot mode ad hoc</strong> (no inventory edit), e.g. to fall back to SD:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/set_boot_mode.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>sd
+</pre></div>
+</div>
+</section>
 </section>
 
 
@@ -138,7 +188,7 @@ pieces fit the way they do before running anything.</p>
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="David_Igou.Armbian" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="architecture.html" class="btn btn-neutral float-right" title="Architecture and data flow" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../board_boot_verify_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
