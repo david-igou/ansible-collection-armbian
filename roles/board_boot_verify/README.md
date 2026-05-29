@@ -61,4 +61,4 @@ After a successful run:
 ```
 
 Typically reached via `playbooks/converge_boot_mode.yml` and
-`playbooks/test_hardware_e2e.yml` as the post-boot assertion step.
+`playbooks/tests/test_hardware_e2e.yml` as the post-boot assertion step.

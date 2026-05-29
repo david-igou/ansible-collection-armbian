@@ -44,14 +44,14 @@
 #
 # Usage:
 #   # Full fleet, default target group:
-#   ansible-playbook playbooks/test_fleet_e2e.yml
+#   ansible-playbook playbooks/tests/test_fleet_e2e.yml
 #
 #   # Subset of hosts (use -e target_hosts=, not --limit, because the
 #   # plays delegate to the router/netboot_server/PoE switches):
-#   ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01.example.lan
+#   ansible-playbook playbooks/tests/test_fleet_e2e.yml -e target_hosts=opi5pro-01.example.lan
 #
 #   # Skip phases you've already proven on a previous run:
-#   ansible-playbook playbooks/test_fleet_e2e.yml -e skip_phase_3=true
+#   ansible-playbook playbooks/tests/test_fleet_e2e.yml -e skip_phase_3=true
 #   # Available: skip_phase_0, skip_phase_1, skip_phase_2, skip_phase_3,
 #   # skip_phase_4, skip_phase_5.
 #
@@ -176,9 +176,9 @@
       when: not (skip_phase_1 | bool)
       block:
         - name: "Phase 1 — resolve effective armbian_board_config"
-          ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+          ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
         - name: "Phase 1 — resolve armbian_rootfs_src"
-          ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+          ansible.builtin.include_tasks: ../tasks/_resolve_rootfs_src.yml
 
 - name: "Phase 1 — Force-refresh per-host NFS rootfs + TFTP (netboot_server)"
   hosts: netboot_server
@@ -252,7 +252,7 @@
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/2-nfs-bootstrap"
   pre_tasks:
     - name: "Phase 2a — resolve effective armbian_board_config"
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 2a — block"
       when: not (skip_phase_2 | bool)
@@ -271,7 +271,7 @@
 
         # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
         - name: "Phase 2a — render+upload pxelinux for nfs (no cycle)"
-          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+          ansible.builtin.include_tasks: ../tasks/_converge_boot_mode.yml
           vars:
             armbian_boot_mode: nfs
             armbian_cycle_board: false
@@ -281,7 +281,7 @@
         # skips the wait_for_connection-as-igou check that would
         # otherwise fail on the bootstrap-less rootfs.
         - name: "Phase 2a — PoE cycle + TCP/22 wait (no SSH-as-igou)"
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 2a"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | int + 1 }}"
@@ -303,7 +303,7 @@
 
         # Step 4 — now that igou exists, wait for SSH-as-igou.
         - name: "Phase 2a — wait for SSH as igou (post-bootstrap)"
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 2a"
             _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
@@ -321,7 +321,7 @@
 # is load-bearing for the no-skip (normal-run) case. To skip Phase 2,
 # pass `-e skip_phase_2=true` — extra-vars are global scope.
 - name: "Phase 2b — Persist SPI U-Boot env (no-op for non-SPI boards)"
-  ansible.builtin.import_playbook: persist_uboot_env.yml
+  ansible.builtin.import_playbook: ../persist_uboot_env.yml
   vars:
     armbian_persist_uboot_env_cycle: false
   when: not (skip_phase_2 | default(false) | bool)
@@ -363,7 +363,7 @@
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/3-dd-sd"
   pre_tasks:
     - name: "Phase 3 — resolve armbian_rootfs_src (for disk_image; idempotent if Phase 1 ran)"
-      ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_rootfs_src.yml
       when: not (skip_phase_3 | bool)
   tasks:
     - name: "Phase 3 — block"
@@ -415,7 +415,7 @@
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/4-sd-bootstrap"
   pre_tasks:
     - name: "Phase 4 — resolve effective armbian_board_config"
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 4 — block"
       when: not (skip_phase_4 | bool)
@@ -431,7 +431,7 @@
 
         # Step 1 — write pxelinux + upload to router. No cycle, no SSH.
         - name: "Phase 4 — render+upload pxelinux for sd (no cycle)"
-          ansible.builtin.include_tasks: tasks/_converge_boot_mode.yml
+          ansible.builtin.include_tasks: ../tasks/_converge_boot_mode.yml
           vars:
             armbian_boot_mode: sd
             armbian_cycle_board: false
@@ -439,7 +439,7 @@
 
         # Step 2 — PoE cycle + TCP/22 wait, skipping SSH-as-igou.
         - name: "Phase 4 — PoE cycle + TCP/22 wait (no SSH-as-igou)"
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 4"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | int + 1 }}"
@@ -460,7 +460,7 @@
 
         # Step 4 — wait for SSH as igou now that bootstrap created it.
         - name: "Phase 4 — wait for SSH as igou (post-bootstrap)"
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 4"
             _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
@@ -505,7 +505,7 @@
     fleet_artifact_dir: "/tmp/iter-FLEET-{{ inventory_hostname | regex_replace('\\..*', '') }}/5-nvme-localkernel"
   pre_tasks:
     - name: "Phase 5 — resolve effective armbian_board_config"
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
   tasks:
     - name: "Phase 5 — block"
       when: not (skip_phase_5 | bool)
@@ -515,7 +515,7 @@
             _t_phase_5_start: "{{ lookup('pipe', 'date +%s') | int }}"
 
         - name: "Phase 5 — set + verify nfs (rsync source for disk_provision)"
-          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
           vars:
             target_boot_mode: nfs
             on_failure_revert_to: nfs
@@ -563,7 +563,7 @@
           changed_when: false
 
         - name: "Phase 5 — set + verify local_kernel"
-          ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+          ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
           vars:
             target_boot_mode: local_kernel
             on_failure_revert_to: nfs

@@ -86,13 +86,13 @@
   gather_subset: [mounts]
   tasks:
     - name: "Set boot mode to nfs (in case not already)"
-      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
       vars:
         target_boot_mode: nfs
         on_failure_revert_to: nfs
 
 - name: "B: First reprovision"
-  import_playbook: reprovision_to_local.yml
+  import_playbook: ../reprovision_to_local.yml
 
 - name: "B2: Assert local rootfs label"
   hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
@@ -118,7 +118,7 @@
       become: true
 
 - name: "C: Second reprovision (idempotency on preserved /var)"
-  import_playbook: reprovision_to_local.yml
+  import_playbook: ../reprovision_to_local.yml
 
 - name: "C2: Assert sentinel survived"
   hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
@@ -140,7 +140,7 @@
   gather_facts: false
   tasks:
     - name: "Set + verify nfs"
-      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
       vars:
         target_boot_mode: nfs
         on_failure_revert_to: nfs
@@ -150,7 +150,7 @@
   gather_facts: false
   tasks:
     - name: "Set + verify local"
-      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
       vars:
         target_boot_mode: local
         on_failure_revert_to: nfs
@@ -170,7 +170,7 @@
   gather_facts: false
   tasks:
     - name: "Final set + verify nfs"
-      ansible.builtin.include_tasks: tasks/_lifecycle_set_and_verify.yml
+      ansible.builtin.include_tasks: ../tasks/_lifecycle_set_and_verify.yml
       vars:
         target_boot_mode: nfs
         on_failure_revert_to: nfs

@@ -38,8 +38,9 @@ Roles are transport-agnostic. Networking-gear-specific tasks (RouterOS upload,
 PoE control, user provisioning) live as reference playbooks under
 `playbooks/routeros/`; a user swapping switch ecosystems writes a parallel
 directory and points the transport-hook variables at it. Top-level orchestration
-playbooks (`converge_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`)
-compose roles + reference playbooks. See
+playbooks (`converge_boot_mode.yml`, `stage_router.yml`) and the E2E harnesses
+under `playbooks/tests/` (`test_hardware_e2e.yml`) compose roles + reference
+playbooks. See
 [`docs/boot-mode-override.md`](docs/boot-mode-override.md).
 
 ## Status: early-stage (0.0.x) — expect breaking changes
@@ -82,14 +83,17 @@ david_igou/armbian/   (this repo root)
 │   ├── cleanup_boot_files.yml       # Remove stale per-host pxelinux.cfg + per-model TFTP rows
 │   ├── converge_boot_mode.yml       # Converge board(s) to inventory-declared boot mode
 │   ├── set_boot_mode.yml            # Thin wrapper around converge for -e override
-│   ├── poe_control.yml              # PoE on/off/cycle (wraps routeros/poe_control.yml)
 │   ├── persist_uboot_env.yml        # Write SPI U-Boot env vars via fw_setenv (rock-5b etc.)
 │   ├── provision_local_disk.yml     # Compose disk_provision against a board's local disk
 │   ├── reprovision_to_local.yml     # Headless NFS-boot → reprovision → flip pxelinux to local
-│   ├── test_fleet_e2e.yml           # Deterministic six-phase whole-fleet harness
-│   ├── test_hardware_e2e.yml        # SD → NFS → SD single-board assertion harness
-│   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
-│   ├── test_reprovision_e2e.yml     # Single-board reprovision regression
+│   ├── examples/                    # Per-role demo playbooks (one role each; known-good usage)
+│   │   ├── image_build.yml            # Demo: build one .img.xz via the image_build role
+│   │   ├── rootfs_provision.yml       # Demo: per-host NFS rootfs via the rootfs_provision role
+│   │   ├── disk_image.yml             # Demo: stream an .img.xz onto a block device
+│   │   ├── disk_provision.yml         # Demo: declarative GPT layout + rsync via disk_provision
+│   │   ├── pxelinux_render.yml        # Demo: render one per-board pxelinux.cfg locally
+│   │   ├── board_boot_wait.yml        # Demo: TCP/22 + SSH wait via board_boot_wait
+│   │   └── board_boot_verify.yml      # Demo: assert rootfs matches declared boot mode
 │   ├── routeros/                    # RouterOS-specific reference playbooks (swappable)
 │   │   ├── requirements.yml           # Optional deps: community.routeros + ansible.netcommon
 │   │   ├── bootstrap_user.yml         # Provision ansible-netboot user/group/SSH keys
@@ -101,8 +105,15 @@ david_igou/armbian/   (this repo root)
 │   │       ├── upload_file.yml        # Shared primitive: net_put + /ip tftp row
 │   │       ├── poe_cycle.yml          # Shared primitive: off → drain → on
 │   │       └── upload_pxelinux_one.yml # Per-host pxelinux upload (for in-play use)
-│   ├── tests/
-│   │   └── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
+│   ├── tests/                       # Hardware E2E harnesses + localhost var-contract tests
+│   │   ├── test_fleet_e2e.yml          # Deterministic six-phase whole-fleet harness
+│   │   ├── test_hardware_e2e.yml       # SD → NFS → SD single-board assertion harness
+│   │   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
+│   │   ├── test_reprovision_e2e.yml    # Single-board reprovision regression
+│   │   ├── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
+│   │   ├── test_resolve_board_config.yml     # Localhost test for tasks/_resolve_board_config.yml
+│   │   ├── test_resolve_build_profile.yml    # Localhost test for tasks/_resolve_build_profile.yml
+│   │   └── test_resolve_rootfs_src.yml       # Localhost test for tasks/_resolve_rootfs_src.yml
 │   └── tasks/
 │       ├── _converge_boot_mode.yml         # Inner converge primitive used by lifecycle wrappers
 │       ├── _lifecycle_set_and_verify.yml   # Converge + verify with diagnostic-bundle on failure
@@ -134,6 +145,18 @@ david_igou/armbian/   (this repo root)
         └── reprovision-local-disk.md  # disk_provision lifecycle runbook
 ```
 
+**`playbooks/` layout convention** — three buckets, sorted by purpose:
+
+- **Top level** = workflow playbooks you actually run in operation (the
+  "verbs"). These are the only ones addressable by FQCN
+  (`david_igou.armbian.<name>`).
+- **`examples/`** = one demo playbook per role, showing the minimal
+  known-good role call. Run by path; not for production use.
+- **`tests/`** = hardware E2E harnesses + localhost var-contract tests.
+
+A new playbook belongs in whichever bucket matches its purpose; keep the
+top level limited to operational workflows.
+
 ## Running playbooks
 
 Run from the collection root:
@@ -142,8 +165,8 @@ Run from the collection root:
 # Install runtime collection dependencies (roles/ only).
 ansible-galaxy collection install -r requirements.yml
 # If you use any orchestration that talks to RouterOS (stage_router.yml,
-# converge_boot_mode.yml, poe_control.yml, the routeros/ reference
-# playbooks, or the test_*_e2e.yml harnesses), also install:
+# converge_boot_mode.yml, the routeros/ reference playbooks, or the
+# test_*_e2e.yml harnesses), also install:
 ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
 # (0) Build the custom Armbian image on a builder host. Publishes the
@@ -173,7 +196,7 @@ ansible-playbook playbooks/set_boot_mode.yml \
   -e armbian_boot_mode=sd
 
 # Power cycle a board via its upstream RouterOS switch.
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 \
+ansible-playbook playbooks/routeros/poe_control.yml --limit orange-pi-5-pro-01 \
   -e armbian_poe_action=cycle
 
 # Persist the U-Boot env vars SPI-flash boards need for autonomous PXE.
@@ -193,14 +216,14 @@ ansible-playbook playbooks/cleanup_boot_files.yml
 
 # Hardware E2E test: converge a single board through SD → NFS → SD and
 # assert each transition. Single board via --limit.
-ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 
 # Deterministic whole-fleet E2E test: six phases × all target boards.
 # See `.claude/skills/running-fleet-e2e-test/` for the wrapper.
-ansible-playbook playbooks/test_fleet_e2e.yml
+ansible-playbook playbooks/tests/test_fleet_e2e.yml
 
 # Single-board reprovision regression test.
-ansible-playbook playbooks/test_reprovision_e2e.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/tests/test_reprovision_e2e.yml --limit orange-pi-5-pro-01
 ```
 
 ## Inventory: documentation vs. real
@@ -289,7 +312,7 @@ collection's `vars/` tree.
 
 For PoE-powered boards, also set `armbian_poe_switch` (inventory hostname of
 the RouterOS switch providing power) and `armbian_poe_port` (interface name on
-that switch, e.g. `ether3`). These are required by `playbooks/poe_control.yml`.
+that switch, e.g. `ether3`). These are required by `playbooks/routeros/poe_control.yml`.
 
 **`armbian_router`** (consumed by `converge_boot_mode.yml`,
 `set_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`, and
@@ -401,7 +424,7 @@ netboot server during boot-mode convergence.
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
 | `build_and_publish_from_inventory.yml` | **`armbian_builders`** (Docker-capable build host; loops per-host after resolving `armbian_build` profile); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
-| `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
+| `routeros/poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
 | `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
 | `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 
@@ -531,7 +554,7 @@ sends every TFTP request straight at rb5009.
 
 ## PoE power control
 
-`poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
+`routeros/poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
 and delegates the RouterOS command to the switch identified by each board's
 `armbian_poe_switch` host variable. The `delegate_to` pattern works because
 `group_vars/routeros.yml` sets `ansible_connection: ansible.netcommon.network_cli` on
