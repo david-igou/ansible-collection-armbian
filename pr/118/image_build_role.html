@@ -179,8 +179,8 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--armbian_build_cache_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-armbian-build-cache-dir"><strong>armbian_build_cache_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_cache_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>Directory on the builder host for the armbian/build checkout, cache, and userpatches tree. Must be writable by the connecting user — the role does not escalate privileges. The default lives under $HOME so this holds with no setup; if you relocate it under a root-owned path like /var/lib, pre-create + chown the path before the first run.</p>
-<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/home/{{</span> <span class="pre">ansible_user</span> <span class="pre">}}/armbian_build&quot;</span></code></p>
+<td><div class="ansible-option-cell"><p>Directory on the builder host for the armbian/build checkout, cache, and userpatches tree. Must be writable by the connecting user — the role does not escalate privileges. The default resolves to the connecting user’s real $HOME (via ansible_env.HOME, so root and non-/home homes work too), which holds with no setup; if you relocate it under a root-owned path like /var/lib, pre-create + chown the path before the first run.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_env.HOME</span> <span class="pre">}}/armbian_build&quot;</span></code></p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
@@ -222,7 +222,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>Directory where the final .img.xz and manifest.json are written. Same writability requirement as armbian_build_cache_dir.</p>
-<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/home/{{</span> <span class="pre">ansible_user</span> <span class="pre">}}/armbian_build/output&quot;</span></code></p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_env.HOME</span> <span class="pre">}}/armbian_build/output&quot;</span></code></p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
