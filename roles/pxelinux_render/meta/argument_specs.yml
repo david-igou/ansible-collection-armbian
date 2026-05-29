@@ -70,6 +70,11 @@ argument_specs:
       pxelinux_render_sd_root:
         type: str
         default: "LABEL=armbi_root"
+        description: >-
+          root= kernel argument for the `sd` label. Defaults to the
+          Armbian SD-card filesystem label armbi_root; override per-host
+          (via armbian_sd_root) when the board's SD rootfs uses a
+          different label, UUID, or PARTUUID.
       pxelinux_render_local_root:
         type: str
         default: "LABEL=armbi_root_local"
@@ -82,6 +87,12 @@ argument_specs:
       pxelinux_render_pxe_verbose:
         type: bool
         default: false
+        description: >-
+          When true, appends verbose console/debug kernel arguments
+          (earlycon, loglevel=8, ignore_loglevel, initcall_debug, and
+          systemd console logging) to every label's append line, for
+          diagnosing boot failures over serial. Default false renders a
+          quiet boot.
       pxelinux_render_tftp_kernel:
         type: str
         default: "armbian/{{ inventory_hostname }}/vmlinuz"
