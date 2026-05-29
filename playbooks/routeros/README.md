@@ -1,5 +1,10 @@
 # `playbooks/routeros/`
 
+> **Disclaimer.** These playbooks are what the author runs to test the
+> collection in their own homelab environment. They are provided as-is, with
+> **no guarantee of functionality, stability, or fitness** for any other setup.
+> Expect to read and adapt them before relying on them.
+
 RouterOS-specific **reference playbooks**. The collection's roles are
 transport-agnostic; all networking-gear-specific behaviour (TFTP/pxelinux
 upload, `/ip tftp` row registration, PoE control, SSH-user provisioning) is
