@@ -35,6 +35,32 @@ jobs:
       init-html-short-title: David_Igou.Armbian Collection Docs
       init-extra-html-theme-options: |
         documentation_home_url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branch/main/
+      # Trim the auto-generated role/plugin reference entries in the navigation
+      # sidebar down to just their names (drop the "-- <short description>"
+      # suffix). Leaves each page's own H1 heading untouched.
+      init-append-conf-py: |
+        def _trim_reference_sidebar_titles(app, env):
+            import re
+            from docutils import nodes
+            targets = (' role', ' module', ' plugin', ' filter', ' lookup')
+            sep = re.compile('\\s+(?:--|–|—)\\s+')
+
+            def needs_trim(text):
+                return sep.search(text) is not None and any(s in text for s in targets)
+
+            for docname, title in list(env.titles.items()):
+                text = title.astext()
+                if needs_trim(text):
+                    env.titles[docname] = nodes.title('', sep.split(text, 1)[0])
+                    toc = env.tocs.get(docname)
+                    if toc is not None:
+                        for ref in toc.findall(nodes.reference):
+                            rawtext = ref.astext()
+                            if needs_trim(rawtext):
+                                ref.children = [nodes.Text(sep.split(rawtext, 1)[0])]
+
+        def setup(app):
+            app.connect('env-check-consistency', _trim_reference_sidebar_titles)
       render-file-line: '> * `$<status>` [$<path_tail>](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr/${{ github.event.number }}/$<path_tail>)'
 
   publish-docs-gh-pages:
