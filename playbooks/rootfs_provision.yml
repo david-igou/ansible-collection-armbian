@@ -20,6 +20,49 @@
 #   armbian_rootfs_host          — inventory_hostname this rootfs is for (required)
 #   armbian_rootfs_dtb           — DTB path under /boot/dtb/ (required)
 #   armbian_rootfs_force_refresh — re-extract even if the sentinel matches (default false)
+#
+# Example inventory this playbook expects (doc-safe placeholders):
+#
+#   # inventory/hosts.yml
+#   all:
+#     children:
+#       netboot_server:                 # the host that exports NFS rootfs
+#         hosts:
+#           truenas-01:
+#             ansible_host: 192.0.2.10
+#             ansible_user: admin
+#             ansible_become: true
+#       boards:
+#         children:
+#           orange_pi_5_pro:            # <model_group> — carries the model layer
+#             hosts:
+#               orange-pi-5-pro-01:
+#                 ansible_host: 192.0.2.111
+#                 armbian_board_model: orange-pi-5-pro
+#                 # .img.xz for THIS host (URL or path on the netboot server).
+#                 # Omit to resolve from the published manifest instead
+#                 # (armbian_nfs_assets_export/images/<host>/manifest.json).
+#                 armbian_rootfs_src: "https://images.example.lan/orange-pi-5-pro-01.img.xz"
+#
+#   # inventory/group_vars/rk3588s.yml      (family layer)
+#   armbian_board_config_family:
+#     console: ttyS2,1500000n8
+#     earlycon: uart8250,mmio32,0xfeb50000
+#
+#   # inventory/group_vars/orange_pi_5_pro.yml   (model layer — sets dtb)
+#   armbian_board_config_model:
+#     armbian_board_name: orangepi5pro
+#     dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+#
+#   # inventory/group_vars/all.yml
+#   armbian_nfs_rootfs_path: /srv/netboot/rootfs
+#   armbian_nfs_assets_export: /srv/netboot/boot-files
+#   armbian_image_cache: /var/lib/armbian/cache
+#
+# _resolve_board_config.yml merges family → model → host into
+# armbian_board_config (so armbian_board_config.dtb comes from the model
+# layer above); _resolve_rootfs_src.yml uses the host's armbian_rootfs_src
+# or falls back to the published manifest.
 
 - name: Resolve board configs + rootfs sources per board host
   hosts: "{{ armbian_boards_group | default('boards') }}"

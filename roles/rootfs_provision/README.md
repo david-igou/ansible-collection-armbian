@@ -113,6 +113,46 @@ skip):
 }
 ```
 
+## Example inventory
+
+The example below reads `armbian_rootfs_src` and `armbian_board_config.dtb`
+from each board's hostvars. A matching inventory (doc-safe placeholders):
+
+```yaml
+# inventory/hosts.yml
+all:
+  children:
+    netboot_server:               # exports the NFS rootfs
+      hosts:
+        truenas-01:
+          ansible_host: 192.0.2.10
+          ansible_user: admin
+          ansible_become: true
+    boards:
+      children:
+        orange_pi_5_pro:          # <model_group> — carries the model layer
+          hosts:
+            orange-pi-5-pro-01:
+              ansible_host: 192.0.2.111
+              armbian_board_model: orange-pi-5-pro
+              armbian_rootfs_src: "https://images.example.lan/orange-pi-5-pro-01.img.xz"
+
+# inventory/group_vars/orange_pi_5_pro.yml   (model layer sets the dtb)
+armbian_board_config_model:
+  armbian_board_name: orangepi5pro
+  dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+
+# inventory/group_vars/all.yml
+armbian_nfs_rootfs_path: /srv/netboot/rootfs
+armbian_image_cache: /var/lib/armbian/cache
+```
+
+`armbian_board_config` is the resolved fact produced by merging the
+family/model/host layers — run `tasks/_resolve_board_config.yml` on the
+board hosts before this role reads `armbian_board_config.dtb` (the
+`playbooks/rootfs_provision.yml` and `stage_netboot_assets.yml` plays do
+this in a first play).
+
 ## Example
 
 ```yaml
