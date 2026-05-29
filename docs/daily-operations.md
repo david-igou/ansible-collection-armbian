@@ -201,7 +201,7 @@ and have no persistent env).
 ## Hardware E2E test
 
 ```bash
-ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 ```
 
 Drives a single board through SD → nfsroot → SD via pxelinux boot-mode
@@ -218,7 +218,7 @@ checkpoint.
 ## Fleet-level E2E test
 
 ```bash
-ansible-playbook playbooks/test_fleet_e2e.yml
+ansible-playbook playbooks/tests/test_fleet_e2e.yml
 ```
 
 Deterministic six-phase whole-fleet harness: PoE-down → NFS reset →

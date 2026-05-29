@@ -1,13 +1,13 @@
 ---
 name: running-fleet-e2e-test
-description: Use when running the deterministic six-phase fleet e2e (`playbooks/test_fleet_e2e.yml`) — validating cross-iteration determinism after image rebuilds, `disk_image`/`disk_provision`/`bootstrap_armbian` changes, new-board bring-up, or SPI recovery. Covers pre-flight probes, the `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` wrapper, Summary-table interpretation, and per-phase recovery routes.
+description: Use when running the deterministic six-phase fleet e2e (`playbooks/tests/test_fleet_e2e.yml`) — validating cross-iteration determinism after image rebuilds, `disk_image`/`disk_provision`/`bootstrap_armbian` changes, new-board bring-up, or SPI recovery. Covers pre-flight probes, the `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` wrapper, Summary-table interpretation, and per-phase recovery routes.
 ---
 
 # Running the Fleet E2E Test
 
 ## Overview
 
-`playbooks/test_fleet_e2e.yml` is the canonical whole-fleet harness: six
+`playbooks/tests/test_fleet_e2e.yml` is the canonical whole-fleet harness: six
 deterministic phases (0 PoE-down → 1 NFS reset → 2 NFS boot + bootstrap
 + SPI persist → 3 dd SD → 4 SD boot + bootstrap → 5 NVMe reprovision +
 local_kernel TFTP-flat verify). Each phase produces a known-clean state
@@ -36,9 +36,8 @@ phase-specific diagnostic bundle (auto-captured by
 
 Per-board reliability iteration on a single board (campaign-shaped:
 PoE-cycle delay tuning, voltage-select flake debugging, etc.) is the
-domain of `playbooks/test_hardware_e2e.yml` and `playbooks/scripts/run-iter.sh`,
-not this skill. That harness is per-board, per-iter; this one is whole-fleet,
-deterministic.
+domain of `playbooks/tests/test_hardware_e2e.yml`, not this skill. That
+harness is per-board, per-iter; this one is whole-fleet, deterministic.
 
 ## Phase A — Pre-flight probes (do before running)
 
@@ -485,7 +484,7 @@ ansible boards:netboot_server:routeros_switch:routeros_router -m ping | grep -E 
 .claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh --skip 0,1
 
 # Bypass the wrapper (full control)
-ansible-playbook playbooks/test_fleet_e2e.yml -e target_hosts=opi5pro-01
+ansible-playbook playbooks/tests/test_fleet_e2e.yml -e target_hosts=opi5pro-01
 
 # Re-read per-board artifacts
 ls /tmp/iter-FLEET-<host>/
@@ -504,7 +503,7 @@ grep "delta=" /tmp/iter-FLEET-<host>/5-nvme-localkernel/nvme-localkernel-evidenc
 
 ## Cross-references
 
-- `playbooks/test_fleet_e2e.yml` — the six-phase deterministic fleet test orchestrated by this skill.
+- `playbooks/tests/test_fleet_e2e.yml` — the six-phase deterministic fleet test orchestrated by this skill.
 - `.claude/skills/running-fleet-e2e-test/scripts/run-fleet-e2e.sh` — wrapper that creates per-run artifact dirs + archives per-board state + saves the Summary.
 - `playbooks/persist_uboot_env.yml` — imported as Phase 2b; idempotent SPI env converge (no-op for non-SPI boards).
 - `playbooks/stage_router.yml` — pre-requisite; populates rb5009's `/ip tftp` rows.
@@ -518,4 +517,4 @@ grep "delta=" /tmp/iter-FLEET-<host>/5-nvme-localkernel/nvme-localkernel-evidenc
 - `docs/end-to-end-fleet-test.html` — historical operator runbook (some content predates the deterministic refactor; section markers updated for the new structure).
 - `recovering-uboot-spi-state` skill — invoked when Phase 2 fails on a stuck-SPI board.
 - `adding-armbian-board` skill — usually run before this skill on a new board's first fleet entry.
-- `playbooks/test_hardware_e2e.yml` + `playbooks/scripts/run-iter.sh` — per-board reliability iteration harness; complementary to (not replaced by) the fleet test.
+- `playbooks/tests/test_hardware_e2e.yml` — per-board reliability iteration harness; complementary to (not replaced by) the fleet test.

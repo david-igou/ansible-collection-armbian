@@ -38,8 +38,9 @@ Roles are transport-agnostic. Networking-gear-specific tasks (RouterOS upload,
 PoE control, user provisioning) live as reference playbooks under
 `playbooks/routeros/`; a user swapping switch ecosystems writes a parallel
 directory and points the transport-hook variables at it. Top-level orchestration
-playbooks (`converge_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`)
-compose roles + reference playbooks. See
+playbooks (`converge_boot_mode.yml`, `stage_router.yml`) and the E2E harnesses
+under `playbooks/tests/` (`test_hardware_e2e.yml`) compose roles + reference
+playbooks. See
 [`docs/boot-mode-override.md`](docs/boot-mode-override.md).
 
 ## Status: early-stage (0.0.x) — expect breaking changes
@@ -86,10 +87,14 @@ david_igou/armbian/   (this repo root)
 │   ├── persist_uboot_env.yml        # Write SPI U-Boot env vars via fw_setenv (rock-5b etc.)
 │   ├── provision_local_disk.yml     # Compose disk_provision against a board's local disk
 │   ├── reprovision_to_local.yml     # Headless NFS-boot → reprovision → flip pxelinux to local
-│   ├── test_fleet_e2e.yml           # Deterministic six-phase whole-fleet harness
-│   ├── test_hardware_e2e.yml        # SD → NFS → SD single-board assertion harness
-│   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
-│   ├── test_reprovision_e2e.yml     # Single-board reprovision regression
+│   ├── examples/                    # Per-role demo playbooks (one role each; known-good usage)
+│   │   ├── image_build.yml            # Demo: build one .img.xz via the image_build role
+│   │   ├── rootfs_provision.yml       # Demo: per-host NFS rootfs via the rootfs_provision role
+│   │   ├── disk_image.yml             # Demo: stream an .img.xz onto a block device
+│   │   ├── disk_provision.yml         # Demo: declarative GPT layout + rsync via disk_provision
+│   │   ├── pxelinux_render.yml        # Demo: render one per-board pxelinux.cfg locally
+│   │   ├── board_boot_wait.yml        # Demo: TCP/22 + SSH wait via board_boot_wait
+│   │   └── board_boot_verify.yml      # Demo: assert rootfs matches declared boot mode
 │   ├── routeros/                    # RouterOS-specific reference playbooks (swappable)
 │   │   ├── requirements.yml           # Optional deps: community.routeros + ansible.netcommon
 │   │   ├── bootstrap_user.yml         # Provision ansible-netboot user/group/SSH keys
@@ -101,8 +106,16 @@ david_igou/armbian/   (this repo root)
 │   │       ├── upload_file.yml        # Shared primitive: net_put + /ip tftp row
 │   │       ├── poe_cycle.yml          # Shared primitive: off → drain → on
 │   │       └── upload_pxelinux_one.yml # Per-host pxelinux upload (for in-play use)
-│   ├── tests/
-│   │   └── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
+│   ├── tests/                       # Hardware E2E harnesses + localhost var-contract tests
+│   │   ├── test_fleet_e2e.yml          # Deterministic six-phase whole-fleet harness
+│   │   ├── test_hardware_e2e.yml       # SD → NFS → SD single-board assertion harness
+│   │   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
+│   │   ├── test_reprovision_e2e.yml    # Single-board reprovision regression
+│   │   ├── test_connection.yml         # Ad-hoc RouterOS reachability check
+│   │   ├── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
+│   │   ├── test_resolve_board_config.yml     # Localhost test for tasks/_resolve_board_config.yml
+│   │   ├── test_resolve_build_profile.yml    # Localhost test for tasks/_resolve_build_profile.yml
+│   │   └── test_resolve_rootfs_src.yml       # Localhost test for tasks/_resolve_rootfs_src.yml
 │   └── tasks/
 │       ├── _converge_boot_mode.yml         # Inner converge primitive used by lifecycle wrappers
 │       ├── _lifecycle_set_and_verify.yml   # Converge + verify with diagnostic-bundle on failure
@@ -133,6 +146,18 @@ david_igou/armbian/   (this repo root)
     └── runbooks/
         └── reprovision-local-disk.md  # disk_provision lifecycle runbook
 ```
+
+**`playbooks/` layout convention** — three buckets, sorted by purpose:
+
+- **Top level** = workflow playbooks you actually run in operation (the
+  "verbs"). These are the only ones addressable by FQCN
+  (`david_igou.armbian.<name>`).
+- **`examples/`** = one demo playbook per role, showing the minimal
+  known-good role call. Run by path; not for production use.
+- **`tests/`** = hardware E2E harnesses + localhost var-contract tests.
+
+A new playbook belongs in whichever bucket matches its purpose; keep the
+top level limited to operational workflows.
 
 ## Running playbooks
 
@@ -193,14 +218,14 @@ ansible-playbook playbooks/cleanup_boot_files.yml
 
 # Hardware E2E test: converge a single board through SD → NFS → SD and
 # assert each transition. Single board via --limit.
-ansible-playbook playbooks/test_hardware_e2e.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 
 # Deterministic whole-fleet E2E test: six phases × all target boards.
 # See `.claude/skills/running-fleet-e2e-test/` for the wrapper.
-ansible-playbook playbooks/test_fleet_e2e.yml
+ansible-playbook playbooks/tests/test_fleet_e2e.yml
 
 # Single-board reprovision regression test.
-ansible-playbook playbooks/test_reprovision_e2e.yml --limit orange-pi-5-pro-01
+ansible-playbook playbooks/tests/test_reprovision_e2e.yml --limit orange-pi-5-pro-01
 ```
 
 ## Inventory: documentation vs. real

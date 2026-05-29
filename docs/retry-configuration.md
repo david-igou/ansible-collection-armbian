@@ -76,7 +76,7 @@ before re-energizing. Hits ~80 % on the 4 A HAT topology in #38.
 ### Maximum eventual consistency (slow but reliable)
 
 ```
-ansible-playbook playbooks/test_hardware_e2e.yml \
+ansible-playbook playbooks/tests/test_hardware_e2e.yml \
   --limit <board> \
   -e armbian_boot_retry_attempts=3 \
   -e armbian_poe_cycle_delay=60 \
@@ -92,7 +92,7 @@ needs every chance to recover.
 ### Fast iter loop (for characterization, not production)
 
 ```
-ansible-playbook playbooks/test_hardware_e2e.yml \
+ansible-playbook playbooks/tests/test_hardware_e2e.yml \
   --limit <board> \
   -e skip_baseline=true \
   -e leave_state=true \
@@ -114,7 +114,7 @@ toggle back.
 ### Fresh-rootfs reflash (auto-bootstrap needed)
 
 ```
-ansible-playbook playbooks/test_hardware_e2e.yml \
+ansible-playbook playbooks/tests/test_hardware_e2e.yml \
   --limit <board> \
   -e armbian_boot_retry_attempts=0
 ```

@@ -326,6 +326,6 @@ don't affect boot or system behavior.
 
 - DSL reference: `roles/disk_provision/meta/argument_specs.yml`
 - Lifecycle source: `playbooks/reprovision_to_local.yml`
-- Hardware E2E: `playbooks/test_reprovision_e2e.yml`
+- Hardware E2E: `playbooks/tests/test_reprovision_e2e.yml`
 - Boot-mode override methods (inventory / -e / U-Boot env):
   `docs/boot-mode-override.md`

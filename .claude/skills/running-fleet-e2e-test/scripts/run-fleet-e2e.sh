@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # run-fleet-e2e.sh — driver for the deterministic six-phase fleet e2e
-# (playbooks/test_fleet_e2e.yml). Creates a unique per-run artifact
+# (playbooks/tests/test_fleet_e2e.yml). Creates a unique per-run artifact
 # directory, tees ansible output, archives the per-board
 # /tmp/iter-FLEET-<host>/ dirs back into the run dir for archival, and
 # saves the rendered Summary table as a separate file.
@@ -97,7 +97,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Script lives at .claude/skills/running-fleet-e2e-test/scripts/ — repo
 # root is four levels up (scripts/ → skill-dir/ → skills/ → .claude/ → repo).
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
-PLAYBOOK="${REPO_ROOT}/playbooks/test_fleet_e2e.yml"
+PLAYBOOK="${REPO_ROOT}/playbooks/tests/test_fleet_e2e.yml"
 
 if [[ ! -f "${PLAYBOOK}" ]]; then
   echo "[run-fleet-e2e] playbook not found at ${PLAYBOOK}" >&2

@@ -1,0 +1,27 @@
+---
+breaking_changes:
+  - |
+    The ``playbooks/`` directory has been reorganized into three
+    purpose-based buckets. Top level now holds only operational
+    workflow playbooks. The per-role demo playbooks moved to
+    ``playbooks/examples/`` (``board_boot_verify.yml``,
+    ``board_boot_wait.yml``, ``disk_image.yml``, ``disk_provision.yml``,
+    ``image_build.yml``, ``pxelinux_render.yml``,
+    ``rootfs_provision.yml``), and the hardware E2E + connection-test
+    playbooks moved to ``playbooks/tests/`` alongside the existing
+    localhost var-contract tests (``test_fleet_e2e.yml``,
+    ``test_hardware_e2e.yml``, ``test_manual_psu_cold_boot.yml``,
+    ``test_reprovision_e2e.yml``, and ``test_connection.yml`` — the
+    last renamed from ``test_connection.yaml`` for extension
+    consistency). Only top-level playbooks are addressable by FQCN
+    (``david_igou.armbian.<name>``); update any scripts, CI, or
+    ``ansible-playbook`` invocations that referenced the old paths.
+  - |
+    ``playbooks/build_image.yml`` (the simplified single-board build
+    companion) has been removed. Use
+    ``playbooks/build_and_publish_from_inventory.yml`` for
+    inventory-driven builds, or ``playbooks/examples/image_build.yml``
+    for a minimal single-role demo.
+  - |
+    ``playbooks/scripts/run-iter.sh`` (the per-iter hardware-E2E driver
+    wrapper) has been removed.

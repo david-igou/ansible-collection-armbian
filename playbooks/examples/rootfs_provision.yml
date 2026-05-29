@@ -11,9 +11,9 @@
 #      reading the resolved facts from the board hostvars.
 #
 # Usage:
-#   ansible-playbook playbooks/rootfs_provision.yml
+#   ansible-playbook playbooks/examples/rootfs_provision.yml
 #   # force a clean re-extract regardless of the sentinel:
-#   ansible-playbook playbooks/rootfs_provision.yml -e armbian_force_refresh=true
+#   ansible-playbook playbooks/examples/rootfs_provision.yml -e armbian_force_refresh=true
 #
 # Role variables (see roles/rootfs_provision/README.md):
 #   armbian_rootfs_src           — .img.xz URL or local path on the server (required)
@@ -70,9 +70,9 @@
 
   tasks:
     - name: Resolve effective armbian_board_config
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
     - name: Resolve armbian_rootfs_src per host
-      ansible.builtin.include_tasks: tasks/_resolve_rootfs_src.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_rootfs_src.yml
 
 - name: Provision per-host NFS rootfs + TFTP artifacts on the netboot server
   hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"

@@ -28,7 +28,7 @@
 #      PAUSE: prompt operator to unplug PSU for next iter.
 #
 # Usage:
-#   ansible-playbook playbooks/test_manual_psu_cold_boot.yml \
+#   ansible-playbook playbooks/tests/test_manual_psu_cold_boot.yml \
 #     --limit opi5pro-01.example.lan \
 #     -e armbian_default_password=1234
 
@@ -121,7 +121,7 @@
     - name: Cold-boot test (cleanup runs in always)
       block:
         - name: Setup — converge pxelinux.cfg to nfs mode on the router
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: nfs
 
@@ -158,7 +158,7 @@
                                              | map(attribute='device') | first }}"
 
         - name: Diagnostic bundle
-          ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+          ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
           vars:
             _diag_phase: "manual-psu cold boot — nfsroot verify"
 
@@ -175,7 +175,7 @@
 
       always:
         - name: Cleanup — converge pxelinux.cfg to sd mode on the router
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: sd
 

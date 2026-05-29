@@ -107,7 +107,7 @@ armbian_image_cache: /var/lib/armbian/cache
 `armbian_board_config` is the resolved fact produced by merging the
 family/model/host layers — run `tasks/_resolve_board_config.yml` on the
 board hosts before this role reads `armbian_board_config.dtb` (the
-`playbooks/rootfs_provision.yml` and `stage_netboot_assets.yml` plays do
+`playbooks/examples/rootfs_provision.yml` and `stage_netboot_assets.yml` plays do
 this in a first play).
 
 ## Example

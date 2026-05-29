@@ -104,10 +104,10 @@ detail); this table is the dependency graph.
 | 8 | [`persist_uboot_env.yml`](../playbooks/persist_uboot_env.yml) | rock-5b boards → switch (delegated) | — | — (uses `routeros/tasks/poe_cycle.yml`) |
 | 9 | [`provision_local_disk.yml`](../playbooks/provision_local_disk.yml) | one board | `disk_provision` | — |
 | 10 | [`reprovision_to_local.yml`](../playbooks/reprovision_to_local.yml) | one board (+ router delegated) | `pxelinux_render`, `disk_provision`, `board_boot_verify` | `routeros/upload_pxelinux_cfg.yml` |
-| — | [`test_hardware_e2e.yml`](../playbooks/test_hardware_e2e.yml) | `boards` + router + switch (delegated) | exercises all roles transitively | exercises all reference playbooks transitively |
-| — | [`test_fleet_e2e.yml`](../playbooks/test_fleet_e2e.yml) | `boards` (six-phase fleet harness) | exercises all roles transitively | — |
-| — | [`test_manual_psu_cold_boot.yml`](../playbooks/test_manual_psu_cold_boot.yml) | `boards` (manual PSU) | `pxelinux_render`, `board_boot_wait` | — |
-| — | [`test_reprovision_e2e.yml`](../playbooks/test_reprovision_e2e.yml) | one board (regression for `reprovision_to_local.yml`) | exercises `disk_provision` lifecycle | — |
+| — | [`test_hardware_e2e.yml`](../playbooks/tests/test_hardware_e2e.yml) | `boards` + router + switch (delegated) | exercises all roles transitively | exercises all reference playbooks transitively |
+| — | [`test_fleet_e2e.yml`](../playbooks/tests/test_fleet_e2e.yml) | `boards` (six-phase fleet harness) | exercises all roles transitively | — |
+| — | [`test_manual_psu_cold_boot.yml`](../playbooks/tests/test_manual_psu_cold_boot.yml) | `boards` (manual PSU) | `pxelinux_render`, `board_boot_wait` | — |
+| — | [`test_reprovision_e2e.yml`](../playbooks/tests/test_reprovision_e2e.yml) | one board (regression for `reprovision_to_local.yml`) | exercises `disk_provision` lifecycle | — |
 | — | [`cleanup_boot_files.yml`](../playbooks/cleanup_boot_files.yml) | `routeros_router` | — | — |
 
 ### RouterOS reference playbooks (swappable)

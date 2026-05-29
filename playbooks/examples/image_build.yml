@@ -5,7 +5,7 @@
 # <armbian_build_output_dir>/<armbian_build_host>/ on the builder.
 #
 # Usage:
-#   ansible-playbook playbooks/image_build.yml --limit builder-01
+#   ansible-playbook playbooks/examples/image_build.yml --limit builder-01
 #
 # Role variables (see roles/image_build/README.md):
 #   armbian_build_board        — armbian/build BOARD= value (required)
@@ -15,11 +15,10 @@
 #   armbian_build_output_dir   — where <host>/<file>.img.xz + manifest.json land
 #   armbian_build_userpatches  — list of {dest, content} overlay files
 #
-# Companions: playbooks/build_image.yml (verbose single-board build with
-# the full local_kernel-bake userpatch) and
-# playbooks/build_and_publish_from_inventory.yml (every board +
-# publish to the netboot server). Use this one to read, at a glance,
-# the minimal known-good role call.
+# Companion: playbooks/build_and_publish_from_inventory.yml (resolves the
+# per-host armbian_build profile for every board and publishes the result
+# to the netboot server). Use this one to read, at a glance, the minimal
+# known-good role call.
 
 - name: Build a custom PXE-first Armbian image
   hosts: "{{ armbian_builders_group | default('armbian_builders') }}"
@@ -41,8 +40,9 @@
           # armbian/build only sources config/boards/<board>.conf when
           # building that board, so no `if BOARD == ...` guard is needed.
           # PXE-first is genuinely family-shared in the real fleet — see
-          # build_userpatches_common in inventory/group_vars/<family>.yml
-          # and playbooks/build_image.yml for the family-level form.
+          # armbian_build_family.userpatches in inventory/group_vars/<family>.yml
+          # for the family-level form composed by
+          # playbooks/build_and_publish_from_inventory.yml.
           - dest: config/boards/orangepi5pro.conf
             content: |
               function pre_config_uboot_target__orangepi5pro_pxe_first() {

@@ -35,13 +35,10 @@
 # for stty/socat against the UART device.
 #
 # Usage:
-#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01
-#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
-#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
-#   ansible-playbook playbooks/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
-#
-# For iteration runs with per-iter serial artifacts, prefer
-# `playbooks/scripts/run-iter.sh <iter-number> -- <ansible-playbook extras>`.
+#   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01
+#   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
+#   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
+#   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
 
 - name: Hardware E2E always-netboot boot-mode test
   hosts: "{{ armbian_boards_group | default('boards') }}"
@@ -87,7 +84,7 @@
       run_once: true
 
     - name: Pre-flight — resolve effective armbian_board_config
-      ansible.builtin.include_tasks: tasks/_resolve_board_config.yml
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
 
     # Background serial capture on the serial host. Pre-create the log
     # file as root with mode 0644 so socat (also root, since the FTDI
@@ -197,7 +194,7 @@
         # presence. A prior aborted run might have left default=nfs and
         # would trip Phase 1's local-rootfs assertion.
         - name: Pre-flight — converge pxelinux default to sd on router
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: sd
 
@@ -215,18 +212,18 @@
             #   3. if (1) succeeds and (2) fails, run bootstrap_armbian
             #      inline against the root account.
             - name: Phase 1 — PoE cycle + wait for TCP/22 (with retries)
-              ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+              ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
               vars:
                 _phase_label: "Phase 1"
                 _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
             - name: Phase 1 — auto-bootstrap if needed
-              ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+              ansible.builtin.include_tasks: ../tasks/auto_bootstrap_if_needed.yml
               vars:
                 _phase_label: "Phase 1"
 
             - name: Phase 1 — wait for SSH (SD-root identity, with cycle retry)
-              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 1"
                 _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
@@ -242,7 +239,7 @@
                                                  | map(attribute='device') | first }}"
 
             - name: Phase 1 — diagnostic bundle
-              ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+              ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 1 — SD baseline"
 
@@ -257,12 +254,12 @@
                   Diagnostic bundle is in the prior debug task.
 
         - name: Phase 2 — render+upload pxelinux for nfs
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: nfs
 
         - name: Phase 2 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 2"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
@@ -278,14 +275,14 @@
         # rootfs leaves the inventory user provisioned. Probe + auto-
         # bootstrap handles both cases.
         - name: Phase 2 — auto-bootstrap if needed (NFS rootfs may be fresh)
-          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+          ansible.builtin.include_tasks: ../tasks/auto_bootstrap_if_needed.yml
           vars:
             _phase_label: "Phase 2"
 
         - name: Phase 2 — verify NFS-mounted boot
           block:
             - name: Phase 2 — wait for SSH (NFS-root identity, with cycle retry)
-              ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+              ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 2"
                 _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
@@ -301,7 +298,7 @@
                                                  | map(attribute='device') | first }}"
 
             - name: Phase 2 — diagnostic bundle
-              ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+              ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
               vars:
                 _diag_phase: "phase 2 — nfsroot"
 
@@ -317,7 +314,7 @@
                   router's /ip tftp serving for armbian/{{ inventory_hostname }}/.
 
         - name: Phase 3 — render+upload pxelinux for sd
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: sd
 
@@ -330,13 +327,13 @@
           ansible.builtin.meta: reset_connection
 
         - name: Phase 3 — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Phase 3"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
         - name: Phase 3 — wait for SSH (SD-root identity, with cycle retry)
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
             _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
@@ -352,7 +349,7 @@
                                              | map(attribute='device') | first }}"
 
         - name: Phase 3 — diagnostic bundle
-          ansible.builtin.import_tasks: tasks/diagnostic_bundle.yml
+          ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
           vars:
             _diag_phase: "phase 3 — back to SD"
 
@@ -378,7 +375,7 @@
           when: leave_state | bool
 
         - name: Cleanup — converge pxelinux default sd on router
-          ansible.builtin.include_tasks: tasks/render_and_upload_pxelinux.yml
+          ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
             armbian_boot_mode: sd
           when: not (leave_state | bool)
@@ -388,20 +385,20 @@
           when: not (leave_state | bool)
 
         - name: Cleanup — PoE cycle + wait for TCP/22 (with retries)
-          ansible.builtin.include_tasks: tasks/cold_boot_with_retry.yml
+          ansible.builtin.include_tasks: ../tasks/cold_boot_with_retry.yml
           vars:
             _phase_label: "Cleanup"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
-          ansible.builtin.include_tasks: tasks/auto_bootstrap_if_needed.yml
+          ansible.builtin.include_tasks: ../tasks/auto_bootstrap_if_needed.yml
           vars:
             _phase_label: "Cleanup"
           when: not (leave_state | bool)
 
         - name: Cleanup — wait for SSH after cleanup cycle (with cycle retry)
-          ansible.builtin.include_tasks: tasks/wait_for_ssh_with_cycle_retry.yml
+          ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Cleanup"
             _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
