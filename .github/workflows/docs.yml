@@ -1,0 +1,92 @@
+---
+name: "Docs"
+
+# Build the antsibull-docs / Sphinx docsite (collection + role reference,
+# generated from each role's meta/argument_specs.yml, the role READMEs, and
+# the collection README) and publish it to GitHub Pages.
+#
+# The Sphinx project is scaffolded fresh each run by `antsibull-docs
+# sphinx-init` (nothing is committed under docs/docsite/ except links.yml),
+# so the build always tracks the installed antsibull-docs toolchain.
+#
+# Prerequisite (one-time, manual): repo Settings -> Pages -> Source =
+# "GitHub Actions". The workflow cannot set this itself.
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the deploy job to publish to Pages via OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize Pages deployments; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install antsibull-docs and ansible-core
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core antsibull-docs
+
+      - name: Install the collection and its dependencies
+        # `--use-current` (below) renders whatever is installed in the
+        # ansible_collections tree. Install this collection from the checkout
+        # plus the runtime + optional routeros deps so doc import resolves
+        # every referenced collection cleanly.
+        run: |
+          ansible-galaxy collection install . --force
+          ansible-galaxy collection install -r requirements.yml
+          ansible-galaxy collection install -r playbooks/routeros/requirements.yml
+
+      - name: Scaffold the Sphinx docsite
+        # sphinx-init requires the dest-dir to already exist and be writable
+        # only by the owner. --squash-hierarchy: single-collection site (no
+        # all-collections nav). --use-current: build from the collection
+        # installed above.
+        run: |
+          mkdir -p build/docsite
+          chmod 755 build/docsite
+          antsibull-docs sphinx-init \
+            --use-current \
+            --squash-hierarchy \
+            --dest-dir build/docsite \
+            david_igou.armbian
+
+      - name: Install Sphinx build requirements
+        run: pip install -r build/docsite/requirements.txt
+
+      - name: Build the HTML docsite
+        run: build/docsite/build.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/docsite/build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
