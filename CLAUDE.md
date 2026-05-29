@@ -111,7 +111,6 @@ david_igou/armbian/   (this repo root)
 │   │   ├── test_hardware_e2e.yml       # SD → NFS → SD single-board assertion harness
 │   │   ├── test_manual_psu_cold_boot.yml # NFS converge for USB-C powered boards (manual power)
 │   │   ├── test_reprovision_e2e.yml    # Single-board reprovision regression
-│   │   ├── test_connection.yml         # Ad-hoc RouterOS reachability check
 │   │   ├── test_build_and_publish_vars.yml   # Localhost inventory-contract test for build_and_publish_from_inventory.yml's per-host resolver contract
 │   │   ├── test_resolve_board_config.yml     # Localhost test for tasks/_resolve_board_config.yml
 │   │   ├── test_resolve_build_profile.yml    # Localhost test for tasks/_resolve_build_profile.yml

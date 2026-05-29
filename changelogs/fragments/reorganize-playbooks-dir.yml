@@ -7,13 +7,11 @@ breaking_changes:
     ``playbooks/examples/`` (``board_boot_verify.yml``,
     ``board_boot_wait.yml``, ``disk_image.yml``, ``disk_provision.yml``,
     ``image_build.yml``, ``pxelinux_render.yml``,
-    ``rootfs_provision.yml``), and the hardware E2E + connection-test
-    playbooks moved to ``playbooks/tests/`` alongside the existing
-    localhost var-contract tests (``test_fleet_e2e.yml``,
-    ``test_hardware_e2e.yml``, ``test_manual_psu_cold_boot.yml``,
-    ``test_reprovision_e2e.yml``, and ``test_connection.yml`` — the
-    last renamed from ``test_connection.yaml`` for extension
-    consistency). Only top-level playbooks are addressable by FQCN
+    ``rootfs_provision.yml``), and the hardware E2E playbooks moved to
+    ``playbooks/tests/`` alongside the existing localhost var-contract
+    tests (``test_fleet_e2e.yml``, ``test_hardware_e2e.yml``,
+    ``test_manual_psu_cold_boot.yml``, ``test_reprovision_e2e.yml``).
+    Only top-level playbooks are addressable by FQCN
     (``david_igou.armbian.<name>``); update any scripts, CI, or
     ``ansible-playbook`` invocations that referenced the old paths.
   - |
@@ -24,4 +22,19 @@ breaking_changes:
     for a minimal single-role demo.
   - |
     ``playbooks/scripts/run-iter.sh`` (the per-iter hardware-E2E driver
-    wrapper) has been removed.
+    wrapper) and ``playbooks/test_connection.yaml`` (an unreferenced
+    ad-hoc RouterOS reachability check superseded by
+    ``playbooks/routeros/plumbing_check.yml``) have been removed.
+
+bugfixes:
+  - |
+    ``playbooks/provision_local_disk.yml`` now invokes the
+    ``disk_provision`` role through its current ``disk_binding``
+    interface (device + declarative ``layout``) instead of the removed
+    flat ``device``/``label``/``force`` vars, which left the playbook
+    broken after the per-host provisioning refactor. The ad-hoc input
+    variables (``armbian_local_disk_device``, ``armbian_local_disk_label``,
+    ``armbian_local_disk_force``) are unchanged; the playbook synthesizes
+    the canonical single grow-to-fill ext4 root layout from them. A new
+    optional ``armbian_local_disk_fast_wipe`` (default true) exposes the
+    role's blkdiscard fast path.

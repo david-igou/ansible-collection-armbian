@@ -30,6 +30,9 @@
 #   armbian_local_disk_force   force re-provision even if a partition
 #                                      with the requested label already exists.
 #                                      Default false.
+#   armbian_local_disk_fast_wipe       blkdiscard + mkfs -K fast path.
+#                                      Default true; set false for disks
+#                                      with broken TRIM firmware.
 #   target_hosts                       inventory pattern. Default: `boards`.
 #
 # Usage:
@@ -54,6 +57,7 @@
   vars:
     armbian_local_disk_label: "armbi_root_local"
     armbian_local_disk_force: false
+    armbian_local_disk_fast_wipe: true
 
   pre_tasks:
     - name: Assert armbian_local_disk_device is set
@@ -88,11 +92,26 @@
           Safe to proceed.
 
   tasks:
+    # disk_provision takes one declarative disk_binding (device + layout).
+    # For this ad-hoc single-disk entrypoint we synthesize the canonical
+    # local_kernel layout: one ext4 root partition grown to fill the
+    # device, labeled for the LABEL=-keyed fstab the role regenerates.
+    # For multi-disk / per-host declarative layouts driven from inventory
+    # (armbian_local_disks), use reprovision_to_local.yml instead.
     - name: Provision the local disk
       ansible.builtin.import_role:
         name: disk_provision
       vars:
-        device: "{{ armbian_local_disk_device }}"
         disk_provision_source: "/"
-        label: "{{ armbian_local_disk_label }}"
-        force: "{{ armbian_local_disk_force | bool }}"
+        disk_binding:
+          device: "{{ armbian_local_disk_device }}"
+          wipe: true
+          fast_wipe: "{{ armbian_local_disk_fast_wipe | bool }}"
+          force: "{{ armbian_local_disk_force | bool }}"
+          layout:
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: "{{ armbian_local_disk_label }}"
+              mount: /
