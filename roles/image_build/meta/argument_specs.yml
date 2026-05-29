@@ -102,19 +102,20 @@ argument_specs:
       armbian_build_cache_dir:
         type: str
         required: false
-        default: /home/{{ ansible_user }}/armbian_build
+        default: "{{ ansible_env.HOME }}/armbian_build"
         description: >-
           Directory on the builder host for the armbian/build checkout,
           cache, and userpatches tree. Must be writable by the
           connecting user — the role does not escalate privileges. The
-          default lives under $HOME so this holds with no setup; if you
-          relocate it under a root-owned path like /var/lib, pre-create
-          + chown the path before the first run.
+          default resolves to the connecting user's real $HOME (via
+          ansible_env.HOME, so root and non-/home homes work too), which
+          holds with no setup; if you relocate it under a root-owned path
+          like /var/lib, pre-create + chown the path before the first run.
 
       armbian_build_output_dir:
         type: str
         required: false
-        default: /home/{{ ansible_user }}/armbian_build/output
+        default: "{{ ansible_env.HOME }}/armbian_build/output"
         description: >-
           Directory where the final .img.xz and manifest.json are
           written. Same writability requirement as
