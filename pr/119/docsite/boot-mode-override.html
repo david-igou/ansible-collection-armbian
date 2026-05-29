@@ -22,7 +22,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Boot-retry configuration matrix" href="retry-configuration.html" />
-    <link rel="prev" title="Daily operations" href="daily-operations.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+    <link rel="prev" title="Reference" href="reference.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
 
@@ -72,28 +72,24 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
-</ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="daily-operations.html">Daily operations</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Boot mode override methods</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#comparison">Comparison</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#method-1-inventory-permanent">Method 1: Inventory (permanent)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#method-2-ansible-e-override-ad-hoc">Method 2: Ansible <code class="docutils literal notranslate"><span class="pre">-e</span></code> override (ad-hoc)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#method-3-u-boot-environment-variable-single-boot">Method 3: U-Boot environment variable (single boot)</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#spi-vs-non-spi-boards">SPI vs non-SPI boards</a></li>
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Onboarding and operations</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Boot mode override methods</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#comparison">Comparison</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#method-1-inventory-permanent">Method 1: Inventory (permanent)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#method-2-ansible-e-override-ad-hoc">Method 2: Ansible <code class="docutils literal notranslate"><span class="pre">-e</span></code> override (ad-hoc)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#method-3-u-boot-environment-variable-single-boot">Method 3: U-Boot environment variable (single boot)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#spi-vs-non-spi-boards">SPI vs non-SPI boards</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="reprovision-local-disk.html">Runbook: Reprovision a board’s local disk</a></li>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="runbooks.html">Runbooks</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
@@ -121,6 +117,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="reference.html">Reference</a></li>
       <li class="breadcrumb-item active">Boot mode override methods</li>
       <li class="wy-breadcrumbs-aside">
       </li>
@@ -295,7 +292,7 @@ Effective as a single-boot override.</p></li>
           
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="daily-operations.html" class="btn btn-neutral float-left" title="Daily operations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="reference.html" class="btn btn-neutral float-left" title="Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="retry-configuration.html" class="btn btn-neutral float-right" title="Boot-retry configuration matrix" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

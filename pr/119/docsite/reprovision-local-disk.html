@@ -22,7 +22,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." href="../board_boot_verify_role.html" />
-    <link rel="prev" title="Boot-retry configuration matrix" href="retry-configuration.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+    <link rel="prev" title="Runbooks" href="runbooks.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
 
@@ -72,42 +72,37 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
-</ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="daily-operations.html">Daily operations</a></li>
-</ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
-<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Runbook: Reprovision a board’s local disk</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#when-to-use">When to use</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#pre-flight-checklist">Pre-flight checklist</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#dsl-declaring-the-layout">DSL: declaring the layout</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#environment-specific-caveats-observed-in-practice">Environment-specific caveats observed in practice</a></li>
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Onboarding and operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="runbooks.html">Runbooks</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Runbook: Reprovision a board’s local disk</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#when-to-use">When to use</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pre-flight-checklist">Pre-flight checklist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dsl-declaring-the-layout">DSL: declaring the layout</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#environment-specific-caveats-observed-in-practice">Environment-specific caveats observed in practice</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#procedure">Procedure</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#e-target-hosts-fqdn-required-if-your-inventory-uses-fqdns"><code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code>: required if your inventory uses FQDNs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#what-the-playbook-does-4-plays">What the playbook does (4 plays)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#procedure">Procedure</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#e-target-hosts-fqdn-required-if-your-inventory-uses-fqdns"><code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code>: required if your inventory uses FQDNs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#what-the-playbook-does-4-plays">What the playbook does (4 plays)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#post-run-verification">Post-run verification</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#failure-recovery">Failure recovery</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#worked-example-removing-boot-from-orange-pi-5-max-01">Worked example: removing <code class="docutils literal notranslate"><span class="pre">/boot</span></code> from <code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#edit-inventory">1. Edit inventory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#verify-inventory-parses">2. Verify inventory parses</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#run-the-lifecycle">3. Run the lifecycle</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#what-happens-on-the-disk">4. What happens on the disk</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#reclaiming-the-orphan-partitions-optional">5. Reclaiming the orphan partitions (optional)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#post-run-verification">Post-run verification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#failure-recovery">Failure recovery</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#worked-example-removing-boot-from-orange-pi-5-max-01">Worked example: removing <code class="docutils literal notranslate"><span class="pre">/boot</span></code> from <code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edit-inventory">1. Edit inventory</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#verify-inventory-parses">2. Verify inventory parses</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#run-the-lifecycle">3. Run the lifecycle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#what-happens-on-the-disk">4. What happens on the disk</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#reclaiming-the-orphan-partitions-optional">5. Reclaiming the orphan partitions (optional)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#common-pitfalls">Common pitfalls</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#see-also">See also</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#common-pitfalls">Common pitfalls</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -137,6 +132,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="runbooks.html">Runbooks</a></li>
       <li class="breadcrumb-item active">Runbook: Reprovision a board’s local disk</li>
       <li class="wy-breadcrumbs-aside">
       </li>
@@ -541,7 +537,7 @@ binary check still asserts</p></td>
           
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="retry-configuration.html" class="btn btn-neutral float-left" title="Boot-retry configuration matrix" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="runbooks.html" class="btn btn-neutral float-left" title="Runbooks" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../board_boot_verify_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

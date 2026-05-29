@@ -21,7 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Runbook: Reprovision a board’s local disk" href="reprovision-local-disk.html" />
+    <link rel="next" title="Runbooks" href="runbooks.html" />
     <link rel="prev" title="Boot mode override methods" href="boot-mode-override.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
@@ -72,33 +72,29 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
-</ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="daily-operations.html">Daily operations</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Boot-retry configuration matrix</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#knobs">Knobs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recommended-combinations">Recommended combinations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#healthy-hardware-production-toggle-on-a-known-good-poe-setup">Healthy hardware (production toggle on a known-good PoE setup)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#flaky-poe-hat-production-toggle-on-hardware-with-known-brown-out-behavior">Flaky PoE HAT (production toggle on hardware with known brown-out behavior)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#maximum-eventual-consistency-slow-but-reliable">Maximum eventual consistency (slow but reliable)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#fast-iter-loop-for-characterization-not-production">Fast iter loop (for characterization, not production)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#fresh-rootfs-reflash-auto-bootstrap-needed">Fresh-rootfs reflash (auto-bootstrap needed)</a></li>
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Onboarding and operations</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="reference.html">Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Boot-retry configuration matrix</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#knobs">Knobs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recommended-combinations">Recommended combinations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#healthy-hardware-production-toggle-on-a-known-good-poe-setup">Healthy hardware (production toggle on a known-good PoE setup)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flaky-poe-hat-production-toggle-on-hardware-with-known-brown-out-behavior">Flaky PoE HAT (production toggle on hardware with known brown-out behavior)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#maximum-eventual-consistency-slow-but-reliable">Maximum eventual consistency (slow but reliable)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fast-iter-loop-for-characterization-not-production">Fast iter loop (for characterization, not production)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fresh-rootfs-reflash-auto-bootstrap-needed">Fresh-rootfs reflash (auto-bootstrap needed)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#how-the-two-retry-layers-interact">How the two retry layers interact</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#failure-modes-the-retry-stack-does-not-cover">Failure modes the retry stack does <em>not</em> cover</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tuning-intuition">Tuning intuition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-the-two-retry-layers-interact">How the two retry layers interact</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#failure-modes-the-retry-stack-does-not-cover">Failure modes the retry stack does <em>not</em> cover</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tuning-intuition">Tuning intuition</a></li>
 </ul>
 </li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="reprovision-local-disk.html">Runbook: Reprovision a board’s local disk</a></li>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="runbooks.html">Runbooks</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
@@ -126,6 +122,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="reference.html">Reference</a></li>
       <li class="breadcrumb-item active">Boot-retry configuration matrix</li>
       <li class="wy-breadcrumbs-aside">
       </li>
@@ -412,7 +409,7 @@ compounds to 93.6 % per-phase. With three phases in a full e2e, that’s about
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="boot-mode-override.html" class="btn btn-neutral float-left" title="Boot mode override methods" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="reprovision-local-disk.html" class="btn btn-neutral float-right" title="Runbook: Reprovision a board’s local disk" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="runbooks.html" class="btn btn-neutral float-right" title="Runbooks" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

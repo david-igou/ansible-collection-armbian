@@ -21,7 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Boot mode override methods" href="boot-mode-override.html" />
+    <link rel="next" title="Reference" href="reference.html" />
     <link rel="prev" title="Lifecycle: Phase 0 (control plane) → Phase 1 (per board)" href="lifecycle.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
@@ -72,30 +72,26 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
-</ul>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Daily operations</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#converge-a-board-to-its-declared-boot-mode">Converge a board to its declared boot mode</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#override-boot-mode-without-editing-inventory">Override boot mode without editing inventory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#power-cycle-a-board-via-poe">Power-cycle a board via PoE</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#reprovision-a-board-s-local-disk">Reprovision a board’s local disk</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#headless-reprovision-to-local-boot">Headless reprovision to local boot</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#local-kernel-boot-mode"><code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> boot mode</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#hardware-e2e-test">Hardware E2E test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#fleet-level-e2e-test">Fleet-level E2E test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="operations.html">Onboarding and operations</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Daily operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#converge-a-board-to-its-declared-boot-mode">Converge a board to its declared boot mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#override-boot-mode-without-editing-inventory">Override boot mode without editing inventory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#power-cycle-a-board-via-poe">Power-cycle a board via PoE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reprovision-a-board-s-local-disk">Reprovision a board’s local disk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#headless-reprovision-to-local-boot">Headless reprovision to local boot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#local-kernel-boot-mode"><code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> boot mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hardware-e2e-test">Hardware E2E test</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fleet-level-e2e-test">Fleet-level E2E test</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quick-reference">Quick reference</a></li>
 </ul>
 </li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
-<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
-</ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="reprovision-local-disk.html">Runbook: Reprovision a board’s local disk</a></li>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="runbooks.html">Runbooks</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
@@ -123,6 +119,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="operations.html">Onboarding and operations</a></li>
       <li class="breadcrumb-item active">Daily operations</li>
       <li class="wy-breadcrumbs-aside">
       </li>
@@ -398,7 +395,7 @@ role changes.</p>
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="lifecycle.html" class="btn btn-neutral float-left" title="Lifecycle: Phase 0 (control plane) → Phase 1 (per board)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="boot-mode-override.html" class="btn btn-neutral float-right" title="Boot mode override methods" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="reference.html" class="btn btn-neutral float-right" title="Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
