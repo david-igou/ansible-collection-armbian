@@ -74,7 +74,11 @@
   
               <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Getting started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#manage-a-stock-armbian-board">Manage a stock Armbian board</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#full-pxe-netboot-workflow">Full PXE-netboot workflow</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -124,11 +128,13 @@ over PoE.</p>
 <p>The collection is built from <strong>single-purpose, parameter-driven roles</strong> —
 each one enforces one piece of desired state on one host class — composed by
 <strong>workflow playbooks</strong> that decide which roles to run, where, and in what order.
-The guiding invariant is <em>always-netboot</em>: every onboarded board always has a
-<code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> on the router, and a single <code class="docutils literal notranslate"><span class="pre">default</span></code> directive inside it
-selects the active boot mode. Per-role inputs and outputs are documented in the
-role reference (see the Role Index below); networking-gear specifics (RouterOS
-upload, PoE) live as swappable reference playbooks under <code class="docutils literal notranslate"><span class="pre">playbooks/routeros/</span></code>.</p>
+You can use the roles à la carte to manage an ordinary Armbian board, or run the
+full netboot workflow whose guiding invariant is <em>always-netboot</em>: every
+onboarded board always has a <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> on the router, and a single
+<code class="docutils literal notranslate"><span class="pre">default</span></code> directive inside it selects the active boot mode. Per-role inputs and
+outputs are documented in the role reference (see the Role Index); networking-gear
+specifics (RouterOS upload, PoE) live as swappable reference playbooks under
+<code class="docutils literal notranslate"><span class="pre">playbooks/routeros/</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Early-stage 0.0.x — expect breaking changes between releases. Pin a specific
@@ -136,39 +142,65 @@ version in your <code class="docutils literal notranslate"><span class="pre">req
 </div>
 <section id="example-usage">
 <h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading"></a></h2>
-<p>A minimal end-to-end path from nothing to a board booting over NFS on demand.
-Each board needs an inventory entry with at least <code class="docutils literal notranslate"><span class="pre">armbian_board_mac</span></code>,
+<section id="manage-a-stock-armbian-board">
+<h3>Manage a stock Armbian board<a class="headerlink" href="#manage-a-stock-armbian-board" title="Link to this heading"></a></h3>
+<p>The simplest use of the collection needs no netboot server, router, or custom
+image — just an ordinary board flashed from <a class="reference external" href="https://www.armbian.com/">armbian.com</a>.
+Flash the image, boot the board, then bootstrap your login: <code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code>
+connects as <code class="docutils literal notranslate"><span class="pre">root</span></code> with Armbian’s default password and leaves you a regular
+user with SSH-key auth and passwordless sudo (and disables password login).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>david_igou.armbian
+</pre></div>
+</div>
+<p>A minimal inventory entry — the board’s address plus the public keys to install:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># inventory/hosts.yml</span>
+<span class="nt">all</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">hosts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">my-board</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.50</span>
+<span class="c1"># group_vars/all.yml</span>
+<span class="nt">armbian_bootstrap_ssh_keys</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;ssh-ed25519</span><span class="nv"> </span><span class="s">AAAA...</span><span class="nv"> </span><span class="s">you@workstation&quot;</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/bootstrap_armbian.yml<span class="w"> </span>--limit<span class="w"> </span>my-board
+</pre></div>
+</div>
+<p>From here the board is a normal Ansible target. Other roles work standalone too —
+e.g. <code class="docutils literal notranslate"><span class="pre">disk_image</span></code> streams an <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> onto a block device, and
+<code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> applies a declarative GPT layout to a local disk.</p>
+</section>
+<section id="full-pxe-netboot-workflow">
+<h3>Full PXE-netboot workflow<a class="headerlink" href="#full-pxe-netboot-workflow" title="Link to this heading"></a></h3>
+<p>The end-to-end path from nothing to a board booting over NFS on demand. Each
+board needs an inventory entry with at least <code class="docutils literal notranslate"><span class="pre">armbian_board_mac</span></code>,
 <code class="docutils literal notranslate"><span class="pre">armbian_board_model</span></code>, and <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code>; see the role reference for
 the full set of variables.</p>
-<p><strong>1. Install the collection.</strong></p>
+<p><strong>1. Install the collection</strong> (plus the RouterOS reference deps, since this
+workflow drives the router):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>david_igou.armbian
-
-<span class="c1"># Only if you orchestrate RouterOS (boot-mode convergence, TFTP staging):</span>
 ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>playbooks/routeros/requirements.yml
 </pre></div>
 </div>
-<p><strong>2. Build and publish the custom PXE-first image.</strong></p>
-<p>Stock Armbian images don’t boot PXE-first; this builds one that does and
-publishes the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> to the netboot server.</p>
+<p><strong>2. Build and publish the custom PXE-first image.</strong> Stock Armbian images don’t
+boot PXE-first; this builds one that does and publishes the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> to the
+netboot server.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/build_and_publish_from_inventory.yml
 </pre></div>
 </div>
-<p><strong>3. Bootstrap a freshly flashed board.</strong></p>
-<p>Flash the image to an SD card and power the board on, then create the SSH-key
-user with passwordless sudo:</p>
+<p><strong>3. Bootstrap a freshly flashed board</strong> (as in the standalone example):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/bootstrap_armbian.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01
 </pre></div>
 </div>
-<p><strong>4. Stage the netboot assets.</strong></p>
-<p>Provision the per-host NFS rootfs on the netboot server, then push the
-kernel/initrd/dtb and TFTP rows to the router:</p>
+<p><strong>4. Stage the netboot assets</strong> — the per-host NFS rootfs on the netboot server,
+then the kernel/initrd/dtb and TFTP rows on the router:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_netboot_assets.yml
 ansible-playbook<span class="w"> </span>playbooks/stage_router.yml
 </pre></div>
 </div>
-<p><strong>5. Converge the board to its declared boot mode.</strong></p>
-<p>Renders the per-board <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code>, uploads it, power-cycles the board, and
-verifies it comes up on the expected rootfs:</p>
+<p><strong>5. Converge the board to its declared boot mode.</strong> Renders the per-board
+<code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code>, uploads it, power-cycles the board, and verifies it comes up on
+the expected rootfs:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/converge_boot_mode.yml<span class="w"> </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01
 </pre></div>
 </div>
@@ -178,6 +210,7 @@ verifies it comes up on the expected rootfs:</p>
 <span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>sd
 </pre></div>
 </div>
+</section>
 </section>
 </section>
 
