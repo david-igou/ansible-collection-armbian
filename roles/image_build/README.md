@@ -16,8 +16,8 @@ the patch list and consume the resulting `.img.xz` + `manifest.json` from
 | `armbian_build_release` | `bookworm` | Userspace release |
 | `armbian_build_ref` | `v26.2.0-trunk.844` | Pinned `armbian/build` git ref |
 | `armbian_build_userpatches` | `[]` | List of `{ dest, content }` entries |
-| `armbian_build_cache_dir` | `/var/lib/armbian_build` | Checkout + cache + userpatches root |
-| `armbian_build_output_dir` | `/var/lib/armbian_build/output` | Where `<host>/<file>.img.xz` + `manifest.json` land |
+| `armbian_build_cache_dir` | `/home/{{ ansible_user }}/armbian_build` | Checkout + cache + userpatches root |
+| `armbian_build_output_dir` | `/home/{{ ansible_user }}/armbian_build/output` | Where `<host>/<file>.img.xz` + `manifest.json` land |
 | `armbian_build_min_free_gb` | `50` | Preflight threshold |
 | `armbian_build_required_egress_hosts` | github.com, apt.armbian.com, ghcr.io, registry-1.docker.io | Preflight HEAD-checks |
 | `armbian_build_compile_args` | _see defaults_ | Per-run knobs forwarded to `compile.sh` |
@@ -31,13 +31,13 @@ the patch list and consume the resulting `.img.xz` + `manifest.json` from
 - `Armbian_<version>_<board>_<release>_<branch>_<kernel>.img.xz.sha` (when `COMPRESS_OUTPUTIMAGE` includes `sha`)
 - `manifest.json`
 
-With the defaults (`armbian_build_output_dir: /var/lib/armbian_build/output`)
+With the defaults (`armbian_build_output_dir: /home/<ansible_user>/armbian_build/output`)
 and a host `orange-pi-5-pro-01`, a completed build leaves this per-host
 tree on the builder (the output dir is keyed by `inventory_hostname`, so
 two hosts that build the same board don't collide):
 
 ```text
-/var/lib/armbian_build/output/
+/home/<ansible_user>/armbian_build/output/
 └── orange-pi-5-pro-01/
     ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz
     ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz.sha
@@ -120,7 +120,6 @@ publish step requires:
         armbian_build_host: orange-pi-5-pro-01   # required: per-host output subdir
         armbian_build_branch: current
         armbian_build_release: bookworm
-        armbian_build_output_dir: /var/lib/armbian_build/output
         armbian_build_userpatches:
           - dest: "config/boards/orangepi5pro.conf"
             content: |

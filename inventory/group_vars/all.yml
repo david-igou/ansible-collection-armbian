@@ -98,18 +98,15 @@ armbian_default_password: "1234"
 # drift vector.
 armbian_nfs_rootfs_path: /srv/netboot/rootfs
 armbian_tftp_flash_dir: sbc
-# Anchor on inventory_dir, not playbook_dir — playbook_dir resolves
-# to different directories in stage_router.yml (playbooks/) vs the
-# imported routeros/upload_tftp_assets.yml (playbooks/routeros/),
-# which caused the fetch to land in one path and the upload to look
-# in another. inventory_dir is the same in both contexts.
-#
-# IMPORTANT: if your inventory dir is a symlink (e.g. .inventory →
-# ../some-other-repo), don't use this relative form — set an absolute
-# path instead. fetch resolves dest lexically while stat/file resolve
-# via POSIX symlink-follow, so the two tasks land on different
-# physical paths when `..` crosses a symlink.
-armbian_tftp_cache_dir: "{{ inventory_dir }}/../.cache/sbc-tftp"
+# Absolute /tmp path — a single constant value in every play, so the
+# fetch (write) play in stage_router.yml (playbooks/) and the upload
+# (read) play in the imported routeros/upload_tftp_assets.yml
+# (playbooks/routeros/) always resolve the same directory. playbook_dir
+# differs between those two files and would split the fetch/upload; a
+# relative `..` form breaks when the inventory dir is a symlink (fetch
+# resolves dest lexically while stat/file follow the symlink). An
+# absolute path sidesteps both. Ephemeral scratch — fetch repopulates it.
+armbian_tftp_cache_dir: "/tmp/sbc-tftp"
 # Scratch dir on the netboot_server where rootfs_provision caches .img.xz / .img
 # downloads and writes per-model TFTP artefacts (sbc-tftp/<model>/vmlinuz, ...).
 # Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
