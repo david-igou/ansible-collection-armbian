@@ -1,0 +1,341 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lifecycle: Phase 0 (control plane) → Phase 1 (per board) &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="../_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7f41d439"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Daily operations" href="daily-operations.html" />
+    <link rel="prev" title="Architecture and data flow" href="architecture.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="../_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#phase-0-one-time-control-plane-setup">Phase 0 — One-time control-plane setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#build-or-download-the-custom-armbian-image">0.1 Build (or download) the custom Armbian image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#provision-the-routeros-user">0.2 Provision the RouterOS user</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-nfs-rootfs-netboot-server">0.3 Stage NFS rootfs (netboot server)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-tftp-assets-on-the-router">0.4 Stage TFTP assets on the router</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#phase-1-adding-a-board">Phase 1 — Adding a board</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#flash-the-custom-armbian-image-to-an-sd-card-manual">1.1 Flash the custom Armbian image to an SD card (manual)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#insert-the-sd-card-and-power-the-board-on">1.2 Insert the SD card and power the board on</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#add-the-board-to-inventory">1.3 Add the board to inventory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bootstrap-the-board-s-ssh-user">1.4 Bootstrap the board’s SSH user</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#re-run-staging-playbooks">1.5 Re-run staging playbooks</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="daily-operations.html">Daily operations</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="reprovision-local-disk.html">Runbook: Reprovision a board’s local disk</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <section id="lifecycle-phase-0-control-plane-phase-1-per-board">
+<span id="ansible-collections-david-igou-armbian-docsite-lifecycle"></span><h1>Lifecycle: Phase 0 (control plane) → Phase 1 (per board)<a class="headerlink" href="#lifecycle-phase-0-control-plane-phase-1-per-board" title="Link to this heading"></a></h1>
+<p>Bringing a fresh environment from zero to a fully onboarded board. For the
+conceptual model and role / playbook reference see
+<a class="reference internal" href="architecture.html#ansible-collections-david-igou-armbian-docsite-architecture"><span class="std std-ref">Architecture and data flow</span></a>; for
+day-to-day operations see
+<a class="reference internal" href="daily-operations.html#ansible-collections-david-igou-armbian-docsite-daily-operations"><span class="std std-ref">Daily operations</span></a>.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>A board ships from “fresh SD card” to “boots NFS on demand” in two passes
+through a small set of playbooks. Phase 0 sets up the control plane once per
+environment; Phase 1 onboards each board, ending in either an SD-rooted or
+NFS-rooted boot.</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="nt">Phase 0 — control plane (once per environment)</span><span class="p">:</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">build_and_publish ──▶ stage_netboot_assets ──▶ stage_router</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">routeros/bootstrap_user ───────────────────────▶ (router ready)</span>
+
+<span class="nt">Phase 1 — onboard a board (per board)</span><span class="p">:</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">flash SD card ──▶ bootstrap_armbian (SD) ──▶ converge_boot_mode</span>
+<span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">├─ boot_mode=sd  ──▶ Booted from SD</span>
+<span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">└─ boot_mode=nfs ──▶ bootstrap_armbian (NFS) ──▶ Booted from NFS</span>
+</pre></div>
+</div>
+<p>Flashing the SD card is the only human action in the lifecycle; everything else
+runs over SSH. After adding a host to inventory, re-run Phase 0’s
+<code class="docutils literal notranslate"><span class="pre">stage_netboot_assets</span></code> to provision the per-host rootfs clone before the first
+<code class="docutils literal notranslate"><span class="pre">converge_boot_mode</span></code>.</p>
+<p>The SD rootfs and the per-host NFS rootfs are <strong>separate filesystems</strong>, each
+cloned from the upstream Armbian image — neither has the inventory’s
+<code class="docutils literal notranslate"><span class="pre">ansible_user</span></code> until <code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code> runs against the board while it is
+booted into that rootfs. Boards declared <code class="docutils literal notranslate"><span class="pre">boot_mode:</span> <span class="pre">sd</span></code> need one bootstrap
+run; boards declared <code class="docutils literal notranslate"><span class="pre">boot_mode:</span> <span class="pre">nfs</span></code> need a second <code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code>
+after the first NFS boot so the NFS rootfs gets the same user.</p>
+<p>Once a board is in either outcome state, daily operations toggle between them or
+recover from wedged boards — see
+<a class="reference internal" href="daily-operations.html#ansible-collections-david-igou-armbian-docsite-daily-operations"><span class="std std-ref">Daily operations</span></a>.
+Diagnostic playbooks (<code class="docutils literal notranslate"><span class="pre">test_hardware_e2e.yml</span></code>, <code class="docutils literal notranslate"><span class="pre">persist_uboot_env.yml</span></code>,
+<code class="docutils literal notranslate"><span class="pre">test_manual_psu_cold_boot.yml</span></code>) sit outside the standard lifecycle and run on
+demand.</p>
+</section>
+<section id="phase-0-one-time-control-plane-setup">
+<h2>Phase 0 — One-time control-plane setup<a class="headerlink" href="#phase-0-one-time-control-plane-setup" title="Link to this heading"></a></h2>
+<p>Done once per environment, before adding any boards.</p>
+<section id="build-or-download-the-custom-armbian-image">
+<h3>0.1 Build (or download) the custom Armbian image<a class="headerlink" href="#build-or-download-the-custom-armbian-image" title="Link to this heading"></a></h3>
+<p>Stock Armbian images do not deliver the PXE-first U-Boot ordering this
+collection relies on. Either build the image yourself:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.yml
+ansible-playbook<span class="w"> </span>playbooks/build_and_publish_from_inventory.yml
+</pre></div>
+</div>
+<p>…or place a pre-built <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> in your netboot server’s HTTP assets directory
+and set <code class="docutils literal notranslate"><span class="pre">armbian_rootfs_src</span></code> on the host or model group to its URL. The
+<code class="docutils literal notranslate"><span class="pre">image_build</span></code> role patches <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">pre_config_uboot_target__&lt;board&gt;_*</span></code> hook to set PXE first in U-Boot’s
+<code class="docutils literal notranslate"><span class="pre">BOOT_TARGETS</span></code>.</p>
+</section>
+<section id="provision-the-routeros-user">
+<h3>0.2 Provision the RouterOS user<a class="headerlink" href="#provision-the-routeros-user" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/routeros/bootstrap_user.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">ansible_user</span><span class="o">=</span>&lt;existing-admin&gt;
+</pre></div>
+</div>
+<p>Targets the <code class="docutils literal notranslate"><span class="pre">routeros_netboot</span></code> group (router + any switches). The
+<code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">ansible_user=...</span></code> overrides the inventory-set <code class="docutils literal notranslate"><span class="pre">ansible-netboot</span></code> for this
+bootstrap run only — that user does not yet exist on the router. The playbook
+idempotently creates the <code class="docutils literal notranslate"><span class="pre">ansible-netboot</span></code> user, group, and SSH keys. From
+this point on every other playbook authenticates as <code class="docutils literal notranslate"><span class="pre">ansible-netboot</span></code>.</p>
+</section>
+<section id="stage-nfs-rootfs-netboot-server">
+<h3>0.3 Stage NFS rootfs (netboot server)<a class="headerlink" href="#stage-nfs-rootfs-netboot-server" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_netboot_assets.yml
+</pre></div>
+</div>
+<p>Against the netboot server over SSH: for each board host, <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code>
+resolves the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> source (via <code class="docutils literal notranslate"><span class="pre">_resolve_rootfs_src.yml</span></code>), extracts the
+rootfs into <code class="docutils literal notranslate"><span class="pre">armbian_nfs_rootfs_path/_templates/&lt;model&gt;/</span></code> (shared across all
+hosts of the same model), and reflink-clones a per-host rootfs into
+<code class="docutils literal notranslate"><span class="pre">armbian_nfs_rootfs_path/&lt;inventory_hostname&gt;/</span></code>, resetting hostname /
+machine-id / SSH host keys. Per-model TFTP artefacts are also emitted.</p>
+</section>
+<section id="stage-tftp-assets-on-the-router">
+<h3>0.4 Stage TFTP assets on the router<a class="headerlink" href="#stage-tftp-assets-on-the-router" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_router.yml
+</pre></div>
+</div>
+<p>Three plays: fetch kernel/initrd/DTB from the netboot server to the controller’s
+<code class="docutils literal notranslate"><span class="pre">armbian_tftp_cache_dir</span></code>, push them to the router via
+<code class="docutils literal notranslate"><span class="pre">routeros/upload_tftp_assets.yml</span></code>, then verify <code class="docutils literal notranslate"><span class="pre">/ip</span> <span class="pre">tftp</span></code> rows landed via
+<code class="docutils literal notranslate"><span class="pre">routeros/plumbing_check.yml</span></code>.</p>
+<p>Re-run 0.3–0.4 on inventory or image changes; both are idempotent.</p>
+</section>
+</section>
+<section id="phase-1-adding-a-board">
+<h2>Phase 1 — Adding a board<a class="headerlink" href="#phase-1-adding-a-board" title="Link to this heading"></a></h2>
+<p>Repeated once per physical board.</p>
+<section id="flash-the-custom-armbian-image-to-an-sd-card-manual">
+<h3>1.1 Flash the custom Armbian image to an SD card (manual)<a class="headerlink" href="#flash-the-custom-armbian-image-to-an-sd-card-manual" title="Link to this heading"></a></h3>
+<p>Use any tool you like — <code class="docutils literal notranslate"><span class="pre">xzcat</span> <span class="pre">|</span> <span class="pre">dd</span></code>, <code class="docutils literal notranslate"><span class="pre">etcher</span></code>, the Armbian installer — to
+write the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> produced by <code class="docutils literal notranslate"><span class="pre">build_and_publish_from_inventory.yml</span></code> (or
+whichever pre-built image is resolved via <code class="docutils literal notranslate"><span class="pre">armbian_rootfs_src</span></code> / the published
+manifest) to an SD card. This is the only step in the lifecycle that this
+collection does not automate; everything from here on runs over SSH.</p>
+</section>
+<section id="insert-the-sd-card-and-power-the-board-on">
+<h3>1.2 Insert the SD card and power the board on<a class="headerlink" href="#insert-the-sd-card-and-power-the-board-on" title="Link to this heading"></a></h3>
+<p>The board obtains a DHCP lease and responds to SSH. Default credentials are
+<code class="docutils literal notranslate"><span class="pre">root</span></code> / <code class="docutils literal notranslate"><span class="pre">armbian_default_password</span></code> (1234) until first interactive login
+replaces them.</p>
+</section>
+<section id="add-the-board-to-inventory">
+<h3>1.3 Add the board to inventory<a class="headerlink" href="#add-the-board-to-inventory" title="Link to this heading"></a></h3>
+<p>Edit <code class="docutils literal notranslate"><span class="pre">inventory/hosts.yml</span></code>. Each host needs <code class="docutils literal notranslate"><span class="pre">armbian_board_mac</span></code>,
+<code class="docutils literal notranslate"><span class="pre">armbian_board_model</span></code>, and <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code> (<code class="docutils literal notranslate"><span class="pre">nfs</span></code>, <code class="docutils literal notranslate"><span class="pre">sd</span></code>, <code class="docutils literal notranslate"><span class="pre">local</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">local_kernel</span></code>). For <code class="docutils literal notranslate"><span class="pre">sd</span></code> mode the rendered kernel cmdline defaults to
+<code class="docutils literal notranslate"><span class="pre">root=LABEL=armbi_root</span></code>; override with <code class="docutils literal notranslate"><span class="pre">armbian_sd_root</span></code> only when a board
+has multiple drives carrying that label and the default would be ambiguous. The
+board model must match an <code class="docutils literal notranslate"><span class="pre">armbian_board_config_model</span></code> entry in the model
+group’s <code class="docutils literal notranslate"><span class="pre">inventory/group_vars/&lt;model_group&gt;.yml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">boards</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">children</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">orange_pi_5_pro</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">hosts</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">orange-pi-5-pro-01</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.131</span>
+<span class="w">          </span><span class="nt">armbian_board_mac</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;aa:bb:cc:dd:ee:11&quot;</span>
+<span class="w">          </span><span class="nt">armbian_board_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro</span>
+<span class="w">          </span><span class="nt">armbian_boot_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nfs</span>
+</pre></div>
+</div>
+<p>Group vars under <code class="docutils literal notranslate"><span class="pre">inventory/group_vars/boards.yml</span></code> must define
+<code class="docutils literal notranslate"><span class="pre">armbian_router</span></code> (the inventory name of the RouterOS host that owns TFTP state
+for these boards).</p>
+<p>For PoE-powered boards, also set <code class="docutils literal notranslate"><span class="pre">armbian_poe_switch</span></code> (inventory hostname of
+the RouterOS switch supplying power) and <code class="docutils literal notranslate"><span class="pre">armbian_poe_port</span></code> (interface name on
+that switch, e.g. <code class="docutils literal notranslate"><span class="pre">ether3</span></code>).</p>
+</section>
+<section id="bootstrap-the-board-s-ssh-user">
+<h3>1.4 Bootstrap the board’s SSH user<a class="headerlink" href="#bootstrap-the-board-s-ssh-user" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/bootstrap_armbian.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p>Connects as <code class="docutils literal notranslate"><span class="pre">root</span></code> with <code class="docutils literal notranslate"><span class="pre">armbian_default_password</span></code>, creates the inventory’s
+<code class="docutils literal notranslate"><span class="pre">ansible_user</span></code> with passwordless sudo + SSH-key auth, drops Armbian’s
+first-login TUI prompt, and disables sshd password auth. Idempotent — a second
+run is a no-op aside from authorized_keys reconciliation.</p>
+<p>Edit the SSH key list in <code class="docutils literal notranslate"><span class="pre">inventory/group_vars/all.yml</span></code> (see
+<code class="docutils literal notranslate"><span class="pre">armbian_bootstrap_ssh_keys</span></code>) or override via <code class="docutils literal notranslate"><span class="pre">-e</span></code> before first run.</p>
+</section>
+<section id="re-run-staging-playbooks">
+<h3>1.5 Re-run staging playbooks<a class="headerlink" href="#re-run-staging-playbooks" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_netboot_assets.yml
+ansible-playbook<span class="w"> </span>playbooks/stage_router.yml
+</pre></div>
+</div>
+<p>Creates the per-host rootfs clone for the new host via <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code>.
+Existing boards are unaffected; the per-model template extraction step is
+skipped if it’s already populated.</p>
+<p>The board is now <strong>fully onboarded</strong>. It will participate in the
+toggle-and-revert lifecycle in
+<a class="reference internal" href="daily-operations.html#ansible-collections-david-igou-armbian-docsite-daily-operations"><span class="std std-ref">Daily operations</span></a>
+indefinitely without further setup.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Architecture and data flow" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="daily-operations.html" class="btn btn-neutral float-right" title="Daily operations" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>

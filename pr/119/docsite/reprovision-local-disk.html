@@ -1,0 +1,569 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runbook: Reprovision a board’s local disk &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="../_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7f41d439"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." href="../board_boot_verify_role.html" />
+    <link rel="prev" title="Boot-retry configuration matrix" href="retry-configuration.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="../_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="daily-operations.html">Daily operations</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Runbook: Reprovision a board’s local disk</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#when-to-use">When to use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pre-flight-checklist">Pre-flight checklist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dsl-declaring-the-layout">DSL: declaring the layout</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#environment-specific-caveats-observed-in-practice">Environment-specific caveats observed in practice</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#procedure">Procedure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#e-target-hosts-fqdn-required-if-your-inventory-uses-fqdns"><code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code>: required if your inventory uses FQDNs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-the-playbook-does-4-plays">What the playbook does (4 plays)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#post-run-verification">Post-run verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#failure-recovery">Failure recovery</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#worked-example-removing-boot-from-orange-pi-5-max-01">Worked example: removing <code class="docutils literal notranslate"><span class="pre">/boot</span></code> from <code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edit-inventory">1. Edit inventory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#verify-inventory-parses">2. Verify inventory parses</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#run-the-lifecycle">3. Run the lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-happens-on-the-disk">4. What happens on the disk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reclaiming-the-orphan-partitions-optional">5. Reclaiming the orphan partitions (optional)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#common-pitfalls">Common pitfalls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Runbook: Reprovision a board’s local disk</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <section id="runbook-reprovision-a-board-s-local-disk">
+<span id="ansible-collections-david-igou-armbian-docsite-reprovision-local-disk"></span><h1>Runbook: Reprovision a board’s local disk<a class="headerlink" href="#runbook-reprovision-a-board-s-local-disk" title="Link to this heading"></a></h1>
+<p>How to safely apply (or change) the declarative <code class="docutils literal notranslate"><span class="pre">armbian_local_disks</span></code> layout
+on a board, using the <code class="docutils literal notranslate"><span class="pre">reprovision_to_local.yml</span></code> lifecycle playbook from #77 /
+PR #80.</p>
+<section id="when-to-use">
+<h2>When to use<a class="headerlink" href="#when-to-use" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>First time</strong> putting a board on local-disk boot — board currently runs on
+<code class="docutils literal notranslate"><span class="pre">armbian_boot_mode:</span> <span class="pre">nfs</span></code>, you want to provision its NVMe (or SATA, eMMC, USB
+SSD) and flip to <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode:</span> <span class="pre">local</span></code>.</p></li>
+<li><p><strong>Changing the layout</strong> — board is already on local boot but you want a
+different partition shape (add <code class="docutils literal notranslate"><span class="pre">/var</span></code>, drop <code class="docutils literal notranslate"><span class="pre">/boot</span></code>, change sizes). The
+lifecycle re-runs end-to-end and your inventory drives the new shape.
+Preserved partitions survive if their label hasn’t changed.</p></li>
+<li><p><strong>Recovering</strong> a board whose local rootfs is corrupted — set <code class="docutils literal notranslate"><span class="pre">force:</span> <span class="pre">true</span></code>
+on the binding, re-run; everything wipes including preserved partitions.</p></li>
+</ul>
+<p>NOT for: kernel updates (#78 — separate flow), one-off bootstrap of a freshly
+flashed board (use <code class="docutils literal notranslate"><span class="pre">bootstrap_armbian.yml</span></code> first), or changing <code class="docutils literal notranslate"><span class="pre">boot_mode</span></code>
+without touching disk (use <code class="docutils literal notranslate"><span class="pre">set_boot_mode.yml</span></code>).</p>
+</section>
+<section id="pre-flight-checklist">
+<h2>Pre-flight checklist<a class="headerlink" href="#pre-flight-checklist" title="Link to this heading"></a></h2>
+<p>Before running the playbook, verify:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 40.0%" />
+<col style="width: 26.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Check</p></th>
+<th class="head"><p>Command</p></th>
+<th class="head"><p>Expected</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Board reachable</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ansible</span> <span class="pre">&lt;fqdn&gt;</span> <span class="pre">-m</span> <span class="pre">ping</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SUCCESS</span> <span class="pre">/</span> <span class="pre">pong</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Router reachable</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ansible</span> <span class="pre">&lt;router-fqdn&gt;</span> <span class="pre">-m</span> <span class="pre">community.routeros.command</span> <span class="pre">-a</span> <span class="pre">'commands=&quot;/system</span> <span class="pre">identity</span> <span class="pre">print&quot;'</span></code></p></td>
+<td><p>identity line</p></td>
+</tr>
+<tr class="row-even"><td><p>Per-model TFTP rows present</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ansible</span> <span class="pre">&lt;router-fqdn&gt;</span> <span class="pre">-m</span> <span class="pre">community.routeros.command</span> <span class="pre">-a</span> <span class="pre">'commands=&quot;/ip</span> <span class="pre">tftp</span> <span class="pre">print</span> <span class="pre">where</span> <span class="pre">req-filename~\&quot;&lt;model&gt;\&quot;&quot;'</span></code></p></td>
+<td><p>three rows (vmlinuz, initrd.img, board.dtb) with HITS ≥ 1</p></td>
+</tr>
+<tr class="row-odd"><td><p>Inventory has <code class="docutils literal notranslate"><span class="pre">armbian_local_disks</span></code> set</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ansible-inventory</span> <span class="pre">--host</span> <span class="pre">&lt;fqdn&gt;</span></code> then look for the key</p></td>
+<td><p>list of disk bindings</p></td>
+</tr>
+<tr class="row-even"><td><p>Inventory has <code class="docutils literal notranslate"><span class="pre">armbian_poe_switch</span></code> + <code class="docutils literal notranslate"><span class="pre">armbian_poe_port</span></code></p></td>
+<td><p>same <code class="docutils literal notranslate"><span class="pre">ansible-inventory</span> <span class="pre">--host</span></code></p></td>
+<td><p>both present</p></td>
+</tr>
+<tr class="row-odd"><td><p>(Optional) UART dongle present on serial host</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ls</span> <span class="pre">/dev/ttyUSB0</span></code> on the serial host</p></td>
+<td><p>char device exists</p></td>
+</tr>
+</tbody>
+</table>
+<p>If TFTP rows are missing, run <code class="docutils literal notranslate"><span class="pre">playbooks/stage_router.yml</span></code> first.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">armbian_local_disks</span></code> is not set, the playbook will fail in Phase 2
+pre-tasks with a clear assertion message — you need to add the binding before
+the playbook can proceed.</p>
+</section>
+<section id="dsl-declaring-the-layout">
+<h2>DSL: declaring the layout<a class="headerlink" href="#dsl-declaring-the-layout" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">armbian_local_disks</span></code> is a per-host list. Each element is one disk binding
+with <code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">wipe</span></code> / <code class="docutils literal notranslate"><span class="pre">force</span></code>, and a <code class="docutils literal notranslate"><span class="pre">layout</span></code> list of
+partition specs. Example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">armbian_local_disks</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/nvme0n1</span>
+<span class="w">    </span><span class="nt">wipe</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">            </span><span class="c1"># default true; set false for read-only audit mode</span>
+<span class="w">    </span><span class="nt">force</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">          </span><span class="c1"># default false; true bypasses preserve idempotency</span>
+<span class="w">    </span><span class="nt">layout</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">var</span><span class="w">           </span><span class="c1"># unique within this disk&#39;s layout</span>
+<span class="w">        </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20GiB</span><span class="w">       </span><span class="c1"># MiB|GiB|TiB or &#39;grow&#39; (exactly one &#39;grow&#39; per disk)</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">var</span><span class="w">         </span><span class="c1"># esp | linux | root | var | home | srv | swap</span>
+<span class="w">        </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ext4</span><span class="w">      </span><span class="c1"># vfat | ext4 | xfs | btrfs | swap</span>
+<span class="w">        </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbi_var</span><span class="w">  </span><span class="c1"># required if preserve_on_reprovision: true</span>
+<span class="w">        </span><span class="nt">mount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var</span><span class="w">       </span><span class="c1"># absolute path; written to /etc/fstab</span>
+<span class="w">        </span><span class="nt">preserve_on_reprovision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># label-keyed idempotency; default false</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<span class="w">        </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">grow</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<span class="w">        </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ext4</span>
+<span class="w">        </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbi_root_local</span>
+<span class="w">        </span><span class="nt">mount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
+</pre></div>
+</div>
+<section id="environment-specific-caveats-observed-in-practice">
+<h3>Environment-specific caveats observed in practice<a class="headerlink" href="#environment-specific-caveats-observed-in-practice" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>vfat labels must be uppercase ≤11 chars</strong> (FAT spec). The role’s pre-flight
+<code class="docutils literal notranslate"><span class="pre">_validate.yml</span></code> catches lowercase / overlong labels.</p></li>
+<li><p><strong>``linux`` type translates to ``linux-generic``</strong> for systemd-repart. Use
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">linux</span></code> in the DSL; the template translates.</p></li>
+<li><p><strong>``systemd-repart`` is in a separate package on Debian 13 (Trixie)</strong>.
+<code class="docutils literal notranslate"><span class="pre">_apply_repart.yml</span></code> installs it idempotently — no operator action needed on
+Trixie or later.</p></li>
+<li><p><strong>If the running kernel lacks ``CONFIG_VFAT_FS``</strong> (some Armbian rk3588 edge
+kernels do), <code class="docutils literal notranslate"><span class="pre">mount.vfat</span></code> fails. Drop the ESP entry from the layout for
+those boards — passthrough boot doesn’t read <code class="docutils literal notranslate"><span class="pre">/boot/efi</span></code> anyway.</p></li>
+<li><p><strong>If ``/boot`` adds no value for your boot model</strong> (always true under
+passthrough), drop it. Kernel files still rsync into <code class="docutils literal notranslate"><span class="pre">/boot/</span></code> as a directory
+inside the root partition; nothing reads them at boot.</p></li>
+</ul>
+</section>
+</section>
+<section id="procedure">
+<h2>Procedure<a class="headerlink" href="#procedure" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Edit inventory: add or change armbian_local_disks for</span>
+<span class="c1">#    your host. Use `ansible-inventory --host &lt;fqdn&gt;` to verify the</span>
+<span class="c1">#    schema parses.</span>
+
+<span class="c1"># 2. Run the lifecycle.</span>
+ansible-playbook<span class="w"> </span>playbooks/reprovision_to_local.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limit<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>&lt;fqdn&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">capture_serial</span><span class="o">=</span><span class="nb">true</span><span class="w">     </span><span class="c1"># optional UART tail in diagnostic bundle on failure</span>
+</pre></div>
+</div>
+<section id="e-target-hosts-fqdn-required-if-your-inventory-uses-fqdns">
+<h3><code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code>: required if your inventory uses FQDNs<a class="headerlink" href="#e-target-hosts-fqdn-required-if-your-inventory-uses-fqdns" title="Link to this heading"></a></h3>
+<p>The playbook’s <code class="docutils literal notranslate"><span class="pre">hosts:</span></code> default is <code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01</span></code> (short name);
+<code class="docutils literal notranslate"><span class="pre">--limit</span></code> narrows the inventory subset, but <code class="docutils literal notranslate"><span class="pre">hosts:</span></code> ALSO needs to match an
+inventory entry. If your inventory keys hosts by FQDN (e.g.
+<code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01.example.lan</span></code>), pass <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code> to override
+the playbook default.</p>
+</section>
+<section id="what-the-playbook-does-4-plays">
+<h3>What the playbook does (4 plays)<a class="headerlink" href="#what-the-playbook-does-4-plays" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Set boot mode to nfs + verify</strong> — board comes up on the NFS rootfs
+(PoE-cycle + PXE + wait for SSH + assert <code class="docutils literal notranslate"><span class="pre">findmnt</span> <span class="pre">/</span></code> reports nfs/nfs4).
+Uses the same <code class="docutils literal notranslate"><span class="pre">_lifecycle_set_and_verify</span></code> block used by Phase 4; on failure
+here the board is already on NFS so no revert needed.</p></li>
+<li><p><strong>Cross-binding validation + per-disk provision</strong> — asserts no two disks
+share a mount path, exactly one partition declares <code class="docutils literal notranslate"><span class="pre">mount:</span> <span class="pre">/</span></code>, then loops
+<code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> per disk binding. Each invocation runs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_validate.yml</span></code> (9 checks)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_render_repart.yml</span></code> (DSL → <code class="docutils literal notranslate"><span class="pre">/run/disk_provision/&lt;dev&gt;/repart.d/*.conf</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_preserve_scan.yml</span></code> (lsblk → set of preserved partition ids)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_apply_repart.yml</span></code> (install systemd-repart if missing → run with
+<code class="docutils literal notranslate"><span class="pre">--empty=force</span></code> on fresh disk OR <code class="docutils literal notranslate"><span class="pre">--empty=refuse</span></code> + filtered
+definitions when preserves exist → partprobe → blkid wait)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_populate.yml</span></code> (mount in dep order → rsync from <code class="docutils literal notranslate"><span class="pre">/</span></code> with preserve
+excludes → write fstab → rewrite extlinux.conf → unmount in reverse order)</p></li>
+</ul>
+</li>
+<li><p><strong>Set boot mode to local + verify</strong> — render new pxelinux.cfg with <code class="docutils literal notranslate"><span class="pre">default</span>
+<span class="pre">local</span></code>, upload to router, PoE-cycle, wait, assert <code class="docutils literal notranslate"><span class="pre">findmnt</span> <span class="pre">/</span></code> reports a
+local block device.</p></li>
+<li><p><strong>Auto-revert rescue</strong> wrapping Phase 3 — if the local boot fails, capture
+diagnostic bundle (findmnt, /proc/cmdline, lsblk, journalctl -k, UART tail if
+<code class="docutils literal notranslate"><span class="pre">capture_serial=true</span></code>), set boot mode back to nfs, verify the board
+recovered, fail loudly with a pointer to the bundle path.</p></li>
+</ol>
+<p>Approximate runtime on PoE-powered NVMe board: <strong>3–4 minutes</strong> for a first-time
+provision; <strong>5–10 minutes</strong> if rsync source is large.</p>
+</section>
+</section>
+<section id="post-run-verification">
+<h2>Post-run verification<a class="headerlink" href="#post-run-verification" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Confirm rootfs source</span>
+ansible<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span>-m<span class="w"> </span>shell<span class="w"> </span>-a<span class="w"> </span><span class="s1">&#39;findmnt -no SOURCE,LABEL,FSTYPE /&#39;</span>
+<span class="c1"># expected:  /dev/nvme0n1p&lt;N&gt;  armbi_root_local  ext4</span>
+
+<span class="c1"># Confirm kernel cmdline says root=LABEL=...</span>
+ansible<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span>-m<span class="w"> </span>shell<span class="w"> </span>-a<span class="w"> </span><span class="s1">&#39;cat /proc/cmdline&#39;</span>
+<span class="c1"># expected:  root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=...</span>
+
+<span class="c1"># Confirm running kernel comes from TFTP (not the disk&#39;s /boot)</span>
+ansible<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span>-m<span class="w"> </span>shell<span class="w"> </span>-a<span class="w"> </span><span class="s1">&#39;uname -r&#39;</span>
+<span class="c1"># this is whatever&#39;s on the router&#39;s TFTP, not necessarily what&#39;s in /boot</span>
+<span class="c1"># on the local disk (passthrough boot decouples them)</span>
+
+<span class="c1"># Confirm fstab has LABEL= entries for every mount in the layout</span>
+ansible<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span>-m<span class="w"> </span>shell<span class="w"> </span>-a<span class="w"> </span><span class="s1">&#39;cat /etc/fstab&#39;</span><span class="w"> </span>--become
+
+<span class="c1"># Confirm preserved partitions survived (if any)</span>
+ansible<span class="w"> </span>&lt;fqdn&gt;<span class="w"> </span>-m<span class="w"> </span>shell<span class="w"> </span>-a<span class="w"> </span><span class="s1">&#39;ls -la /var/&lt;your-sentinel-file&gt;&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="failure-recovery">
+<h2>Failure recovery<a class="headerlink" href="#failure-recovery" title="Link to this heading"></a></h2>
+<p>The lifecycle’s Phase 3 (local boot + verify) is wrapped in <code class="docutils literal notranslate"><span class="pre">block/rescue</span></code>. If
+local boot fails, the playbook automatically:</p>
+<ol class="arabic simple">
+<li><p>Captures <code class="docutils literal notranslate"><span class="pre">./diagnostics/&lt;host&gt;-&lt;iso8601&gt;/</span></code> with findmnt, cmdline, lsblk,
+route, resolv.conf, U-Boot debs, journal, router TFTP log, and last 200 UART
+lines if <code class="docutils literal notranslate"><span class="pre">capture_serial=true</span></code>.</p></li>
+<li><p>Sets boot mode back to <code class="docutils literal notranslate"><span class="pre">nfs</span></code> and PoE-cycles.</p></li>
+<li><p>Verifies the board is back on NFS.</p></li>
+<li><p>Fails the playbook with the diagnostic bundle path in the failure message.</p></li>
+</ol>
+<p>If Phase 2 (disk_provision) fails (e.g. systemd-repart rejects the layout, mount
+fails), there is NO auto-revert — the playbook aborts with the failure. The
+board is still NFS-booted (Phase 1 already flipped it), so re-running after
+fixing the issue is safe.</p>
+<p>If Phase 1 (initial NFS flip) fails, the board may be stuck on its previous
+mode. Use <code class="docutils literal notranslate"><span class="pre">set_boot_mode.yml</span> <span class="pre">-e</span> <span class="pre">armbian_boot_mode=sd</span></code> (or whatever known-good
+mode you have) to recover, then debug the NFS infrastructure (TFTP rows, NFS
+export, board’s MAC in pxelinux.cfg).</p>
+</section>
+<section id="worked-example-removing-boot-from-orange-pi-5-max-01">
+<h2>Worked example: removing <code class="docutils literal notranslate"><span class="pre">/boot</span></code> from <code class="docutils literal notranslate"><span class="pre">orange-pi-5-max-01</span></code><a class="headerlink" href="#worked-example-removing-boot-from-orange-pi-5-max-01" title="Link to this heading"></a></h2>
+<p>Context: the board was previously provisioned with ESP + /boot + /var + root.
+After the first-pass E2E, we observed that <code class="docutils literal notranslate"><span class="pre">/boot</span></code> is functionally inert under
+our passthrough boot model — the kernel comes from TFTP, not the local disk’s
+<code class="docutils literal notranslate"><span class="pre">/boot</span></code>. The 1 GiB partition contributes nothing and creates a footgun
+(<code class="docutils literal notranslate"><span class="pre">apt</span></code>-installed kernels land there but don’t boot).</p>
+<section id="edit-inventory">
+<h3>1. Edit inventory<a class="headerlink" href="#edit-inventory" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">.inventory/inventory.yaml</span></code> (gitignored — this is the real inventory, not the
+documentation sample):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">orange-pi-5-max-01.example.lan</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># ... existing entries ...</span>
+<span class="w">  </span><span class="nt">armbian_local_disks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/nvme0n1</span>
+<span class="w">      </span><span class="nt">wipe</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">layout</span><span class="p">:</span>
+<span class="w">        </span><span class="c1"># /boot DROPPED — see runbook for reasoning under passthrough boot</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">var</span>
+<span class="w">          </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20GiB</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">var</span>
+<span class="w">          </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ext4</span>
+<span class="w">          </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbi_var</span>
+<span class="w">          </span><span class="nt">mount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var</span>
+<span class="w">          </span><span class="nt">preserve_on_reprovision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<span class="w">          </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">grow</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<span class="w">          </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ext4</span>
+<span class="w">          </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbi_root_local</span>
+<span class="w">          </span><span class="nt">mount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
+</pre></div>
+</div>
+</section>
+<section id="verify-inventory-parses">
+<h3>2. Verify inventory parses<a class="headerlink" href="#verify-inventory-parses" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-inventory<span class="w"> </span>--host<span class="w"> </span>orange-pi-5-max-01.example.lan<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.armbian_local_disks[0].layout | length&#39;</span>
+<span class="c1"># expected: 2</span>
+</pre></div>
+</div>
+</section>
+<section id="run-the-lifecycle">
+<h3>3. Run the lifecycle<a class="headerlink" href="#run-the-lifecycle" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/reprovision_to_local.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limit<span class="w"> </span>orange-pi-5-max-01.example.lan<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-max-01.example.lan<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">capture_serial</span><span class="o">=</span><span class="nb">true</span>
+</pre></div>
+</div>
+</section>
+<section id="what-happens-on-the-disk">
+<h3>4. What happens on the disk<a class="headerlink" href="#what-happens-on-the-disk" title="Link to this heading"></a></h3>
+<p>Before run (4 partitions on NVMe):</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">nvme0n1p1  vfat  ARMBI_ESP          512M  ← orphan from earlier run</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p2  ext4  armbi_boot           1G  ← about to be removed</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p3  ext4  armbi_var           20G  ← preserved (label match)</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p4  ext4  armbi_root_local  97.7G  ← matches new root def</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">_preserve_scan.yml</span></code> finds <code class="docutils literal notranslate"><span class="pre">armbi_var</span></code> matches the layout’s preserve flag →
+marks <code class="docutils literal notranslate"><span class="pre">var</span></code> to skip wipe.</p>
+<p><code class="docutils literal notranslate"><span class="pre">_apply_repart.yml</span></code> runs with <code class="docutils literal notranslate"><span class="pre">--empty=refuse</span></code> (because we have preserves)
+and filtered definitions (only <code class="docutils literal notranslate"><span class="pre">root</span></code> — <code class="docutils literal notranslate"><span class="pre">var</span></code> filtered out, <code class="docutils literal notranslate"><span class="pre">boot</span></code> not in
+the new layout). systemd-repart’s behavior:</p>
+<ul class="simple">
+<li><p><strong>Existing partition matching a definition’s Type+Label</strong>: preserved (root
+partition matches → stays).</p></li>
+<li><p><strong>Existing partition mentioned via preserve scan</strong>: not in definitions →
+systemd-repart never sees it → left alone (var partition).</p></li>
+<li><p><strong>Existing partition unmentioned anywhere</strong>: systemd-repart’s default with
+<code class="docutils literal notranslate"><span class="pre">--empty=refuse</span></code> is to leave it alone. The old /boot partition
+(linux-generic, armbi_boot label) doesn’t match any current definition → stays
+as an orphan partition.</p></li>
+<li><p><strong>Old ESP</strong> stays too (same reason — orphan from prior runs).</p></li>
+</ul>
+<p>After run (4 partitions, but only 2 are managed by current layout):</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">nvme0n1p1  vfat  ARMBI_ESP          512M  ← orphan (still unmanaged)</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p2  ext4  armbi_boot           1G  ← orphan (not in layout)</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p3  ext4  armbi_var           20G  ← preserved</span>
+<span class="l l-Scalar l-Scalar-Plain">nvme0n1p4  ext4  armbi_root_local  97.7G  ← managed</span>
+</pre></div>
+</div>
+<p>Generated fstab on the new root partition (mounts only the layout’s declared
+mounts):</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">tmpfs           /tmp  tmpfs  defaults,nosuid       0 0</span>
+<span class="l l-Scalar l-Scalar-Plain">LABEL=armbi_root_local  /     ext4   defaults,noatime     0 1</span>
+<span class="l l-Scalar l-Scalar-Plain">LABEL=armbi_var         /var  ext4   defaults,noatime     0 2</span>
+</pre></div>
+</div>
+<p>No <code class="docutils literal notranslate"><span class="pre">/boot</span></code> entry — <code class="docutils literal notranslate"><span class="pre">/boot</span></code> is now a regular directory inside the root
+partition, populated by the rsync from the NFS source.</p>
+</section>
+<section id="reclaiming-the-orphan-partitions-optional">
+<h3>5. Reclaiming the orphan partitions (optional)<a class="headerlink" href="#reclaiming-the-orphan-partitions-optional" title="Link to this heading"></a></h3>
+<p>Orphan partitions consume disk space and partition-table slots but are otherwise
+harmless. To reclaim them:</p>
+<p>Option A: re-run with <code class="docutils literal notranslate"><span class="pre">force:</span> <span class="pre">true</span></code> on the binding (wipes everything including
+preserves):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">armbian_local_disks</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/nvme0n1</span>
+<span class="w">    </span><span class="nt">force</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># ← bypasses preserve idempotency</span>
+<span class="w">    </span><span class="nt">layout</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="nv">... your new layout ...</span><span class="w"> </span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Option B: SSH to the board and <code class="docutils literal notranslate"><span class="pre">sfdisk</span> <span class="pre">--delete</span> <span class="pre">/dev/nvme0n1</span> <span class="pre">&lt;N&gt;</span></code> for each
+orphan partition number.</p>
+<p>For most operators: leave the orphans alone. They cost disk space but don’t
+affect boot or system behavior.</p>
+</section>
+</section>
+<section id="common-pitfalls">
+<h2>Common pitfalls<a class="headerlink" href="#common-pitfalls" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 32.0%" />
+<col style="width: 34.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Symptom</p></th>
+<th class="head"><p>Cause</p></th>
+<th class="head"><p>Fix</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Playbook says “no hosts matched”</p></td>
+<td><p>Inventory keys by FQDN, playbook <code class="docutils literal notranslate"><span class="pre">hosts:</span></code> default is short name</p></td>
+<td><p>Pass <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">target_hosts=&lt;fqdn&gt;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'armbian_local_disks'</span> <span class="pre">is</span> <span class="pre">undefined</span></code></p></td>
+<td><p>Inventory missing the var</p></td>
+<td><p>Add it per the DSL above</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Failed</span> <span class="pre">to</span> <span class="pre">parse</span> <span class="pre">partition</span> <span class="pre">type:</span> <span class="pre">&lt;foo&gt;</span></code></p></td>
+<td><p>DSL type isn’t a valid systemd-repart name</p></td>
+<td><p>Use one of: esp, linux, root, var, home, srv, swap</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Error</span> <span class="pre">mounting</span> <span class="pre">...</span> <span class="pre">vfat</span> <span class="pre">...</span> <span class="pre">wrong</span> <span class="pre">fs</span> <span class="pre">type</span></code></p></td>
+<td><p>Kernel lacks CONFIG_VFAT_FS</p></td>
+<td><p>Drop ESP from layout for this board</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">blkid</span> <span class="pre">-L</span> <span class="pre">&lt;label&gt;</span></code> retries exhausted on vfat</p></td>
+<td><p>FAT label lowercase or &gt;11 chars</p></td>
+<td><p>Pre-flight validation catches this; use UPPERCASE ≤11 chars</p></td>
+</tr>
+<tr class="row-odd"><td><p>Sentinel disappeared from <code class="docutils literal notranslate"><span class="pre">/var</span></code> across reprovision</p></td>
+<td><p>Either <code class="docutils literal notranslate"><span class="pre">force:</span> <span class="pre">true</span></code> set, or label changed (lost label-keyed preserve match)</p></td>
+<td><p>Don’t change <code class="docutils literal notranslate"><span class="pre">armbi_var</span></code> label between runs; don’t set <code class="docutils literal notranslate"><span class="pre">force:</span> <span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Local boot doesn’t come up after reprovision</p></td>
+<td><p>Most likely: pxelinux.cfg flip happened but kernel cmdline mismatches the
+new layout’s labels</p></td>
+<td><p>Auto-revert kicks in; check <code class="docutils literal notranslate"><span class="pre">./diagnostics/&lt;host&gt;-*/</span></code> for findmnt +
+journal</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">systemd-repart:</span> <span class="pre">command</span> <span class="pre">not</span> <span class="pre">found</span></code></p></td>
+<td><p>Pre-Trixie Debian (Bookworm) where it’s bundled in <code class="docutils literal notranslate"><span class="pre">systemd</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">_apply_repart.yml</span></code>’s <code class="docutils literal notranslate"><span class="pre">failed_when:</span> <span class="pre">false</span></code> apt install handles this;
+binary check still asserts</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>DSL reference: <code class="docutils literal notranslate"><span class="pre">roles/disk_provision/meta/argument_specs.yml</span></code></p></li>
+<li><p>Lifecycle source: <code class="docutils literal notranslate"><span class="pre">playbooks/reprovision_to_local.yml</span></code></p></li>
+<li><p>Hardware E2E: <code class="docutils literal notranslate"><span class="pre">playbooks/tests/test_reprovision_e2e.yml</span></code></p></li>
+<li><p>Boot-mode override methods (inventory / -e / U-Boot env):
+<a class="reference internal" href="boot-mode-override.html#ansible-collections-david-igou-armbian-docsite-boot-mode-override"><span class="std std-ref">Boot mode override methods</span></a></p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="retry-configuration.html" class="btn btn-neutral float-left" title="Boot-retry configuration matrix" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../board_boot_verify_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode." accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>

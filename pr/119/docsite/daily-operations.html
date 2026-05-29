@@ -1,0 +1,425 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily operations &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="../_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7f41d439"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Boot mode override methods" href="boot-mode-override.html" />
+    <link rel="prev" title="Lifecycle: Phase 0 (control plane) → Phase 1 (per board)" href="lifecycle.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="../_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture and data flow</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="lifecycle.html">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Daily operations</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#converge-a-board-to-its-declared-boot-mode">Converge a board to its declared boot mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#override-boot-mode-without-editing-inventory">Override boot mode without editing inventory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#power-cycle-a-board-via-poe">Power-cycle a board via PoE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reprovision-a-board-s-local-disk">Reprovision a board’s local disk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#headless-reprovision-to-local-boot">Headless reprovision to local boot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#local-kernel-boot-mode"><code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> boot mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hardware-e2e-test">Hardware E2E test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fleet-level-e2e-test">Fleet-level E2E test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="boot-mode-override.html">Boot mode override methods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="retry-configuration.html">Boot-retry configuration matrix</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="reprovision-local-disk.html">Runbook: Reprovision a board’s local disk</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Daily operations</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <section id="daily-operations">
+<span id="ansible-collections-david-igou-armbian-docsite-daily-operations"></span><h1>Daily operations<a class="headerlink" href="#daily-operations" title="Link to this heading"></a></h1>
+<p>Day-to-day operations after a board has been onboarded via
+<a class="reference internal" href="lifecycle.html#ansible-collections-david-igou-armbian-docsite-lifecycle"><span class="std std-ref">Lifecycle: Phase 0 (control plane) → Phase 1 (per board)</span></a>. For the
+conceptual model see
+<a class="reference internal" href="architecture.html#ansible-collections-david-igou-armbian-docsite-architecture"><span class="std std-ref">Architecture and data flow</span></a>.</p>
+<section id="converge-a-board-to-its-declared-boot-mode">
+<h2>Converge a board to its declared boot mode<a class="headerlink" href="#converge-a-board-to-its-declared-boot-mode" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/converge_boot_mode.yml<span class="w"> </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p>Reads each host’s <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code> from inventory, renders
+<code class="docutils literal notranslate"><span class="pre">pxelinux.cfg/01-&lt;MAC&gt;</span></code> (with <code class="docutils literal notranslate"><span class="pre">default</span></code> pointing at the nfs or sd label),
+uploads it to the router, ensures the <code class="docutils literal notranslate"><span class="pre">/ip</span> <span class="pre">tftp</span></code> row exists, PoE-cycles where
+applicable, and verifies the board reaches SSH with the expected rootfs.</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">converge_boot_mode.yml -e target_hosts=&lt;host&gt;</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ routeros/plumbing_check.yml   (assert /ip tftp rows for the model)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ role</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pxelinux_render          (delegate_to localhost; default = boot_mode)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ routeros/upload_pxelinux_cfg.yml  (net_put to flash:/sbc/pxelinux.cfg/01-&lt;MAC&gt;)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ tasks/cold_boot_with_retry.yml    (PoE cycle + wait_for TCP/22 + retry)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ tasks/wait_for_ssh_with_cycle_retry.yml  (SSH probe; PoE-cycle on fail)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ role</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">board_boot_verify        (assert ansible_mounts[&#39;/&#39;] matches mode)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ board on declared mode</span>
+</pre></div>
+</div>
+</section>
+<section id="override-boot-mode-without-editing-inventory">
+<h2>Override boot mode without editing inventory<a class="headerlink" href="#override-boot-mode-without-editing-inventory" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/set_boot_mode.yml<span class="w"> </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>nfs
+ansible-playbook<span class="w"> </span>playbooks/set_boot_mode.yml<span class="w"> </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>sd
+</pre></div>
+</div>
+<p>Same convergence mechanics as <code class="docutils literal notranslate"><span class="pre">converge_boot_mode.yml</span></code>, but the desired mode
+comes from <code class="docutils literal notranslate"><span class="pre">-e</span></code>. See
+<a class="reference internal" href="boot-mode-override.html#ansible-collections-david-igou-armbian-docsite-boot-mode-override"><span class="std std-ref">Boot mode override methods</span></a> for the
+three override methods (inventory, <code class="docutils literal notranslate"><span class="pre">-e</span></code>, U-Boot env).</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">set_boot_mode.yml -e target_hosts=&lt;host&gt; -e armbian_boot_mode=&lt;mode&gt;</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ override applied (-e value supersedes inventory boot_mode)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ converge_boot_mode.yml (import_playbook)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ board on override mode</span>
+</pre></div>
+</div>
+</section>
+<section id="power-cycle-a-board-via-poe">
+<h2>Power-cycle a board via PoE<a class="headerlink" href="#power-cycle-a-board-via-poe" title="Link to this heading"></a></h2>
+<p>When a board is wedged or unreachable, cycle its upstream RouterOS PoE switch
+port instead of pulling cables:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Hard power-cycle (off → wait armbian_poe_cycle_delay seconds → on)</span>
+ansible-playbook<span class="w"> </span>playbooks/routeros/poe_control.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_poe_action</span><span class="o">=</span>cycle
+
+<span class="c1"># Power off / on individually</span>
+ansible-playbook<span class="w"> </span>playbooks/routeros/poe_control.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_poe_action</span><span class="o">=</span>off
+ansible-playbook<span class="w"> </span>playbooks/routeros/poe_control.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_poe_action</span><span class="o">=</span>on
+</pre></div>
+</div>
+<p>The play targets <code class="docutils literal notranslate"><span class="pre">boards</span></code> with <code class="docutils literal notranslate"><span class="pre">gather_facts:</span> <span class="pre">false</span></code> (boards may be powered
+off) and delegates the PoE command to each board’s <code class="docutils literal notranslate"><span class="pre">armbian_poe_switch</span></code> via
+<code class="docutils literal notranslate"><span class="pre">delegate_to</span></code>. Use <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">armbian_poe_cycle_delay=&lt;seconds&gt;</span></code> to override the
+off→on dwell (default 5s).</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">routeros/poe_control.yml --limit &lt;host&gt; -e armbian_poe_action=&lt;action&gt;</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">(delegate_to</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian_poe_switch)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">├─ action=cycle ──▶ routeros/tasks/poe_cycle.yml (off → drain → on)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">├─ action=on    ──▶ /interface ethernet poe set poe-out=auto</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">└─ action=off   ──▶ /interface ethernet poe set poe-out=off</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">──▶ PoE state applied to &lt;switch&gt;:&lt;port&gt;</span>
+</pre></div>
+</div>
+</section>
+<section id="reprovision-a-board-s-local-disk">
+<h2>Reprovision a board’s local disk<a class="headerlink" href="#reprovision-a-board-s-local-disk" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Boot the board into NFS first so `/` is the cleanly-cloned per-host rootfs.</span>
+ansible-playbook<span class="w"> </span>playbooks/set_boot_mode.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>nfs
+
+<span class="c1"># Then wipe + materialize that rootfs onto a local block device.</span>
+ansible-playbook<span class="w"> </span>playbooks/provision_local_disk.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_local_disk_device</span><span class="o">=</span>/dev/nvme0n1
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> role’s source is hardcoded to the board’s running <code class="docutils literal notranslate"><span class="pre">/</span></code> —
+so whatever rootfs the board is booted from at the moment is what gets copied to
+the disk. The pre-step above (<code class="docutils literal notranslate"><span class="pre">set_boot_mode=nfs</span></code>) is what makes that <code class="docutils literal notranslate"><span class="pre">/</span></code> be
+the per-host NFS clone (with hostname, machine-id, and SSH host keys already
+reset by <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code>) rather than the raw, identity-less SD rootfs from
+the flashed image. The playbook will refuse to run if the target disk is the
+same device the board is currently booted from.</p>
+<p>The full lineage from upstream Armbian to a bootable local partition:</p>
+<div class="highlight-YAML+Jinja notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">armbian/build upstream</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ image_build (hosts</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian_builders)         per-host PXE-first U-Boot</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ &lt;model&gt;.img.xz + manifest.json                rsynced to netboot HTTP root</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ rootfs_provision (hosts</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">netboot_server)      extract template +</span>
+<span class="w">                                                    </span><span class="l l-Scalar l-Scalar-Plain">cp --reflink=auto + identity reset</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ /srv/netboot/rootfs/_templates/&lt;model&gt;/       (shared)</span>
+<span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">/srv/netboot/rootfs/&lt;hostname&gt;/               (per-host NFS clone)</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ NFS export (netboot_server:/srv/netboot/rootfs/&lt;hostname&gt;)</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ board&#39;s /  mounted via NFS (boot_mode=nfs)</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ disk_provision (hosts</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boards)                rsync -aAX from /, regen fstab</span>
+<span class="w">                                                    </span><span class="l l-Scalar l-Scalar-Plain">(LABEL=...), INSTALLED=true marker</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">──▶ /dev/&lt;disk&gt;p1  LABEL=armbi_root_local</span>
+</pre></div>
+</div>
+<p>Each layer adds something specific: <code class="docutils literal notranslate"><span class="pre">image_build</span></code> bakes PXE-first U-Boot into
+a per-host image; <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code> extracts the per-model template and makes
+a per-host CoW copy with the right identity; the NFS mount delivers that rootfs
+as the board’s <code class="docutils literal notranslate"><span class="pre">/</span></code>; and <code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> materializes the
+<em>currently-running</em> <code class="docutils literal notranslate"><span class="pre">/</span></code> onto a local block device with a fresh <code class="docutils literal notranslate"><span class="pre">/etc/fstab</span></code>
+pointing root at <code class="docutils literal notranslate"><span class="pre">LABEL=&lt;label&gt;</span></code>.</p>
+<p>If the board had been SD-booted when you ran <code class="docutils literal notranslate"><span class="pre">provision_local_disk.yml</span></code>, the
+source would have been the SD’s ext4 — essentially the raw flashed image’s
+rootfs, no identity reset, no per-host customization. Booting into NFS first is
+what threads the per-host identity all the way through to the local disk.</p>
+</section>
+<section id="headless-reprovision-to-local-boot">
+<h2>Headless reprovision to local boot<a class="headerlink" href="#headless-reprovision-to-local-boot" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/reprovision_to_local.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-max-01
+</pre></div>
+</div>
+<p>Drives a board from any boot mode to verified local-disk boot in one command.
+The board’s inventory must define <code class="docutils literal notranslate"><span class="pre">armbian_local_disks</span></code> (a list of disk
+bindings, each with a declarative <code class="docutils literal notranslate"><span class="pre">layout</span></code> of GPT partitions) and
+<code class="docutils literal notranslate"><span class="pre">armbian_boot_mode:</span> <span class="pre">local</span></code>.</p>
+<p>Inventory example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">armbian_local_disks</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/nvme0n1</span>
+<span class="w">    </span><span class="nt">wipe</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">layout</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> id</span><span class="p">:</span><span class="w"> </span><span class="nv">esp</span><span class="p p-Indicator">,</span><span class="nt">  size</span><span class="p">:</span><span class="w"> </span><span class="nv">512MiB</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">esp</span><span class="p p-Indicator">,</span><span class="nt">   format</span><span class="p">:</span><span class="w"> </span><span class="nv">vfat</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">armbi_esp</span><span class="p p-Indicator">,</span><span class="nt">        mount</span><span class="p">:</span><span class="w"> </span><span class="nv">/boot/efi</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> id</span><span class="p">:</span><span class="w"> </span><span class="nv">boot</span><span class="p p-Indicator">,</span><span class="nt"> size</span><span class="p">:</span><span class="w"> </span><span class="nv">1GiB</span><span class="p p-Indicator">,</span><span class="nt">   type</span><span class="p">:</span><span class="w"> </span><span class="nv">linux</span><span class="p p-Indicator">,</span><span class="nt"> format</span><span class="p">:</span><span class="w"> </span><span class="nv">ext4</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">armbi_boot</span><span class="p p-Indicator">,</span><span class="nt">       mount</span><span class="p">:</span><span class="w"> </span><span class="nv">/boot</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> id</span><span class="p">:</span><span class="w"> </span><span class="nv">var</span><span class="p p-Indicator">,</span><span class="nt">  size</span><span class="p">:</span><span class="w"> </span><span class="nv">20GiB</span><span class="p p-Indicator">,</span><span class="nt">  type</span><span class="p">:</span><span class="w"> </span><span class="nv">var</span><span class="p p-Indicator">,</span><span class="nt">   format</span><span class="p">:</span><span class="w"> </span><span class="nv">ext4</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">armbi_var</span><span class="p p-Indicator">,</span><span class="nt">        mount</span><span class="p">:</span><span class="w"> </span><span class="nv">/var</span><span class="p p-Indicator">,</span><span class="nt"> preserve_on_reprovision</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> id</span><span class="p">:</span><span class="w"> </span><span class="nv">root</span><span class="p p-Indicator">,</span><span class="nt"> size</span><span class="p">:</span><span class="w"> </span><span class="nv">grow</span><span class="p p-Indicator">,</span><span class="nt">   type</span><span class="p">:</span><span class="w"> </span><span class="nv">root</span><span class="p p-Indicator">,</span><span class="nt">  format</span><span class="p">:</span><span class="w"> </span><span class="nv">ext4</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">armbi_root_local</span><span class="p p-Indicator">,</span><span class="nt"> mount</span><span class="p">:</span><span class="w"> </span><span class="nv">/</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">preserve_on_reprovision:</span> <span class="pre">true</span></code> partitions (typically <code class="docutils literal notranslate"><span class="pre">/var</span></code> for k3s state)
+are detected by filesystem label and skipped on every re-run. Set <code class="docutils literal notranslate"><span class="pre">force:</span>
+<span class="pre">true</span></code> on a binding to bypass preserve idempotency.</p>
+<p>If the final cold-boot in local mode fails, the playbook captures a diagnostic
+bundle (<code class="docutils literal notranslate"><span class="pre">findmnt</span></code>, <code class="docutils literal notranslate"><span class="pre">/proc/cmdline</span></code>, <code class="docutils literal notranslate"><span class="pre">lsblk</span></code>, <code class="docutils literal notranslate"><span class="pre">journalctl</span> <span class="pre">-k</span></code>, last 200
+UART lines if <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">capture_serial=true</span></code>), then auto-reverts the board to nfs
+mode for forensic access. Operator fixes the root cause and re-runs.</p>
+<p>See <a class="reference internal" href="reprovision-local-disk.html#ansible-collections-david-igou-armbian-docsite-reprovision-local-disk"><span class="std std-ref">Runbook: Reprovision a board’s local disk</span></a>
+for the full operator runbook: pre-flight checks, what the lifecycle does
+play-by-play, environment-specific caveats observed in practice, failure
+recovery, and a worked example of changing the layout on an already-provisioned
+board.</p>
+</section>
+<section id="local-kernel-boot-mode">
+<h2><code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> boot mode<a class="headerlink" href="#local-kernel-boot-mode" title="Link to this heading"></a></h2>
+<p>Variant of <code class="docutils literal notranslate"><span class="pre">local</span></code> in which the <strong>kernel itself</strong> is loaded from the NVMe
+rootfs, not from the router’s TFTP. The pxelinux.cfg’s <code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> label
+has only a <code class="docutils literal notranslate"><span class="pre">localboot</span> <span class="pre">0</span></code> body; U-Boot’s <code class="docutils literal notranslate"><span class="pre">localcmd</span></code> env (baked into the
+binary by <code class="docutils literal notranslate"><span class="pre">build_and_publish_from_inventory.yml</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">__999_orangepi5max_localcmd</span></code> hook) runs <code class="docutils literal notranslate"><span class="pre">bootflow</span> <span class="pre">scan</span> <span class="pre">-b</span></code>, which hands off
+to the extlinux bootmeth on the NVMe and follows
+<code class="docutils literal notranslate"><span class="pre">/boot/extlinux/extlinux.conf</span></code> (Armbian’s standard <code class="docutils literal notranslate"><span class="pre">apt</span></code>-managed boot path).
+Selecting this mode means <code class="docutils literal notranslate"><span class="pre">apt</span> <span class="pre">upgrade</span> <span class="pre">linux-image-*</span></code> on the board is the
+kernel update mechanism — no router TFTP refresh, no per-board module rsync from
+a central template.</p>
+<p>The mode requires a rebuilt image (the <code class="docutils literal notranslate"><span class="pre">localcmd</span></code> value is baked into U-Boot
+because boards like the OPi5Max ship <code class="docutils literal notranslate"><span class="pre">CONFIG_ENV_IS_NOWHERE=y</span></code> and have no
+persistent env).</p>
+</section>
+<section id="hardware-e2e-test">
+<h2>Hardware E2E test<a class="headerlink" href="#hardware-e2e-test" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/tests/test_hardware_e2e.yml<span class="w"> </span>--limit<span class="w"> </span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p>Drives a single board through SD → nfsroot → SD via pxelinux boot-mode changes
+and PoE cycles, asserting <code class="docutils literal notranslate"><span class="pre">findmnt</span> <span class="pre">/</span></code> reports the expected source at each
+transition. Diagnostic bundle (cmdline, route, lsblk, U-Boot version, journal)
+is emitted at every checkpoint. <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">leave_state=true</span></code> preserves the failure
+state for forensic debugging. <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">capture_serial=true</span></code> spawns a background
+socat capture from a USB-UART on the serial host (defaults to <code class="docutils literal notranslate"><span class="pre">localhost</span></code>,
+override with <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">serial_host=&lt;inventory-host&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">serial_device=</span></code>,
+<code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">serial_baud=</span></code>) and tails the last 200 serial lines at every checkpoint.</p>
+</section>
+<section id="fleet-level-e2e-test">
+<h2>Fleet-level E2E test<a class="headerlink" href="#fleet-level-e2e-test" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/tests/test_fleet_e2e.yml
+</pre></div>
+</div>
+<p>Deterministic six-phase whole-fleet harness: PoE-down → NFS reset → NFS boot +
+bootstrap → dd SD → SD boot + bootstrap → NVMe reprovision + local_kernel
+verify. Used to validate cross-iteration determinism after image rebuilds or
+role changes.</p>
+</section>
+<section id="quick-reference">
+<h2>Quick reference<a class="headerlink" href="#quick-reference" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 4.0%" />
+<col style="width: 60.0%" />
+<col style="width: 36.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Playbook</p></th>
+<th class="head"><p>Frequency</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">build_and_publish_from_inventory.yml</span></code></p></td>
+<td><p>Per <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code> ref or patch-table change</p></td>
+</tr>
+<tr class="row-odd"><td><p>1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bootstrap_armbian.yml</span> <span class="pre">--limit</span> <span class="pre">&lt;host&gt;</span></code></p></td>
+<td><p>Once per board, right after flashing</p></td>
+</tr>
+<tr class="row-even"><td><p>2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">routeros/bootstrap_user.yml</span> <span class="pre">-e</span> <span class="pre">ansible_user=&lt;existing-admin&gt;</span></code></p></td>
+<td><p>Once per RouterOS device</p></td>
+</tr>
+<tr class="row-odd"><td><p>3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stage_netboot_assets.yml</span></code></p></td>
+<td><p>NFS templates + per-host rootfs on netboot server</p></td>
+</tr>
+<tr class="row-even"><td><p>4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stage_router.yml</span></code></p></td>
+<td><p>Kernel/initrd/dtb + plumbing check on the router</p></td>
+</tr>
+<tr class="row-odd"><td><p>5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">converge_boot_mode.yml</span> <span class="pre">-e</span> <span class="pre">target_hosts=&lt;host&gt;</span></code></p></td>
+<td><p>Converge to inventory <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>6</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">set_boot_mode.yml</span> <span class="pre">-e</span> <span class="pre">target_hosts=&lt;host&gt;</span> <span class="pre">-e</span> <span class="pre">armbian_boot_mode=nfs</span></code> (or <code class="docutils literal notranslate"><span class="pre">=sd</span></code>)</p></td>
+<td><p>Ad-hoc boot mode override</p></td>
+</tr>
+<tr class="row-odd"><td><p>7</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">routeros/poe_control.yml</span> <span class="pre">--limit</span> <span class="pre">&lt;host&gt;</span> <span class="pre">-e</span> <span class="pre">armbian_poe_action=cycle</span></code></p></td>
+<td><p>Ad-hoc PoE power-cycle (<code class="docutils literal notranslate"><span class="pre">on</span></code>/<code class="docutils literal notranslate"><span class="pre">off</span></code>/<code class="docutils literal notranslate"><span class="pre">cycle</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p>8</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">persist_uboot_env.yml</span> <span class="pre">--limit</span> <span class="pre">rock-5b-01</span></code></p></td>
+<td><p>Once per rock-5b for autonomous PXE</p></td>
+</tr>
+<tr class="row-odd"><td><p>9</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">provision_local_disk.yml</span> <span class="pre">--limit</span> <span class="pre">&lt;host&gt;</span> <span class="pre">-e</span> <span class="pre">armbian_local_disk_device=/dev/nvme0n1</span></code></p></td>
+<td><p>Wipe + materialize running <code class="docutils literal notranslate"><span class="pre">/</span></code> onto a local block device</p></td>
+</tr>
+<tr class="row-even"><td><p>10</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">reprovision_to_local.yml</span> <span class="pre">--limit</span> <span class="pre">&lt;host&gt;</span></code></p></td>
+<td><p>Headless reprovision: NFS → local with auto-revert</p></td>
+</tr>
+<tr class="row-odd"><td><p>—</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_hardware_e2e.yml</span> <span class="pre">--limit</span> <span class="pre">&lt;host&gt;</span></code></p></td>
+<td><p>Ad-hoc SD ↔ NFS hardware E2E test</p></td>
+</tr>
+<tr class="row-even"><td><p>—</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_fleet_e2e.yml</span></code></p></td>
+<td><p>Deterministic six-phase whole-fleet harness</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="lifecycle.html" class="btn btn-neutral float-left" title="Lifecycle: Phase 0 (control plane) → Phase 1 (per board)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="boot-mode-override.html" class="btn btn-neutral float-right" title="Boot mode override methods" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>
