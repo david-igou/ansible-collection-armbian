@@ -83,7 +83,6 @@ david_igou/armbian/   (this repo root)
 │   ├── cleanup_boot_files.yml       # Remove stale per-host pxelinux.cfg + per-model TFTP rows
 │   ├── converge_boot_mode.yml       # Converge board(s) to inventory-declared boot mode
 │   ├── set_boot_mode.yml            # Thin wrapper around converge for -e override
-│   ├── poe_control.yml              # PoE on/off/cycle (wraps routeros/poe_control.yml)
 │   ├── persist_uboot_env.yml        # Write SPI U-Boot env vars via fw_setenv (rock-5b etc.)
 │   ├── provision_local_disk.yml     # Compose disk_provision against a board's local disk
 │   ├── reprovision_to_local.yml     # Headless NFS-boot → reprovision → flip pxelinux to local
@@ -166,8 +165,8 @@ Run from the collection root:
 # Install runtime collection dependencies (roles/ only).
 ansible-galaxy collection install -r requirements.yml
 # If you use any orchestration that talks to RouterOS (stage_router.yml,
-# converge_boot_mode.yml, poe_control.yml, the routeros/ reference
-# playbooks, or the test_*_e2e.yml harnesses), also install:
+# converge_boot_mode.yml, the routeros/ reference playbooks, or the
+# test_*_e2e.yml harnesses), also install:
 ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 
 # (0) Build the custom Armbian image on a builder host. Publishes the
@@ -197,7 +196,7 @@ ansible-playbook playbooks/set_boot_mode.yml \
   -e armbian_boot_mode=sd
 
 # Power cycle a board via its upstream RouterOS switch.
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 \
+ansible-playbook playbooks/routeros/poe_control.yml --limit orange-pi-5-pro-01 \
   -e armbian_poe_action=cycle
 
 # Persist the U-Boot env vars SPI-flash boards need for autonomous PXE.
@@ -313,7 +312,7 @@ collection's `vars/` tree.
 
 For PoE-powered boards, also set `armbian_poe_switch` (inventory hostname of
 the RouterOS switch providing power) and `armbian_poe_port` (interface name on
-that switch, e.g. `ether3`). These are required by `playbooks/poe_control.yml`.
+that switch, e.g. `ether3`). These are required by `playbooks/routeros/poe_control.yml`.
 
 **`armbian_router`** (consumed by `converge_boot_mode.yml`,
 `set_boot_mode.yml`, `stage_router.yml`, `test_hardware_e2e.yml`, and
@@ -425,7 +424,7 @@ netboot server during boot-mode convergence.
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
 | `build_and_publish_from_inventory.yml` | **`armbian_builders`** (Docker-capable build host; loops per-host after resolving `armbian_build` profile); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
-| `poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
+| `routeros/poe_control.yml` | **boards** (delegated to `routeros_switch` via `armbian_poe_switch` hostvar) |
 | `persist_uboot_env.yml` | **rock-5b boards** (`fw_setenv` from Linux into SPI) + RouterOS switch (PoE cold-cycle, delegated) |
 | `test_hardware_e2e.yml` | **boards** + **rb5009** (delegated) + RouterOS switch (PoE, delegated) |
 
@@ -555,7 +554,7 @@ sends every TFTP request straight at rb5009.
 
 ## PoE power control
 
-`poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
+`routeros/poe_control.yml` targets `boards` with `gather_facts: false` (boards may be powered off)
 and delegates the RouterOS command to the switch identified by each board's
 `armbian_poe_switch` host variable. The `delegate_to` pattern works because
 `group_vars/routeros.yml` sets `ansible_connection: ansible.netcommon.network_cli` on

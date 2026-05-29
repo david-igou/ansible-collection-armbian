@@ -59,11 +59,11 @@ switch port instead of pulling cables:
 
 ```bash
 # Hard power-cycle (off → wait armbian_poe_cycle_delay seconds → on)
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=cycle
+ansible-playbook playbooks/routeros/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=cycle
 
 # Power off / on individually
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=off
-ansible-playbook playbooks/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=on
+ansible-playbook playbooks/routeros/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=off
+ansible-playbook playbooks/routeros/poe_control.yml --limit orange-pi-5-pro-01 -e armbian_poe_action=on
 ```
 
 The play targets `boards` with `gather_facts: false` (boards may be
@@ -74,17 +74,15 @@ powered off) and delegates the PoE command to each board's
 
 ```mermaid
 flowchart TB
-    START(["poe_control.yml<br/>--limit &lt;host&gt;<br/>-e armbian_poe_action=&lt;action&gt;"])
-    HOOK["routeros/poe_control.yml<br/><i>delegate_to:<br/>armbian_poe_switch</i>"]
+    START(["routeros/poe_control.yml<br/>--limit &lt;host&gt;<br/>-e armbian_poe_action=&lt;action&gt;<br/><i>delegate_to: armbian_poe_switch</i>"])
     CYCLE["routeros/tasks/poe_cycle.yml<br/><i>off → wait poe_cycle_delay → on</i>"]
     SETON["community.routeros.command<br/><i>/interface ethernet poe set<br/>poe-out=auto</i>"]
     SETOFF["community.routeros.command<br/><i>/interface ethernet poe set<br/>poe-out=off</i>"]
     END(["PoE state applied<br/>to &lt;switch&gt;:&lt;port&gt;"])
 
-    START --> HOOK
-    HOOK -- "action=cycle" --> CYCLE
-    HOOK -- "action=on" --> SETON
-    HOOK -- "action=off" --> SETOFF
+    START -- "action=cycle" --> CYCLE
+    START -- "action=on" --> SETON
+    START -- "action=off" --> SETOFF
     CYCLE --> END
     SETON --> END
     SETOFF --> END
@@ -237,7 +235,7 @@ after image rebuilds or role changes.
 | 4 | `stage_router.yml` | Kernel/initrd/dtb + plumbing check on the router |
 | 5 | `converge_boot_mode.yml -e target_hosts=<host>` | Converge to inventory `armbian_boot_mode` |
 | 6 | `set_boot_mode.yml -e target_hosts=<host> -e armbian_boot_mode=nfs` (or `=sd`) | Ad-hoc boot mode override |
-| 7 | `poe_control.yml --limit <host> -e armbian_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
+| 7 | `routeros/poe_control.yml --limit <host> -e armbian_poe_action=cycle` | Ad-hoc PoE power-cycle (`on`/`off`/`cycle`) |
 | 8 | `persist_uboot_env.yml --limit rock-5b-01` | Once per rock-5b for autonomous PXE |
 | 9 | `provision_local_disk.yml --limit <host> -e armbian_local_disk_device=/dev/nvme0n1` | Wipe + materialize running `/` onto a local block device |
 | 10 | `reprovision_to_local.yml --limit <host>` | Headless reprovision: NFS → local with auto-revert |

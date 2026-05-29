@@ -100,7 +100,7 @@ detail); this table is the dependency graph.
 | 4 | [`stage_router.yml`](../playbooks/stage_router.yml) | `netboot_server` (fetch) → `routeros_router` (push) | — | `routeros/upload_tftp_assets.yml`, `routeros/plumbing_check.yml` |
 | 5 | [`converge_boot_mode.yml`](../playbooks/converge_boot_mode.yml) | `routeros_router` (plumbing) → `boards` (render + boot) | `pxelinux_render`, `board_boot_wait`, `board_boot_verify` | `routeros/plumbing_check.yml`, `routeros/upload_pxelinux_cfg.yml` |
 | 6 | [`set_boot_mode.yml`](../playbooks/set_boot_mode.yml) | (import wrapper) | — | `converge_boot_mode.yml` |
-| 7 | [`poe_control.yml`](../playbooks/poe_control.yml) | `boards` → `routeros_switch` (delegated) | — | `routeros/poe_control.yml` |
+| 7 | [`routeros/poe_control.yml`](../playbooks/routeros/poe_control.yml) | `boards` → `routeros_switch` (delegated) | — | — (run directly) |
 | 8 | [`persist_uboot_env.yml`](../playbooks/persist_uboot_env.yml) | rock-5b boards → switch (delegated) | — | — (uses `routeros/tasks/poe_cycle.yml`) |
 | 9 | [`provision_local_disk.yml`](../playbooks/provision_local_disk.yml) | one board | `disk_provision` | — |
 | 10 | [`reprovision_to_local.yml`](../playbooks/reprovision_to_local.yml) | one board (+ router delegated) | `pxelinux_render`, `disk_provision`, `board_boot_verify` | `routeros/upload_pxelinux_cfg.yml` |
@@ -124,4 +124,4 @@ transports.
 | `routeros/upload_pxelinux_cfg.yml` | `converge_boot_mode.yml` | `armbian_pxelinux_upload_playbook` |
 | `routeros/upload_tftp_assets.yml` | `stage_router.yml` | `armbian_tftp_upload_playbook` |
 | `routeros/plumbing_check.yml` | `stage_router.yml`, `converge_boot_mode.yml` | `armbian_plumbing_check_playbook` |
-| `routeros/poe_control.yml` | `poe_control.yml` | `armbian_poe_control_playbook` |
+| `routeros/poe_control.yml` | manual ad-hoc | — (run directly) |

@@ -25,6 +25,15 @@ breaking_changes:
     wrapper) and ``playbooks/test_connection.yaml`` (an unreferenced
     ad-hoc RouterOS reachability check superseded by
     ``playbooks/routeros/plumbing_check.yml``) have been removed.
+  - |
+    The top-level ``playbooks/poe_control.yml`` wrapper has been removed.
+    Nothing imported it (in-play power cycling goes through
+    ``routeros/tasks/poe_cycle.yml`` via the ``armbian_poe_cycle_tasks_file``
+    hook), so the only effect is that ad-hoc PoE control is now run
+    directly against the reference playbook:
+    ``ansible-playbook playbooks/routeros/poe_control.yml --limit <host>
+    -e armbian_poe_action=cycle``. The ``armbian_poe_control_playbook``
+    swap variable no longer exists.
 
 bugfixes:
   - |

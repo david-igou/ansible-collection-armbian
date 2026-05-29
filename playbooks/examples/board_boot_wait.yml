@@ -3,7 +3,7 @@
 #
 # Single-purpose demo of the board_boot_wait role: probe port 22 from
 # the control node, then confirm an SSH connection. The role has no
-# knowledge of power — cycle PoE (playbooks/poe_control.yml) or press
+# knowledge of power — cycle PoE (playbooks/routeros/poe_control.yml) or press
 # the button yourself first, then gate downstream work on this.
 #
 # Usage:

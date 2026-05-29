@@ -144,7 +144,7 @@ captured. See
 ### Recover a wedged board via PoE
 
 ```bash
-ansible-playbook playbooks/poe_control.yml \
+ansible-playbook playbooks/routeros/poe_control.yml \
   --limit orange-pi-5-pro-01 -e armbian_poe_action=cycle
 ```
 
