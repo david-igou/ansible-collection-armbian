@@ -1,7 +1,7 @@
 # `playbooks/tests/`
 
 > **Disclaimer.** These playbooks are what the author runs to test the
-> collection in their own homelab environment. They are provided as-is, with
+> collection in their own environment. They are provided as-is, with
 > **no guarantee of functionality, stability, or fitness** for any other setup.
 > Expect to read and adapt them before relying on them.
 
