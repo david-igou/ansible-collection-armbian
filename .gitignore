@@ -177,3 +177,7 @@ playbooks/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*
 .cursor/
 .claude/
 .cache/
+
+# antsibull-changelog generated cache (regenerated on each release;
+# also excluded from the published tarball via galaxy.yml build_ignore)
+changelogs/.plugin-cache.yaml

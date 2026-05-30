@@ -1,6 +1,296 @@
-This should be updated by antsibull-changelog. Do not edit this manually!
+============================================
+david\_igou.armbian Collection Release Notes
+============================================
 
-See https://github.com/ansible-community/antsibull-changelog/blob/main/docs/changelogs.rst for
-information on how to use antsibull-changelog.
+.. contents:: Topics
 
-Check out ``changelogs/config.yaml`` for its configuration. You need to change at least the ``title`` field in there.
+v0.0.3-alpha
+============
+
+Release Summary
+---------------
+
+First release with consolidated notes, rolling up all changes since the
+``v0.0.1-alpha`` tag: a per-host refactor of the build and rootfs
+pipeline, a reorganized ``playbooks/`` layout, complete role READMEs
+with generated-asset snippets, and a published antsibull-docs / Sphinx
+docsite on GitHub Pages with copy-paste-able getting-started and PXE
+netboot guides.
+
+This is an early-stage (alpha) release. Inventory variable names,
+default values, group names, role names, and playbook names may all
+shift between 0.0.x releases without long deprecation windows. Pin to
+a specific version in your ``requirements.yml``.
+
+Major Changes
+-------------
+
+- Always-netboot model: every onboarded board always has a
+  per-board ``pxelinux.cfg/01-<MAC>`` on the RouterOS router; the
+  ``default`` directive inside it selects ``nfs``, ``sd``, ``local``,
+  or ``local_kernel`` boot. Convergence rewrites the same file rather
+  than adding/removing files to flip modes.
+- Ansible collection for end-to-end management of Armbian-based ARM
+  SBCs: custom image build, per-host rootfs provisioning,
+  netboot/SD/local-disk boot-mode convergence, and PoE-driven hardware
+  lifecycle.
+- Nine single-purpose, single-host, transport-agnostic roles:
+  ``image_build``, ``image_extract``, ``disk_image``,
+  ``disk_provision``, ``rootfs_clone``, ``pxelinux_render``,
+  ``bootstrap_armbian``, ``board_boot_wait``, ``board_boot_verify``.
+- RouterOS-specific behaviour (TFTP/pxelinux uploads, PoE control,
+  user bootstrap) lives in swappable reference playbooks under
+  ``playbooks/routeros/``. Replace the directory to support a
+  different switching ecosystem.
+
+Minor Changes
+-------------
+
+- Added a single-purpose demo playbook for each role that lacked one, so
+  every role now has a same-named ``playbooks/<role>.yml`` showing minimal
+  known-good usage with concrete, logical variable values:
+  ``board_boot_wait.yml``, ``board_boot_verify.yml``, ``disk_image.yml``,
+  ``disk_provision.yml``, ``image_build.yml``, ``pxelinux_render.yml``, and
+  ``rootfs_provision.yml`` (``bootstrap_armbian.yml`` already existed). Each
+  mirrors its role README example and cross-references the richer workflow
+  playbook that composes the same role.
+- Fleet-wide armbian/build userpatches now live in
+  ``inventory/group_vars/armbian.yml`` under a new ``armbian``
+  parent group (covering both ``armbian_builders`` and ``boards``),
+  rather than as a ``vars:`` block inside the build playbook. The
+  rk3588 family overlay (PXE-first boot order, local_kernel localcmd
+  bake, uboot_env drift check, bcmdhd DKMS suppression) is unchanged
+  in content; only its location moved.
+- Inventory-contract test
+  (``playbooks/tests/test_build_and_publish_vars.yml``) gains a new
+  assertion that ``build_userpatches_common`` is visible on a
+  representative boards host via the new ``armbian`` parent group.
+- New ``playbooks/build_image.yml`` is a simplified single-board
+  build companion to
+  ``playbooks/build_and_publish_from_inventory.yml``. Edit the
+  ``armbian_build_*`` vars at the top of the file (board, branch,
+  cache + output dirs, userpatches) — no inventory resolution, no
+  pre-task templating, no Jinja inside the userpatches list.
+  Defaults target ``orangepi5pro`` and write to
+  ``/home/{{ ansible_user }}/armbian_build``.
+- New resolver task files in ``playbooks/tasks/``:
+  ``_resolve_board_config.yml``, ``_resolve_build_profile.yml``,
+  ``_resolve_rootfs_src.yml``. Pure transforms; no SSH side effects.
+- New role ``rootfs_provision`` (single primitive replacing
+  ``image_extract`` + ``rootfs_clone``). See its README and
+  ``meta/argument_specs.yml`` for the contract.
+- The ``image_build`` role now defaults ``armbian_build_cache_dir`` and
+  ``armbian_build_output_dir`` to ``{{ ansible_env.HOME }}/armbian_build``
+  (and ``/output``) instead of ``/var/lib/armbian_build``, so the role
+  runs become-free out of the box — the build tree lands under the
+  connecting user's real ``$HOME`` (resolved from facts, correct for
+  ``root`` and non-``/home`` homes alike), which ``compile.sh`` needs to
+  own for Docker auto-delegation.
+- The ``inventory/`` documentation-only catalogue gains
+  ``rk3588.yml`` and ``rk3588s.yml`` family group_vars files, plus
+  ``rk3588`` / ``rk3588s`` intermediate groups under ``boards`` in
+  ``hosts.yml`` so per-model groups inherit family-level defaults.
+- Two new molecule scenarios under ``extensions/molecule/``:
+  ``board_boot_verify`` (qemu/Debian, exercises the assertion role
+  via real ``ansible_mounts['/']``) and ``board_boot_wait`` (podman,
+  happy-path + timeout-path via TEST-NET-2 unroutable address).
+  Existing role-level molecule directories under ``roles/*/molecule/``
+  have been consolidated into ``extensions/molecule/`` for a single
+  source of test scenarios.
+- ``armbian_tftp_cache_dir`` now defaults to the absolute ``/tmp/sbc-tftp``
+  instead of an ``inventory_dir``-relative ``.cache/sbc-tftp`` path. A
+  single constant value resolves identically in the ``stage_router.yml``
+  fetch play and the imported ``routeros/upload_tftp_assets.yml`` upload
+  play (whose ``playbook_dir`` differs), and avoids a split when the
+  inventory directory is a symlink.
+- ``disk_image`` role input ``dd_bs`` renamed to ``disk_image_dd_bs``
+  for the same namespace-hygiene reason.
+- ``disk_provision`` role inputs are now prefixed with the role name:
+  ``disk_provision_source``, ``disk_provision_reset_identity``,
+  ``disk_provision_mount_dir_base``, ``disk_provision_render_only``,
+  ``disk_provision_installed_marker``. The unprefixed ``source``
+  variable in particular was prone to collision and is now safe.
+
+Breaking Changes / Porting Guide
+--------------------------------
+
+- Inventory group names (``boards``, ``netboot_server``,
+  ``armbian_builders``) are now parameterised via
+  ``armbian_boards_group``, ``armbian_netboot_server_group``, and
+  ``armbian_builders_group`` (defaults shipped in
+  ``inventory/group_vars/all.yml``). Operators with non-default group
+  naming can override per-collection rather than forking playbooks.
+- The ``armbian_build`` profile (branch, release, userpatches,
+  compile_args) follows the same family/model/host layered shape as
+  ``armbian_board_config``, with a fourth ``armbian_build_defaults`` layer
+  shipped in ``inventory/group_vars/all.yml``. The
+  ``playbooks/tasks/_resolve_build_profile.yml`` resolver merges all
+  layers; userpatches are list-concatenated with a hard-fail on duplicate
+  ``dest`` paths.
+- The ``armbian_image_urls`` model-keyed dict is gone. Per-host
+  ``armbian_rootfs_src`` (URL or path) replaces it, resolved by a new
+  ``playbooks/tasks/_resolve_rootfs_src.yml`` with precedence: host_vars >
+  published-manifest-derived path > fail.
+- The ``image_build`` role no longer uses ``become: true`` anywhere.
+  ``armbian_build_cache_dir`` and ``armbian_build_output_dir`` must
+  be writable by ``ansible_user`` on the builder host. Operators
+  keeping the ``/var/lib/armbian_build`` defaults must pre-create
+  and ``chown`` the directories once before the first run; pointing
+  them at a path under the user's home (e.g.
+  ``/home/{{ ansible_user }}/armbian_build``) avoids that one-time
+  setup.
+- The ``image_build`` role re-keyed by host. New required input
+  ``armbian_build_host`` (must be ``inventory_hostname``). Output paths
+  now suffix per-host (``<cache_dir>/<host>/build/`` and
+  ``<output_dir>/<host>/...img.xz``). Manifest gains a ``host:`` field in
+  the rebuild-decision tuple. Path-safety validation against ``/`` and
+  ``..`` in the host string.
+- The ``image_extract`` and ``rootfs_clone`` roles have been deleted and
+  replaced by a single ``rootfs_provision`` role. The new role accepts a
+  direct ``armbian_rootfs_src``, extracts to a per-host directory, stages
+  per-host TFTP artifacts, and resets host identity (hostname, machine-id,
+  ssh host keys) inline. Sentinel-based idempotent skip; URL-keyed shared
+  download cache; mount-aware safety guard.
+- The ``playbooks/`` directory has been reorganized into three
+  purpose-based buckets. Top level now holds only operational
+  workflow playbooks. The per-role demo playbooks moved to
+  ``playbooks/examples/`` (``board_boot_verify.yml``,
+  ``board_boot_wait.yml``, ``disk_image.yml``, ``disk_provision.yml``,
+  ``image_build.yml``, ``pxelinux_render.yml``,
+  ``rootfs_provision.yml``), and the hardware E2E playbooks moved to
+  ``playbooks/tests/`` alongside the existing localhost var-contract
+  tests (``test_fleet_e2e.yml``, ``test_hardware_e2e.yml``,
+  ``test_manual_psu_cold_boot.yml``, ``test_reprovision_e2e.yml``).
+  Only top-level playbooks are addressable by FQCN
+  (``david_igou.armbian.<name>``); update any scripts, CI, or
+  ``ansible-playbook`` invocations that referenced the old paths.
+- The collection is re-keyed from per-model to per-host as the unit of work
+  for image building and rootfs provisioning. Operators can now build and
+  roll out completely different images for hosts of the same hardware
+  model, with the full build profile expressed in inventory via a
+  three-layer family/model/host merge.
+- The top-level ``playbooks/poe_control.yml`` wrapper has been removed.
+  Nothing imported it (in-play power cycling goes through
+  ``routeros/tasks/poe_cycle.yml`` via the ``armbian_poe_cycle_tasks_file``
+  hook), so the only effect is that ad-hoc PoE control is now run
+  directly against the reference playbook:
+  ``ansible-playbook playbooks/routeros/poe_control.yml --limit <host>
+  -e armbian_poe_action=cycle``. The ``armbian_poe_control_playbook``
+  swap variable no longer exists.
+- ``playbooks/build_image.yml`` (the simplified single-board build
+  companion) has been removed. Use
+  ``playbooks/build_and_publish_from_inventory.yml`` for
+  inventory-driven builds, or ``playbooks/examples/image_build.yml``
+  for a minimal single-role demo.
+- ``playbooks/build_image.yml`` has been renamed to
+  ``playbooks/build_and_publish_from_inventory.yml`` to reflect what
+  it actually does (iterates every board in ``groups['boards']`` and
+  publishes images to the netboot server). The ``build_image.yml``
+  path is now occupied by a new, simplified single-board build
+  playbook (see Minor Changes). Update scripts or CI invocations
+  referring to the old path. The sibling
+  ``playbooks/tests/test_build_image_vars.yml`` has been renamed to
+  ``test_build_and_publish_vars.yml``, and the Makefile target
+  ``test-build-image-vars`` to ``test-build-and-publish-vars``.
+- ``playbooks/scripts/run-iter.sh`` (the per-iter hardware-E2E driver
+  wrapper) and ``playbooks/test_connection.yaml`` (an unreferenced
+  ad-hoc RouterOS reachability check superseded by
+  ``playbooks/routeros/plumbing_check.yml``) have been removed.
+- ``pxelinux_render`` role consumes the resolved ``armbian_board_config``
+  fact directly. Three caller-supplied inputs are removed:
+  ``board_console``, ``pxelinux_render_model_name``,
+  ``pxelinux_render_earlycon``. Callers must run
+  ``_resolve_board_config.yml`` in pre_tasks before invoking the role.
+- ``vars/boards.yml`` (the per-board catalogue) has been deleted. Per-model
+  hardware facts move to operator inventory under
+  ``inventory/group_vars/<family>.yml`` (``armbian_board_config_family``) and
+  ``inventory/group_vars/<model_group>.yml``
+  (``armbian_board_config_model``). A new resolver task
+  (``playbooks/tasks/_resolve_board_config.yml``) merges
+  family/model/host layers into the per-host ``armbian_board_config`` fact.
+
+Bugfixes
+--------
+
+- Fixed the ``image_build`` role README example to set the required
+  ``armbian_build_host`` input (the role's argument_specs marks it
+  ``required: true``; the example previously omitted it).
+- Fixed the ``pxelinux_render`` role README example, which put
+  ``delegate_to: localhost`` directly on ``include_role`` (rejected with
+  "'delegate_to' is not a valid attribute for a IncludeRole"). The render
+  is now wrapped in a delegated ``block``, matching
+  ``converge_boot_mode.yml``.
+- ``playbooks/provision_local_disk.yml`` now invokes the
+  ``disk_provision`` role through its current ``disk_binding``
+  interface (device + declarative ``layout``) instead of the removed
+  flat ``device``/``label``/``force`` vars, which left the playbook
+  broken after the per-host provisioning refactor. The ad-hoc input
+  variables (``armbian_local_disk_device``, ``armbian_local_disk_label``,
+  ``armbian_local_disk_force``) are unchanged; the playbook synthesizes
+  the canonical single grow-to-fill ext4 root layout from them. A new
+  optional ``armbian_local_disk_fast_wipe`` (default true) exposes the
+  role's blkdiscard fast path.
+- ``rootfs_provision``'s mountpoint guard used substring matching
+  (``'MOUNTED' in stdout``) which spuriously matched ``NOT_MOUNTED``
+  — the guard fired on every fresh run rather than only on
+  actually-mounted targets. Fixed with exact-string comparison plus
+  a switch to ``/proc/mounts`` (more reliable than ``mountpoint -q``
+  in some VM kernels).
+
+Known Issues
+------------
+
+- Tested primarily on Rockchip RK3588(s) boards (Orange Pi 5 Pro /
+  Max, Rock 5A/B). Other Armbian-supported boards should work but
+  have not all been brought up end-to-end.
+- The ``bootstrap_armbian`` role grants the created user unrestricted
+  ``NOPASSWD: ALL`` sudo — the user is automation-root by design.
+  Tighten the ``/etc/sudoers.d/<user>`` entry out-of-band post-deploy
+  if your threat model wants narrower scope.
+- ``armbian_default_password`` is the upstream Armbian default
+  (``"1234"``). Encrypt it with ansible-vault in any real inventory.
+
+Documentation Changes
+---------------------
+
+- Every role README example is now a complete, runnable playbook.
+  The ``disk_image`` and ``image_build`` examples gained the missing
+  play scaffolding (``hosts``/``become``/``gather_facts`` and explicit
+  ``vars``) and use the fully-qualified role name; ``board_boot_verify``
+  and ``board_boot_wait`` examples make their fact/timeout inputs
+  explicit.
+- Rewrote the docsite Getting started page to match the verbose
+  copy-paste style of the netboot page. Each step (Setup, Build,
+  Flash, Bootstrap) carries a self-contained playbook with every
+  variable spelled out inline plus the resulting state on the
+  builder or board. The same concrete board (``orange-pi-5-pro-01``)
+  threads through both pages.
+- Rewrote the docsite ``netboot`` page so every step is copy-paste-able.
+  Each section now carries a self-contained playbook with explicit
+  ``vars:`` values (no inventory resolution required to read it),
+  followed by the resulting file tree on the netboot server or router
+  and the rendered ``pxelinux.cfg`` for a concrete board threaded
+  through every section (``orange-pi-5-pro-01`` with MAC
+  ``aa:bb:cc:dd:ee:ff``).
+- Roles that generate files now document what they produce, with an
+  example file tree plus a snippet of the generated content:
+  ``pxelinux_render`` (the rendered ``01-<mac>`` pxelinux.cfg with
+  per-host TFTP paths), ``rootfs_provision`` (per-host rootfs identity
+  files, TFTP staging, and the provision sentinel JSON),
+  ``disk_provision`` (the transient ``.repart.d`` configs and the
+  generated ``/etc/fstab``), ``image_build`` (the per-host output
+  directory), and ``bootstrap_armbian`` (``authorized_keys`` and the
+  ``sudoers.d`` drop-in).
+- Split the docsite operator guide in two. The Getting started page now
+  walks through the simplest end-to-end use — build a custom Armbian
+  image with the ``image_build`` role, flash it to an SD card, and
+  bootstrap a login user — with no netboot server or RouterOS router in
+  play. A new ``netboot`` page covers the full PXE workflow in three
+  sections (Build, Rootfs, PXE assets), each pointing at the role and
+  workflow playbook that owns it.
+- The collection's operator guide is now published to the rendered docsite
+  on GitHub Pages, alongside the auto-generated collection and role
+  reference. The previous repo-only markdown is consolidated into a single
+  getting-started ``guide`` page under a ``General`` section, with a
+  curated short-titled page per role under a ``Roles`` section — mirroring
+  ``felixfontein/ansible-acme``'s ``extra-docs.yml`` layout.
