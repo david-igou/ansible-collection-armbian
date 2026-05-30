@@ -3,6 +3,7 @@ sections:
   - title: General
     toctree:
       - guide
+      - netboot
   - title: Roles
     toctree:
       - image_build_role
