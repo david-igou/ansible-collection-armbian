@@ -74,7 +74,7 @@ Or pin a version in `requirements.yml`:
 ---
 collections:
   - name: david_igou.armbian
-    version: 0.0.2-alpha
+    version: 0.0.3-alpha
 ```
 
 Upgrade to the latest:
