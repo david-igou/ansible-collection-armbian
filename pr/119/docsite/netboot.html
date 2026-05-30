@@ -1,0 +1,282 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PXE netboot &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="../_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7f41d439"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="david_igou.armbian.image_build role" href="image_build_role.html" />
+    <link rel="prev" title="Getting started" href="guide.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="../_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="guide.html">Getting started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">PXE netboot</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#install">Install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-build">The build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-rootfs">The rootfs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-pxe-assets">The PXE assets</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">PXE netboot</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <section id="pxe-netboot">
+<span id="ansible-collections-david-igou-armbian-docsite-netboot"></span><h1>PXE netboot<a class="headerlink" href="#pxe-netboot" title="Link to this heading"></a></h1>
+<p>The netboot workflow boots boards over PXE → NFS from a central server and
+falls back to local SD only on demand. The guiding invariant is
+<strong>always-netboot</strong>: every onboarded board always has a <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> on
+the RouterOS router, and a single <code class="docutils literal notranslate"><span class="pre">default</span></code> directive inside it selects
+the active boot mode.</p>
+<p>Three pieces of state need to be in place on a per-board basis before a
+board can come up on NFS:</p>
+<ol class="arabic simple">
+<li><p>A <strong>custom PXE-first Armbian image</strong> (the U-Boot <code class="docutils literal notranslate"><span class="pre">BOOT_TARGETS</span></code> order
+is patched in at build time so the board reliably netboots from
+power-up).</p></li>
+<li><p>A <strong>per-host NFS rootfs</strong> carved out of that image on the netboot
+server, with hostname / machine-id / SSH host keys reset.</p></li>
+<li><p><strong>PXE assets on the router</strong> — per-model kernel/initrd/dtb in
+<code class="docutils literal notranslate"><span class="pre">/ip</span> <span class="pre">tftp</span></code>, and a per-board <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> whose <code class="docutils literal notranslate"><span class="pre">default</span></code>
+directive selects <code class="docutils literal notranslate"><span class="pre">nfs</span></code> or <code class="docutils literal notranslate"><span class="pre">sd</span></code>.</p></li>
+</ol>
+<p>The sections below cover each piece in turn. Once all three are in place,
+<code class="docutils literal notranslate"><span class="pre">converge_boot_mode.yml</span></code> flips the <code class="docutils literal notranslate"><span class="pre">default</span></code> directive, power-cycles
+the board, and verifies it came up on the expected rootfs.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Early-stage 0.0.x — expect breaking changes between releases. Pin a
+specific version in your <code class="docutils literal notranslate"><span class="pre">requirements.yml</span></code>.</p>
+</div>
+<section id="install">
+<h2>Install<a class="headerlink" href="#install" title="Link to this heading"></a></h2>
+<p>The netboot workflow drives RouterOS, so install both the collection and
+the RouterOS reference dependencies:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>david_igou.armbian
+ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>playbooks/routeros/requirements.yml
+</pre></div>
+</div>
+<p>Each board in inventory needs at least <code class="docutils literal notranslate"><span class="pre">armbian_board_mac</span></code>,
+<code class="docutils literal notranslate"><span class="pre">armbian_board_model</span></code>, <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code>, plus PoE coordinates
+(<code class="docutils literal notranslate"><span class="pre">armbian_poe_switch</span></code>, <code class="docutils literal notranslate"><span class="pre">armbian_poe_port</span></code>) when the switch controls
+power. See the role reference for the full set of variables.</p>
+</section>
+<section id="the-build">
+<h2>The build<a class="headerlink" href="#the-build" title="Link to this heading"></a></h2>
+<p>Stock Armbian images don’t boot PXE first. The <code class="docutils literal notranslate"><span class="pre">image_build</span></code> role
+produces a custom <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> with the PXE-first <code class="docutils literal notranslate"><span class="pre">BOOT_TARGETS</span></code> order
+baked into U-Boot at compile time, via an <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code> userpatches
+overlay. The
+<code class="docutils literal notranslate"><span class="pre">build_and_publish_from_inventory.yml</span></code> workflow loops the role over
+every board in inventory, resolves the per-host build profile (family →
+model → host layers), and publishes the resulting <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> plus a
+<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> to the netboot server’s HTTP assets directory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/build_and_publish_from_inventory.yml
+</pre></div>
+</div>
+<p>Per-board build profile lives in inventory under
+<code class="docutils literal notranslate"><span class="pre">armbian_build_family</span></code> / <code class="docutils literal notranslate"><span class="pre">armbian_build_model</span></code> / <code class="docutils literal notranslate"><span class="pre">armbian_build_host</span></code>;
+the resolver primitive in <code class="docutils literal notranslate"><span class="pre">playbooks/tasks/_resolve_build_profile.yml</span></code>
+merges them and feeds the result into <code class="docutils literal notranslate"><span class="pre">image_build</span></code>. See the
+<a class="reference internal" href="../image_build_role.html#ansible-collections-david-igou-armbian-image-build-role"><span class="std std-ref">image_build role reference</span></a>.</p>
+</section>
+<section id="the-rootfs">
+<h2>The rootfs<a class="headerlink" href="#the-rootfs" title="Link to this heading"></a></h2>
+<p>Each board gets its own NFS rootfs so two same-model boards have
+independent identity on the wire. <code class="docutils literal notranslate"><span class="pre">stage_netboot_assets.yml</span></code> invokes
+the <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code> role once per board against the netboot server:</p>
+<ol class="arabic simple">
+<li><p>Resolve the per-host <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> source (host_vars
+<code class="docutils literal notranslate"><span class="pre">armbian_rootfs_src</span></code>, falling back to the published manifest from
+the previous step).</p></li>
+<li><p>Extract the rootfs into a per-model template (<code class="docutils literal notranslate"><span class="pre">_templates/&lt;model&gt;/</span></code>).</p></li>
+<li><p>Reflink-clone the template into a per-host directory
+(<code class="docutils literal notranslate"><span class="pre">&lt;inventory_hostname&gt;/</span></code>) — a zero-cost CoW snapshot on XFS, btrfs,
+or ZFS.</p></li>
+<li><p>Reset identity inside the clone: hostname, machine-id, SSH host keys.</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_netboot_assets.yml
+</pre></div>
+</div>
+<p>The NFS export root (<code class="docutils literal notranslate"><span class="pre">armbian_nfs_rootfs_path</span></code>, default
+<code class="docutils literal notranslate"><span class="pre">/srv/netboot/rootfs</span></code>) must already exist on the netboot server and be
+exported. See the
+<a class="reference internal" href="../rootfs_provision_role.html#ansible-collections-david-igou-armbian-rootfs-provision-role"><span class="std std-ref">rootfs_provision role reference</span></a>.</p>
+</section>
+<section id="the-pxe-assets">
+<h2>The PXE assets<a class="headerlink" href="#the-pxe-assets" title="Link to this heading"></a></h2>
+<p>Two pieces of router-side state make a board actually boot over the
+network: per-model TFTP assets (kernel, initrd, dtb) registered in
+<code class="docutils literal notranslate"><span class="pre">/ip</span> <span class="pre">tftp</span></code>, and a per-board <code class="docutils literal notranslate"><span class="pre">pxelinux.cfg</span></code> keyed on the board’s MAC.</p>
+<p><strong>Per-model TFTP assets</strong> — <code class="docutils literal notranslate"><span class="pre">stage_router.yml</span></code> fetches the
+kernel/initrd/dtb from the netboot server to a controller cache, then
+uploads them to the router and registers the <code class="docutils literal notranslate"><span class="pre">/ip</span> <span class="pre">tftp</span></code> rows:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/stage_router.yml
+</pre></div>
+</div>
+<p>This is a one-time step per model; assets persist across boot-mode
+changes.</p>
+<p><strong>Per-board pxelinux.cfg + boot-mode convergence</strong> —
+<code class="docutils literal notranslate"><span class="pre">converge_boot_mode.yml</span></code> is the workhorse that renders one
+<code class="docutils literal notranslate"><span class="pre">01-&lt;mac&gt;</span></code> pxelinux.cfg via the <code class="docutils literal notranslate"><span class="pre">pxelinux_render</span></code> role, uploads it
+to the router, PoE-cycles the board, and verifies it came up on the
+expected rootfs:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/converge_boot_mode.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">target_hosts</span><span class="o">=</span>orange-pi-5-pro-01
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">default</span></code> directive inside the pxelinux.cfg is driven by each
+board’s <code class="docutils literal notranslate"><span class="pre">armbian_boot_mode</span></code> inventory variable (<code class="docutils literal notranslate"><span class="pre">nfs</span></code> or <code class="docutils literal notranslate"><span class="pre">sd</span></code>).
+To flip a board ad hoc without editing inventory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/set_boot_mode.yml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limit<span class="w"> </span>orange-pi-5-pro-01<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_boot_mode</span><span class="o">=</span>sd
+</pre></div>
+</div>
+<p>See the
+<a class="reference internal" href="../pxelinux_render_role.html#ansible-collections-david-igou-armbian-pxelinux-render-role"><span class="std std-ref">pxelinux_render role reference</span></a>
+and the RouterOS reference playbooks under <code class="docutils literal notranslate"><span class="pre">playbooks/routeros/</span></code> for
+the swappable transport layer.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="guide.html" class="btn btn-neutral float-left" title="Getting started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="image_build_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.image_build role" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>
