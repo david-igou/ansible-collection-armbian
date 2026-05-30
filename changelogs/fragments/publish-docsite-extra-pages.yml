@@ -1,0 +1,9 @@
+---
+doc_changes:
+  - |
+    The collection's operator guide is now published to the rendered docsite
+    on GitHub Pages, alongside the auto-generated collection and role
+    reference. The previous repo-only markdown is consolidated into a single
+    getting-started ``guide`` page under a ``General`` section, with a
+    curated short-titled page per role under a ``Roles`` section — mirroring
+    ``felixfontein/ansible-acme``'s ``extra-docs.yml`` layout.
