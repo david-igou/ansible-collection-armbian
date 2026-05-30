@@ -1,13 +1,6 @@
 ---
-# Extra documentation pages included in the rendered docsite, on top of the
-# auto-generated collection / role reference.
-#
-# The Roles section is a curated, short-titled nav for the roles (each page
-# links to the full auto-generated reference for parameters). These are
-# separate docnames from the auto-generated role reference pages, so both
-# coexist — the curated section is the slim primary nav.
 sections:
-  - title: Documentation
+  - title: General
     toctree:
       - guide
   - title: Roles
