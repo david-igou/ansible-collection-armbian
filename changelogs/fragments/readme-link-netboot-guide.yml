@@ -1,0 +1,8 @@
+---
+doc_changes:
+  - |
+    Link the new docsite PXE netboot guide alongside the SD-boot
+    getting-started guide in the top-level ``README.md`` and
+    ``playbooks/README.md``, and drop the stale "mental model" framing
+    on the getting-started link (the guide is now a copy-paste
+    walkthrough).

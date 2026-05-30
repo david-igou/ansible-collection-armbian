@@ -56,8 +56,11 @@ under `playbooks/routeros/` import them):
 ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 ```
 
-See the [getting-started guide](docs/docsite/rst/guide.rst) for the mental
-model and an end-to-end example; per-role detail lives in the
+See the [getting-started guide](docs/docsite/rst/guide.rst) for a
+copy-paste SD-boot walkthrough (build → flash → bootstrap) and the
+[PXE netboot guide](docs/docsite/rst/netboot.rst) for the full
+always-netboot workflow (Build / Rootfs / PXE assets); per-role detail
+lives in the
 [documentation site](https://david-igou.github.io/ansible-collection-armbian/).
 
 ## Installation
@@ -222,9 +225,13 @@ shape.
 ## Related Information
 
 - [**Documentation site**](https://david-igou.github.io/ansible-collection-armbian/)
-  — getting-started guide + generated collection / role reference (antsibull-docs).
-- [Getting-started guide](docs/docsite/rst/guide.rst) — mental model and an
-  end-to-end example.
+  — getting-started + PXE netboot guides and the generated collection /
+  role reference (antsibull-docs).
+- [Getting-started guide](docs/docsite/rst/guide.rst) — copy-paste SD-boot
+  walkthrough (build → flash → bootstrap).
+- [PXE netboot guide](docs/docsite/rst/netboot.rst) — full always-netboot
+  workflow with concrete playbooks, file trees, and a rendered
+  ``pxelinux.cfg``.
 
 External:
 

@@ -49,5 +49,9 @@ ansible-galaxy collection install -r requirements.yml
 ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 ```
 
-See the repo `CLAUDE.md` and [`docs/`](../docs/) for full per-playbook usage,
-required inventory variables, and the boot-mode model.
+See the repo `CLAUDE.md` and the
+[documentation site](https://david-igou.github.io/ansible-collection-armbian/)
+for full per-playbook usage, required inventory variables, and the
+boot-mode model. The docsite ships two operator guides: the
+[getting-started SD-boot walkthrough](../docs/docsite/rst/guide.rst) and
+the [PXE netboot guide](../docs/docsite/rst/netboot.rst).
