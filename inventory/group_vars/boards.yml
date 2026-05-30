@@ -26,9 +26,7 @@
 # Defaults live in roles/board_boot_wait/defaults/main.yml and are
 # consumed by playbooks/tasks/cold_boot_with_retry.yml and
 # playbooks/tasks/wait_for_ssh_with_cycle_retry.yml. See
-# docs/retry-configuration.md for tuning intuition and recommended
-# combinations (healthy / flaky-PoE / max-consistency / fast-iter /
-# fresh-rootfs).
+# roles/board_boot_wait/meta/argument_specs.yml for each knob's meaning.
 #
 # NB: test_fleet_e2e.yml defaults armbian_boot_retry_attempts
 # to 1 at play scope (one auto-retry per phase) so a single SD

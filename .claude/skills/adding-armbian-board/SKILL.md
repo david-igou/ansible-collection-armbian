@@ -135,4 +135,4 @@ See `docs/uboot-armbian-build-explainer.html` §8 for the three-layer failure mo
 - `docs/uboot-armbian-build-explainer.html` §8 — three-layer failure model + Approach B rationale.
 - `docs/superpowers/specs/.rock5b-friction-notes.md` — empirical baseline this skill is built on.
 - `CLAUDE.md` "Adding a new board" — short pointer + minimum-touched-files list (collection edits are not required; only inventory edits needed).
-- `docs/boot-mode-override.md`, `docs/retry-configuration.md` — boot-mode convergence + retry knobs (post-staging); the retry primitives live in `playbooks/tasks/cold_boot_with_retry.yml` and friends (no role-level wrapper any more).
+- boot-mode convergence + retry knobs (post-staging): the retry primitives live in `playbooks/tasks/cold_boot_with_retry.yml` and friends (no role-level wrapper any more); the knob descriptions live in `roles/board_boot_wait/meta/argument_specs.yml`.

@@ -41,7 +41,7 @@ directory and points the transport-hook variables at it. Top-level orchestration
 playbooks (`converge_boot_mode.yml`, `stage_router.yml`) and the E2E harnesses
 under `playbooks/tests/` (`test_hardware_e2e.yml`) compose roles + reference
 playbooks. See
-[`docs/boot-mode-override.md`](docs/boot-mode-override.md).
+[`docs/docsite/rst/guide.rst`](docs/docsite/rst/guide.rst).
 
 ## Status: early-stage (0.0.x) — expect breaking changes
 
@@ -139,10 +139,11 @@ david_igou/armbian/   (this repo root)
 │       ├── <model_group>.yml      # Per-model vars: armbian_board_config_model, armbian_build_model
 │       └── routeros.yml           # network_cli connection plumbing
 └── docs/
-    ├── boot-mode-override.md      # Three override methods (inventory, -e, U-Boot env)
-    ├── retry-configuration.md     # Retry/timeout knob tuning recipes
-    └── runbooks/
-        └── reprovision-local-disk.md  # disk_provision lifecycle runbook
+    └── docsite/                   # antsibull-docs docsite sources (published to GitHub Pages)
+        ├── links.yml              # Edit-on-GitHub + extra/communication links
+        ├── extra-docs.yml         # Sections + toctree for the extra pages below
+        └── rst/                   # Extra docsite pages (RST)
+            └── guide.rst          # Single getting-started guide: intro + example usage
 ```
 
 **`playbooks/` layout convention** — three buckets, sorted by purpose:
@@ -599,7 +600,5 @@ filtering.
 - `inventory/group_vars/boards.yml` — `armbian_router` + retry-knob overrides
 - `playbooks/build_and_publish_from_inventory.yml` — custom Armbian image build pipeline (per-host loop)
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
-- `docs/boot-mode-override.md` — three boot mode override methods (inventory, -e, U-Boot env)
-- `docs/retry-configuration.md` — retry/timeout knob recipes
-- `docs/runbooks/reprovision-local-disk.md` — disk_provision lifecycle runbook
+- `docs/docsite/rst/guide.rst` — single getting-started guide (intro + example usage); per-role detail lives in the generated role reference
 - `galaxy.yml` — collection namespace, version (0.0.2-alpha), external dependencies

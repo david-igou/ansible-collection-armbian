@@ -56,8 +56,9 @@ under `playbooks/routeros/` import them):
 ansible-galaxy collection install -r playbooks/routeros/requirements.yml
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the full role /
-playbook / data-flow picture.
+See the [getting-started guide](docs/docsite/rst/guide.rst) for the mental
+model and an end-to-end example; per-role detail lives in the
+[documentation site](https://david-igou.github.io/ansible-collection-armbian/).
 
 ## Installation
 
@@ -95,8 +96,7 @@ ansible-playbook playbooks/build_and_publish_from_inventory.yml
 ```
 
 Produces a `.img.xz` on `armbian_builders` and publishes it to the
-netboot server's HTTP root. See
-[docs/lifecycle.md §0.1](docs/lifecycle.md#01-build-or-download-the-custom-armbian-image).
+netboot server's HTTP root.
 
 ### Onboard a freshly flashed board
 
@@ -110,8 +110,7 @@ ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pr
 
 Creates the SSH-key user, stages the per-host NFS rootfs, writes the
 per-board `pxelinux.cfg/01-<MAC>`, cold-cycles the board via PoE, and
-verifies it comes up on the declared rootfs. Full walkthrough:
-[docs/lifecycle.md](docs/lifecycle.md).
+verifies it comes up on the declared rootfs.
 
 ### Toggle a board between NFS and SD rootfs
 
@@ -127,8 +126,8 @@ ansible-playbook playbooks/set_boot_mode.yml \
   --limit orange-pi-5-pro-01 -e armbian_boot_mode=sd
 ```
 
-See [docs/boot-mode-override.md](docs/boot-mode-override.md) for all
-three methods (inventory, `-e`, U-Boot env).
+The inventory value persists across converge runs; the `-e` override
+applies to a single run.
 
 ### Provision a board's local NVMe for high-IO workloads
 
@@ -142,8 +141,7 @@ ansible-playbook playbooks/reprovision_to_local.yml --limit orange-pi-5-max-01
 ```
 
 Auto-reverts to NFS on local-boot failure with a diagnostic bundle
-captured. See
-[docs/runbooks/reprovision-local-disk.md](docs/runbooks/reprovision-local-disk.md).
+captured.
 
 ### Recover a wedged board via PoE
 
@@ -153,8 +151,7 @@ ansible-playbook playbooks/routeros/poe_control.yml \
 ```
 
 Delegates the PoE command to each board's `armbian_poe_switch`. Also
-takes `armbian_poe_action=off` / `=on`. See
-[docs/daily-operations.md](docs/daily-operations.md).
+takes `armbian_poe_action=off` / `=on`.
 
 ## Roles
 
@@ -188,8 +185,7 @@ covers.
 
 End-to-end hardware tests against a real fleet (`test_hardware_e2e.yml`,
 `test_fleet_e2e.yml`, `test_reprovision_e2e.yml`, etc.) are not run in
-CI — they require physical boards. See
-[docs/daily-operations.md](docs/daily-operations.md) for usage.
+CI — they require physical boards.
 
 ## Contributing
 
@@ -226,20 +222,9 @@ shape.
 ## Related Information
 
 - [**Documentation site**](https://david-igou.github.io/ansible-collection-armbian/)
-  — generated collection + role reference (antsibull-docs).
-
-Documentation in this repo:
-
-- [Architecture and data flow](docs/architecture.md) — roles,
-  dependencies, mental model, full playbooks table
-- [Lifecycle walkthrough](docs/lifecycle.md) — Phase 0 (control plane)
-  + Phase 1 (per-board onboarding)
-- [Daily operations](docs/daily-operations.md) — boot-mode toggling,
-  PoE control, reprovisioning, hardware E2E
-- [Boot mode override methods](docs/boot-mode-override.md) — inventory,
-  `-e`, and U-Boot env approaches
-- [Retry / timeout knob recipes](docs/retry-configuration.md)
-- [Reprovision a board's local disk](docs/runbooks/reprovision-local-disk.md)
+  — getting-started guide + generated collection / role reference (antsibull-docs).
+- [Getting-started guide](docs/docsite/rst/guide.rst) — mental model and an
+  end-to-end example.
 
 External:
 
