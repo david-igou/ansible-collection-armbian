@@ -1,0 +1,9 @@
+---
+doc_changes:
+  - |
+    Rewrote the docsite Getting started page to match the verbose
+    copy-paste style of the netboot page. Each step (Setup, Build,
+    Flash, Bootstrap) carries a self-contained playbook with every
+    variable spelled out inline plus the resulting state on the
+    builder or board. The same concrete board (``orange-pi-5-pro-01``)
+    threads through both pages.
