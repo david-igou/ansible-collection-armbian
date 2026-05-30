@@ -74,11 +74,11 @@
   
               <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Getting started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#install">Install</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#inventory">Inventory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#build-a-custom-image">Build a custom image</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-setup">The setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-build">The build</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#flash-the-sd-card">Flash the SD card</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#bootstrap-the-board">Bootstrap the board</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#where-to-next">Where to next</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="netboot.html">PXE netboot</a></li>
@@ -132,88 +132,178 @@
              
   <section id="getting-started">
 <span id="ansible-collections-david-igou-armbian-docsite-guide"></span><h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">david_igou.armbian</span></code> manages Armbian-based ARM SBCs end to end: building a
-custom Armbian image, writing it to a board, and provisioning a regular
+<p><code class="docutils literal notranslate"><span class="pre">david_igou.armbian</span></code> manages Armbian-based ARM SBCs end to end: building
+a custom Armbian image, writing it to a board, and provisioning a regular
 login user — all with single-purpose, parameter-driven roles composed by
-workflow playbooks. This page walks through the simplest end-to-end use:
-build a custom image and boot a single board from its SD card.</p>
+workflow playbooks. This page walks through the simplest use: build a
+regular Armbian image, flash it to an SD card, and bootstrap a login user.
+No netboot server, no router, no PXE patches.</p>
 <p>For the PXE-netboot workflow (custom PXE-first image, NFS rootfs, and
 RouterOS-driven boot-mode convergence), see
 <a class="reference internal" href="netboot.html#ansible-collections-david-igou-armbian-docsite-netboot"><span class="std std-ref">PXE netboot</span></a>. Per-role
 inputs and outputs are documented in the role reference.</p>
+<p>Every example threads the same concrete board — <code class="docutils literal notranslate"><span class="pre">orange-pi-5-pro-01</span></code> —
+so the variables read straight across.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Early-stage 0.0.x — expect breaking changes between releases. Pin a
 specific version in your <code class="docutils literal notranslate"><span class="pre">requirements.yml</span></code>.</p>
 </div>
-<section id="install">
-<h2>Install<a class="headerlink" href="#install" title="Link to this heading"></a></h2>
+<section id="the-setup">
+<h2>The setup<a class="headerlink" href="#the-setup" title="Link to this heading"></a></h2>
+<p>Install the collection:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-galaxy<span class="w"> </span>collection<span class="w"> </span>install<span class="w"> </span>david_igou.armbian
 </pre></div>
 </div>
-</section>
-<section id="inventory">
-<h2>Inventory<a class="headerlink" href="#inventory" title="Link to this heading"></a></h2>
-<p>You need two hosts: a Docker-capable <strong>builder</strong> that runs
-<code class="docutils literal notranslate"><span class="pre">armbian/build</span></code>, and the <strong>board</strong> that will be booted.</p>
+<p>The examples below assume this inventory shape: a Docker-capable
+<strong>builder</strong> that runs <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code>, and the <strong>board</strong> itself.
+Replace the two hosts with your own and adjust addresses; everything
+else is verbatim:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># inventory/hosts.yml</span>
 <span class="nt">all</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">children</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">armbian_builders</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">hosts</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">builder-01</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.10</span>
+<span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.0.2.5</span>
 <span class="w">    </span><span class="nt">boards</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">hosts</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">my-board</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.50</span>
-<span class="w">          </span><span class="nt">armbian_build_board</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orangepi5pro</span><span class="w">    </span><span class="c1"># armbian/build BOARD= value</span>
-<span class="w">          </span><span class="nt">armbian_build_branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current</span><span class="w">        </span><span class="c1"># current | edge | legacy | vendor</span>
-<span class="w">          </span><span class="nt">armbian_build_release</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bookworm</span>
+<span class="w">        </span><span class="nt">orange-pi-5-pro-01</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.0.2.111</span>
+<span class="w">          </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian</span>
 
 <span class="c1"># inventory/group_vars/all.yml</span>
-<span class="nt">armbian_bootstrap_ssh_keys</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;ssh-ed25519</span><span class="nv"> </span><span class="s">AAAA...</span><span class="nv"> </span><span class="s">you@workstation&quot;</span>
+<span class="nt">armbian_default_password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1234&quot;</span>
 </pre></div>
 </div>
 </section>
-<section id="build-a-custom-image">
-<h2>Build a custom image<a class="headerlink" href="#build-a-custom-image" title="Link to this heading"></a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">image_build</span></code> role builds one <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> per board on a builder host
-using <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code> in Docker mode. The output (<code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> + a
-<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>) lands at
-<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">armbian_build_output_dir</span> <span class="pre">}}/{{</span> <span class="pre">armbian_build_host</span> <span class="pre">}}/</span></code> on the builder.
-For a regular SD-bootable image, no userpatches are required.</p>
-<p>A minimal demo playbook lives at <code class="docutils literal notranslate"><span class="pre">playbooks/examples/image_build.yml</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/examples/image_build.yml<span class="w"> </span>--limit<span class="w"> </span>builder-01
+<section id="the-build">
+<h2>The build<a class="headerlink" href="#the-build" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">image_build</span></code> runs <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code> in Docker mode on the builder
+host and writes a <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> plus a <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> to
+<code class="docutils literal notranslate"><span class="pre">$HOME/armbian_build/output/&lt;host&gt;/</span></code>. A regular SD-bootable image
+needs no userpatches — board, branch, and release are the only inputs.</p>
+<p>Drop this into <code class="docutils literal notranslate"><span class="pre">playbooks/local/build.yml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build a regular Armbian image for orange-pi-5-pro-01</span>
+<span class="w">  </span><span class="nt">hosts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builder-01</span>
+<span class="w">  </span><span class="nt">gather_facts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">tasks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.image_build</span>
+<span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">armbian_build_board</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">orangepi5pro</span>
+<span class="w">        </span><span class="nt">armbian_build_host</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro-01</span>
+<span class="w">        </span><span class="nt">armbian_build_branch</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">current</span>
+<span class="w">        </span><span class="nt">armbian_build_release</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bookworm</span>
 </pre></div>
 </div>
-<p>See the <a class="reference internal" href="../image_build_role.html#ansible-collections-david-igou-armbian-image-build-role"><span class="std std-ref">image_build role reference</span></a>
-for the full parameter list.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/local/build.yml
+</pre></div>
+</div>
+<p>The output on the builder:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>$HOME/armbian_build/output/
+└── orange-pi-5-pro-01/
+    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz
+    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz.sha
+    └── manifest.json
+</pre></div>
+</div>
+<p>The accompanying <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> records what was built; the role uses
+it as its idempotency key on subsequent runs (re-running <code class="docutils literal notranslate"><span class="pre">build.yml</span></code>
+is a no-op until <code class="docutils literal notranslate"><span class="pre">board</span></code>, <code class="docutils literal notranslate"><span class="pre">branch</span></code>, <code class="docutils literal notranslate"><span class="pre">release</span></code>, <code class="docutils literal notranslate"><span class="pre">armbian_build_ref</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">armbian_build_userpatches</span></code> change):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;patch_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;armbian_build_ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v26.2.0-trunk.844&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;board&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;orangepi5pro&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;branch&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;current&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bookworm&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;image_filename&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;built_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-05-30T12:34:56Z&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
 </section>
 <section id="flash-the-sd-card">
 <h2>Flash the SD card<a class="headerlink" href="#flash-the-sd-card" title="Link to this heading"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">image_build</span></code>’s output is a regular Armbian <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code>. Copy it off the
-builder and write it to an SD card with whatever flashing tool you prefer
-(<code class="docutils literal notranslate"><span class="pre">balenaEtcher</span></code>, <code class="docutils literal notranslate"><span class="pre">dd</span></code>, or Armbian’s own writer):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>scp<span class="w"> </span>builder-01:/path/to/output/my-board/Armbian_*.img.xz<span class="w"> </span>.
-xz<span class="w"> </span>-dc<span class="w"> </span>Armbian_*.img.xz<span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>dd<span class="w"> </span><span class="nv">of</span><span class="o">=</span>/dev/sdX<span class="w"> </span><span class="nv">bs</span><span class="o">=</span>4M<span class="w"> </span><span class="nv">status</span><span class="o">=</span>progress<span class="w"> </span><span class="nv">conv</span><span class="o">=</span>fsync
+<p>The <code class="docutils literal notranslate"><span class="pre">image_build</span></code> role only produces the <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code>; flashing is a
+manual step because <code class="docutils literal notranslate"><span class="pre">disk_image</span></code> can’t write to a board’s own boot
+disk. Copy the image off the builder and write it to an SD card on your
+workstation:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>scp<span class="w"> </span>builder-01:armbian_build/output/orange-pi-5-pro-01/Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz<span class="w"> </span>.
+
+<span class="c1"># Identify the SD card; double-check before running dd.</span>
+lsblk
+
+xz<span class="w"> </span>-dc<span class="w"> </span>Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>dd<span class="w"> </span><span class="nv">of</span><span class="o">=</span>/dev/sdX<span class="w"> </span><span class="nv">bs</span><span class="o">=</span>4M<span class="w"> </span><span class="nv">status</span><span class="o">=</span>progress<span class="w"> </span><span class="nv">conv</span><span class="o">=</span>fsync
 </pre></div>
 </div>
-<p>Insert the SD card in the board and power it on.</p>
+<p>Insert the SD card in the board, power it on, and confirm it’s reachable
+on the address you set in inventory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>root@192.0.2.111<span class="w">   </span><span class="c1"># password: 1234</span>
+</pre></div>
+</div>
 </section>
 <section id="bootstrap-the-board">
 <h2>Bootstrap the board<a class="headerlink" href="#bootstrap-the-board" title="Link to this heading"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code> connects as <code class="docutils literal notranslate"><span class="pre">root</span></code> with Armbian’s default password
-and replaces it with your inventory user — passwordless sudo, SSH-key auth
-only, password login disabled. The play is idempotent.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/bootstrap_armbian.yml<span class="w"> </span>--limit<span class="w"> </span>my-board
+<p>A freshly flashed Armbian image only has the <code class="docutils literal notranslate"><span class="pre">root</span></code> user with the
+default password (<code class="docutils literal notranslate"><span class="pre">&quot;1234&quot;</span></code>). <code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code> connects as <code class="docutils literal notranslate"><span class="pre">root</span></code>,
+provisions your inventory user with passwordless sudo + SSH-key login,
+drops Armbian’s first-login TUI, and disables password authentication.</p>
+<p>Drop this into <code class="docutils literal notranslate"><span class="pre">playbooks/local/bootstrap.yml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Bootstrap orange-pi-5-pro-01 with an SSH-key login user</span>
+<span class="w">  </span><span class="nt">hosts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro-01</span>
+<span class="w">  </span><span class="nt">gather_facts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># Connect as root with the default Armbian password — this is the</span>
+<span class="w">    </span><span class="c1"># only user that exists before bootstrap runs. After this playbook</span>
+<span class="w">    </span><span class="c1"># succeeds, subsequent plays connect as `armbian` (ansible_user in</span>
+<span class="w">    </span><span class="c1"># inventory) using key auth.</span>
+<span class="w">    </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<span class="w">    </span><span class="nt">ansible_password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1234&quot;</span>
+<span class="w">    </span><span class="nt">ansible_ssh_common_args</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;-o</span><span class="nv"> </span><span class="s">StrictHostKeyChecking=no</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">UserKnownHostsFile=/dev/null&quot;</span>
+<span class="w">    </span><span class="nt">ansible_become</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">roles</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.bootstrap_armbian</span>
+<span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">armbian_bootstrap_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian</span>
+<span class="w">        </span><span class="nt">armbian_bootstrap_ssh_keys</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;ssh-ed25519</span><span class="nv"> </span><span class="s">AAAA...your-public-key...</span><span class="nv"> </span><span class="s">you@workstation&quot;</span>
 </pre></div>
 </div>
-<p>From here the board is a normal Ansible target. Other roles work standalone
-too — <code class="docutils literal notranslate"><span class="pre">disk_image</span></code> streams an <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> onto a block device,
-<code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> applies a declarative GPT layout to a local disk, and
-the netboot playbooks compose the whole fleet (see the netboot guide).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/local/bootstrap.yml
+</pre></div>
+</div>
+<p>The role leaves the board in this state — a regular <code class="docutils literal notranslate"><span class="pre">armbian</span></code> user
+with key-only login and passwordless sudo:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>/home/armbian/.ssh/authorized_keys     # the supplied public key(s)
+/etc/sudoers.d/armbian                  # mode 0440, visudo-validated
+
+# /etc/sudoers.d/armbian
+armbian ALL=(ALL) NOPASSWD: ALL
+</pre></div>
+</div>
+<p>It also removes <code class="docutils literal notranslate"><span class="pre">/root/.not_logged_in_yet</span></code> (Armbian’s first-login TUI)
+and sets <code class="docutils literal notranslate"><span class="pre">PasswordAuthentication</span> <span class="pre">no</span></code> in <code class="docutils literal notranslate"><span class="pre">/etc/ssh/sshd_config</span></code> so the
+next reboot is key-only. Verify with key auth:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>armbian@192.0.2.111
+</pre></div>
+</div>
+<p>From here the board is a regular Ansible target. Re-running
+<code class="docutils literal notranslate"><span class="pre">bootstrap.yml</span></code> reconciles <code class="docutils literal notranslate"><span class="pre">authorized_keys</span></code> and is otherwise a no-op.</p>
+</section>
+<section id="where-to-next">
+<h2>Where to next<a class="headerlink" href="#where-to-next" title="Link to this heading"></a></h2>
+<p>Other roles work standalone too — <code class="docutils literal notranslate"><span class="pre">disk_image</span></code> streams an <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code>
+onto a block device (run from a board booted from a different device),
+and <code class="docutils literal notranslate"><span class="pre">disk_provision</span></code> applies a declarative GPT layout to a local disk.</p>
+<p>For the full PXE-netboot workflow that builds a PXE-first image, carves
+out per-host NFS rootfs on a netboot server, and drives boot-mode
+convergence via RouterOS, see
+<a class="reference internal" href="netboot.html#ansible-collections-david-igou-armbian-docsite-netboot"><span class="std std-ref">PXE netboot</span></a>.</p>
 </section>
 </section>
 
