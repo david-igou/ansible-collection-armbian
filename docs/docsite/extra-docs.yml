@@ -1,8 +1,22 @@
 ---
 # Extra documentation pages included in the rendered docsite, on top of the
-# auto-generated collection / role reference. A single getting-started guide;
-# per-role detail lives in the generated role reference.
+# auto-generated collection / role reference.
+#
+# The Roles section is a curated, short-titled nav for the roles (each page
+# links to the full auto-generated reference for parameters). These are
+# separate docnames from the auto-generated role reference pages, so both
+# coexist — the curated section is the slim primary nav.
 sections:
   - title: Documentation
     toctree:
       - guide
+  - title: Roles
+    toctree:
+      - image_build_role
+      - rootfs_provision_role
+      - disk_image_role
+      - disk_provision_role
+      - pxelinux_render_role
+      - board_boot_wait_role
+      - board_boot_verify_role
+      - bootstrap_armbian_role
