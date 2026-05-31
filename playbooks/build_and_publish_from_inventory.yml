@@ -11,6 +11,18 @@
 # A host opts in by having any of armbian_build_{family,model,host} set.
 # A host with only armbian_rootfs_src (stock upstream) has no opt-in and
 # is skipped by this playbook.
+#
+# Use -e armbian_boards_group=<group> (or default 'boards') — not --limit.
+# The three plays target different host groups; --limit silently empties
+# the builders and netboot_server plays.
+
+- name: Pre-flight — refuse --limit on composite playbook
+  hosts: "{{ armbian_boards_group | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+      vars:
+        _expected_pattern: "{{ armbian_boards_group | default('boards') }}"
 
 - name: Resolve effective configs per board host
   hosts: "{{ armbian_boards_group | default('boards') }}"

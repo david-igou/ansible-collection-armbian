@@ -1,0 +1,41 @@
+---
+bugfixes:
+  - |
+    Fixed ``playbooks/tasks/render_and_upload_pxelinux.yml`` resolving
+    ``routeros/tasks/upload_pxelinux_one.yml`` via ``{{ playbook_dir }}``,
+    which broke whenever the helper was included from a playbook outside
+    ``playbooks/`` (e.g. anything under ``playbooks/tests/``). The path
+    is now relative to the helper file itself (``../routeros/...``),
+    matching the sibling pattern used in
+    ``playbooks/tasks/cold_boot_with_retry.yml``.
+  - |
+    Fixed ``playbooks/tests/test_hardware_e2e.yml`` hardcoding ``sd`` as
+    the baseline boot mode for Pre-flight / Phase 3 / Cleanup pxelinux
+    convergence. Boards declared as ``armbian_boot_mode: local_kernel``
+    (NVMe with ``armbi_root_local``, no working ``armbi_root`` SD card)
+    could not boot the SD label and timed out at TCP/22. The test now
+    parameterises baseline off the host's inventory ``armbian_boot_mode``
+    (override with ``-e baseline_mode=<mode>``), bypasses ``known_hosts``
+    for the duration of the play so rootfs-identity swaps between
+    baseline and NFS don't trip ``StrictHostKeyChecking`` mismatches,
+    passes ``_skip_ssh_stability_check: true`` to ``cold_boot_with_retry``
+    on the three phases that chain ``auto_bootstrap_if_needed`` (so a
+    fresh per-host NFS rootfs gets the inventory user provisioned
+    before any wait_for_connection that needs it), and defaults
+    ``armbian_boot_retry_attempts`` to ``1`` (matching ``test_fleet_e2e.yml``
+    convention for transient cold-boot flakes).
+minor_changes:
+  - |
+    Composite multi-play playbooks now refuse ``--limit`` and fail fast
+    with a clear ``-e target_hosts=<pattern>`` suggestion when invoked
+    with the wrong knob. Previously, ``--limit`` silently emptied the
+    plays targeting the router or netboot_server because ``--limit`` is
+    global while ``target_hosts`` is intentionally per-play. Affected
+    playbooks: ``converge_boot_mode.yml``,
+    ``build_and_publish_from_inventory.yml``, ``stage_router.yml``,
+    ``tests/test_fleet_e2e.yml``. Implemented via the shared
+    ``playbooks/tasks/_assert_no_limit.yml`` task file, which compares
+    the inventory-resolved host count for the caller's expected pattern
+    against ``ansible_play_hosts_all``. Same-group multi-play playbooks
+    (``reprovision_to_local.yml``, ``tests/test_reprovision_e2e.yml``)
+    are unaffected — their docstrings continue to document ``--limit``.

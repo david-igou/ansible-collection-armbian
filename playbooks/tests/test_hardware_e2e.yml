@@ -3,13 +3,22 @@
 #
 # Per-board pxelinux.cfg on the router always exists; U-Boot PXE-loads
 # it every boot and the `default` directive selects nfsroot vs local
-# SD. This playbook drives the target board through three phases:
-#   1. SD baseline — converge pxelinux `default sd`, PoE cycle, assert
+# rootfs. This playbook drives the target board through three phases:
+#   1. baseline — converge pxelinux to the host's inventory-declared
+#      armbian_boot_mode (or -e baseline_mode=<mode>), PoE cycle, assert
 #      root on a local block device
 #   2. nfsroot — set `default nfs`, render pxelinux, PoE cycle, assert
 #      NFS rootfs
-#   3. Back to SD — set `default sd`, render pxelinux, PoE cycle,
-#      assert local rootfs again
+#   3. Back to baseline — set `default <baseline_mode>`, render pxelinux,
+#      PoE cycle, assert local rootfs again
+#
+# baseline_mode defaults to the host's inventory armbian_boot_mode so
+# boards configured for sd, local, or local_kernel all work without
+# extra flags. Pass -e baseline_mode=<mode> to pin a specific baseline.
+# baseline_mode must be a local-rooted mode (sd, local, local_kernel,
+# or any extra mode whose label doesn't produce an NFS rootfs);
+# baseline_mode=nfs is rejected at pre-flight (the cycle is
+# baseline → nfs → baseline; baseline=nfs is degenerate).
 #
 # Pre-condition: the board runs a custom-built Armbian image with
 # PXE-first U-Boot and PoE wiring matches inventory.
@@ -20,14 +29,14 @@
 # lines so a failure is actionable without re-SSHing.
 #
 # Failure cleanup: by default, the always-block converges pxelinux
-# back to `default sd` on the router and PoE-cycles the board
-# regardless of pass/fail. Pass `-e leave_state=true` to preserve the
-# failure state for forensics.
+# back to `default <baseline_mode>` on the router and PoE-cycles the
+# board regardless of pass/fail. Pass `-e leave_state=true` to preserve
+# the failure state for forensics.
 #
 # Skip-baseline mode: pass `-e skip_baseline=true` to bypass Phase 1
-# (SD-side baseline). Useful when local SD boot is broken but NFS path
-# is healthy — Phase 2 still validates nfsroot; Phase 3 still asserts
-# return-to-SD. Phase 2 diagnostics are usually what matter.
+# (baseline). Useful when local boot is broken but NFS path is healthy
+# — Phase 2 still validates nfsroot; Phase 3 still asserts return-to-
+# baseline. Phase 2 diagnostics are usually what matter.
 #
 # Optional serial capture: pass `-e capture_serial=true` to spawn
 # socat on the serial host (default `localhost`; override with
@@ -39,6 +48,7 @@
 #   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e leave_state=true
 #   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e capture_serial=true
 #   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e skip_baseline=true
+#   ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit opi5pro-01 -e baseline_mode=sd
 
 - name: Hardware E2E always-netboot boot-mode test
   hosts: "{{ armbian_boards_group | default('boards') }}"
@@ -47,6 +57,23 @@
     leave_state: false
     skip_baseline: false
     capture_serial: false
+    # One automatic retry per phase by default to absorb transient
+    # boot flakes (matches test_fleet_e2e.yml convention). Override
+    # with -e armbian_boot_retry_attempts=N for board-specific tuning.
+    armbian_boot_retry_attempts: 1
+    # baseline_mode materialized via set_fact in Pre-flight (default is
+    # the host's inventory armbian_boot_mode; -e baseline_mode=<mode>
+    # pins a specific baseline). Cannot use a lazy play-var default
+    # here: include blocks set vars: armbian_boot_mode: "{{ baseline_mode }}"
+    # and a lazy "{{ armbian_boot_mode }}" default would recurse.
+    #
+    # Bypass known_hosts entirely for the duration of the play. Each
+    # phase swaps the board's rootfs identity (baseline ↔ NFS ↔ baseline),
+    # which presents different /etc/ssh/ssh_host_* keys. The pre-flight
+    # one-shot ssh-keygen -R can't catch the mid-play swaps. ansible.cfg's
+    # host_key_checking=False is insufficient because StrictHostKeyChecking=no
+    # still rejects KEY MISMATCH against an existing known_hosts entry.
+    ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
     serial_host: localhost
     serial_device: /dev/ttyUSB0
     serial_baud: 1500000
@@ -61,6 +88,20 @@
           test_hardware_e2e.yml is single-board. Pass --limit <hostname>.
           Got {{ ansible_play_hosts | length }} hosts: {{ ansible_play_hosts }}
       run_once: true
+
+    - name: Pre-flight — resolve baseline_mode (default = inventory armbian_boot_mode)
+      ansible.builtin.set_fact:
+        baseline_mode: "{{ baseline_mode | default(armbian_boot_mode) }}"
+
+    - name: Pre-flight — assert baseline_mode is local-rooted (not nfs)
+      ansible.builtin.assert:
+        that:
+          - baseline_mode != 'nfs'
+        fail_msg: >-
+          baseline_mode='{{ baseline_mode }}' is invalid. The test cycles
+          baseline → nfs → baseline; baseline=nfs is degenerate. Set
+          armbian_boot_mode in inventory to a local-rooted mode (sd,
+          local, local_kernel) or pass -e baseline_mode=<mode>.
 
     - name: Pre-flight — assert per-board PoE state
       ansible.builtin.assert:
@@ -189,20 +230,21 @@
     - name: Test phases (cleanup runs in always)
       block:
         # Before Phase 1's opening PoE cycle, converge pxelinux.cfg so
-        # the `default` label is sd. The pxelinux.cfg file always exists
-        # on the router; boot mode is selected by `default`, not by file
-        # presence. A prior aborted run might have left default=nfs and
-        # would trip Phase 1's local-rootfs assertion.
-        - name: Pre-flight — converge pxelinux default to sd on router
+        # the `default` label is the host's baseline mode. The pxelinux.cfg
+        # file always exists on the router; boot mode is selected by
+        # `default`, not by file presence. A prior aborted run might
+        # have left default=nfs and would trip Phase 1's local-rootfs
+        # assertion.
+        - name: "Pre-flight — converge pxelinux default to {{ baseline_mode }} on router"
           ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_boot_mode: sd
+            armbian_boot_mode: "{{ baseline_mode }}"
 
-        - name: Phase 1 — SD baseline (skippable via skip_baseline=true)
+        - name: "Phase 1 — baseline ({{ baseline_mode }}, skippable via skip_baseline=true)"
           when: not (skip_baseline | bool)
           block:
-            # Auto-bootstrap detection: after a fresh SD reflash the
-            # board boots cleanly but the inventory user doesn't exist
+            # Auto-bootstrap detection: after a fresh local-storage reflash
+            # the board boots cleanly but the inventory user doesn't exist
             # yet — only the Armbian default root user does.
             #   1. wait_for TCP/22 (inside cold_boot_with_retry) —
             #      identity-agnostic; a real boot failure times out
@@ -216,13 +258,18 @@
               vars:
                 _phase_label: "Phase 1"
                 _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
+                # Skip the cold_boot_single_attempt SSH-stability gate —
+                # we run auto_bootstrap_if_needed next, which probes
+                # then bootstraps the inventory user on a fresh rootfs
+                # before any wait_for_connection that needs igou.
+                _skip_ssh_stability_check: true
 
             - name: Phase 1 — auto-bootstrap if needed
               ansible.builtin.include_tasks: ../tasks/auto_bootstrap_if_needed.yml
               vars:
                 _phase_label: "Phase 1"
 
-            - name: Phase 1 — wait for SSH (SD-root identity, with cycle retry)
+            - name: Phase 1 — wait for SSH (baseline identity, with cycle retry)
               ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
               vars:
                 _phase_label: "Phase 1"
@@ -241,7 +288,7 @@
             - name: Phase 1 — diagnostic bundle
               ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
               vars:
-                _diag_phase: "phase 1 — SD baseline"
+                _diag_phase: "phase 1 — baseline ({{ baseline_mode }})"
 
             - name: Phase 1 — assert rootfs is on a local block device
               ansible.builtin.assert:
@@ -263,6 +310,10 @@
           vars:
             _phase_label: "Phase 2"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
+            # Skip the cold_boot_single_attempt SSH-stability gate —
+            # the per-host NFS clone may be fresh (stock root only).
+            # auto_bootstrap_if_needed runs next.
+            _skip_ssh_stability_check: true
 
         - name: Phase 2 — reset connection so new identity takes effect
           ansible.builtin.meta: reset_connection
@@ -313,10 +364,10 @@
                   Check /proc/cmdline in the diagnostic bundle and the
                   router's /ip tftp serving for armbian/{{ inventory_hostname }}/.
 
-        - name: Phase 3 — render+upload pxelinux for sd
+        - name: "Phase 3 — render+upload pxelinux for {{ baseline_mode }}"
           ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_boot_mode: sd
+            armbian_boot_mode: "{{ baseline_mode }}"
 
         # Phase 3 intentionally has no block-scoped vars: the Phase 2
         # verify block has exited so its NFS-root identity vars are
@@ -332,7 +383,7 @@
             _phase_label: "Phase 3"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
 
-        - name: Phase 3 — wait for SSH (SD-root identity, with cycle retry)
+        - name: Phase 3 — wait for SSH (baseline identity, with cycle retry)
           ansible.builtin.include_tasks: ../tasks/wait_for_ssh_with_cycle_retry.yml
           vars:
             _phase_label: "Phase 3"
@@ -351,7 +402,7 @@
         - name: Phase 3 — diagnostic bundle
           ansible.builtin.import_tasks: ../tasks/diagnostic_bundle.yml
           vars:
-            _diag_phase: "phase 3 — back to SD"
+            _diag_phase: "phase 3 — back to baseline ({{ baseline_mode }})"
 
         - name: Phase 3 — assert rootfs returned to local block device
           ansible.builtin.assert:
@@ -360,7 +411,7 @@
               - _root_device is match('^/dev/')
             fail_msg: >-
               Phase 3: expected rootfs on /dev/<block> after converging
-              pxelinux.cfg to default sd; got {{ _root_device }}
+              pxelinux.cfg to default {{ baseline_mode }}; got {{ _root_device }}
               ({{ _root_fstype }}).
 
       always:
@@ -368,16 +419,16 @@
           ansible.builtin.debug:
             msg: >-
               leave_state=true: not cleaning up. Board may still be in
-              NFS root; converge back to SD manually with:
+              NFS root; converge back to baseline manually with:
               ansible-playbook playbooks/converge_boot_mode.yml
-              --limit {{ inventory_hostname }}
-              -e armbian_boot_mode=sd
+              -e target_hosts={{ inventory_hostname }}
+              -e armbian_boot_mode={{ baseline_mode }}
           when: leave_state | bool
 
-        - name: Cleanup — converge pxelinux default sd on router
+        - name: "Cleanup — converge pxelinux default {{ baseline_mode }} on router"
           ansible.builtin.include_tasks: ../tasks/render_and_upload_pxelinux.yml
           vars:
-            armbian_boot_mode: sd
+            armbian_boot_mode: "{{ baseline_mode }}"
           when: not (leave_state | bool)
 
         - name: Cleanup — reset connection to inventory identity
@@ -389,6 +440,7 @@
           vars:
             _phase_label: "Cleanup"
             _boot_max_attempts: "{{ armbian_boot_retry_attempts | default(0) | int + 1 }}"
+            _skip_ssh_stability_check: true
           when: not (leave_state | bool)
 
         - name: Cleanup — auto-bootstrap if needed (post-Phase-1-skip recovery)
@@ -416,15 +468,15 @@
                                              | map(attribute='device') | first }}"
           when: not (leave_state | bool)
 
-        - name: Cleanup — assert SD-rooted (post-cleanup)
+        - name: Cleanup — assert baseline-rooted (post-cleanup)
           ansible.builtin.assert:
             that:
               - _root_fstype not in ['nfs', 'nfs4']
             fail_msg: >-
               Cleanup left the board in NFS root mode despite converging
-              pxelinux.cfg to default sd. Investigate the pxelinux.cfg
-              default directive on the router and the linux-u-boot-*
-              deb on disk.
+              pxelinux.cfg to default {{ baseline_mode }}. Investigate the
+              pxelinux.cfg default directive on the router and the
+              linux-u-boot-* deb on disk.
           when: not (leave_state | bool)
 
         # Stop serial capture last so the cleanup phase's reboots are

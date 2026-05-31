@@ -36,6 +36,9 @@
   delegate_to: "{{ armbian_router }}"
   block:
     - name: Include per-host pxelinux upload tasks
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/routeros/tasks/upload_pxelinux_one.yml"
+      # Relative to this task file (playbooks/tasks/) so callers in both
+      # playbooks/ and playbooks/tests/ resolve to playbooks/routeros/…
+      # — playbook_dir varies with the caller and breaks the tests/ case.
+      ansible.builtin.include_tasks: ../routeros/tasks/upload_pxelinux_one.yml
       vars:
         _upload_pxe_hostname: "{{ inventory_hostname }}"

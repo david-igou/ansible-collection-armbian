@@ -30,6 +30,14 @@
 # That file is the single-play-compatible alternative entry point with
 # identical behaviour for single-board invocations.
 
+- name: Pre-flight — refuse --limit on composite playbook
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+      vars:
+        _expected_pattern: "{{ target_hosts | default('boards') }}"
+
 - name: Validate local_kernel inventory consistency
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
