@@ -1,0 +1,38 @@
+---
+# playbooks/tasks/_assert_no_limit.yml
+#
+# Pre-flight guard for multi-play composite playbooks (the ones that
+# target different host groups in different plays — e.g.
+# converge_boot_mode.yml's router-plumbing-check + board-render + router-
+# upload + board-cycle sequence).
+#
+# --limit is global: a user running such a playbook with --limit narrows
+# every play, so plays that target groups outside the limit silently
+# match no hosts and skip without warning. The documented invocation is
+# -e target_hosts=<pattern>, which only narrows the board-side plays.
+#
+# This task fires if the inventory-resolved host count for the calling
+# playbook's expected pattern differs from the play's
+# ansible_play_hosts_all — the strongest signal we can get from inside
+# a play that --limit was applied.
+#
+# Required vars on include:
+#   _expected_pattern  inventory pattern the calling playbook expects to
+#                      fully resolve (e.g. "{{ target_hosts | default('boards') }}"
+#                      or "{{ armbian_netboot_server_group | default('netboot_server') }}")
+
+- name: "Assert play matched all hosts in '{{ _expected_pattern }}' (refuse --limit)"
+  ansible.builtin.assert:
+    that:
+      - (query('inventory_hostnames', _expected_pattern) | length)
+        == (ansible_play_hosts_all | length)
+    fail_msg: |
+      Pattern '{{ _expected_pattern }}' resolves to
+      {{ query('inventory_hostnames', _expected_pattern) | length }} inventory host(s)
+      but {{ ansible_play_hosts_all | length }} matched this play. --limit was likely used.
+
+      This composite playbook targets different host groups across plays
+      (router, switches, boards, netboot_server). --limit is global and
+      silently empties non-board plays. Use -e target_hosts=<pattern>
+      instead — see the playbook docstring.
+  run_once: true

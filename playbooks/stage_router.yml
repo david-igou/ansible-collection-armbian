@@ -6,6 +6,18 @@
 # kernel/initrd/dtb are populated under
 # {{ armbian_image_cache }}/sbc-tftp/<host>/ on netboot_server
 # (defaults to /var/lib/armbian/cache/sbc-tftp/<host>/).
+#
+# Use -e armbian_netboot_server_group=<group> (or default 'netboot_server')
+# — not --limit. The three plays mix netboot_server with router upload +
+# plumbing-check imports; --limit silently empties the router plays.
+
+- name: Pre-flight — refuse --limit on composite playbook
+  hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+      vars:
+        _expected_pattern: "{{ armbian_netboot_server_group | default('netboot_server') }}"
 
 - name: Fetch TFTP artifacts from netboot server to controller cache
   hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"

@@ -62,6 +62,14 @@
 # Override with -e armbian_boot_retry_attempts=N or set in
 # inventory for fleet-wide tuning.
 
+- name: Pre-flight — refuse --limit on composite playbook
+  hosts: "{{ target_hosts | default('boards') }}"
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_tasks: ../tasks/_assert_no_limit.yml
+      vars:
+        _expected_pattern: "{{ target_hosts | default('boards') }}"
+
 - name: "Pre-flight: ensure all per-board artifact dirs exist on controller"
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
