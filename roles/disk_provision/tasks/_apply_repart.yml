@@ -70,9 +70,15 @@
 # view of the disk whose BLKDISCARD chunk is hard-capped at 128 KiB
 # — for a 477 GiB NVMe that's ~3.7M ioctls × wbt_wait throttling,
 # clocking ~30 min instead of ~2 min.
+#
+# -f is required: util-linux 2.41 (2025-03-18) refuses to wipe a
+# device that carries a partition table without --force. The when:
+# clause below already gates this on __disk_provision_preserve_ids
+# being empty (nothing to preserve), so bypassing the guard matches
+# the role's intent — fast_wipe is an explicit destructive opt-in.
 - name: "Apply repart: pre-discard whole disk (fast_wipe)"
   ansible.builtin.command:
-    cmd: "blkdiscard {{ disk_binding.device }}"
+    cmd: "blkdiscard -f {{ disk_binding.device }}"
   become: true
   when:
     - __disk_provision_preserve_ids | length == 0     # only safe when nothing to preserve
