@@ -601,4 +601,4 @@ filtering.
 - `playbooks/build_and_publish_from_inventory.yml` — custom Armbian image build pipeline (per-host loop)
 - `playbooks/persist_uboot_env.yml` — Approach B for rock-5b autonomous PXE
 - `docs/docsite/rst/guide.rst` — single getting-started guide (intro + example usage); per-role detail lives in the generated role reference
-- `galaxy.yml` — collection namespace, version (0.0.3-alpha), external dependencies
+- `galaxy.yml` — collection namespace, version (0.0.4-alpha), external dependencies

@@ -4,18 +4,96 @@ david\_igou.armbian Collection Release Notes
 
 .. contents:: Topics
 
+v0.0.4-alpha
+============
+
+Release Summary
+---------------
+
+Bug-fix release closing three regressions exposed by running
+``test_hardware_e2e.yml`` end-to-end on a ``local_kernel``-only
+board, plus a util-linux 2.41 incompatibility in
+``roles/disk_provision`` that affected every caller (Phase 5 of
+``test_fleet_e2e.yml``, ``reprovision_to_local.yml``,
+``provision_local_disk.yml``).
+
+All four fixes were verified end-to-end on real hardware (Orange
+Pi 5 Pro): ``test_hardware_e2e.yml`` cycles baseline → NFS →
+baseline cleanly on a ``local_kernel`` board, and
+``reprovision_to_local.yml`` reprovisions an already-partitioned
+NVMe without the ``blkdiscard`` failure.
+
+Minor Changes
+-------------
+
+- Composite multi-play playbooks now refuse ``--limit`` and fail fast
+  with a clear ``-e target_hosts=<pattern>`` suggestion when invoked
+  with the wrong knob. Previously, ``--limit`` silently emptied the
+  plays targeting the router or netboot_server because ``--limit`` is
+  global while ``target_hosts`` is intentionally per-play. Affected
+  playbooks: ``converge_boot_mode.yml``,
+  ``build_and_publish_from_inventory.yml``, ``stage_router.yml``,
+  ``tests/test_fleet_e2e.yml``. Implemented via the shared
+  ``playbooks/tasks/_assert_no_limit.yml`` task file, which compares
+  the inventory-resolved host count for the caller's expected pattern
+  against ``ansible_play_hosts_all``. Same-group multi-play playbooks
+  (``reprovision_to_local.yml``, ``tests/test_reprovision_e2e.yml``)
+  are unaffected — their docstrings continue to document ``--limit``.
+
+Bugfixes
+--------
+
+- Fixed ``disk_provision`` ``fast_wipe`` failing on partitioned disks
+  when running against a util-linux 2.41+ rootfs (Debian trixie,
+  Armbian edge builds). util-linux 2.41 (released 2025-03-18) added
+  a partition-table guard to ``blkdiscard`` that refuses a whole
+  disk carrying a GPT unless ``--force`` is given. The role's
+  ``Apply repart: pre-discard whole disk (fast_wipe)`` task now
+  passes ``-f``; the ``when:`` clause already gates this on
+  ``__disk_provision_preserve_ids`` being empty (nothing to
+  preserve), so bypassing the guard matches the role's intent —
+  ``fast_wipe`` is an explicit destructive opt-in. Affected callers:
+  ``test_fleet_e2e.yml`` Phase 5, ``reprovision_to_local.yml``,
+  ``provision_local_disk.yml``. (igou-io/igou-ansible#201)
+- Fixed ``playbooks/tasks/render_and_upload_pxelinux.yml`` resolving
+  ``routeros/tasks/upload_pxelinux_one.yml`` via ``{{ playbook_dir }}``,
+  which broke whenever the helper was included from a playbook outside
+  ``playbooks/`` (e.g. anything under ``playbooks/tests/``). The path
+  is now relative to the helper file itself (``../routeros/...``),
+  matching the sibling pattern used in
+  ``playbooks/tasks/cold_boot_with_retry.yml``.
+- Fixed ``playbooks/tests/test_hardware_e2e.yml`` hardcoding ``sd`` as
+  the baseline boot mode for Pre-flight / Phase 3 / Cleanup pxelinux
+  convergence. Boards declared as ``armbian_boot_mode: local_kernel``
+  (NVMe with ``armbi_root_local``, no working ``armbi_root`` SD card)
+  could not boot the SD label and timed out at TCP/22. The test now
+  parameterises baseline off the host's inventory ``armbian_boot_mode``
+  (override with ``-e baseline_mode=<mode>``), bypasses ``known_hosts``
+  for the duration of the play so rootfs-identity swaps between
+  baseline and NFS don't trip ``StrictHostKeyChecking`` mismatches,
+  passes ``_skip_ssh_stability_check: true`` to ``cold_boot_with_retry``
+  on the three phases that chain ``auto_bootstrap_if_needed`` (so a
+  fresh per-host NFS rootfs gets the inventory user provisioned
+  before any wait_for_connection that needs it), and defaults
+  ``armbian_boot_retry_attempts`` to ``1`` (matching ``test_fleet_e2e.yml``
+  convention for transient cold-boot flakes).
+
+Documentation Changes
+---------------------
+
+- Link the new docsite PXE netboot guide alongside the SD-boot
+  getting-started guide in the top-level ``README.md`` and
+  ``playbooks/README.md``, and drop the stale "mental model" framing
+  on the getting-started link (the guide is now a copy-paste
+  walkthrough).
+
 v0.0.3-alpha
 ============
 
 Release Summary
 ---------------
 
-First release with consolidated notes, rolling up all changes since the
-``v0.0.1-alpha`` tag: a per-host refactor of the build and rootfs
-pipeline, a reorganized ``playbooks/`` layout, complete role READMEs
-with generated-asset snippets, and a published antsibull-docs / Sphinx
-docsite on GitHub Pages with copy-paste-able getting-started and PXE
-netboot guides.
+First release with consolidated notes, rolling up all changes since the ``v0.0.1-alpha`` tag: a per-host refactor of the build and rootfs pipeline, a reorganized ``playbooks/`` layout, complete role READMEs with generated-asset snippets, and a published antsibull-docs / Sphinx docsite on GitHub Pages with copy-paste-able getting-started and PXE netboot guides.
 
 This is an early-stage (alpha) release. Inventory variable names,
 default values, group names, role names, and playbook names may all
