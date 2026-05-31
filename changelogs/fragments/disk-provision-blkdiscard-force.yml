@@ -1,0 +1,15 @@
+---
+bugfixes:
+  - |
+    Fixed ``disk_provision`` ``fast_wipe`` failing on partitioned disks
+    when running against a util-linux 2.41+ rootfs (Debian trixie,
+    Armbian edge builds). util-linux 2.41 (released 2025-03-18) added
+    a partition-table guard to ``blkdiscard`` that refuses a whole
+    disk carrying a GPT unless ``--force`` is given. The role's
+    ``Apply repart: pre-discard whole disk (fast_wipe)`` task now
+    passes ``-f``; the ``when:`` clause already gates this on
+    ``__disk_provision_preserve_ids`` being empty (nothing to
+    preserve), so bypassing the guard matches the role's intent —
+    ``fast_wipe`` is an explicit destructive opt-in. Affected callers:
+    ``test_fleet_e2e.yml`` Phase 5, ``reprovision_to_local.yml``,
+    ``provision_local_disk.yml``. (igou-io/igou-ansible#201)
