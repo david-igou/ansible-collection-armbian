@@ -4,21 +4,30 @@
 
    Inputs:
      board_cfg: the resolved armbian_board_config fact (must have
-                local_kernel.{storage,storage_scan}, dtb, console).
+                local_kernel.{storage,storage_scan} OR
+                local_kernel.storage_candidates, plus dtb, console).
      overrides: optional dict with keys that override the board defaults.
                 Supported override keys: storage, storage_scan,
-                root_label, console, dtb.
+                storage_candidates, root_label, console, dtb.
 
-   Output: single-line U-Boot command string ending in `booti`.
+   Output: single-line U-Boot command string.
 
-   Chain shape (per-board hardcoded partition number):
+   Storage resolution: `storage_candidates` (ordered list of
+   {scan, dev} dicts) wins when defined; otherwise the legacy single
+   {storage_scan, storage} pair becomes a one-element candidate list.
+
+   Chain shape — one if-block per candidate (per-board hardcoded
+   partition numbers). `booti` never returns on success, so a later
+   candidate runs only when an earlier one fails to load (e.g.
+   cm3588-nas prefers NVMe, falls back to eMMC):
      setenv bootargs root=LABEL=<root_label> rootfstype=ext4 rootwait rw console=<console>;
-     <storage_scan>;
-     ext4load <storage> ${kernel_addr_r} /boot/Image;
-     ext4load <storage> ${ramdisk_addr_r} /boot/uInitrd;
+     <c.scan>;
+     if ext4load <c.dev> ${kernel_addr_r} /boot/Image;
+     then ext4load <c.dev> ${ramdisk_addr_r} /boot/uInitrd;
      setenv ramdisk_size ${filesize};
-     ext4load <storage> ${fdt_addr_r} /boot/dtb/<dtb>;
-     booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+     ext4load <c.dev> ${fdt_addr_r} /boot/dtb/<dtb>;
+     booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r};
+     fi; [... next candidate ...]
 
    `storage` is the full U-Boot device address including partition number
    (e.g. "nvme 0:2" or "nvme 0:4"). Per-board hardcoded values:
@@ -43,16 +52,22 @@
 #}
 {%- macro render_localcmd_chain(board_cfg, overrides={}) -%}
 {%- set lk = board_cfg.local_kernel -%}
-{%- set storage      = overrides.storage      | default(lk.storage) -%}
-{%- set storage_scan = overrides.storage_scan | default(lk.storage_scan) -%}
+{%- set storage      = overrides.storage      | default(lk.storage      | default('')) -%}
+{%- set storage_scan = overrides.storage_scan | default(lk.storage_scan | default('')) -%}
+{%- set candidates   = overrides.storage_candidates
+      | default(lk.storage_candidates
+      | default([{'scan': storage_scan, 'dev': storage}])) -%}
 {%- set root_label   = overrides.root_label   | default('armbi_root_local') -%}
 {%- set console      = overrides.console      | default(board_cfg.console) -%}
 {%- set dtb          = overrides.dtb          | default(board_cfg.dtb) -%}
 setenv bootargs root=LABEL={{ root_label }} rootfstype=ext4 rootwait rw console={{ console }};
-{{- ' ' }}{{ storage_scan }};
-{{- ' ' }}ext4load {{ storage }} ${kernel_addr_r} /boot/Image;
-{{- ' ' }}ext4load {{ storage }} ${ramdisk_addr_r} /boot/uInitrd;
+{%- for c in candidates %}
+{{- ' ' }}{{ c.scan }};
+{{- ' ' }}if ext4load {{ c.dev }} ${kernel_addr_r} /boot/Image;
+{{- ' ' }}then ext4load {{ c.dev }} ${ramdisk_addr_r} /boot/uInitrd;
 {{- ' ' }}setenv ramdisk_size ${filesize};
-{{- ' ' }}ext4load {{ storage }} ${fdt_addr_r} /boot/dtb/{{ dtb }};
-{{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+{{- ' ' }}ext4load {{ c.dev }} ${fdt_addr_r} /boot/dtb/{{ dtb }};
+{{- ' ' }}booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r};
+{{- ' ' }}fi;
+{%- endfor %}
 {%- endmacro -%}

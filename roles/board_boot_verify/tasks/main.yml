@@ -46,20 +46,31 @@
       the target disk was provisioned via provision_local_disk.yml.
   when: boot_mode == 'local'
 
-- name: Assert NVMe rootfs when boot_mode=local_kernel
+- name: Assert local rootfs when boot_mode=local_kernel
+  vars:
+    # Default expects NVMe. Boards whose localcmd has non-NVMe storage
+    # candidates (e.g. cm3588-nas falls back to eMMC) widen this via
+    # local_kernel.verify_match in their armbian_board_config layer, or
+    # callers pass local_kernel_verify_match directly.
+    _lk_match: >-
+      {{ local_kernel_verify_match
+         | default((armbian_board_config | default({})).local_kernel.verify_match
+         | default('^/dev/nvme')) }}
   ansible.builtin.assert:
     that:
       - _root_fstype not in ['nfs', 'nfs4']
-      - _root_device is match('^/dev/nvme')
+      - _root_device is match(_lk_match)
     fail_msg: >-
-      boot_mode[local_kernel]: expected NVMe rootfs but got
+      boot_mode[local_kernel]: expected rootfs matching
+      '{{ _lk_match }}' but got
       {{ _root_device }} ({{ _root_fstype }}). The local_kernel label
       runs `localboot 0`, which executes U-Boot's `localcmd`. If
-      _root_device is on the SD card or eMMC, `bootflow scan` likely
-      picked up the wrong bootdev — constrain localcmd to NVMe
-      (e.g. `nvme scan; bootflow scan -b nvme0.blk`). If you got an
+      _root_device is on an unexpected disk, check the localcmd
+      storage candidates for this board (local_kernel.storage or
+      .storage_candidates in armbian_board_config). If you got an
       NFS rootfs, U-Boot fell through to PXE — check localcmd is
-      actually set in the U-Boot binary's default environment.
+      actually set in the U-Boot binary's default environment (or SPI
+      env for persist_via=spi boards).
   when: boot_mode == 'local_kernel'
 
 - name: "Assert custom mode rootfs source matches verify_match"

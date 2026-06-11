@@ -8,7 +8,8 @@ argument_specs:
         and asserts that the rootfs fstype matches the declared
         boot_mode (nfs|nfs4 for nfs; not nfs for sd, local, or
         local_kernel; for local_kernel additionally asserts the
-        device path starts with /dev/nvme).
+        device path matches local_kernel_verify_match, default
+        ^/dev/nvme).
 
     options:
       boot_mode:
@@ -16,9 +17,19 @@ argument_specs:
         required: true
         choices: [nfs, sd, local, local_kernel]
         description: >-
-          The declared boot mode. `local_kernel` asserts NVMe rootfs
-          (the local_kernel pxelinux label hands off to U-Boot's
-          extlinux bootmeth which loads kernel+rootfs off NVMe).
+          The declared boot mode. `local_kernel` asserts the rootfs
+          device matches local_kernel_verify_match (default
+          ^/dev/nvme; boards with non-NVMe localcmd fallbacks widen
+          it via local_kernel.verify_match in armbian_board_config).
+      local_kernel_verify_match:
+        type: str
+        required: false
+        description: >-
+          Regex the rootfs device must match when
+          boot_mode=local_kernel. Defaults to
+          armbian_board_config.local_kernel.verify_match when that is
+          resolved on the host, else '^/dev/nvme'. Example for a
+          board with an eMMC fallback: '^/dev/(nvme|mmcblk0)'.
       extra_modes:
         type: dict
         default: {}
