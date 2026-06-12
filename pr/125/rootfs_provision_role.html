@@ -205,20 +205,28 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_mount_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-mount-dir"><strong>armbian_rootfs_mount_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_mount_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Mount point for the image’s rootfs partition (loop device) during extraction.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/mnt/armbian_rootfs_provision&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_src"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-src"><strong>armbian_rootfs_src</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_src" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>.img.xz source. <a class="reference external" href="https://">https://</a> URL, <a class="reference external" href="http://">http://</a> URL, or absolute path. Resolved by the caller per the precedence in playbooks/tasks/_resolve_rootfs_src.yml.</p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_target_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-target-dir"><strong>armbian_rootfs_target_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_target_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>NFS rootfs destination. Default per-host suffix under armbian_nfs_rootfs_path.</p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_tftp_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-tftp-dir"><strong>armbian_rootfs_tftp_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_tftp_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
