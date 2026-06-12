@@ -43,9 +43,13 @@ trivial:
     it in every scenario.
   - >-
     Removed unused ansible-creator test scaffolding (placeholder pytest
-    suites, ``tox-ansible.ini``, ``test-requirements.txt``) and stale
-    references to it in ``galaxy.yml``, ``.ansible-lint``, and the
-    ``Makefile``.
+    suites, ``test-requirements.txt``) and stale references to it in
+    ``galaxy.yml``, ``.ansible-lint``, and the ``Makefile``.
+  - >-
+    tox-ansible.ini now documents that it feeds the sanity CI matrix and
+    skips the py3.12-devel combination (ansible-core devel requires
+    Python >= 3.13 since June 2026, but tox-ansible still generates the
+    cell).
   - >-
     CI workflow now declares least-privilege read-only permissions.
   - >-

@@ -71,3 +71,4 @@ build_ignore:
   - extensions
   - pyproject.toml
   - requirements.txt
+  - tox-ansible.ini
