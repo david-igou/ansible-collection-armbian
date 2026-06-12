@@ -59,13 +59,16 @@ build_ignore:
   - CONTRIBUTING.md
   - MAINTAINERS
   - Makefile
-  - ansible-creator.log
   - ansible.cfg
+  # Local docsite build output (gitignored, but present in working trees
+  # that have built docs — without this entry it ships in locally built
+  # tarballs and fails ansible-test sanity's no-smart-quotes check).
+  - build
   - changelogs/.plugin-cache.yaml
   - devfile.yaml
+  # Internal design documents — not user-facing collection docs.
+  - docs/superpowers
   - extensions
   - pyproject.toml
   - requirements.txt
-  - test-requirements.txt
-  - tests
   - tox-ansible.ini

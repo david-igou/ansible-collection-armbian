@@ -36,5 +36,10 @@
     update: true
     depth: 1
   become: false
+  # Shield the clone from the connecting user's global git config
+  # (insteadOf rewrites, credential helpers, signing requirements) by
+  # pointing GIT_CONFIG_GLOBAL at the same build-local config file
+  # invoke_build.yml uses. The file does not need to exist — git treats
+  # a missing GIT_CONFIG_GLOBAL target as an empty config.
   environment:
-    HOME: ""
+    GIT_CONFIG_GLOBAL: "{{ __image_build_cache_dir_host }}/.gitconfig"

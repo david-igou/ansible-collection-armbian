@@ -22,15 +22,15 @@ armbian_build_output_dir: "{{ ansible_env.HOME }}/armbian_build/output" # final 
 # reachable — this is the standard build method per Armbian docs.
 armbian_build_user: ""
 
-# Per-build inputs. Caller sets board and host; branch/release defaulted to a
-# CLI-friendly modern Armbian Rockchip image.
-armbian_build_board: ""
+# Per-build inputs. Branch/release default to a CLI-friendly modern
+# Armbian Rockchip image. armbian_build_board and armbian_build_host are
+# intentionally NOT defaulted here — they are declared `required: true`
+# in meta/argument_specs.yml, and a default (even an empty string) would
+# satisfy that check and defeat it. Callers must supply both;
+# armbian_build_host (the inventory_hostname this build targets) drives
+# per-host output + cache paths.
 armbian_build_branch: "current"
 armbian_build_release: "bookworm"
-
-# inventory_hostname this build targets. Must be supplied by the caller;
-# no default. Drives per-host output + cache paths.
-armbian_build_host: ""
 
 # Userpatches to apply before the build. Each entry is { dest, content }
 # where `dest` is a path relative to USERPATCHES_DIR (no leading slash,

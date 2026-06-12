@@ -1,6 +1,10 @@
 ---
 name: "CI"
 
+# All jobs only read the repo; deny everything else by default.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true

@@ -47,6 +47,11 @@ argument_specs:
         type: str
         required: false
         description: URL-keyed shared download cache. Hosts pointing at the same URL share the download.
+      armbian_rootfs_mount_dir:
+        type: str
+        required: false
+        default: "/mnt/armbian_rootfs_provision"
+        description: Mount point for the image's rootfs partition (loop device) during extraction.
       armbian_rootfs_force_refresh:
         type: bool
         required: false

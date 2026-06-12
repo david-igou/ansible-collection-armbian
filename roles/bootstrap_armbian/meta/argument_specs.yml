@@ -22,7 +22,8 @@ argument_specs:
     options:
       armbian_bootstrap_user:
         type: str
-        required: true
+        required: false
+        default: "armbian"
         description: >-
           Username to create on the board. Should match the
           ansible_user the rest of the inventory connects as so

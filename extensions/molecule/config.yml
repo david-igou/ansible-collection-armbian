@@ -15,3 +15,33 @@ dependency:
   enabled: true
   options:
     requirements-file: extensions/molecule/requirements-test.yml
+
+# Shared scenario shape. Molecule deep-merges this file into every
+# scenario's molecule.yml, so each scenario only declares its name
+# (plus any scenario-specific overrides). Relative playbook paths
+# resolve against the scenario's own directory.
+ansible:
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=inventory/
+        - --inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/
+  playbooks:
+    create: create.yml
+    destroy: destroy.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible
