@@ -171,6 +171,27 @@ jobs:
           ansible-galaxy collection install -r requirements.yml --force
           ansible-galaxy collection install . --force
 
+      # molecule_provisioners fetches base images with get_url's default
+      # 10s read timeout and no retries; cloud.debian.org intermittently
+      # stalls longer than that before serving the first byte, which has
+      # repeatedly failed entire qemu matrix rows. Seed the provisioner's
+      # image cache (keyed by sha256 of the URL) with a patient, retrying
+      # download — get_url skips the download when the staging file
+      # already exists.
+      - name: Pre-fetch base image into the provisioner cache (with retries)
+        run: |
+          set -euo pipefail
+          grep -rhoE 'image: *https://[^ ]+' "extensions/molecule/${{ matrix.scenario }}/inventory/" \
+            | sed 's/^image: *//' | sort -u | while read -r url; do
+            dir="$HOME/.cache/molecule-qemu/$(printf '%s' "$url" | sha256sum | cut -d' ' -f1)"
+            mkdir -p "$dir"
+            if [ ! -f "$dir/disk.qcow2" ] && [ ! -f "$dir/disk.download" ]; then
+              echo "Fetching $url"
+              curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
+                -o "$dir/disk.download" "$url"
+            fi
+          done
+
       - name: Run molecule ${{ matrix.scenario }}
         run: molecule test -s ${{ matrix.scenario }}
 
