@@ -7,9 +7,9 @@
 #   3. neither host_vars nor manifest → fail with actionable message
 #   4. manifest exists but armbian_assets_base_url unset → fail (guard)
 #
-# Run in isolation (no real inventory): the base-URL-unset guard in Case 4
-# requires armbian_assets_base_url to be undefined, which group_vars/all
-# in a real inventory would otherwise define. Invoke with `-i localhost,`.
+# Inventory-independent: every case pins the variables it depends on at
+# play scope (play vars override inventory group_vars), so this runs
+# identically with `-i localhost,`, the sample inventory, or a real one.
 
 - name: Case 1 — host_vars armbian_rootfs_src wins when set
   hosts: localhost
@@ -107,7 +107,10 @@
   gather_facts: false
   vars:
     armbian_nfs_assets_export: "/tmp/armbian_rootfs_src_test_no_baseurl"
-    # armbian_assets_base_url intentionally undefined — the guard precondition.
+    # Empty string trips the same guard as undefined, and (unlike leaving
+    # it undefined) also shadows any inventory-provided value — so the
+    # test doesn't depend on which inventory it runs under.
+    armbian_assets_base_url: ""
   tasks:
     - name: Clear armbian_rootfs_src fact carried over from previous cases
       ansible.builtin.set_fact:

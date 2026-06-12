@@ -33,17 +33,27 @@ make collection-build       # Build the .tar.gz collection artifact
 make collection-install     # Build and install locally
 ```
 
-Molecule scenarios live under `extensions/molecule/` and run with the
-podman driver by default. Some scenarios run a real qemu VM
-(`bootstrap_armbian`, `local_kernel_render`); these need
-`/dev/kvm` access — see `extensions/molecule/README.md` for the
-driver-selection knobs.
+Molecule scenarios live under `extensions/molecule/`. Each scenario
+declares its own backend — some run in podman containers, others in a
+real qemu VM (which needs `/dev/kvm` access). See the scenario table
+and driver-selection knobs in `extensions/molecule/README.md`.
 
 ## Before opening a PR
 
 - `make test` passes locally.
 - New behaviour has a changelog fragment under `changelogs/fragments/`
   ([format reference](https://docs.ansible.com/ansible/latest/community/development_process.html#changelogs)).
+  A fragment is a small YAML file keyed by section, e.g.
+  `changelogs/fragments/fix-disk-image-validation.yml`:
+
+  ```yaml
+  ---
+  bugfixes:
+    - disk_image - refuse to write when the target device is mounted (https://github.com/david-igou/ansible-collection-armbian/pull/123).
+  ```
+
+  Common sections are `minor_changes`, `bugfixes`, `breaking_changes`,
+  and `deprecated_features`.
 - Role inputs are declared in the role's `meta/argument_specs.yml`,
   not just documented in the README.
 - The PR description explains the *why* — what was broken or missing,
@@ -57,8 +67,18 @@ build-import, and molecule scenarios — see `.github/workflows/tests.yml`.
 
 ## Adding a new board
 
-The `vars/boards.yml` file is the per-board source of truth (DTB,
-console, support tier, etc.). Adding a new board usually means an
-entry there plus an inventory example under
-`inventory/group_vars/<model_group>.yml` and possibly per-board U-Boot
-patches in `armbian_board_userpatches`.
+Board metadata lives entirely in inventory — there is no per-board
+data in the collection itself. Adding a new board means new inventory
+layers (documented by example under `inventory/`):
+
+- `inventory/group_vars/<family>.yml` — SoC-family defaults
+  (`armbian_board_config_family`, `armbian_build_family`)
+- `inventory/group_vars/<model_group>.yml` — model specifics
+  (`armbian_board_config_model` with DTB/console/support tier,
+  `armbian_build_model` with branch/userpatches)
+- host entries in `inventory/hosts.yml` with `armbian_board_mac`,
+  `armbian_board_model`, and `armbian_boot_mode`
+
+The documentation-only sample inventory under `inventory/` shows the
+full layering for several real boards — mirror one of those when
+onboarding new hardware.

@@ -2,7 +2,7 @@
 #
 # Extracts an Armbian .img.xz rootfs partition directly into the
 # per-host target_dir (no template indirection).
-
+---
 - name: Ensure mount dir + target_dir exist
   ansible.builtin.file:
     path: "{{ item }}"
