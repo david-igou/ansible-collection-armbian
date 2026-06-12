@@ -3,7 +3,9 @@ COLLECTION_NAME      := armbian
 COLLECTION           := $(COLLECTION_NAMESPACE).$(COLLECTION_NAME)
 COLLECTION_VERSION   := $(shell grep '^version:' galaxy.yml | awk '{print $$2}')
 
-MOLECULE_SCENARIOS := rootfs_clone pxelinux_render local_kernel_render persist_uboot_env disk_image disk_provision image_extract bootstrap_armbian image_build
+# Molecule scenarios are discovered from extensions/molecule/*/ via
+# MOLECULE_GLOB below; there is deliberately no hardcoded scenario list
+# here to drift out of date.
 
 # PROVISIONER picks which mp.<backend> block to use when a scenario's
 # inventory declares more than one. Most scenarios declare only one

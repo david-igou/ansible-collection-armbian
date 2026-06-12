@@ -1,0 +1,14 @@
+---
+# Internal constants (double-underscore prefix = not part of the role's
+# public interface). These live in vars/ rather than defaults/ so the
+# user-facing knob surface in defaults/main.yml stays exactly the set of
+# options declared in meta/argument_specs.yml.
+
+# Default mount_opts per fstype, used by the fstab template when a
+# layout entry does not specify mount_opts explicitly.
+__disk_provision_default_mount_opts:
+  ext4: "defaults,noatime"
+  vfat: "defaults,noatime"
+  xfs: "defaults,noatime"
+  btrfs: "defaults,noatime,compress=zstd"
+  swap: "sw"

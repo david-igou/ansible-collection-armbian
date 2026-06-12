@@ -11,29 +11,9 @@
 # Run with:  molecule test --scenario-name image_build
 #
 # Wall time: ~5–7 minutes (Docker install + shallow armbian/build clone).
-ansible:
-  executor:
-    args:
-      ansible_playbook:
-        - --inventory=inventory/
-        - --inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/
-  playbooks:
-    create: create.yml
-    destroy: destroy.yml
-    prepare: prepare.yml
-    converge: converge.yml
-    verify: verify.yml
-
+#
+# Scenario-specific config only — the shared scenario shape
+# (executor args, playbook map, test_sequence, verifier) lives in
+# extensions/molecule/config.yml and is deep-merged by molecule.
 scenario:
   name: image_build
-  test_sequence:
-    - dependency
-    - syntax
-    - create
-    - prepare
-    - converge
-    - verify
-    - destroy
-
-verifier:
-  name: ansible

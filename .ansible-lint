@@ -2,8 +2,6 @@
 profile: min
 
 exclude_paths:
-  - extensions/molecule/provisioners/
-  - tests/
   - changelogs/
   # RouterOS reference playbooks are documentation-only — illustrative
   # transport-specific orchestrations of the primitives in roles/.
