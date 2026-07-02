@@ -19,13 +19,15 @@
 - name: "{{ _phase_label }} — auto-bootstrap when inv user can't authenticate"
   when: _inv_probe is failed
   block:
-    - ansible.builtin.debug:
+    - name: "{{ _phase_label }} — report auto-bootstrap fallback"
+      ansible.builtin.debug:
         msg: >-
           {{ _phase_label }}: inventory user can't authenticate to
           {{ inventory_hostname }} but the board is reachable —
           running bootstrap_armbian inline.
 
-    - ansible.builtin.include_role:
+    - name: "{{ _phase_label }} — run bootstrap_armbian as default root"
+      ansible.builtin.include_role:
         name: bootstrap_armbian
       vars:
         ansible_user: root
@@ -33,4 +35,5 @@
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_become: false
 
-    - ansible.builtin.meta: reset_connection
+    - name: "{{ _phase_label }} — reset connection to pick up new inventory user"
+      ansible.builtin.meta: reset_connection

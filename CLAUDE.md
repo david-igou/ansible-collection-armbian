@@ -337,6 +337,27 @@ compile-time `BOOT_TARGETS`, which the `image_build` role patches via
 `armbian/build`'s `pre_config_uboot_target__<board>_*` hook before U-Boot is
 configured.
 
+## Variable naming convention
+
+Variables fall into four tiers, distinguished by prefix. The prefix
+signals scope and contract — where the variable is set, who is allowed
+to depend on it, and whether renaming it is a breaking change:
+
+- `armbian_*` — inventory-scoped collection variables. Set in
+  `group_vars`/`host_vars`; consumed by playbooks and passed down into
+  role inputs. The stable, user-facing knobs.
+- `<role>_*` — role input parameters, declared in the role's
+  `meta/argument_specs.yml` (e.g. `disk_image_source`,
+  `board_boot_verify_mode`, `pxelinux_render_boot_mode`). These form the
+  role's public contract; renaming one is a breaking change.
+- `__<role>_*` — role-internal facts/registers (double underscore), not
+  part of any contract (e.g. `__disk_image_mounted_match`,
+  `__board_boot_verify_root_device`). Free to rename within a role.
+- `_foo` — include-time parameters passed to shared task files under
+  `playbooks/tasks/` (single underscore, e.g. `_phase_label`,
+  `_expected_pattern`). Caller-supplied and file-local; a distinct,
+  intentional convention — not to be confused with role internals.
+
 ## Per-host build profile layering
 
 Board metadata and build configuration are expressed as three mergeable

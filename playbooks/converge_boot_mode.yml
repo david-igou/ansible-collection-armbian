@@ -36,7 +36,8 @@
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   tasks:
-    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+    - name: "Assert no --limit narrowing on composite playbook"
+      ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
       vars:
         _expected_pattern: "{{ target_hosts | default('boards') }}"
 
@@ -52,7 +53,7 @@
       when: armbian_boot_mode == 'local_kernel'
 
 - name: Pre-flight — assert router /ip tftp plumbing
-  import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
+  ansible.builtin.import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
     armbian_tftp_check_models: >-
       {{ query('inventory_hostnames', target_hosts | default('boards')) }}
@@ -81,9 +82,10 @@
             pxelinux_render_sd_root: "{{ armbian_sd_root | default('LABEL=armbi_root') }}"
             pxelinux_render_local_root: "{{ armbian_local_root | default('LABEL=' ~ (armbian_local_disk_label | default('armbi_root_local'))) }}"
             pxelinux_render_pxe_verbose: "{{ armbian_pxe_verbose | default(false) }}"
+            pxelinux_render_extra_modes: "{{ armbian_extra_modes | default({}) }}"
 
 - name: Upload rendered pxelinux.cfg to router (reference playbook)
-  import_playbook: "{{ armbian_pxelinux_upload_playbook | default('routeros/upload_pxelinux_cfg.yml') }}"
+  ansible.builtin.import_playbook: "{{ armbian_pxelinux_upload_playbook | default('routeros/upload_pxelinux_cfg.yml') }}"
   vars:
     armbian_pxelinux_upload_boards: >-
       {{ query('inventory_hostnames', target_hosts | default('boards')) }}
@@ -116,7 +118,7 @@
       ansible.builtin.include_role:
         name: board_boot_verify
       vars:
-        boot_mode: "{{ armbian_boot_mode }}"
+        board_boot_verify_mode: "{{ armbian_boot_mode }}"
       when:
         - armbian_cycle_board | default(true) | bool
         - armbian_verify_state | default(true) | bool

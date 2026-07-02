@@ -5,7 +5,7 @@
 
 - name: "Render: derive device basename"
   ansible.builtin.set_fact:
-    __disk_provision_device_basename: "{{ disk_binding.device | basename }}"
+    __disk_provision_device_basename: "{{ disk_provision_disk_binding.device | basename }}"
 
 - name: "Render: define repart.d directory path"
   ansible.builtin.set_fact:
@@ -23,7 +23,7 @@
     src: repart.conf.j2
     dest: "{{ __disk_provision_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
     mode: "0644"
-  loop: "{{ disk_binding.layout }}"
+  loop: "{{ disk_provision_disk_binding.layout }}"
   loop_control:
     loop_var: partition
     label: "{{ partition.id }}"

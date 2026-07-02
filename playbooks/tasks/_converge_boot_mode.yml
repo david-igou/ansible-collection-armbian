@@ -69,7 +69,7 @@
   ansible.builtin.include_role:
     name: board_boot_verify
   vars:
-    boot_mode: "{{ armbian_boot_mode }}"
+    board_boot_verify_mode: "{{ armbian_boot_mode }}"
   when:
     - armbian_cycle_board | default(true) | bool
     - armbian_verify_state | default(true) | bool

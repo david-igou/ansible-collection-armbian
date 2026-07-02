@@ -6,7 +6,7 @@
 #     --limit orange-pi-5-max-01
 #
 # Requires:
-#   armbian_local_disks: list of disk_binding dicts (per host)
+#   armbian_local_disks: list of disk_provision_disk_binding dicts (per host)
 #   armbian_boot_mode: local (per host or via -e)
 #
 # Phases:
@@ -33,7 +33,7 @@
     - name: "Assert / is on NFS before wiping anything"
       ansible.builtin.assert:
         that: >-
-          ansible_mounts | selectattr('mount', 'equalto', '/')
+          ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
           | map(attribute='fstype') | first in ['nfs', 'nfs4']
         fail_msg: "Board must be NFS-booted before reprovisioning local disks."
 
@@ -70,7 +70,7 @@
       ansible.builtin.include_role:
         name: disk_provision
       vars:
-        disk_binding: "{{ item }}"
+        disk_provision_disk_binding: "{{ item }}"
       loop: "{{ armbian_local_disks }}"
       loop_control:
         label: "{{ item.device }}"

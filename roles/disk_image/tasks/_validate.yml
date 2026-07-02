@@ -2,77 +2,77 @@
 # Block A — pre-flight validation. No side effects.
 #
 # Asserts:
-#   1. target_device exists and is a whole-disk block device.
-#   2. Neither target_device nor any of its partitions is currently
+#   1. disk_image_target_device exists and is a whole-disk block device.
+#   2. Neither disk_image_target_device nor any of its partitions is currently
 #      mounted (read from /proc/mounts).
-#   3. image_source is either an http(s):// URL or an absolute path.
-#   4. image_source ends in .img.xz or .img (extension-based, no
+#   3. disk_image_source is either an http(s):// URL or an absolute path.
+#   4. disk_image_source ends in .img.xz or .img (extension-based, no
 #      content sniffing).
 
-- name: "Block A — stat target_device"
+- name: "Block A — stat disk_image_target_device"
   ansible.builtin.stat:
-    path: "{{ target_device }}"
+    path: "{{ disk_image_target_device }}"
   register: __disk_image_target_stat
 
-- name: "Block A — assert target_device is a block device"
+- name: "Block A — assert disk_image_target_device is a block device"
   ansible.builtin.assert:
     that:
       - __disk_image_target_stat.stat.exists
       - __disk_image_target_stat.stat.isblk | default(false)
-    fail_msg: "not a block device: {{ target_device }}"
+    fail_msg: "not a block device: {{ disk_image_target_device }}"
 
 - name: "Block A — check /sys/class/block/<basename>/partition (whole-disk discriminator)"
   ansible.builtin.stat:
-    path: "/sys/class/block/{{ target_device | basename }}/partition"
-  register: _partition_sysfs
+    path: "/sys/class/block/{{ disk_image_target_device | basename }}/partition"
+  register: __disk_image_partition_sysfs
 
-- name: "Block A — assert target_device is a whole disk, not a partition"
+- name: "Block A — assert disk_image_target_device is a whole disk, not a partition"
   ansible.builtin.assert:
     that:
-      - not _partition_sysfs.stat.exists
+      - not __disk_image_partition_sysfs.stat.exists
     fail_msg: >-
-      target_device is a partition, not a whole disk: {{ target_device }}.
+      disk_image_target_device is a partition, not a whole disk: {{ disk_image_target_device }}.
       Pass the parent disk (e.g. /dev/mmcblk0, not /dev/mmcblk0p1).
 
-- name: "Block A — enumerate target_device + its partitions via lsblk"
-  ansible.builtin.command: "lsblk -nro NAME {{ target_device }}"
-  register: _lsblk_names
+- name: "Block A — enumerate disk_image_target_device + its partitions via lsblk"
+  ansible.builtin.command: "lsblk -nro NAME {{ disk_image_target_device }}"
+  register: __disk_image_lsblk_names
   changed_when: false
 
 - name: "Block A — read /proc/mounts"
   ansible.builtin.slurp:
     src: /proc/mounts
-  register: _mounts_b64
+  register: __disk_image_mounts_b64
 
 - name: "Block A — derive the set of mount-source paths for target + partitions"
   ansible.builtin.set_fact:
-    _candidate_sources: >-
-      {{ _lsblk_names.stdout_lines | map('regex_replace', '^', '/dev/') | list }}
-    _proc_mounts: "{{ (_mounts_b64.content | b64decode).splitlines() }}"
+    __disk_image_candidate_sources: >-
+      {{ __disk_image_lsblk_names.stdout_lines | map('regex_replace', '^', '/dev/') | list }}
+    __disk_image_proc_mounts: "{{ (__disk_image_mounts_b64.content | b64decode).splitlines() }}"
 
 - name: "Block A — find any /proc/mounts line whose source matches target or a partition"
   ansible.builtin.set_fact:
-    _mounted_match: >-
-      {{ _proc_mounts
-         | select('match', '^(' + (_candidate_sources | join('|')) + ') ')
+    __disk_image_mounted_match: >-
+      {{ __disk_image_proc_mounts
+         | select('match', '^(' + (__disk_image_candidate_sources | join('|')) + ') ')
          | list }}
 
-- name: "Block A — assert target_device and its partitions are not mounted"
+- name: "Block A — assert disk_image_target_device and its partitions are not mounted"
   ansible.builtin.assert:
     that:
-      - _mounted_match | length == 0
+      - __disk_image_mounted_match | length == 0
     fail_msg: >-
-      target device {{ target_device }} backs a mounted filesystem:
-      {{ _mounted_match | first | default('<unknown>') }}
+      target device {{ disk_image_target_device }} backs a mounted filesystem:
+      {{ __disk_image_mounted_match | first | default('<unknown>') }}
 
-- name: "Block A — classify image_source (URL vs path)"
+- name: "Block A — classify disk_image_source (URL vs path)"
   ansible.builtin.set_fact:
-    __disk_image_src_is_url: "{{ image_source is match('^https?://') }}"
-    __disk_image_src_is_path: "{{ image_source is match('^/') }}"
+    __disk_image_src_is_url: "{{ disk_image_source is match('^https?://') }}"
+    __disk_image_src_is_path: "{{ disk_image_source is match('^/') }}"
 
-- name: "Block A — fail when image_source is neither URL nor abs path"
+- name: "Block A — fail when disk_image_source is neither URL nor abs path"
   ansible.builtin.fail:
-    msg: "image_source must be http(s):// URL or absolute path, got: {{ image_source }}"
+    msg: "disk_image_source must be http(s):// URL or absolute path, got: {{ disk_image_source }}"
   when:
     - not __disk_image_src_is_url
     - not __disk_image_src_is_path
@@ -80,17 +80,17 @@
 - name: "Block A — for path source, stat it and assert regular file"
   when: __disk_image_src_is_path
   block:
-    - name: "Block A — stat image_source path"
+    - name: "Block A — stat disk_image_source path"
       ansible.builtin.stat:
-        path: "{{ image_source }}"
-      register: _src_stat
+        path: "{{ disk_image_source }}"
+      register: __disk_image_src_stat
 
-    - name: "Block A — assert image_source path exists and is a regular file"
+    - name: "Block A — assert disk_image_source path exists and is a regular file"
       ansible.builtin.assert:
         that:
-          - _src_stat.stat.exists
-          - _src_stat.stat.isreg | default(false)
-        fail_msg: "image_source path does not exist or is not a regular file: {{ image_source }}"
+          - __disk_image_src_stat.stat.exists
+          - __disk_image_src_stat.stat.isreg | default(false)
+        fail_msg: "disk_image_source path does not exist or is not a regular file: {{ disk_image_source }}"
 
 - name: "Block A — classify format by extension"
   ansible.builtin.set_fact:
@@ -100,11 +100,11 @@
     # + xz" which never matches a real path/URL. Verified empirically
     # against actual disk_image invocations.
     __disk_image_fmt: >-
-      {{ 'xz'  if image_source | regex_search('\.img\.xz$')
-         else 'raw' if image_source | regex_search('\.img$')
+      {{ 'xz'  if disk_image_source | regex_search('\.img\.xz$')
+         else 'raw' if disk_image_source | regex_search('\.img$')
          else 'unknown' }}
 
 - name: "Block A — fail on unsupported format"
   ansible.builtin.fail:
-    msg: "unsupported format; only .img and .img.xz: {{ image_source }}"
+    msg: "unsupported format; only .img and .img.xz: {{ disk_image_source }}"
   when: __disk_image_fmt == 'unknown'

@@ -58,7 +58,7 @@ The devcontainer (`/workspace/igou-devenv`) ships all of the above plus
 ## What the board_boot_* scenarios cover
 
 - **`board_boot_wait`** — happy-path (instance reachable, role completes quickly) plus timeout-path (unroutable host in TEST-NET-2, role MUST fail-into-rescue). Exercises the wrapper's contract; the real hardware concern (board comes up after a cold boot) is still covered by `playbooks/tests/test_hardware_e2e.yml`.
-- **`board_boot_verify`** — runs against a real Debian VM (qemu) so `ansible_mounts['/']` is populated. Asserts `sd`/`local` modes pass (container/VM has a block-device `/`) and `nfs`/`local_kernel` modes correctly fail-into-rescue (rootfs is neither NFS nor `/dev/nvme*`). NFS and local_kernel happy paths still require real hardware via `playbooks/tests/test_hardware_e2e.yml`.
+- **`board_boot_verify`** — runs against a real Debian VM (qemu) so `ansible_facts['mounts']['/']` is populated. Asserts `sd`/`local` modes pass (container/VM has a block-device `/`) and `nfs`/`local_kernel` modes correctly fail-into-rescue (rootfs is neither NFS nor `/dev/nvme*`). NFS and local_kernel happy paths still require real hardware via `playbooks/tests/test_hardware_e2e.yml`.
 
 ## Why `image_build` and `bootstrap_armbian` are special
 

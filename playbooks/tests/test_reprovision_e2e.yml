@@ -92,7 +92,7 @@
         on_failure_revert_to: nfs
 
 - name: "B: First reprovision"
-  import_playbook: ../reprovision_to_local.yml
+  ansible.builtin.import_playbook: ../reprovision_to_local.yml
 
 - name: "B2: Assert local rootfs label"
   hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"
@@ -118,7 +118,7 @@
       become: true
 
 - name: "C: Second reprovision (idempotency on preserved /var)"
-  import_playbook: ../reprovision_to_local.yml
+  ansible.builtin.import_playbook: ../reprovision_to_local.yml
 
 - name: "C2: Assert sentinel survived"
   hosts: "{{ target_hosts | default('orange-pi-5-max-01') }}"

@@ -20,7 +20,8 @@
   hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: false
   tasks:
-    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+    - name: "Assert no --limit narrowing on composite playbook"
+      ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
       vars:
         _expected_pattern: "{{ armbian_boards_group | default('boards') }}"
 
