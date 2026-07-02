@@ -178,7 +178,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--disk_binding"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding"><strong>disk_binding</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_binding" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>One entry from armbian_local_disks. Shape: {device, wipe?, force?, layout: [partition_spec, …]}.</p>
+<td><div class="ansible-option-cell"><p>One entry from armbian_local_disks. Shape: {device, force?, fast_wipe?, layout: [partition_spec, …]}.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
@@ -192,7 +192,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--disk_binding/fast_wipe"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-fast-wipe"><strong>fast_wipe</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_binding/fast_wipe" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
-<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>When true, issue `blkdiscard &lt;device&gt;` (full-device TRIM using the storage’s native chunk size) before systemd-repart, AND pass `-K` to mkfs.ext4 to skip its per-block discard at format time. Net effect: ~30x speedup on large NVMe (&gt;200 GiB), no functional change on small disks. Set false for devices with broken TRIM firmware (some old eMMC) where blkdiscard hangs.</p>
+<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>When true, issue `blkdiscard &lt;device&gt;` (full-device TRIM using the storage’s native chunk size) before systemd-repart, AND suppress mkfs.ext4’s per-block discard at format time (`-E nodiscard` via SYSTEMD_REPART_MKFS_OPTIONS_EXT4). Net effect: ~30x speedup on large NVMe (&gt;200 GiB), no functional change on small disks. Set false for devices with broken TRIM firmware (some old eMMC) where blkdiscard hangs.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
 <ul class="simple">
 <li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">false</span></code></p></li>
@@ -297,19 +297,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </ul>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/wipe"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-wipe"><strong>wipe</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/wipe" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
-</div></td>
-<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>When true, allow destructive partitioning. When false, fail if disk layout doesn’t already match (read-only audit mode).</p>
-<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
-<ul class="simple">
-<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">false</span></code></p></li>
-<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">true</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
-</ul>
-</div></td>
-</tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--disk_provision_installed_marker"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-installed-marker"><strong>disk_provision_installed_marker</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_provision_installed_marker" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
@@ -321,7 +309,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </ul>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--disk_provision_mount_dir_base"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-mount-dir-base"><strong>disk_provision_mount_dir_base</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_provision_mount_dir_base" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>
@@ -329,7 +317,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/var/lib/armbian/disk_provision_mnt&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--disk_provision_render_only"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-render-only"><strong>disk_provision_render_only</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_provision_render_only" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
@@ -341,7 +329,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </ul>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--disk_provision_reset_identity"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-reset-identity"><strong>disk_provision_reset_identity</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_provision_reset_identity" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
@@ -353,7 +341,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </ul>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--disk_provision_source"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-source"><strong>disk_provision_source</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--disk_provision_source" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>

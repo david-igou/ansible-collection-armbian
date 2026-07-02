@@ -126,9 +126,10 @@
   <section id="david-igou-armbian-rootfs-provision-role">
 <span id="ansible-collections-david-igou-armbian-docsite-rootfs-provision-role"></span><h1>david_igou.armbian.rootfs_provision role<a class="headerlink" href="#david-igou-armbian-rootfs-provision-role" title="Link to this heading"></a></h1>
 <p>Runs on the netboot server. Resolves a per-host <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> source, extracts the
-rootfs into a per-model template, reflink-clones it into a per-host directory, and
-resets identity (hostname, machine-id, SSH host keys) so same-model boards stay
-independent on the wire.</p>
+rootfs directly into a per-host directory (hosts pointing at the same upstream
+URL share only the download, via a URL-keyed image cache), and resets identity
+(hostname, machine-id, SSH host keys) so same-model boards stay independent on
+the wire.</p>
 <p>See the <a class="reference internal" href="../rootfs_provision_role.html#ansible-collections-david-igou-armbian-rootfs-provision-role"><span class="std std-ref">full role reference</span></a>
 for all parameters and defaults.</p>
 </section>

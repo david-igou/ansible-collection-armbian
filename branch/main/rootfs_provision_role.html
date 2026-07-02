@@ -159,7 +159,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <h3><a class="toc-backref" href="#id2" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>Downloads or copies an Armbian .img.xz, extracts the rootfs into a per-host directory on the netboot server, stages kernel/initrd/dtb to a TFTP cache directory, and resets host identity (hostname, machine-id, SSH host keys).</p></li>
-<li><p>With per-host builds there is no rootfs-template sharing across hosts of different images, so extract-and-clone happens in one invocation. A shared per-model template is still written for same- model hosts to amortize extraction cost via reflink-copy.</p></li>
+<li><p>Provisioning is purely per-host — the rootfs is extracted directly into the per-host target directory (no shared per-model template, no reflink cloning). Hosts pointing at the same upstream URL share only the .img.xz download, via the URL-keyed armbian_rootfs_image_cache.</p></li>
 </ul>
 </section>
 <section id="parameters">

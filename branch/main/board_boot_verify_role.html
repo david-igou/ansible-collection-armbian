@@ -175,14 +175,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--boot_mode"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-board-boot-verify-role-parameter-main-boot-mode"><strong>boot_mode</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--boot_mode" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>The declared boot mode. `local_kernel` asserts the rootfs device matches local_kernel_verify_match (default ^/dev/nvme; boards with non-NVMe localcmd fallbacks widen it via local_kernel.verify_match in armbian_board_config).</p>
-<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
-<ul class="simple">
-<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">&quot;nfs&quot;</span></code></p></li>
-<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">&quot;sd&quot;</span></code></p></li>
-<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code></p></li>
-<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">&quot;local_kernel&quot;</span></code></p></li>
-</ul>
+<td><div class="ansible-option-cell"><p>The declared boot mode. Built-in modes are nfs, sd, local, and local_kernel (`local_kernel` asserts the rootfs device matches local_kernel_verify_match, default ^/dev/nvme; boards with non-NVMe localcmd fallbacks widen it via local_kernel.verify_match in armbian_board_config). Any other value is treated as a user-defined mode and must be a key in extra_modes; the mode’s `verify_match` regex is asserted against the root device. No `choices:` constraint here on purpose — it would reject custom modes before the extra_modes branch could run.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
