@@ -23,7 +23,7 @@
     - name: "Lifecycle: capture diagnostic bundle before revert"
       ansible.builtin.include_tasks: diagnostic_bundle.yml
       vars:
-        bundle_dir: "{{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}"
+        bundle_dir: "{{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_facts['date_time'].iso8601_basic_short }}"
 
     - name: "Lifecycle: auto-revert to {{ on_failure_revert_to }}"
       ansible.builtin.include_tasks: _converge_boot_mode.yml
@@ -35,4 +35,4 @@
         msg: >-
           Boot mode '{{ target_boot_mode }}' failed for {{ inventory_hostname }};
           auto-reverted to '{{ on_failure_revert_to }}'. Diagnostic bundle:
-          {{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}/
+          {{ armbian_diagnostic_bundle_dir | default('./diagnostics') }}/{{ inventory_hostname }}-{{ ansible_facts['date_time'].iso8601_basic_short }}/

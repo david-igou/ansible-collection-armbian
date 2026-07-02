@@ -10,11 +10,11 @@
 #
 # Usage:
 #   ansible-playbook playbooks/examples/disk_image.yml --limit orange-pi-5-pro-01 \
-#     -e image_source=https://images.example.lan/orange-pi-5-pro.img.xz
+#     -e disk_image_source=https://images.example.lan/orange-pi-5-pro.img.xz
 #
 # Role variables (see roles/disk_image/README.md):
-#   image_source      — https://, http://, or local path to .img.xz/.img (required)
-#   target_device     — whole-disk path, WILL BE OVERWRITTEN (required)
+#   disk_image_source      — https://, http://, or local path to .img.xz/.img (required)
+#   disk_image_target_device     — whole-disk path, WILL BE OVERWRITTEN (required)
 #   disk_image_dd_bs  — dd block size (default 4M)
 #
 # For the full fleet reset that wraps this role (Phase 3), see
@@ -30,6 +30,6 @@
       ansible.builtin.include_role:
         name: disk_image
       vars:
-        image_source: "{{ armbian_disk_image_source | default('https://images.example.lan/orange-pi-5-pro.img.xz') }}"
-        target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
+        disk_image_source: "{{ armbian_disk_image_source | default('https://images.example.lan/orange-pi-5-pro.img.xz') }}"
+        disk_image_target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
         disk_image_dd_bs: 4M

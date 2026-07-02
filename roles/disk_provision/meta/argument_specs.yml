@@ -1,10 +1,10 @@
 ---
 argument_specs:
   main:
-    short_description: "Apply a declarative partition layout to one block device and populate it from a source rootfs."
+    short_description: "Apply a declarative partition layout to one block device and populate it from a source rootfs"
     description:
       - >-
-        Given one disk_binding (device + layout list), validates the
+        Given one disk_provision_disk_binding (device + layout list), validates the
         layout, translates it to systemd-repart .repart.d/*.conf files,
         invokes systemd-repart against the device, populates the
         resulting filesystems by rsyncing `source` (default /), writes
@@ -23,7 +23,7 @@ argument_specs:
         modes, or what the rootfs will be used for.
 
     options:
-      disk_binding:
+      disk_provision_disk_binding:
         type: dict
         required: true
         description: >-

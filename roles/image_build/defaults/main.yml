@@ -5,7 +5,7 @@
 armbian_build_ref: "v26.2.0-trunk.844"
 
 # Filesystem layout on the builder host. Defaults under the connecting
-# user's real $HOME (ansible_env.HOME, resolved from gathered facts — so
+# user's real $HOME (ansible_facts['env']['HOME'], resolved from gathered facts — so
 # it's correct for root's /root and any non-/home home, unlike a hardcoded
 # /home/<user>) so the role runs become-free out of the box — every task
 # sets become: false because compile.sh needs user (not root) ownership
@@ -13,8 +13,8 @@ armbian_build_ref: "v26.2.0-trunk.844"
 # mount if $HOME is small (preflight asserts >= armbian_build_min_free_gb);
 # if you move it under a root-owned path like /var/lib, pre-create + chown
 # it to the connecting user once — the role will not sudo to create it.
-armbian_build_cache_dir: "{{ ansible_env.HOME }}/armbian_build"         # armbian/build checkout + cache + userpatches
-armbian_build_output_dir: "{{ ansible_env.HOME }}/armbian_build/output" # final .img.xz + manifest.json land here
+armbian_build_cache_dir: "{{ ansible_facts['env']['HOME'] }}/armbian_build"         # armbian/build checkout + cache + userpatches
+armbian_build_output_dir: "{{ ansible_facts['env']['HOME'] }}/armbian_build/output" # final .img.xz + manifest.json land here
 
 # Per-build inputs. Branch/release default to a CLI-friendly modern
 # Armbian Rockchip image. armbian_build_board and armbian_build_host are

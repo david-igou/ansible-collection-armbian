@@ -14,7 +14,7 @@
         - /tmp/board_boot_verify_local_kernel_rescue
 
     - name: Assert both negative-case rescue markers exist
-      # If the role had silently passed boot_mode=nfs or local_kernel,
+      # If the role had silently passed board_boot_verify_mode=nfs or local_kernel,
       # the rescue block in converge would never have run and these
       # markers would be missing.
       ansible.builtin.assert:
@@ -40,7 +40,7 @@
     - name: Assert nfs-rescue message names the expected mismatch
       ansible.builtin.assert:
         that:
-          - "'boot_mode[nfs]' in (_nfs_msg.content | b64decode)"
+          - "'board_boot_verify_mode[nfs]' in (_nfs_msg.content | b64decode)"
           - "'expected NFS rootfs' in (_nfs_msg.content | b64decode)"
         fail_msg: >-
           nfs-rescue message did not contain the expected guidance.
@@ -49,7 +49,7 @@
     - name: Assert local_kernel-rescue message names the expected mismatch
       ansible.builtin.assert:
         that:
-          - "'boot_mode[local_kernel]' in (_lk_msg.content | b64decode)"
+          - "'board_boot_verify_mode[local_kernel]' in (_lk_msg.content | b64decode)"
           # The role reports the configurable match pattern; this scenario
           # sets no verify_match override, so the default must appear.
           - "'expected rootfs matching' in (_lk_msg.content | b64decode)"

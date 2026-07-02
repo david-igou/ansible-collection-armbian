@@ -6,7 +6,7 @@
 # mount path.
 
 - name: "Preserve scan: list existing partitions on device"
-  ansible.builtin.command: "lsblk -no NAME,LABEL --pairs {{ disk_binding.device }}"
+  ansible.builtin.command: "lsblk -no NAME,LABEL --pairs {{ disk_provision_disk_binding.device }}"
   register: __disk_provision_lsblk
   changed_when: false
   become: true
@@ -28,7 +28,7 @@
 - name: "Preserve scan: build skip set of partition ids to preserve"
   ansible.builtin.set_fact:
     __disk_provision_preserve_ids: >-
-      {{ disk_binding.layout
+      {{ disk_provision_disk_binding.layout
          | selectattr('preserve_on_reprovision', 'defined')
          | selectattr('preserve_on_reprovision')
          | selectattr('label', 'in', __disk_provision_existing_labels | map('last') | list)
@@ -38,12 +38,12 @@
 - name: "Preserve scan: report skip decision"
   ansible.builtin.debug:
     msg: >-
-      Preserve scan: existing labels on {{ disk_binding.device }}:
+      Preserve scan: existing labels on {{ disk_provision_disk_binding.device }}:
       {{ __disk_provision_existing_labels }}; partitions to preserve (skip wipe):
-      {{ __disk_provision_preserve_ids }}; force={{ disk_binding.force | default(false) }}
+      {{ __disk_provision_preserve_ids }}; force={{ disk_provision_disk_binding.force | default(false) }}
     verbosity: 1
 
 - name: "Preserve scan: when force=true, clear preserve list (operator escape hatch)"
   ansible.builtin.set_fact:
     __disk_provision_preserve_ids: []
-  when: disk_binding.force | default(false) | bool
+  when: disk_provision_disk_binding.force | default(false) | bool

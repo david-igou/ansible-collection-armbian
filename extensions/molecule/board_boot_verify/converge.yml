@@ -1,7 +1,7 @@
 ---
 # board_boot_verify is a pure assertion role: it gathers facts, then
-# inspects ansible_mounts['/'] and asserts the rootfs matches the
-# declared boot_mode. We exercise it against the molecule container's
+# inspects ansible_facts['mounts']['/'] and asserts the rootfs matches
+# the declared board_boot_verify_mode. We exercise it against the molecule container's
 # real mounts (which look like a local block device — overlay/ext4),
 # so the `sd` and `local` modes pass straight through, while `nfs`
 # and `local_kernel` modes are exercised via block/rescue to verify
@@ -18,14 +18,14 @@
       ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_verify
       vars:
-        boot_mode: sd
+        board_boot_verify_mode: sd
 
     # ---------- Pass case: local ----------
     - name: local-mode — role should pass (same condition as sd)
       ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_verify
       vars:
-        boot_mode: local
+        board_boot_verify_mode: local
 
     # ---------- Negative case: nfs — should fail-into-rescue ----------
     - name: nfs-mode — role MUST fail (container's / is not NFS)
@@ -33,10 +33,10 @@
         - ansible.builtin.include_role:
             name: david_igou.armbian.board_boot_verify
           vars:
-            boot_mode: nfs
+            board_boot_verify_mode: nfs
         - name: Trip an explicit failure if the role did not assert
           ansible.builtin.fail:
-            msg: "board_boot_verify accepted boot_mode=nfs against a non-NFS rootfs"
+            msg: "board_boot_verify accepted board_boot_verify_mode=nfs against a non-NFS rootfs"
       rescue:
         - name: Record the rescued failure for verify.yml to consume
           ansible.builtin.copy:
@@ -50,9 +50,9 @@
         - ansible.builtin.include_role:
             name: david_igou.armbian.board_boot_verify
           vars:
-            boot_mode: local_kernel
+            board_boot_verify_mode: local_kernel
         - ansible.builtin.fail:
-            msg: "board_boot_verify accepted boot_mode=local_kernel against a non-NVMe rootfs"
+            msg: "board_boot_verify accepted board_boot_verify_mode=local_kernel against a non-NVMe rootfs"
       rescue:
         - ansible.builtin.copy:
             dest: /tmp/board_boot_verify_local_kernel_rescue

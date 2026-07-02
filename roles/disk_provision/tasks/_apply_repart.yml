@@ -45,7 +45,7 @@
     src: "{{ __disk_provision_repart_dir }}/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
     dest: "{{ __disk_provision_repart_dir }}.filtered/{{ '%02d' | format(idx * 10 + 10) }}-{{ partition.id }}.conf"
     state: link
-  loop: "{{ disk_binding.layout }}"
+  loop: "{{ disk_provision_disk_binding.layout }}"
   loop_control:
     loop_var: partition
     label: "{{ partition.id }}"
@@ -78,11 +78,11 @@
 # the role's intent — fast_wipe is an explicit destructive opt-in.
 - name: "Apply repart: pre-discard whole disk (fast_wipe)"
   ansible.builtin.command:
-    cmd: "blkdiscard -f {{ disk_binding.device }}"
+    cmd: "blkdiscard -f {{ disk_provision_disk_binding.device }}"
   become: true
   when:
     - __disk_provision_preserve_ids | length == 0     # only safe when nothing to preserve
-    - (disk_binding.fast_wipe | default(true)) | bool
+    - (disk_provision_disk_binding.fast_wipe | default(true)) | bool
   register: __disk_provision_blkdiscard
   changed_when: true
   failed_when:
@@ -98,7 +98,7 @@
       --dry-run=no
       --json=pretty
       --discard={{ 'no' if __disk_provision_fast_wipe else 'yes' }}
-      {{ disk_binding.device }}
+      {{ disk_provision_disk_binding.device }}
   environment:
     # SYSTEMD_REPART_MKFS_OPTIONS_EXT4 is appended AFTER the device
     # in mkfs.ext4's argv. With glibc getopt's default permutation
@@ -109,7 +109,7 @@
     # suspenders override for the mkfs side.
     SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-E nodiscard' if __disk_provision_fast_wipe else '' }}"
   vars:
-    __disk_provision_fast_wipe: "{{ (__disk_provision_preserve_ids | length == 0) and (disk_binding.fast_wipe | default(true)) | bool }}"
+    __disk_provision_fast_wipe: "{{ (__disk_provision_preserve_ids | length == 0) and (disk_provision_disk_binding.fast_wipe | default(true)) | bool }}"
   become: true
   register: __disk_provision_repart_run
   # systemd-repart --json=pretty emits a JSON array listing every
@@ -123,7 +123,7 @@
     verbosity: 1
 
 - name: "Apply repart: force partition-table re-read"
-  ansible.builtin.command: "partprobe -s {{ disk_binding.device }}"
+  ansible.builtin.command: "partprobe -s {{ disk_provision_disk_binding.device }}"
   changed_when: false
   failed_when: false
   become: true
@@ -134,7 +134,7 @@
   retries: 5
   delay: 1
   until: __disk_provision_blkid.rc == 0
-  loop: "{{ disk_binding.layout }}"
+  loop: "{{ disk_provision_disk_binding.layout }}"
   loop_control:
     loop_var: partition
     label: "{{ partition.id }}"

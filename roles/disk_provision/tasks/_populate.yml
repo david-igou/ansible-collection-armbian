@@ -17,7 +17,7 @@
 - name: "Populate: build ordered mount list (by path depth)"
   ansible.builtin.set_fact:
     __disk_provision_mount_order: >-
-      {{ disk_binding.layout
+      {{ disk_provision_disk_binding.layout
          | selectattr('mount', 'defined')
          | sort(attribute='mount')
          | list }}
@@ -117,7 +117,7 @@
         regexp: 'root=\S+'
         replace: "root=LABEL={{ __disk_provision_root_label }}"
       vars:
-        __disk_provision_root_label: "{{ disk_binding.layout | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
+        __disk_provision_root_label: "{{ disk_provision_disk_binding.layout | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
       failed_when: false  # extlinux.conf may not exist; not on boot path under passthrough model
       become: true
 

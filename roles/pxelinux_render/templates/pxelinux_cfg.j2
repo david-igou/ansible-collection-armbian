@@ -1,3 +1,4 @@
+{{ ansible_managed | comment }}
 {% set _board = armbian_board_config | default({}) %}
 {% set _console = _board.console | default('') %}
 {% if pxelinux_render_pxe_verbose | bool %}
@@ -8,7 +9,6 @@
 {% else %}
 {%   set _verbose_suffix = '' %}
 {% endif %}
-# {{ ansible_managed }}
 # pxelinux.cfg for {{ pxelinux_render_hostname }} ({{ _board.armbian_board_name | default('UNRESOLVED') }})
 # MAC: {{ pxelinux_render_board_mac }}
 # Active mode: {{ pxelinux_render_boot_mode }}

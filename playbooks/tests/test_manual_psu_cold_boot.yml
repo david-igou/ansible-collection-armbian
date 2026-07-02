@@ -152,9 +152,9 @@
 
         - name: Capture root mount facts
           ansible.builtin.set_fact:
-            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='fstype') | first }}"
-            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='device') | first }}"
 
         - name: Diagnostic bundle

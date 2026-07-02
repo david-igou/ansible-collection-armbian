@@ -37,12 +37,12 @@
             executable: /bin/bash
           changed_when: true
 
-        - name: "Call role with the partition as target_device — must fail"
+        - name: "Call role with the partition as disk_image_target_device — must fail"
           ansible.builtin.include_role:
             name: david_igou.armbian.disk_image
           vars:
-            image_source: "/tmp/test.img.xz"
-            target_device: "{{ _target_loop }}p1"
+            disk_image_source: "/tmp/test.img.xz"
+            disk_image_target_device: "{{ _target_loop }}p1"
       rescue:
         - name: "Confirm role failed because target was a partition"
           ansible.builtin.assert:
@@ -53,20 +53,20 @@
               Expected failure mentioning 'partition'; got:
               {{ ansible_failed_result | default({}) }}
 
-    - name: "Negative: reject when image_source is gibberish"
+    - name: "Negative: reject when disk_image_source is gibberish"
       block:
-        - name: "Call role with a non-URL, non-abs-path image_source"
+        - name: "Call role with a non-URL, non-abs-path disk_image_source"
           ansible.builtin.include_role:
             name: david_igou.armbian.disk_image
           vars:
-            image_source: "not-a-url-and-not-a-path"
-            target_device: "{{ _target_loop }}"
+            disk_image_source: "not-a-url-and-not-a-path"
+            disk_image_target_device: "{{ _target_loop }}"
       rescue:
-        - name: "Confirm role failed because image_source is invalid"
+        - name: "Confirm role failed because disk_image_source is invalid"
           ansible.builtin.assert:
             that:
               - ansible_failed_result.msg is defined
-              - "'image_source' in ansible_failed_result.msg"
+              - "'disk_image_source' in ansible_failed_result.msg"
             fail_msg: >-
-              Expected failure mentioning 'image_source'; got:
+              Expected failure mentioning 'disk_image_source'; got:
               {{ ansible_failed_result | default({}) }}

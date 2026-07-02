@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: "Provision an SSH-key user with passwordless sudo on a flashed Armbian board."
+    short_description: "Provision an SSH-key user with passwordless sudo on a flashed Armbian board"
     description:
       - >-
         Connects as the Armbian default user (root) using the supplied

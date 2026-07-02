@@ -66,7 +66,8 @@
   hosts: "{{ target_hosts | default('boards') }}"
   gather_facts: false
   tasks:
-    - ansible.builtin.include_tasks: ../tasks/_assert_no_limit.yml
+    - name: "Assert no --limit narrowing on composite playbook"
+      ansible.builtin.include_tasks: ../tasks/_assert_no_limit.yml
       vars:
         _expected_pattern: "{{ target_hosts | default('boards') }}"
 
@@ -322,7 +323,7 @@
           ansible.builtin.include_role:
             name: board_boot_verify
           vars:
-            boot_mode: nfs
+            board_boot_verify_mode: nfs
 
 # Phase 2a's `vars: skip_phase_2: false` is play-scoped and does NOT
 # propagate into this imported playbook. The `| default(false)` guard
@@ -389,8 +390,8 @@
           ansible.builtin.include_role:
             name: disk_image
           vars:
-            image_source: "{{ armbian_rootfs_src }}"
-            target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
+            disk_image_source: "{{ armbian_rootfs_src }}"
+            disk_image_target_device: "{{ armbian_sd_device | default('/dev/mmcblk0') }}"
 
         - name: "Phase 3 — write evidence"
           ansible.builtin.copy:
@@ -478,7 +479,7 @@
           ansible.builtin.include_role:
             name: board_boot_verify
           vars:
-            boot_mode: sd
+            board_boot_verify_mode: sd
 
         - name: "Phase 4 — write evidence"
           ansible.builtin.copy:
@@ -535,7 +536,7 @@
         - name: "Phase 5 — guard: must be on NFS before wiping local disks"
           ansible.builtin.assert:
             that: >-
-              ansible_mounts | selectattr('mount', 'equalto', '/')
+              ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                 | map(attribute='fstype') | first in ['nfs', 'nfs4']
             fail_msg: "{{ inventory_hostname }} is not on NFS — refusing to wipe NVMe."
 
@@ -557,7 +558,7 @@
           ansible.builtin.include_role:
             name: disk_provision
           vars:
-            disk_binding: "{{ item }}"
+            disk_provision_disk_binding: "{{ item }}"
           loop: "{{ armbian_local_disks | default([]) }}"
           loop_control:
             label: "{{ item.device }}"

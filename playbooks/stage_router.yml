@@ -15,7 +15,8 @@
   hosts: "{{ armbian_netboot_server_group | default('netboot_server') }}"
   gather_facts: false
   tasks:
-    - ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
+    - name: "Assert no --limit narrowing on composite playbook"
+      ansible.builtin.include_tasks: tasks/_assert_no_limit.yml
       vars:
         _expected_pattern: "{{ armbian_netboot_server_group | default('netboot_server') }}"
 
@@ -45,11 +46,11 @@
         label: "{{ item.0 }}/{{ item.1 }}"
 
 - name: Upload TFTP assets to router (reference playbook)
-  import_playbook: "{{ armbian_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
+  ansible.builtin.import_playbook: "{{ armbian_tftp_upload_playbook | default('routeros/upload_tftp_assets.yml') }}"
   vars:
     armbian_tftp_upload_models: "{{ groups[armbian_boards_group] }}"
 
 - name: Plumbing check — verify /ip tftp rows landed
-  import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
+  ansible.builtin.import_playbook: "{{ armbian_plumbing_check_playbook | default('routeros/plumbing_check.yml') }}"
   vars:
     armbian_tftp_check_models: "{{ groups[armbian_boards_group] }}"

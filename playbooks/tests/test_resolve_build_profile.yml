@@ -81,8 +81,10 @@
   tasks:
     - name: Run resolver (expected to fail)
       block:
-        - ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_build_profile.yml"
-        - ansible.builtin.fail:
+        - name: Run build-profile resolver
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/_resolve_build_profile.yml"
+        - name: Trip failure if resolver did not fail
+          ansible.builtin.fail:
             msg: "Resolver should have failed on duplicate dest but did not"
       rescue:
         - name: Assert the failure message names duplicate dest

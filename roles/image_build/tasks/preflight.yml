@@ -20,7 +20,7 @@
 - name: Resolve free space at armbian_build_cache_dir
   ansible.builtin.set_fact:
     __image_build_cache_mount: >-
-      {{ ansible_mounts
+      {{ ansible_facts['mounts']
          | sort(attribute='mount', reverse=true)
          | selectattr('mount', 'in', __image_build_cache_dir_host + '/')
          | list | first }}

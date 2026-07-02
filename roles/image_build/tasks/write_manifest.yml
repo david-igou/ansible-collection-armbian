@@ -6,7 +6,7 @@
 
 - name: Capture build timestamp (UTC, ISO 8601)
   ansible.builtin.set_fact:
-    __image_build_built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_date_time.epoch | default(lookup('pipe', 'date -u +%s'))) }}"
+    __image_build_built_at: "{{ '%Y-%m-%dT%H:%M:%SZ' | strftime(ansible_facts['date_time'].epoch | default(lookup('pipe', 'date -u +%s'))) }}"
 
 - name: Assemble final manifest
   ansible.builtin.set_fact:

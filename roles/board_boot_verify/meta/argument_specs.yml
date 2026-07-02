@@ -4,42 +4,42 @@ argument_specs:
     short_description: "Assert a board's rootfs matches the declared boot mode."
     description:
       - >-
-        Single-host role. Gathers facts, inspects ansible_mounts['/'],
+        Single-host role. Gathers facts, inspects ansible_facts['mounts']['/'],
         and asserts that the rootfs fstype matches the declared
-        boot_mode (nfs|nfs4 for nfs; not nfs for sd, local, or
+        board_boot_verify_mode (nfs|nfs4 for nfs; not nfs for sd, local, or
         local_kernel; for local_kernel additionally asserts the
-        device path matches local_kernel_verify_match, default
+        device path matches board_boot_verify_local_kernel_match, default
         ^/dev/nvme).
 
     options:
-      boot_mode:
+      board_boot_verify_mode:
         type: str
         required: true
         description: >-
           The declared boot mode. Built-in modes are nfs, sd, local,
           and local_kernel (`local_kernel` asserts the rootfs device
-          matches local_kernel_verify_match, default ^/dev/nvme;
+          matches board_boot_verify_local_kernel_match, default ^/dev/nvme;
           boards with non-NVMe localcmd fallbacks widen it via
           local_kernel.verify_match in armbian_board_config). Any
           other value is treated as a user-defined mode and must be a
-          key in extra_modes; the mode's `verify_match` regex is
+          key in board_boot_verify_extra_modes; the mode's `verify_match` regex is
           asserted against the root device. No `choices:` constraint
           here on purpose — it would reject custom modes before the
-          extra_modes branch could run.
-      local_kernel_verify_match:
+          board_boot_verify_extra_modes branch could run.
+      board_boot_verify_local_kernel_match:
         type: str
         required: false
         description: >-
           Regex the rootfs device must match when
-          boot_mode=local_kernel. Defaults to
+          board_boot_verify_mode=local_kernel. Defaults to
           armbian_board_config.local_kernel.verify_match when that is
           resolved on the host, else '^/dev/nvme'. Example for a
           board with an eMMC fallback: '^/dev/(nvme|mmcblk0)'.
-      extra_modes:
+      board_boot_verify_extra_modes:
         type: dict
         default: {}
         description: >-
           Mirrors armbian_extra_modes for verify_match lookups.
-          When boot_mode is a key in extra_modes, this role reads the
-          mode's `verify_match` regex and asserts ansible_mounts['/'].
+          When board_boot_verify_mode is a key in board_boot_verify_extra_modes, this role reads the
+          mode's `verify_match` regex and asserts ansible_facts['mounts']['/'].
           device matches it.

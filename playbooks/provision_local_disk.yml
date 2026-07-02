@@ -76,7 +76,7 @@
     # would corrupt the running rootfs. Refuse loudly.
     - name: Find the source of the running rootfs
       ansible.builtin.set_fact:
-        _root_source: "{{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
+        _root_source: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
 
     - name: Assert we're not about to wipe the disk we're running from
       ansible.builtin.assert:
@@ -92,7 +92,7 @@
           Safe to proceed.
 
   tasks:
-    # disk_provision takes one declarative disk_binding (device + layout).
+    # disk_provision takes one declarative disk_provision_disk_binding (device + layout).
     # For this ad-hoc single-disk entrypoint we synthesize the canonical
     # local_kernel layout: one ext4 root partition grown to fill the
     # device, labeled for the LABEL=-keyed fstab the role regenerates.
@@ -103,7 +103,7 @@
         name: disk_provision
       vars:
         disk_provision_source: "/"
-        disk_binding:
+        disk_provision_disk_binding:
           device: "{{ armbian_local_disk_device }}"
           fast_wipe: "{{ armbian_local_disk_fast_wipe | bool }}"
           force: "{{ armbian_local_disk_force | bool }}"

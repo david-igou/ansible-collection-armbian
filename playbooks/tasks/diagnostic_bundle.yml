@@ -7,7 +7,7 @@
 # test_hardware_e2e.yml.
 #
 # Required: ansible.builtin.setup must have been called in the parent
-# play before this task file runs (we read ansible_mounts).
+# play before this task file runs (we read ansible_facts['mounts']).
 
 - name: Diagnostic bundle — findmnt root source
   ansible.builtin.command: findmnt -no SOURCE /
@@ -116,9 +116,9 @@
     msg:
       - "==== diagnostic bundle: {{ _diag_phase | default('unknown') }} ===="
       - "findmnt /:        {{ _diag_findmnt.stdout | default('(unavailable)') }}"
-      - "rootfs (facts):   {{ ansible_mounts | selectattr('mount', 'equalto', '/')
+      - "rootfs (facts):   {{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                             | map(attribute='device') | first | default('?') }}
-                            ({{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                            ({{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                               | map(attribute='fstype') | first | default('?') }})"
       - "/proc/cmdline:    {{ _diag_cmdline.content | default('') | b64decode | trim }}"
       - "ip -4 route:      {{ _diag_route.stdout_lines | default([]) }}"

@@ -17,7 +17,7 @@
         name: david_igou.armbian.disk_provision
       vars:
         disk_provision_source: "/tmp/testroot"
-        disk_binding:
+        disk_provision_disk_binding:
           device: "{{ _loop }}"
           layout:
             - id: boot
@@ -56,7 +56,7 @@
         name: david_igou.armbian.disk_provision
       vars:
         disk_provision_source: "/tmp/testroot"
-        disk_binding:
+        disk_provision_disk_binding:
           device: "{{ _loop }}"
           layout:
             - id: boot
@@ -84,7 +84,7 @@
         name: david_igou.armbian.disk_provision
       vars:
         disk_provision_render_only: true
-        disk_binding:
+        disk_provision_disk_binding:
           device: /dev/loop1
           layout:
             - { id: esp,  size: 512MiB, type: esp,   format: vfat, label: ARMBI_ESP,         mount: /boot/efi }

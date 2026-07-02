@@ -13,7 +13,7 @@ partition table currently backs a mounted filesystem.
 
 ## Inputs
 
-See `meta/argument_specs.yml`. Required: `image_source`, `target_device`.
+See `meta/argument_specs.yml`. Required: `disk_image_source`, `disk_image_target_device`.
 Optional: `disk_image_dd_bs` (default `4M`).
 
 ## Example
@@ -28,8 +28,8 @@ Optional: `disk_image_dd_bs` (default `4M`).
       ansible.builtin.include_role:
         name: david_igou.armbian.disk_image
       vars:
-        image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
-        target_device: /dev/mmcblk0
+        disk_image_source: "https://images.example.org/orange-pi-5-pro.img.xz"
+        disk_image_target_device: /dev/mmcblk0
         disk_image_dd_bs: 4M
 ```
 
