@@ -26,7 +26,7 @@ parameters, in what order.
 | Role | Runs on | Enforces / produces |
 |---|---|---|
 | `image_build` | `armbian_builders` | `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server) |
-| `rootfs_provision` | netboot server (host with sudo+losetup) | Per-host NFS rootfs: extracts `.img.xz` (local path or URL) into a per-model template, reflink-clones it to a per-host directory, and resets identity (hostname/machine-id/SSH host keys) |
+| `rootfs_provision` | netboot server (host with sudo+losetup) | Per-host NFS rootfs: extracts `.img.xz` (local path or URL) directly into a per-host directory and resets identity (hostname/machine-id/SSH host keys); same-URL hosts share only the download via a URL-keyed image cache |
 | `disk_image` | a board (or any host owning the target) | One block device imaged via streaming `xz \| dd`; mount-aware refusal |
 | `disk_provision` | a board | Declarative GPT layout via `systemd-repart` + rsync source rootfs + LABEL-keyed fstab regen; idempotent, supports `preserve_on_reprovision` per partition |
 | `pxelinux_render` | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
@@ -68,7 +68,7 @@ david_igou/armbian/   (this repo root)
 ├── meta/runtime.yml          # Minimum Ansible version (>=2.15)
 ├── roles/                    # All single-host, single-purpose, transport-agnostic
 │   ├── image_build/               # Build custom .img.xz on armbian_builders host
-│   ├── rootfs_provision/          # Extract .img.xz → per-model template + per-host clone + identity reset
+│   ├── rootfs_provision/          # Extract .img.xz → per-host rootfs + identity reset
 │   ├── disk_image/                # Stream an .img.xz/.img to a block device (dd-style)
 │   ├── disk_provision/            # Declarative GPT layout via systemd-repart + rsync + LABEL-keyed fstab
 │   ├── pxelinux_render/           # Render one per-board pxelinux.cfg to a local dir
@@ -80,7 +80,7 @@ david_igou/armbian/   (this repo root)
 │   ├── stage_netboot_assets.yml     # Per-host rootfs_provision on netboot server (extract + clone)
 │   ├── stage_router.yml             # Fetch TFTP cache to controller → push to router + verify rows
 │   ├── build_and_publish_from_inventory.yml  # Build custom Armbian .img.xz + publish to netboot server
-│   ├── cleanup_boot_files.yml       # Remove stale per-host pxelinux.cfg + per-model TFTP rows
+│   ├── cleanup_boot_files.yml       # Prune stale published .img.xz (+ .sha) files on the netboot server
 │   ├── converge_boot_mode.yml       # Converge board(s) to inventory-declared boot mode
 │   ├── set_boot_mode.yml            # Thin wrapper around converge for -e override
 │   ├── persist_uboot_env.yml        # Write SPI U-Boot env vars via fw_setenv (rock-5b etc.)
@@ -185,7 +185,7 @@ ansible-playbook playbooks/routeros/bootstrap_user.yml \
 # (3a) Stage netboot assets on the netboot server (per-host rootfs_provision).
 ansible-playbook playbooks/stage_netboot_assets.yml
 
-# (3b) Stage per-model TFTP assets on the router (fetch to controller + push + verify rows).
+# (3b) Stage per-host TFTP assets on the router (fetch to controller + push + verify rows).
 ansible-playbook playbooks/stage_router.yml
 
 # Converge board(s) to their inventory-declared boot mode.
@@ -212,7 +212,8 @@ ansible-playbook playbooks/provision_local_disk.yml --limit orange-pi-5-pro-01
 # disk(s) → flip pxelinux to local → verify (auto-reverts on failure).
 ansible-playbook playbooks/reprovision_to_local.yml --limit orange-pi-5-pro-01
 
-# Clean up stale TFTP rows + per-host pxelinux.cfg for retired boards.
+# Prune stale published .img.xz files (per each board's manifest.json)
+# from the netboot server's images tree.
 ansible-playbook playbooks/cleanup_boot_files.yml
 
 # Hardware E2E test: converge a single board through SD → NFS → SD and
@@ -297,10 +298,10 @@ Inventory (`inventory/hosts.yml`) — SSH connection details on host entries:
   targeted by any playbook.
 
 The NFS rootfs export root (`armbian_nfs_rootfs_path`) must already exist on
-the netboot server and be exported. Within it, the role creates `_templates/<model>/`
-(per-model rootfs template) and `<inventory_hostname>/` (per-host rootfs clone)
-automatically. The control node needs SSH (with `become: true`) to the netboot server,
-but does not need an NFS client.
+the netboot server and be exported. Within it, the role creates a
+`<inventory_hostname>/` per-host rootfs directory automatically. The control
+node needs SSH (with `become: true`) to the netboot server, but does not need
+an NFS client.
 
 Each board in `inventory/hosts.yml` needs `armbian_board_mac`,
 `armbian_board_model`, and `armbian_boot_mode` set. The
@@ -384,34 +385,34 @@ Two staging playbooks write the server-side state:
 (`hosts: netboot_server`, `become: true`) and invokes the `rootfs_provision`
 role once per board host. For each host, `rootfs_provision` resolves the
 `.img.xz` source (via `_resolve_rootfs_src.yml`: host_vars `armbian_rootfs_src`
-→ published manifest → fail), extracts the rootfs into the per-model template
-directory, reflink-clones it into the per-host directory, and resets identity.
-The role accepts a `.img.xz` source as either a local path on the server or an
-`http(s)://` URL.
+→ published manifest → fail), extracts the rootfs directly into the per-host
+directory, and resets identity. The role accepts a `.img.xz` source as either
+a local path on the server or an `http(s)://` URL. Hosts pointing at the same
+upstream URL share only the `.img.xz` download (URL-keyed image cache);
+extraction is always per-host.
 
-`stage_router.yml` is a 3-play composition: play 1 fetches the per-model
+`stage_router.yml` is a 3-play composition: play 1 fetches the per-host
 kernel/initrd/dtb from `netboot_server` to the controller cache; play 2
 imports the transport-specific upload playbook (defaults to
 `routeros/upload_tftp_assets.yml`); play 3 imports the plumbing-check
 reference to verify rows landed.
 
-Inside `armbian_nfs_rootfs_path` two layouts coexist:
+Inside `armbian_nfs_rootfs_path` the layout is one directory per host:
 
 ```
 armbian_nfs_rootfs_path/
-├── _templates/
-│   └── orange-pi-5-pro/    per-model template (extracted from .img.xz)
-└── orange-pi-5-pro-01/     per-host clone of _templates/orange-pi-5-pro
+├── orange-pi-5-pro-01/     per-host rootfs (extracted from its .img.xz)
+└── rock-5b-01/             per-host rootfs
 ```
 
-Per-host clones are made with `cp --reflink=auto`, which is a zero-cost CoW
-snapshot on XFS, btrfs, and ZFS. Hostname, machine-id, and SSH host keys are
-reset per-host so two same-model boards have independent identity on the wire —
-see `roles/rootfs_provision/tasks/_identity_reset.yml`.
+Hostname, machine-id, and SSH host keys are reset per-host so two same-model
+boards have independent identity on the wire — see
+`roles/rootfs_provision/tasks/_identity_reset.yml`.
 
-`converge_boot_mode.yml` is a four-play composition: pre-flight plumbing
-check (router), local pxelinux render (boards, delegated to localhost),
-upload reference playbook (router, swappable transport), and cycle+wait+verify
+`converge_boot_mode.yml` is a seven-play composition: `--limit` guard,
+local_kernel validation, pre-flight plumbing check (router), local pxelinux
+render (boards, delegated to localhost), upload reference playbook (router,
+swappable transport), U-Boot SPI env persist (gated), and cycle+wait+verify
 on boards. The control node never NFS-mounts anything and never SSHes to the
 netboot server during boot-mode convergence.
 
@@ -421,7 +422,7 @@ netboot server during boot-mode convergence.
 |---|---|
 | `bootstrap_armbian.yml` | **boards** (connects as root with `armbian_default_password`; idempotent) |
 | `routeros/bootstrap_user.yml` | RouterOS (router + switches via `routeros_netboot`) |
-| `stage_netboot_assets.yml` | **netboot server** (`rootfs_provision` per host: extract template + reflink-clone + identity reset) |
+| `stage_netboot_assets.yml` | **netboot server** (`rootfs_provision` per host: per-host extract + identity reset) |
 | `stage_router.yml` | **netboot server** (fetch to controller) + **rb5009** (net_put + /ip tftp registration + plumbing check) |
 | `build_and_publish_from_inventory.yml` | **`armbian_builders`** (Docker-capable build host; loops per-host after resolving `armbian_build` profile); publishes to **netboot server** over SSH |
 | `converge_boot_mode.yml` / `set_boot_mode.yml` | **rb5009** (plumbing check + pxelinux upload) + **boards** (pxelinux render via delegate localhost, PoE cycle + wait + verify) |
@@ -537,8 +538,8 @@ flash:/sbc/
 ├── pxelinux.cfg/
 │   └── 01-<MAC>           # per-board (converge_boot_mode.yml writes; always present)
 └── armbian/
-    └── <model>/
-        ├── vmlinuz        # per-model (stage_router.yml writes)
+    └── <inventory_hostname>/
+        ├── vmlinuz        # per-host (stage_router.yml writes)
         ├── initrd.img
         └── board.dtb
 ```
@@ -546,8 +547,8 @@ flash:/sbc/
 Each file has a corresponding `/ip tftp` rule with `req-filename` matching the
 path U-Boot requests and `real-filename` pointing at the flash path. Per-board
 pxelinux.cfg files always exist — the `default` directive inside selects nfs or
-sd boot. Per-model assets are added once by `stage_router.yml` and persist
-across boot-mode changes.
+sd boot. Per-host kernel/initrd/dtb assets are added by `stage_router.yml` and
+persist across boot-mode changes.
 
 The SBC subnet's `next-server` (set by your separate RouterOS-config repo) points
 at rb5009; combined with U-Boot's PXE bootmeth using `siaddr` for `serverip`, that
@@ -574,7 +575,7 @@ filtering.
 ## Key files
 
 - `inventory/group_vars/all.yml` (armbian_build_defaults) — build-time defaults (armbian_build_release, armbian_build_ref, etc.); loaded automatically by inventory, no include_vars needed
-- `roles/rootfs_provision/tasks/main.yml` — per-host: resolve src → extract template → reflink-clone → identity reset
+- `roles/rootfs_provision/tasks/main.yml` — per-host: resolve src → download/copy → extract → stage TFTP → identity reset (sentinel-gated)
 - `roles/rootfs_provision/tasks/_identity_reset.yml` — reset hostname/machine-id/SSH host keys in a rootfs
 - `roles/disk_image/tasks/main.yml` — orchestrate validate → write → settle for the disk-imaging role
 - `roles/disk_image/tasks/_validate.yml` — mount-aware guard + extension classify (pre-flight)
@@ -592,7 +593,7 @@ filtering.
 - `playbooks/tasks/auto_bootstrap_if_needed.yml` — SSH probe + bootstrap_armbian fallback
 - `playbooks/tasks/render_and_upload_pxelinux.yml` — combined render+upload helper for in-play use
 - `playbooks/routeros/upload_pxelinux_cfg.yml` — per-board pxelinux.cfg upload + /ip tftp rows
-- `playbooks/routeros/upload_tftp_assets.yml` — per-model kernel/initrd/dtb upload + rows
+- `playbooks/routeros/upload_tftp_assets.yml` — per-host kernel/initrd/dtb upload + rows
 - `playbooks/routeros/plumbing_check.yml` — assert /ip tftp rows exist on router
 - `playbooks/routeros/poe_control.yml` — PoE on/off/cycle delegated to a board's switch
 - `playbooks/routeros/bootstrap_user.yml` — provision ansible-netboot user/group/SSH keys

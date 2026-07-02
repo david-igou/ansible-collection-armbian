@@ -17,8 +17,8 @@
 #   armbian_uboot_env_extra — optional flat dict (operator escape hatch)
 #
 # Used by:
-#   - playbooks/persist_uboot_env.yml (real fw_setenv path; Task 8)
-#   - extensions/molecule/persist_uboot_env/converge.yml (precedence test; Task 7)
+#   - playbooks/persist_uboot_env.yml (real fw_setenv path)
+#   - extensions/molecule/persist_uboot_env/converge.yml (precedence test)
 
 - name: Pull board config for this host
   ansible.builtin.set_fact:
@@ -48,8 +48,8 @@
 # Chain logic mirrors roles/image_build/templates/render_localcmd_chain.j2
 # exactly. The duplication is intentional: Jinja's FileSystemLoader path
 # restriction prevents importing that macro from a set_fact in a tasks
-# file outside a role. Task 7's molecule scenario verifies both render
-# the same string.
+# file outside a role. The extensions/molecule/persist_uboot_env
+# scenario verifies both render the same string.
 #
 # Storage resolution mirrors the macro: `storage_candidates` (ordered
 # list of {scan, dev} dicts) wins when defined; otherwise the legacy

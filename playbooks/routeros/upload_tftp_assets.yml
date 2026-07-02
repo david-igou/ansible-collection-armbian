@@ -1,10 +1,12 @@
 ---
-# Upload kernel / initrd / dtb per model to flash:/<dir>/armbian/<model>/
+# Upload kernel / initrd / dtb per host to flash:/<dir>/armbian/<hostname>/
 # and register /ip tftp rows.
 #
 # Required vars:
-#   armbian_tftp_upload_models: list of model strings
-#   armbian_tftp_cache_dir:     controller cache holding per-model files
+#   armbian_tftp_upload_models: list of inventory_hostname values (the
+#                               parameter name is kept for backwards
+#                               compatibility; values are hostnames)
+#   armbian_tftp_cache_dir:     controller cache holding per-host files
 #   armbian_tftp_flash_dir:     top-level dir on the router's flash
 
 - name: Upload SBC TFTP assets to RouterOS
@@ -26,7 +28,7 @@
       changed_when: false
       run_once: true
 
-    - name: Ensure per-model dirs exist
+    - name: Ensure per-host dirs exist
       community.routeros.command:
         commands:
           - >-
@@ -61,7 +63,7 @@
         label: "{{ item.0 }}/{{ item.1 }}"
       run_once: true
 
-    - name: Upload each (model, asset) pair via shared primitive
+    - name: Upload each (host, asset) pair via shared primitive
       ansible.builtin.include_tasks: tasks/upload_file.yml
       vars:
         _upload_local_src: "{{ armbian_tftp_cache_dir }}/{{ item.0 }}/{{ item.1 }}"

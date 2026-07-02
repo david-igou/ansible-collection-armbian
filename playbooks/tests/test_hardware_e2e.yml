@@ -319,12 +319,12 @@
           ansible.builtin.meta: reset_connection
 
         # Same auto-bootstrap pattern as Phase 1. The per-host NFS
-        # rootfs is initially cloned from _templates/<model>/ (stock
-        # Armbian image), so a never-bootstrapped clone only has the
-        # Armbian default root user. But per-host clones persist across
-        # test sessions; any prior iter that auto-bootstrapped the
-        # rootfs leaves the inventory user provisioned. Probe + auto-
-        # bootstrap handles both cases.
+        # rootfs is initially extracted from a stock Armbian image, so a
+        # never-bootstrapped rootfs only has the Armbian default root
+        # user. But per-host rootfs dirs persist across test sessions;
+        # any prior iter that auto-bootstrapped the rootfs leaves the
+        # inventory user provisioned. Probe + auto-bootstrap handles
+        # both cases.
         - name: Phase 2 — auto-bootstrap if needed (NFS rootfs may be fresh)
           ansible.builtin.include_tasks: ../tasks/auto_bootstrap_if_needed.yml
           vars:

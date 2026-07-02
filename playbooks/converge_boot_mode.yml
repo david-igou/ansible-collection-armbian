@@ -2,16 +2,18 @@
 # Converge board(s) to their inventory-declared boot mode.
 #
 # Plays:
-#   1. Validate local_kernel inventory consistency (gated to local_kernel hosts)
-#   2. Pre-flight plumbing check (router has /ip tftp rows)
-#   3. Render per-board pxelinux.cfg locally (delegate_to localhost)
-#   4. Upload pxelinux.cfg to router (reference playbook, swappable)
-#   5. Persist U-Boot SPI env for local_kernel + spi hosts (no cycle)
-#   6. PoE cycle + wait + verify on the board
+#   1. Pre-flight — refuse --limit on this composite playbook
+#   2. Validate local_kernel inventory consistency (gated to local_kernel hosts)
+#   3. Pre-flight plumbing check (router has /ip tftp rows)
+#   4. Render per-board pxelinux.cfg locally (delegate_to localhost)
+#   5. Upload pxelinux.cfg to router (reference playbook, swappable)
+#   6. Persist U-Boot env for spi_flash hosts (no cycle; localcmd only
+#      lands on local_kernel + persist_via=spi hosts)
+#   7. PoE cycle + wait + verify on the board
 #
 # Pre-condition: stage_netboot_assets.yml + stage_router.yml have been
 # run at least once, so the router has the per-host kernel/initrd/dtb
-# /ip tftp rows. Play 2 asserts this before touching any board.
+# /ip tftp rows. Play 3 asserts this before touching any board.
 #
 # Usage:
 #   ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
@@ -19,7 +21,7 @@
 #   ansible-playbook playbooks/converge_boot_mode.yml \
 #     -e target_hosts=orange-pi-5-pro-01 -e armbian_cycle_board=false
 #
-# Use -e target_hosts=... (not --limit). The six plays in this composite
+# Use -e target_hosts=... (not --limit). The seven plays in this composite
 # target different host groups (router for plumbing/upload, boards for
 # render/cycle/verify); --limit narrows ALL of them, silently skipping
 # the router-side plays with "no hosts matched".
@@ -86,7 +88,7 @@
     armbian_pxelinux_upload_boards: >-
       {{ query('inventory_hostnames', target_hosts | default('boards')) }}
 
-- name: Persist U-Boot SPI env for local_kernel + spi hosts
+- name: Persist U-Boot env for spi_flash hosts
   ansible.builtin.import_playbook: persist_uboot_env.yml
   vars:
     armbian_persist_uboot_env_cycle: false

@@ -28,16 +28,12 @@ argument_specs:
         required: true
         description: >-
           One entry from armbian_local_disks. Shape:
-          {device, wipe?, force?, layout: [partition_spec, ...]}.
+          {device, force?, fast_wipe?, layout: [partition_spec, ...]}.
         options:
           device:
             type: path
             required: true
             description: "Whole-disk path, e.g. /dev/nvme0n1. WILL BE WIPED unless preserve rules apply."
-          wipe:
-            type: bool
-            default: true
-            description: "When true, allow destructive partitioning. When false, fail if disk layout doesn't already match (read-only audit mode)."
           force:
             type: bool
             default: false
@@ -47,8 +43,9 @@ argument_specs:
             default: true
             description: >-
               When true, issue `blkdiscard <device>` (full-device TRIM using the
-              storage's native chunk size) before systemd-repart, AND pass
-              `-K` to mkfs.ext4 to skip its per-block discard at format time.
+              storage's native chunk size) before systemd-repart, AND suppress
+              mkfs.ext4's per-block discard at format time (`-E nodiscard` via
+              SYSTEMD_REPART_MKFS_OPTIONS_EXT4).
               Net effect: ~30x speedup on large NVMe (>200 GiB), no functional
               change on small disks. Set false for devices with broken TRIM
               firmware (some old eMMC) where blkdiscard hangs.

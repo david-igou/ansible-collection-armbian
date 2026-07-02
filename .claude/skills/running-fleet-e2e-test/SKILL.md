@@ -124,9 +124,9 @@ ansible-inventory --host <spi-board> --list 2>/dev/null \
 
 ### A.5 — Free space on netboot_server
 
-Phase 1 force-recreates per-host NFS clones. Each clone is ~2 GB on the
-first run; reflink on XFS/btrfs/ZFS makes subsequent ones near-zero.
-Still, leave headroom:
+Phase 1 force-recreates per-host NFS rootfs dirs. Each extraction is
+~2 GB per host (extraction is per-host; only the .img.xz download is
+shared via the URL-keyed cache). Leave headroom:
 
 ```bash
 ansible netboot_server -m shell -a "df -h $(ansible-inventory --list | jq -r '.all.vars.armbian_nfs_rootfs_path') 2>&1 | tail -1"
@@ -315,10 +315,9 @@ Failure mode: `rootfs_provision` errored (xz/loop/rsync/identity-reset) on netbo
 - `losetup` failed → the netboot_server is out of free loop devices
   (rare; clears on netboot_server reboot) or `mount` capability is
   missing (check `lsmod | grep loop`).
-- `rsync` mid-stream → disk space (A.5). Free `/mnt/ssd/netboot/rootfs/_templates/<old-model>/`
-  dirs from removed-from-inventory boards.
-- `cp --reflink=auto` falling back to full copy → expected when the
-  NFS dir filesystem doesn't support CoW (ext4). Slower, not broken.
+- `rsync` mid-stream → disk space (A.5). Free `/mnt/ssd/netboot/rootfs/<hostname>/`
+  dirs from removed-from-inventory boards, and stale downloads under
+  the URL-keyed image cache.
 
 Boards stay powered off the whole time, so a Phase 1 failure has zero
 hardware blast radius. Fix and re-run with `--skip 0` to keep the fleet
@@ -419,7 +418,7 @@ something in the canonical image or the netboot infrastructure has
 drifted. Most likely culprits:
 
 - A new Armbian release moved package versions in the .img.xz.
-- The NFS export's `_templates/<model>/` got partially overwritten by a
+- The NFS export's per-host rootfs dir got partially overwritten by a
   manual operator op.
 - A board's SPI got reset (factory-restore on the switch, accidental
   `sf erase`).

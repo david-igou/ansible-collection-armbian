@@ -18,7 +18,7 @@
 #   disk_image_dd_bs  — dd block size (default 4M)
 #
 # For the full fleet reset that wraps this role (Phase 3), see
-# playbooks/test_fleet_e2e.yml.
+# playbooks/tests/test_fleet_e2e.yml.
 
 - name: Image a board's block device from a published .img.xz
   hosts: "{{ armbian_boards_group | default('boards') }}"

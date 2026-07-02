@@ -30,14 +30,14 @@ workflows.
 |---|---|---|
 | `bootstrap_armbian.yml` | boards (as `root`) | Provision the inventory `ansible_user` with passwordless-sudo SSH-key auth |
 | `build_and_publish_from_inventory.yml` | `armbian_builders` → netboot server | Build per-host custom `.img.xz` and publish to the netboot server |
-| `stage_netboot_assets.yml` | netboot server | Per-host `rootfs_provision` (extract template + reflink-clone + identity reset) |
-| `stage_router.yml` | netboot server (fetch) → router (push) | Stage per-model kernel/initrd/dtb + `/ip tftp` rows |
+| `stage_netboot_assets.yml` | netboot server | Per-host `rootfs_provision` (per-host extract + identity reset) |
+| `stage_router.yml` | netboot server (fetch) → router (push) | Stage per-host kernel/initrd/dtb + `/ip tftp` rows |
 | `converge_boot_mode.yml` | router + boards | Converge board(s) to their inventory-declared boot mode |
 | `set_boot_mode.yml` | (import wrapper) | Ad-hoc boot-mode override via `-e armbian_boot_mode=` |
 | `persist_uboot_env.yml` | rock-5b boards | Write SPI U-Boot env vars via `fw_setenv` for autonomous PXE |
 | `provision_local_disk.yml` | a board | Ad-hoc: provision one local disk with a copy of the running rootfs |
 | `reprovision_to_local.yml` | a board | Headless full lifecycle: boot NFS → reprovision local disk(s) → flip to local → verify |
-| `cleanup_boot_files.yml` | router | Remove stale per-host pxelinux.cfg + per-model TFTP rows |
+| `cleanup_boot_files.yml` | netboot server | Prune stale published `.img.xz` (+ `.sha`) files per each board's manifest.json |
 
 ## Running
 

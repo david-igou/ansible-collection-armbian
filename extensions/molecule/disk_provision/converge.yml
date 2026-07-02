@@ -19,7 +19,6 @@
         disk_provision_source: "/tmp/testroot"
         disk_binding:
           device: "{{ _loop }}"
-          wipe: true
           layout:
             - id: boot
               size: 256MiB
@@ -59,7 +58,6 @@
         disk_provision_source: "/tmp/testroot"
         disk_binding:
           device: "{{ _loop }}"
-          wipe: true
           layout:
             - id: boot
               size: 256MiB
@@ -88,7 +86,6 @@
         disk_provision_render_only: true
         disk_binding:
           device: /dev/loop1
-          wipe: true
           layout:
             - { id: esp,  size: 512MiB, type: esp,   format: vfat, label: ARMBI_ESP,         mount: /boot/efi }
             - { id: boot, size: 1GiB,   type: linux, format: ext4, label: armbi_boot,       mount: /boot }

@@ -1,11 +1,11 @@
 ---
 # Single-play-compatible body of converge_boot_mode.yml. Used by
-# _lifecycle_set_and_verify.yml (Task 14), which wraps this in a
-# block/rescue for auto-revert — import_playbook cannot appear inside a
-# block, but include_tasks can.
+# _lifecycle_set_and_verify.yml, which wraps this in a block/rescue for
+# auto-revert — import_playbook cannot appear inside a block, but
+# include_tasks can.
 #
 # Behaviour is identical to converge_boot_mode.yml; only the play
-# scaffolding differs. The four logical phases of the orchestration
+# scaffolding differs. The six logical phases of the orchestration
 # playbook are preserved in order:
 #   1. Pre-flight plumbing check (router, delegated + run_once)
 #   2. Resolve armbian_board_config per host
