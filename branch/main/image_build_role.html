@@ -22,8 +22,8 @@
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory." href="pxelinux_render_role.html" />
-    <link rel="prev" title="david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs." href="disk_provision_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+    <link rel="next" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory" href="pxelinux_render_role.html" />
+    <link rel="prev" title="david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs" href="disk_provision_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
 
@@ -89,10 +89,10 @@
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#entry-point-main-build-a-custom-armbian-image-with-caller-supplied-userpatches-via-armbian-build-docker-mode">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
@@ -104,8 +104,8 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source</a></li>
 </ul>
 <!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
 
@@ -191,8 +191,8 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--armbian_build_cache_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-armbian-build-cache-dir"><strong>armbian_build_cache_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_cache_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>Directory on the builder host for the armbian/build checkout, cache, and userpatches tree. Must be writable by the connecting user — the role does not escalate privileges. The default resolves to the connecting user’s real $HOME (via ansible_env.HOME, so root and non-/home homes work too), which holds with no setup; if you relocate it under a root-owned path like /var/lib, pre-create + chown the path before the first run.</p>
-<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_env.HOME</span> <span class="pre">}}/armbian_build&quot;</span></code></p>
+<td><div class="ansible-option-cell"><p>Directory on the builder host for the armbian/build checkout, cache, and userpatches tree. Must be writable by the connecting user — the role does not escalate privileges. The default resolves to the connecting user’s real $HOME (via ansible_facts[‘env’][‘HOME’], so root and non-/home homes work too), which holds with no setup; if you relocate it under a root-owned path like /var/lib, pre-create + chown the path before the first run.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_facts['env']['HOME']</span> <span class="pre">}}/armbian_build&quot;</span></code></p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
@@ -200,6 +200,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_compile_args" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>Extra key=value arguments passed verbatim to compile.sh. Not folded into the patch_hash; changing these forces a rebuild only when armbian_build_force is true.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">{&quot;BUILD_DESKTOP&quot;:</span> <span class="pre">&quot;no&quot;,</span> <span class="pre">&quot;BUILD_MINIMAL&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;COMPRESS_OUTPUTIMAGE&quot;:</span> <span class="pre">&quot;sha,xz&quot;,</span> <span class="pre">&quot;EXPERT&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;KERNEL_CONFIGURE&quot;:</span> <span class="pre">&quot;no&quot;}</span></code></p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
@@ -234,7 +235,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>Directory where the final .img.xz and manifest.json are written. Same writability requirement as armbian_build_cache_dir.</p>
-<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_env.HOME</span> <span class="pre">}}/armbian_build/output&quot;</span></code></p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">ansible_facts['env']['HOME']</span> <span class="pre">}}/armbian_build/output&quot;</span></code></p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
@@ -258,6 +259,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <a class="ansibleOptionLink" href="#parameter-main--armbian_build_required_egress_hosts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>Hostnames that must be TCP-reachable from the builder before the build starts. Defaults to github.com, apt.armbian.com, ghcr.io, and registry-1.docker.io.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[&quot;github.com&quot;,</span> <span class="pre">&quot;apt.armbian.com&quot;,</span> <span class="pre">&quot;ghcr.io&quot;,</span> <span class="pre">&quot;registry-1.docker.io&quot;]</span></code></p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
@@ -295,8 +297,8 @@ To check whether it is installed, run <code class="code docutils literal notrans
           
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="disk_provision_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs." accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="pxelinux_render_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory." accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="disk_provision_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pxelinux_render_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

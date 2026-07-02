@@ -7,7 +7,7 @@
 <meta content="2.24.0" name="antsibull-docs" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs. &mdash; David_Igou.Armbian Collection  documentation</title>
+  <title>david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs &mdash; David_Igou.Armbian Collection  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=41de9001" />
       <link rel="stylesheet" type="text/css" href="_static/css/ansible.css?v=b54c304f" />
       <link rel="stylesheet" type="text/css" href="_static/antsibull-minimal.css" />
@@ -23,7 +23,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)" href="image_build_role.html" />
-    <link rel="prev" title="david_igou.armbian.disk_image role – Stream a defined image to a defined block device." href="disk_image_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+    <link rel="prev" title="david_igou.armbian.disk_image role – Stream a defined image to a defined block device" href="disk_image_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
 
@@ -89,11 +89,11 @@
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device.</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#parameters">Parameters</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#collection-links">Collection links</a></li>
@@ -104,8 +104,8 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source</a></li>
 </ul>
 <!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
 
@@ -123,7 +123,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.</li>
+      <li class="breadcrumb-item active">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -135,7 +135,7 @@
            <div itemprop="articleBody">
              
   <span class="target" id="ansible-collections-david-igou-armbian-disk-provision-role"></span><section id="david-igou-armbian-disk-provision-role-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs">
-<h1>david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs.<a class="headerlink" href="#david-igou-armbian-disk-provision-role-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" title="Link to this heading"></a></h1>
+<h1>david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs<a class="headerlink" href="#david-igou-armbian-disk-provision-role-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" title="Link to this heading"></a></h1>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This role is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/david_igou/armbian/">david_igou.armbian collection</a> (version 0.0.4-alpha).</p>
@@ -146,7 +146,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div>
 <nav class="contents local" id="contents">
 <ul class="simple">
-<li><p><a class="reference internal" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" id="id1">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a></p>
+<li><p><a class="reference internal" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" id="id1">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs</a></p>
 <ul>
 <li><p><a class="reference internal" href="#synopsis" id="id2">Synopsis</a></p></li>
 <li><p><a class="reference internal" href="#parameters" id="id3">Parameters</a></p></li>
@@ -155,11 +155,11 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </ul>
 </nav>
 <span class="target" id="ansible-collections-david-igou-armbian-disk-provision-role-entrypoint-main"></span><section id="entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs">
-<h2><a class="toc-backref" href="#id1" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs.</a><a class="headerlink" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" title="Link to this heading"></a></h2>
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Apply a declarative partition layout to one block device and populate it from a source rootfs</a><a class="headerlink" href="#entry-point-main-apply-a-declarative-partition-layout-to-one-block-device-and-populate-it-from-a-source-rootfs" title="Link to this heading"></a></h2>
 <section id="synopsis">
 <h3><a class="toc-backref" href="#id2" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>Given one disk_binding (device + layout list), validates the layout, translates it to systemd-repart .repart.d/*.conf files, invokes systemd-repart against the device, populates the resulting filesystems by rsyncing `source` (default /), writes a generated /etc/fstab on the root partition referencing every mount by LABEL=, and unmounts.</p></li>
+<li><p>Given one disk_provision_disk_binding (device + layout list), validates the layout, translates it to systemd-repart .repart.d/*.conf files, invokes systemd-repart against the device, populates the resulting filesystems by rsyncing `source` (default /), writes a generated /etc/fstab on the root partition referencing every mount by LABEL=, and unmounts.</p></li>
 <li><p>Single-disk contract. Callers with multiple disks loop the role per disk binding.</p></li>
 <li><p>Preserved partitions (preserve_on_reprovision: true with a matching label already present on the disk) are skipped at systemd-repart and excluded from rsync. Set `force: true` on the binding to bypass preserve idempotency.</p></li>
 <li><p>Transport-agnostic. Knows nothing about netboot, PXE, boot modes, or what the rootfs will be used for.</p></li>
@@ -175,22 +175,22 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </thead>
 <tbody>
 <tr class="row-even"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding"><strong>disk_binding</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding"><strong>disk_provision_disk_binding</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-cell"><p>One entry from armbian_local_disks. Shape: {device, force?, fast_wipe?, layout: [partition_spec, …]}.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/device"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-device"><strong>device</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/device" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/device"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-device"><strong>device</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/device" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Whole-disk path, e.g. /dev/nvme0n1. WILL BE WIPED unless preserve rules apply.</p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/fast_wipe"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-fast-wipe"><strong>fast_wipe</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/fast_wipe" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/fast_wipe"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-fast-wipe"><strong>fast_wipe</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/fast_wipe" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>When true, issue `blkdiscard &lt;device&gt;` (full-device TRIM using the storage’s native chunk size) before systemd-repart, AND suppress mkfs.ext4’s per-block discard at format time (`-E nodiscard` via SYSTEMD_REPART_MKFS_OPTIONS_EXT4). Net effect: ~30x speedup on large NVMe (&gt;200 GiB), no functional change on small disks. Set false for devices with broken TRIM firmware (some old eMMC) where blkdiscard hangs.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
@@ -201,8 +201,8 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/force"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-force"><strong>force</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/force" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/force"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-force"><strong>force</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/force" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Bypass preserve_on_reprovision idempotency — destructively wipe preserved partitions too.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
@@ -213,14 +213,14 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout"><strong>layout</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout"><strong>layout</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"></div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/format"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-format"><strong>format</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/format" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/format"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-format"><strong>format</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/format" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Filesystem type.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
@@ -234,36 +234,36 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/id"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-id"><strong>id</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/id" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/id"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-id"><strong>id</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/id" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Unique within this layout. Drives the .repart.d filename ordering.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/label"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-label"><strong>label</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/label" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/label"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-label"><strong>label</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/label" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Filesystem label. Required if preserve_on_reprovision is true. Recommended otherwise (fstab references it).</p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/mount"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-mount"><strong>mount</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/mount" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/mount"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-mount"><strong>mount</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/mount" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Absolute mount path written to /etc/fstab. Optional (e.g. swap has no mount).</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/mount_opts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-mount-opts"><strong>mount_opts</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/mount_opts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/mount_opts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-mount-opts"><strong>mount_opts</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/mount_opts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>fstab mount options. Defaults: ext4=’defaults,noatime’; vfat=’defaults,noatime’; swap=’sw’; xfs=’defaults,noatime’; btrfs=’defaults,noatime,compress=zstd’.</p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/preserve_on_reprovision"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-preserve-on-reprovision"><strong>preserve_on_reprovision</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/preserve_on_reprovision" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/preserve_on_reprovision"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-preserve-on-reprovision"><strong>preserve_on_reprovision</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/preserve_on_reprovision" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>If true and a partition with matching label already exists, skip wipe + exclude from rsync. Requires label.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
@@ -274,15 +274,15 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/size"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-size"><strong>size</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/size" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/size"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-size"><strong>size</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/size" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Size string: &lt;number&gt;MiB|GiB|TiB, or ‘grow’ (exactly one ‘grow’ per disk).</p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-indent"></div><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--disk_binding/layout/type"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-binding-layout-type"><strong>type</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--disk_binding/layout/type" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--disk_provision_disk_binding/layout/type"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-disk-provision-role-parameter-main-disk-provision-disk-binding-layout-type"><strong>type</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--disk_provision_disk_binding/layout/type" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>GPT partition type purpose. systemd-repart resolves to the architecture-appropriate GUID.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
@@ -368,7 +368,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
           
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="disk_image_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.disk_image role – Stream a defined image to a defined block device." accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="disk_image_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.disk_image role – Stream a defined image to a defined block device" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="image_build_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
