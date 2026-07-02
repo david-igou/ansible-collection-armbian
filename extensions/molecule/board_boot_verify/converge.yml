@@ -58,3 +58,17 @@
             dest: /tmp/board_boot_verify_local_kernel_rescue
             content: "{{ ansible_failed_result.msg | default('') }}\n"
             mode: "0644"
+
+    # ---------- Pass case: local_kernel with a custom verify_match ----------
+    # Boards whose baked localcmd chain has non-NVMe fallback candidates
+    # (e.g. cm3588-nas: NVMe first, eMMC fallback) widen the default
+    # ^/dev/nvme via board_boot_verify_local_kernel_match (fed from
+    # armbian_board_config.local_kernel.verify_match). The container's
+    # root device satisfies a permissive regex, proving the override
+    # reaches the assertion.
+    - name: local_kernel-mode with custom match — role should pass
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_verify
+      vars:
+        board_boot_verify_mode: local_kernel
+        board_boot_verify_local_kernel_match: "^(/dev/|overlay)"

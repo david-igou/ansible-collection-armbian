@@ -1,0 +1,14 @@
+---
+minor_changes:
+  - >-
+    converge_boot_mode.yml / _converge_boot_mode.yml - the post-boot
+    verify step now passes ``board_boot_verify_extra_modes`` (from
+    ``armbian_extra_modes``), so user-defined extra boot modes verify
+    correctly during convergence instead of failing as an unknown mode.
+  - >-
+    examples/board_boot_verify.yml - the demo now resolves
+    ``armbian_board_config`` before invoking the role, so boards that
+    widen the ``local_kernel`` device regex via
+    ``armbian_board_config.local_kernel.verify_match`` (e.g. an eMMC
+    fallback in the localcmd storage-candidate chain) verify correctly
+    from the example too, matching the converge playbooks' behavior.

@@ -70,6 +70,7 @@
     name: board_boot_verify
   vars:
     board_boot_verify_mode: "{{ armbian_boot_mode }}"
+    board_boot_verify_extra_modes: "{{ armbian_extra_modes | default({}) }}"
   when:
     - armbian_cycle_board | default(true) | bool
     - armbian_verify_state | default(true) | bool
