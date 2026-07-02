@@ -102,20 +102,20 @@ argument_specs:
       armbian_build_cache_dir:
         type: str
         required: false
-        default: "{{ ansible_env.HOME }}/armbian_build"
+        default: "{{ ansible_facts['env']['HOME'] }}/armbian_build"
         description: >-
           Directory on the builder host for the armbian/build checkout,
           cache, and userpatches tree. Must be writable by the
           connecting user — the role does not escalate privileges. The
           default resolves to the connecting user's real $HOME (via
-          ansible_env.HOME, so root and non-/home homes work too), which
+          ansible_facts['env']['HOME'], so root and non-/home homes work too), which
           holds with no setup; if you relocate it under a root-owned path
           like /var/lib, pre-create + chown the path before the first run.
 
       armbian_build_output_dir:
         type: str
         required: false
-        default: "{{ ansible_env.HOME }}/armbian_build/output"
+        default: "{{ ansible_facts['env']['HOME'] }}/armbian_build/output"
         description: >-
           Directory where the final .img.xz and manifest.json are
           written. Same writability requirement as
@@ -132,6 +132,11 @@ argument_specs:
       armbian_build_required_egress_hosts:
         type: list
         required: false
+        default:
+          - github.com
+          - apt.armbian.com
+          - ghcr.io
+          - registry-1.docker.io
         description: >-
           Hostnames that must be TCP-reachable from the builder before the
           build starts. Defaults to github.com, apt.armbian.com, ghcr.io,
@@ -141,6 +146,12 @@ argument_specs:
       armbian_build_compile_args:
         type: dict
         required: false
+        default:
+          KERNEL_CONFIGURE: "no"
+          BUILD_DESKTOP: "no"
+          BUILD_MINIMAL: "yes"
+          COMPRESS_OUTPUTIMAGE: "sha,xz"
+          EXPERT: "yes"
         description: >-
           Extra key=value arguments passed verbatim to compile.sh. Not
           folded into the patch_hash; changing these forces a rebuild only

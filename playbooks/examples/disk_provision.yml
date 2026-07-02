@@ -15,7 +15,7 @@
 #   #   set armbian_local_disks in host_vars and it overrides the default below.
 #
 # Role variables (see roles/disk_provision/README.md):
-#   disk_binding                   — one {device, fast_wipe?, force?, layout} entry (required)
+#   disk_provision_disk_binding                   — one {device, fast_wipe?, force?, layout} entry (required)
 #   disk_provision_source          — source rootfs to rsync (default /)
 #   disk_provision_reset_identity  — zero machine-id on the target (default false)
 #
@@ -50,7 +50,7 @@
       ansible.builtin.assert:
         that:
           - >-
-            ansible_mounts | selectattr('mount', 'equalto', '/')
+            ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
               | map(attribute='fstype') | first in ['nfs', 'nfs4']
         fail_msg: >-
           Board must be NFS-booted before provisioning a local disk
@@ -61,7 +61,7 @@
       ansible.builtin.include_role:
         name: disk_provision
       vars:
-        disk_binding: "{{ item }}"
+        disk_provision_disk_binding: "{{ item }}"
         disk_provision_source: /
         disk_provision_reset_identity: false
       loop: "{{ armbian_local_disks | default(_default_local_disks) }}"

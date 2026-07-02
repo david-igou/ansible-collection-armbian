@@ -12,8 +12,8 @@
   become: true
   changed_when: false
 
-- name: "Block C — partprobe target_device (re-read partition table)"
-  ansible.builtin.command: "partprobe {{ target_device }}"
+- name: "Block C — partprobe disk_image_target_device (re-read partition table)"
+  ansible.builtin.command: "partprobe {{ disk_image_target_device }}"
   become: true
   changed_when: false
 

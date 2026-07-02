@@ -2,7 +2,7 @@
 ---
 argument_specs:
   main:
-    short_description: Provision a per-host NFS rootfs from an .img.xz source.
+    short_description: Provision a per-host NFS rootfs from an .img.xz source
     description:
       - >-
         Downloads or copies an Armbian .img.xz, extracts the rootfs into a

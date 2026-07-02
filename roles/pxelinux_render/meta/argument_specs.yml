@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: "Render one per-board pxelinux.cfg file to a local directory."
+    short_description: "Render one per-board pxelinux.cfg file to a local directory"
     description:
       - >-
         Renders an 01-<mac> pxelinux.cfg file using the supplied board

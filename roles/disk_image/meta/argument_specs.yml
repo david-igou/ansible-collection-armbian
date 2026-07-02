@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: "Stream a defined image to a defined block device."
+    short_description: "Stream a defined image to a defined block device"
     description:
       - >-
         Accepts an http(s):// URL or an absolute path to an .img.xz or .img,
@@ -16,14 +16,14 @@ argument_specs:
         Always writes; no idempotency cache.
 
     options:
-      image_source:
+      disk_image_source:
         type: str
         required: true
         description: >-
           Either an http(s):// URL or an absolute path on the running host.
           Auto-dispatch by extension: .img.xz → xz -dc | dd; .img → dd direct.
           Mismatched extension is a hard failure (no content sniffing).
-      target_device:
+      disk_image_target_device:
         type: path
         required: true
         description: >-

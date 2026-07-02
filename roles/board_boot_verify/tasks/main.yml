@@ -4,85 +4,85 @@
 
 - name: Capture root mount
   ansible.builtin.set_fact:
-    _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+    __board_boot_verify_root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                      | map(attribute='fstype') | first }}"
-    _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+    __board_boot_verify_root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                      | map(attribute='device') | first }}"
 
-- name: Assert NFS rootfs when boot_mode=nfs
+- name: Assert NFS rootfs when board_boot_verify_mode=nfs
   ansible.builtin.assert:
     that:
-      - _root_fstype in ['nfs', 'nfs4']
+      - __board_boot_verify_root_fstype in ['nfs', 'nfs4']
     fail_msg: >-
-      boot_mode[nfs]: expected NFS rootfs but got
-      {{ _root_device }} ({{ _root_fstype }}). The pxelinux.cfg upload
+      board_boot_verify_mode[nfs]: expected NFS rootfs but got
+      {{ __board_boot_verify_root_device }} ({{ __board_boot_verify_root_fstype }}). The pxelinux.cfg upload
       step succeeded, so the board either skipped pxelinux.cfg or fell
       through to local boot. Check the TFTP server's request log.
-  when: boot_mode == 'nfs'
+  when: board_boot_verify_mode == 'nfs'
 
-- name: Assert local block-device rootfs when boot_mode=sd
+- name: Assert local block-device rootfs when board_boot_verify_mode=sd
   ansible.builtin.assert:
     that:
-      - _root_fstype not in ['nfs', 'nfs4']
-      - _root_device is match('^/dev/')
+      - __board_boot_verify_root_fstype not in ['nfs', 'nfs4']
+      - __board_boot_verify_root_device is match('^/dev/')
     fail_msg: >-
-      boot_mode[sd]: expected local block device rootfs but got
-      {{ _root_device }} ({{ _root_fstype }}). Default kernel cmdline
+      board_boot_verify_mode[sd]: expected local block device rootfs but got
+      {{ __board_boot_verify_root_device }} ({{ __board_boot_verify_root_fstype }}). Default kernel cmdline
       is root=LABEL=armbi_root; override per-host with sd_root if the
       board has multiple drives carrying LABEL=armbi_root.
-  when: boot_mode == 'sd'
+  when: board_boot_verify_mode == 'sd'
 
-- name: Assert local block-device rootfs when boot_mode=local
+- name: Assert local block-device rootfs when board_boot_verify_mode=local
   ansible.builtin.assert:
     that:
-      - _root_fstype not in ['nfs', 'nfs4']
-      - _root_device is match('^/dev/')
+      - __board_boot_verify_root_fstype not in ['nfs', 'nfs4']
+      - __board_boot_verify_root_device is match('^/dev/')
     fail_msg: >-
-      boot_mode[local]: expected local block device rootfs but got
-      {{ _root_device }} ({{ _root_fstype }}). Default kernel cmdline
+      board_boot_verify_mode[local]: expected local block device rootfs but got
+      {{ __board_boot_verify_root_device }} ({{ __board_boot_verify_root_fstype }}). Default kernel cmdline
       is root=LABEL=armbi_root_local; override per-host with local_root
       if disk_provision used a different label. If you got an NFS
       rootfs, the kernel couldn't find the labeled partition — verify
       the target disk was provisioned via provision_local_disk.yml.
-  when: boot_mode == 'local'
+  when: board_boot_verify_mode == 'local'
 
-- name: Assert local rootfs when boot_mode=local_kernel
+- name: Assert local rootfs when board_boot_verify_mode=local_kernel
   vars:
     # Default expects NVMe. Boards whose localcmd has non-NVMe storage
     # candidates (e.g. cm3588-nas falls back to eMMC) widen this via
     # local_kernel.verify_match in their armbian_board_config layer, or
-    # callers pass local_kernel_verify_match directly.
-    _lk_match: >-
-      {{ local_kernel_verify_match
+    # callers pass board_boot_verify_local_kernel_match directly.
+    __board_boot_verify_lk_match: >-
+      {{ board_boot_verify_local_kernel_match
          | default((armbian_board_config | default({})).local_kernel.verify_match
          | default('^/dev/nvme')) }}
   ansible.builtin.assert:
     that:
-      - _root_fstype not in ['nfs', 'nfs4']
-      - _root_device is match(_lk_match)
+      - __board_boot_verify_root_fstype not in ['nfs', 'nfs4']
+      - __board_boot_verify_root_device is match(__board_boot_verify_lk_match)
     fail_msg: >-
-      boot_mode[local_kernel]: expected rootfs matching
-      '{{ _lk_match }}' but got
-      {{ _root_device }} ({{ _root_fstype }}). The local_kernel label
+      board_boot_verify_mode[local_kernel]: expected rootfs matching
+      '{{ __board_boot_verify_lk_match }}' but got
+      {{ __board_boot_verify_root_device }} ({{ __board_boot_verify_root_fstype }}). The local_kernel label
       runs `localboot 0`, which executes U-Boot's `localcmd`. If
-      _root_device is on an unexpected disk, check the localcmd
+      __board_boot_verify_root_device is on an unexpected disk, check the localcmd
       storage candidates for this board (local_kernel.storage or
       .storage_candidates in armbian_board_config). If you got an
       NFS rootfs, U-Boot fell through to PXE — check localcmd is
       actually set in the U-Boot binary's default environment (or SPI
       env for persist_via=spi boards).
-  when: boot_mode == 'local_kernel'
+  when: board_boot_verify_mode == 'local_kernel'
 
 - name: "Assert custom mode rootfs source matches verify_match"
   ansible.builtin.assert:
     that:
-      - extra_modes[boot_mode] is defined
-      - extra_modes[boot_mode].verify_match is defined
-      - _root_device is match(extra_modes[boot_mode].verify_match)
+      - board_boot_verify_extra_modes[board_boot_verify_mode] is defined
+      - board_boot_verify_extra_modes[board_boot_verify_mode].verify_match is defined
+      - __board_boot_verify_root_device is match(board_boot_verify_extra_modes[board_boot_verify_mode].verify_match)
     fail_msg: >-
-      boot_mode[{{ boot_mode }}]: _root_device={{ _root_device }}
+      board_boot_verify_mode[{{ board_boot_verify_mode }}]: __board_boot_verify_root_device={{ __board_boot_verify_root_device }}
       does not match verify_match regex
-      '{{ extra_modes[boot_mode].verify_match | default('<unset>') }}'.
-      Define armbian_extra_modes[{{ boot_mode }}].verify_match
+      '{{ board_boot_verify_extra_modes[board_boot_verify_mode].verify_match | default('<unset>') }}'.
+      Define armbian_extra_modes[{{ board_boot_verify_mode }}].verify_match
       so this role can assert the rootfs source.
-  when: boot_mode not in ['nfs', 'sd', 'local', 'local_kernel']
+  when: board_boot_verify_mode not in ['nfs', 'sd', 'local', 'local_kernel']

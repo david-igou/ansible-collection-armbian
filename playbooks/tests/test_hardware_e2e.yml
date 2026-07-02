@@ -280,9 +280,9 @@
 
             - name: Phase 1 — capture root mount facts
               ansible.builtin.set_fact:
-                _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                _root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                                  | map(attribute='fstype') | first }}"
-                _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                _root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                                  | map(attribute='device') | first }}"
 
             - name: Phase 1 — diagnostic bundle
@@ -343,9 +343,9 @@
 
             - name: Phase 2 — capture root mount facts
               ansible.builtin.set_fact:
-                _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                _root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                                  | map(attribute='fstype') | first }}"
-                _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+                _root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                                  | map(attribute='device') | first }}"
 
             - name: Phase 2 — diagnostic bundle
@@ -394,9 +394,9 @@
 
         - name: Phase 3 — capture root mount facts
           ansible.builtin.set_fact:
-            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='fstype') | first }}"
-            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='device') | first }}"
 
         - name: Phase 3 — diagnostic bundle
@@ -462,9 +462,9 @@
 
         - name: Cleanup — capture root mount facts (post-cleanup)
           ansible.builtin.set_fact:
-            _root_fstype: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_fstype: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='fstype') | first }}"
-            _root_device: "{{ ansible_mounts | selectattr('mount', 'equalto', '/')
+            _root_device: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/')
                                              | map(attribute='device') | first }}"
           when: not (leave_state | bool)
 

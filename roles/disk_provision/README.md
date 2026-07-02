@@ -3,7 +3,7 @@
 ## Purpose
 
 Apply a declarative partition layout to one block device and populate it
-from a source rootfs. Given one `disk_binding` (device + layout list),
+from a source rootfs. Given one `disk_provision_disk_binding` (device + layout list),
 the role validates the layout, renders `systemd-repart` `.repart.d/*.conf`
 files, invokes `systemd-repart` against the device, populates each
 filesystem by rsyncing `source` (default `/`), writes an `/etc/fstab` on
@@ -21,7 +21,7 @@ contract. Summary:
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `disk_binding` | yes | — | One entry from `armbian_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
+| `disk_provision_disk_binding` | yes | — | One entry from `armbian_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
 | `disk_provision_source` | no | `/` | Source rootfs to rsync into the populated root partition. |
 | `disk_provision_installed_marker` | no | `true` | Write `INSTALLED=true` to `/etc/armbian-image-release` to suppress `armbian-resize-filesystem`. |
 | `disk_provision_reset_identity` | no | `false` | Zero machine-id files on the target. Default false because the typical caller wants the same identity across boot modes. |
@@ -36,7 +36,7 @@ described in the argument_specs file.
 
 After a successful run:
 
-- `disk_binding.device` carries the GPT layout described by `layout`.
+- `disk_provision_disk_binding.device` carries the GPT layout described by `layout`.
 - Every partition in `layout` is formatted with the requested filesystem
   and (when `label` is given) labelled.
 - Partitions marked `preserve_on_reprovision: true` with a matching
@@ -94,7 +94,7 @@ this role.
     - ansible.builtin.include_role:
         name: david_igou.armbian.disk_provision
       vars:
-        disk_binding: "{{ armbian_local_disks[0] }}"
+        disk_provision_disk_binding: "{{ armbian_local_disks[0] }}"
         disk_provision_source: /
         disk_provision_reset_identity: false
 ```

@@ -125,8 +125,8 @@
       ansible.builtin.shell:
         cmd: >-
           fw_printenv >
-          /var/backups/uboot-env-{{ ansible_facts.date_time.iso8601_basic_short }}.bak
-        creates: "/var/backups/uboot-env-{{ ansible_facts.date_time.iso8601_basic_short }}.bak"
+          /var/backups/uboot-env-{{ ansible_facts['date_time'].iso8601_basic_short }}.bak
+        creates: "/var/backups/uboot-env-{{ ansible_facts['date_time'].iso8601_basic_short }}.bak"
 
     - name: Read each U-Boot env var currently in SPI
       become: true

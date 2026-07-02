@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: "Wait for a board to come up over TCP/22 + SSH."
+    short_description: "Wait for a board to come up over TCP/22 + SSH"
     description:
       - >-
         Single-host role. Waits for the inventory host to accept TCP/22
