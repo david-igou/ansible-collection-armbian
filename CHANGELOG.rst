@@ -4,6 +4,62 @@ david\_igou.armbian Collection Release Notes
 
 .. contents:: Topics
 
+v0.0.5-alpha
+============
+
+Release Summary
+---------------
+
+Review-driven consistency release. Rolls up the multi-skill collection review: the inert ``disk_binding.wipe`` option is removed (it promised a read-only audit mode that was never implemented), every role input now carries its role-name prefix (``disk_image_*``, ``board_boot_verify_*``, ``disk_provision_*``), legacy fact access moved to ``ansible_facts[...]`` bracket notation collection-wide, and a docs-truth sweep realigned CLAUDE.md/README/docsite prose with the implemented per-host rootfs-extraction and per-host TFTP layouts. Also includes the ordered ``storage_candidates`` localcmd fallback (with ``board_boot_verify`` honouring ``armbian_board_config.local_kernel.verify_match``), verified live on a cm3588-nas booting via its eMMC fallback. Breaking changes throughout — see the breaking_changes entries and update inventories and role call sites when upgrading.
+
+Minor Changes
+-------------
+
+- argument_specs - removed trailing periods from the ``short_description`` of seven roles (board_boot_verify, board_boot_wait, bootstrap_armbian, disk_image, disk_provision, pxelinux_render, rootfs_provision).
+- board_boot_verify - added the missing ``board_boot_verify_extra_modes`` key to ``defaults/main.yml`` for spec/defaults parity, and normalized the role-internal facts to the ``__board_boot_verify_*`` prefix.
+- board_boot_verify - the ``local_kernel`` rootfs assertion pattern is configurable via ``local_kernel_verify_match`` (or ``armbian_board_config.local_kernel.verify_match``), defaulting to the previous hardcoded ``^/dev/nvme``, so boards with eMMC fallback can assert ``^/dev/(nvme|mmcblk0)``.
+- bootstrap_armbian - ``armbian_bootstrap_user`` is now correctly declared as optional with default ``armbian`` in ``meta/argument_specs.yml`` (the spec previously claimed ``required: true`` while a default existed, making the requirement unenforceable). No behavior change.
+- bootstrap_armbian - the ``Restart sshd`` handler now uses the collection ``<role> | <name>`` naming pattern with a ``listen:`` topic, so existing ``notify: Restart sshd`` strings keep working.
+- consistency - named the remaining unnamed tasks across the composite playbooks and localhost contract tests, converted legacy top-level fact references (``ansible_mounts``, ``ansible_date_time``, ``ansible_env.HOME``) to the ``ansible_facts['...']`` bracket form, and switched bare ``import_playbook:`` occurrences to the FQCN ``ansible.builtin.import_playbook:``.
+- converge_boot_mode - the inline ``pxelinux_render`` call now passes ``pxelinux_render_extra_modes`` so it renders identically to the ``render_and_upload_pxelinux.yml`` entry point.
+- converge_boot_mode.yml / _converge_boot_mode.yml - the post-boot verify step now passes ``board_boot_verify_extra_modes`` (from ``armbian_extra_modes``), so user-defined extra boot modes verify correctly during convergence instead of failing as an unknown mode.
+- disk_image - normalized the role-internal validation facts/registers (``_partition_sysfs``, ``_lsblk_names``, ``_mounts_b64``, ``_proc_mounts``, ``_candidate_sources``, ``_mounted_match``, ``_src_stat``) to the ``__disk_image_*`` prefix.
+- disk_provision - the internal ``__disk_provision_default_mount_opts`` constant moved from ``defaults/main.yml`` to ``vars/main.yml`` so the defaults file only contains the role's public options. No behavior change.
+- docs - added a "Variable naming convention" section to CLAUDE.md documenting the four tiers (``armbian_*`` inventory vars, ``<role>_*`` role inputs, ``__<role>_*`` role internals, and ``_foo`` include-time parameters).
+- examples/board_boot_verify.yml - the demo now resolves ``armbian_board_config`` before invoking the role, so boards that widen the ``local_kernel`` device regex via ``armbian_board_config.local_kernel.verify_match`` (e.g. an eMMC fallback in the localcmd storage-candidate chain) verify correctly from the example too, matching the converge playbooks' behavior.
+- image_build - ``armbian_build_board`` and ``armbian_build_host`` no longer have empty-string defaults, so the ``required: true`` declaration in ``meta/argument_specs.yml`` is actually enforced; omitting either now fails argument-spec validation with a clear message instead of relying solely on the in-role assert.
+- image_build - added the missing ``default:`` values for ``armbian_build_required_egress_hosts`` and ``armbian_build_compile_args`` in ``meta/argument_specs.yml`` so the argument spec matches ``defaults/main.yml``.
+- image_build - the armbian/build clone now shields itself from the connecting user's global git config via ``GIT_CONFIG_GLOBAL`` (matching the compile.sh invocation) instead of blanking ``HOME``.
+- image_build / compose_uboot_env_vars - the rendered U-Boot ``localcmd`` supports an ordered list of storage candidates (``local_kernel.storage_candidates``, entries of ``{scan, dev}``) with boot fallback - a later candidate only runs when an earlier one fails to load. The legacy single ``{storage, storage_scan}`` pair is treated as a one-element candidate list and renders an equivalent chain (now wrapped in if/fi, which also stops ``booti`` running after a failed load).
+- pxelinux_render - the managed-file header now renders first via ``{{ ansible_managed | comment }}``. Rendered pxelinux directives are unchanged.
+- pxelinux_render - the pxelinux.cfg template factors the repeated board-config lookups into top-level Jinja variables; rendered output is unchanged.
+- rootfs_provision - document the ``armbian_rootfs_mount_dir`` option in ``meta/argument_specs.yml`` (it was previously an undocumented default).
+
+Breaking Changes / Porting Guide
+--------------------------------
+
+- board_boot_verify - the ``boot_mode`` option no longer carries a ``choices:`` constraint. The constraint rejected user-defined modes at argument-spec validation before the role's documented ``extra_modes`` branch could run, making custom ``verify_match`` modes unusable. Built-in modes (``nfs``, ``sd``, ``local``, ``local_kernel``) behave exactly as before.
+- board_boot_verify - the role input parameters ``boot_mode``, ``extra_modes``, and ``local_kernel_verify_match`` have been renamed to ``board_boot_verify_mode``, ``board_boot_verify_extra_modes``, and ``board_boot_verify_local_kernel_match`` respectively. Update any ``vars:`` block that calls the role. Built-in modes (``nfs``, ``sd``, ``local``, ``local_kernel``), the ``armbian_board_config.local_kernel.verify_match`` fallback, and the custom-mode ``verify_match`` behaviour are unchanged.
+- disk_image - the role input parameters ``image_source`` and ``target_device`` have been renamed to ``disk_image_source`` and ``disk_image_target_device`` respectively, so every public input carries the role-name prefix (``disk_image_dd_bs`` already did). Update any ``vars:`` block that calls the role, plus any ``-e image_source=`` / ``-e target_device=`` overrides.
+- disk_provision - the ``disk_binding.wipe`` sub-option has been removed. It was documented as a read-only "audit mode" safety switch (``wipe: false`` would fail instead of repartitioning), but no task ever consumed it — the role always applied the declared layout regardless of its value, so an operator relying on the documented audit mode would have had their disk wiped. Because argument-spec validation rejects unknown sub-options, remove any ``wipe:`` keys from ``armbian_local_disks`` entries in your inventory when upgrading. A real audit mode may return as an explicitly implemented option in a future release.
+- disk_provision - the role input parameter ``disk_binding`` has been renamed to ``disk_provision_disk_binding``. Update any ``vars:`` block that calls the role; the entry shape (``device``, ``layout``, ``force``, ``fast_wipe``) is unchanged.
+
+Removed Features (previously deprecated)
+----------------------------------------
+
+- image_build - removed the unused ``armbian_build_user`` variable from ``defaults/main.yml`` and ``meta/argument_specs.yml``. It was documented ("user that owns the build tree") but never referenced by any task; compile.sh runs as the connecting ``ansible_user``.
+- inventory (sample) - removed the unused ``armbian_branch`` variable from ``inventory/group_vars/all.yml``. Nothing consumed it, and its comment pointed at an ``uboot_apt_package`` field that does not exist. Per-board U-Boot branch selection lives in ``armbian_build_model.branch``.
+
+Bugfixes
+--------
+
+- disk_provision - the ``fast_wipe`` documentation claimed the role passes ``-K`` to mkfs.ext4; the actual mechanism is ``-E nodiscard`` via the ``SYSTEMD_REPART_MKFS_OPTIONS_EXT4`` environment variable. Documentation now matches the implementation. No behavior change.
+- docs - ``cleanup_boot_files.yml`` is now described accurately (prunes stale published ``.img.xz`` files on the netboot server per each board's manifest.json); CLAUDE.md previously claimed it removed pxelinux.cfg files and TFTP rows from the router.
+- docs - corrected drifted play/phase counts in ``converge_boot_mode.yml`` (seven plays, including the ``--limit`` guard) and ``playbooks/tasks/_converge_boot_mode.yml`` (six phases), removed stale internal ticket references ("Task 7/8/14") from comments, fixed the stale ``playbooks/test_fleet_e2e.yml`` path in ``examples/disk_image.yml``, corrected ``playbooks/routeros/tasks/README.md``'s claim about who consumes ``plumbing_check_one.yml``, and renamed the converge play that imports ``persist_uboot_env.yml`` to reflect that it converges env for all ``spi_flash`` hosts (localcmd only lands on ``local_kernel`` + ``persist_via=spi`` hosts).
+- docs - the TFTP layout prose (CLAUDE.md rb5009 section, ``upload_tftp_assets.yml`` header and task names) now describes the implemented per-host ``armbian/<inventory_hostname>/`` layout instead of the retired per-model ``armbian/<model>/`` layout. The ``armbian_tftp_upload_models`` parameter name is unchanged (documented as holding hostnames for backwards compatibility).
+- docs - the per-model-template + reflink-clone description of ``rootfs_provision`` (CLAUDE.md, README.md, playbooks/README.md, the docsite intro page, the role's own argument_specs, the sample inventory header, and test-harness comments) has been replaced with the implemented per-host-extraction model: the rootfs is extracted directly into a per-host directory, and same-URL hosts share only the ``.img.xz`` download via a URL-keyed cache.
+- inventory (sample) - the ``armbian_persist_uboot_env`` comment now documents the implemented behavior (``never`` skips the persist_uboot_env.yml import; any other value behaves like ``auto`` — per-host spi_flash gating lives inside the imported playbook). The previously documented ``always`` value and "step 3.5" reference matched no implemented semantics.
+
 v0.0.4-alpha
 ============
 
