@@ -15,7 +15,7 @@
 #   #   set armbian_local_disks in host_vars and it overrides the default below.
 #
 # Role variables (see roles/disk_provision/README.md):
-#   disk_binding                   — one {device, wipe?, fast_wipe?, force?, layout} entry (required)
+#   disk_binding                   — one {device, fast_wipe?, force?, layout} entry (required)
 #   disk_provision_source          — source rootfs to rsync (default /)
 #   disk_provision_reset_identity  — zero machine-id on the target (default false)
 #
@@ -36,7 +36,6 @@
     # takes precedence — play vars would otherwise outrank host_vars.
     _default_local_disks:
       - device: /dev/nvme0n1
-        wipe: true
         fast_wipe: true        # skip the slow full-device zero pass
         layout:
           - id: root

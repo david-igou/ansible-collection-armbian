@@ -9,7 +9,7 @@ delegation/connection context.
 |---|---|---|
 | `upload_file.yml` | `../upload_pxelinux_cfg.yml`, `../upload_tftp_assets.yml` | `net_put` one file + register its `/ip tftp` row |
 | `upload_pxelinux_one.yml` | per-host pxelinux upload (in-play use) | Upload one board's `01-<mac>` pxelinux.cfg + row |
-| `plumbing_check_one.yml` | `../plumbing_check.yml` | Assert the `/ip tftp` row for one req-filename exists |
+| `plumbing_check_one.yml` | `../../tasks/_converge_boot_mode.yml` via `armbian_plumbing_check_tasks` | Assert the `/ip tftp` rows for one board's per-host TFTP assets exist |
 | `poe_cycle.yml` | `../poe_control.yml`, and `../../tasks/cold_boot_*` via `armbian_poe_cycle_tasks_file` | off → drain (`armbian_poe_cycle_delay`) → on |
 
 `poe_cycle.yml` is the reusable power-cycle primitive the orchestration

@@ -16,12 +16,6 @@ armbian_build_ref: "v26.2.0-trunk.844"
 armbian_build_cache_dir: "{{ ansible_env.HOME }}/armbian_build"         # armbian/build checkout + cache + userpatches
 armbian_build_output_dir: "{{ ansible_env.HOME }}/armbian_build/output" # final .img.xz + manifest.json land here
 
-# User that owns the build tree and runs compile.sh. Must be in the
-# `docker` group on the builder host. Defaults to ansible_user.
-# compile.sh auto-delegates to Docker when EUID != 0 and Docker is
-# reachable — this is the standard build method per Armbian docs.
-armbian_build_user: ""
-
 # Per-build inputs. Branch/release default to a CLI-friendly modern
 # Armbian Rockchip image. armbian_build_board and armbian_build_host are
 # intentionally NOT defaulted here — they are declared `required: true`

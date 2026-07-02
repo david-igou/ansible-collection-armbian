@@ -12,7 +12,7 @@
 #
 #   TFTP for SBCs   → A RouterOS device (the inventory hostname is
 #                     `armbian_router` in group_vars/boards.yml).
-#                     `flash:/sbc/` holds per-model kernel/initrd/dtb +
+#                     `flash:/sbc/` holds per-host kernel/initrd/dtb +
 #                     per-board pxelinux.cfg. Provisioned via /ip tftp
 #                     rules registered by stage_router.yml +
 #                     converge_boot_mode.yml.
@@ -39,11 +39,6 @@
 # boot will fail visibly at boot time.
 # armbian_server_ip: "192.0.2.10"
 # armbian_nfs_server_ip: "192.0.2.10"
-
-# U-Boot branch — informational; the canonical branch source is each
-# armbian_board_config_model.uboot_apt_package field in the model's
-# inventory/group_vars/<model_group>.yml.
-armbian_branch: "current"
 
 # Public SSH keys installed on a board's freshly-flashed Armbian image
 # by `playbooks/bootstrap_armbian.yml`. Used by both the operator's
@@ -108,7 +103,7 @@ armbian_tftp_flash_dir: sbc
 # absolute path sidesteps both. Ephemeral scratch — fetch repopulates it.
 armbian_tftp_cache_dir: "/tmp/sbc-tftp"
 # Scratch dir on the netboot_server where rootfs_provision caches .img.xz / .img
-# downloads and writes per-model TFTP artefacts (sbc-tftp/<model>/vmlinuz, ...).
+# downloads and writes per-host TFTP artefacts (sbc-tftp/<hostname>/vmlinuz, ...).
 # Read by stage_netboot_assets.yml and stage_router.yml. Both fall back to the
 # value below if this is not set in your real inventory.
 armbian_image_cache: /var/lib/armbian/cache
@@ -141,10 +136,12 @@ armbian_image_cache: /var/lib/armbian/cache
 #   override."
 #
 # armbian_persist_uboot_env (playbook-level knob):
-#   auto    — default; run step 3.5 for hosts where uboot_env.storage
-#             == spi_flash.
-#   always  — run step 3.5 unconditionally (no-op on NOWHERE hosts).
-#   never   — skip step 3.5 entirely.
+#   auto    — default; converge_boot_mode.yml imports persist_uboot_env.yml,
+#             which itself skips hosts whose uboot_env.storage != spi_flash.
+#   never   — skip the persist_uboot_env.yml import entirely.
+#   (Implementation is binary: any value other than 'never' behaves
+#   like 'auto' — the per-host spi_flash gating lives inside
+#   persist_uboot_env.yml.)
 
 # Default block device for SD-card reimaging (test_fleet_e2e.yml Phase 0).
 # Override per-host in inventory if a future board's SD slot enumerates

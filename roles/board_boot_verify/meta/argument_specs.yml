@@ -15,12 +15,17 @@ argument_specs:
       boot_mode:
         type: str
         required: true
-        choices: [nfs, sd, local, local_kernel]
         description: >-
-          The declared boot mode. `local_kernel` asserts the rootfs
-          device matches local_kernel_verify_match (default
-          ^/dev/nvme; boards with non-NVMe localcmd fallbacks widen
-          it via local_kernel.verify_match in armbian_board_config).
+          The declared boot mode. Built-in modes are nfs, sd, local,
+          and local_kernel (`local_kernel` asserts the rootfs device
+          matches local_kernel_verify_match, default ^/dev/nvme;
+          boards with non-NVMe localcmd fallbacks widen it via
+          local_kernel.verify_match in armbian_board_config). Any
+          other value is treated as a user-defined mode and must be a
+          key in extra_modes; the mode's `verify_match` regex is
+          asserted against the root device. No `choices:` constraint
+          here on purpose — it would reject custom modes before the
+          extra_modes branch could run.
       local_kernel_verify_match:
         type: str
         required: false

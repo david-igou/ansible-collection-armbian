@@ -57,9 +57,6 @@ After a successful run:
   disk is skipped at the `systemd-repart` step and excluded from the
   rsync populate step. Set `force: true` on the binding to bypass
   preservation and destructively re-partition.
-- **Wipe-aware audit mode.** When `wipe: false`, the role fails if the
-  disk's current layout doesn't already match — useful for asserting
-  expected state without mutating the disk.
 - **Render-only mode.** `render_only: true` performs validation and
   config rendering, then ends the host before any mutation. Used by the
   WS-7 molecule scenario.
@@ -85,7 +82,6 @@ this role.
   vars:
     armbian_local_disks:
       - device: /dev/nvme0n1
-        wipe: true
         fast_wipe: true        # skip the slow full-device zero pass
         layout:
           - id: root

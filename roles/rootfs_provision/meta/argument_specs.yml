@@ -10,10 +10,11 @@ argument_specs:
         kernel/initrd/dtb to a TFTP cache directory, and resets host
         identity (hostname, machine-id, SSH host keys).
       - >-
-        With per-host builds there is no rootfs-template sharing across
-        hosts of different images, so extract-and-clone happens in one
-        invocation. A shared per-model template is still written for same-
-        model hosts to amortize extraction cost via reflink-copy.
+        Provisioning is purely per-host — the rootfs is extracted
+        directly into the per-host target directory (no shared per-model
+        template, no reflink cloning). Hosts pointing at the same
+        upstream URL share only the .img.xz download, via the URL-keyed
+        armbian_rootfs_image_cache.
     options:
       armbian_rootfs_src:
         type: str

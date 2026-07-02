@@ -30,7 +30,7 @@
 #   armbian_local_disk_force   force re-provision even if a partition
 #                                      with the requested label already exists.
 #                                      Default false.
-#   armbian_local_disk_fast_wipe       blkdiscard + mkfs -K fast path.
+#   armbian_local_disk_fast_wipe       blkdiscard + nodiscard-format fast path.
 #                                      Default true; set false for disks
 #                                      with broken TRIM firmware.
 #   target_hosts                       inventory pattern. Default: `boards`.
@@ -105,7 +105,6 @@
         disk_provision_source: "/"
         disk_binding:
           device: "{{ armbian_local_disk_device }}"
-          wipe: true
           fast_wipe: "{{ armbian_local_disk_fast_wipe | bool }}"
           force: "{{ armbian_local_disk_force | bool }}"
           layout:

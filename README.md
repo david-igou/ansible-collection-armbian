@@ -161,7 +161,7 @@ takes `armbian_poe_action=off` / `=on`.
 | Role | Runs on | Enforces / produces |
 |---|---|---|
 | [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server; runs per-host after resolving the `armbian_build` profile) |
-| [`rootfs_provision`](roles/rootfs_provision/) | netboot server | Per-host NFS rootfs: resolves `armbian_rootfs_src`, extracts per-model template from `.img.xz`, reflink-clones per-host rootfs, resets identity (hostname / machine-id / SSH host keys), emits TFTP artefacts |
+| [`rootfs_provision`](roles/rootfs_provision/) | netboot server | Per-host NFS rootfs: resolves `armbian_rootfs_src`, extracts the `.img.xz` rootfs directly into a per-host directory (same-URL hosts share only the download via a URL-keyed cache), resets identity (hostname / machine-id / SSH host keys), emits TFTP artefacts |
 | [`disk_image`](roles/disk_image/) | a board | Stream an `.img.xz` or `.img` (URL or absolute path) to a whole-disk block device via `curl \| xz -dc \| dd` with a mount-aware refusal guard |
 | [`disk_provision`](roles/disk_provision/) | a board | Apply a declarative GPT layout to one block device via `systemd-repart`, rsync `source` rootfs onto it, regenerate `/etc/fstab` (root by `LABEL=`). Idempotent on filesystem label; supports `preserve_on_reprovision: true` per partition for state preservation (e.g. `/var` for k3s). Single-disk contract — multi-disk hosts loop the role. |
 | [`pxelinux_render`](roles/pxelinux_render/) | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
