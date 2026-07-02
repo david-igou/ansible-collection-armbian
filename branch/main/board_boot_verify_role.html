@@ -159,7 +159,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <section id="synopsis">
 <h3><a class="toc-backref" href="#id2" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>Single-host role. Gathers facts, inspects ansible_mounts[‘/’], and asserts that the rootfs fstype matches the declared boot_mode (nfs|nfs4 for nfs; not nfs for sd, local, or local_kernel; for local_kernel additionally asserts the device path starts with /dev/nvme).</p></li>
+<li><p>Single-host role. Gathers facts, inspects ansible_mounts[‘/’], and asserts that the rootfs fstype matches the declared boot_mode (nfs|nfs4 for nfs; not nfs for sd, local, or local_kernel; for local_kernel additionally asserts the device path matches local_kernel_verify_match, default ^/dev/nvme).</p></li>
 </ul>
 </section>
 <section id="parameters">
@@ -175,7 +175,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <div class="ansibleOptionAnchor" id="parameter-main--boot_mode"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-board-boot-verify-role-parameter-main-boot-mode"><strong>boot_mode</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--boot_mode" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>The declared boot mode. `local_kernel` asserts NVMe rootfs (the local_kernel pxelinux label hands off to U-Boot’s extlinux bootmeth which loads kernel+rootfs off NVMe).</p>
+<td><div class="ansible-option-cell"><p>The declared boot mode. `local_kernel` asserts the rootfs device matches local_kernel_verify_match (default ^/dev/nvme; boards with non-NVMe localcmd fallbacks widen it via local_kernel.verify_match in armbian_board_config).</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
 <ul class="simple">
 <li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">&quot;nfs&quot;</span></code></p></li>
@@ -191,6 +191,13 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 <td><div class="ansible-option-cell"><p>Mirrors armbian_extra_modes for verify_match lookups. When boot_mode is a key in extra_modes, this role reads the mode’s `verify_match` regex and asserts ansible_mounts[‘/’]. device matches it.</p>
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">{}</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--local_kernel_verify_match"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-board-boot-verify-role-parameter-main-local-kernel-verify-match"><strong>local_kernel_verify_match</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--local_kernel_verify_match" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Regex the rootfs device must match when boot_mode=local_kernel. Defaults to armbian_board_config.local_kernel.verify_match when that is resolved on the host, else ‘^/dev/nvme’. Example for a board with an eMMC fallback: ‘^/dev/(nvme|mmcblk0)’.</p>
 </div></td>
 </tr>
 </tbody>
