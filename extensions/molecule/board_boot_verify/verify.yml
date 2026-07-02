@@ -50,7 +50,10 @@
       ansible.builtin.assert:
         that:
           - "'boot_mode[local_kernel]' in (_lk_msg.content | b64decode)"
-          - "'expected NVMe rootfs' in (_lk_msg.content | b64decode)"
+          # The role reports the configurable match pattern; this scenario
+          # sets no verify_match override, so the default must appear.
+          - "'expected rootfs matching' in (_lk_msg.content | b64decode)"
+          - "\"'^/dev/nvme'\" in (_lk_msg.content | b64decode)"
         fail_msg: >-
           local_kernel-rescue message did not contain the expected guidance.
           Got: {{ _lk_msg.content | b64decode }}

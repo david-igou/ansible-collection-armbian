@@ -18,6 +18,7 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 |---|---|---|---|
 | `boot_mode` | yes | — | One of `nfs`, `sd`, `local`, `local_kernel`, or a key in `extra_modes`. |
 | `extra_modes` | no | `{}` | Mirrors `armbian_extra_modes`. When `boot_mode` is a key here, the role reads that mode's `verify_match` regex and asserts `ansible_mounts['/'].device` matches it. |
+| `local_kernel_verify_match` | no | `^/dev/nvme` | Regex the rootfs device must match when `boot_mode=local_kernel`. Falls back to `armbian_board_config.local_kernel.verify_match` when that is resolved on the host. Widen for boards with non-NVMe localcmd fallbacks, e.g. `^/dev/(nvme\|mmcblk0)`. |
 
 ### Built-in assertion table
 
@@ -26,7 +27,7 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 | `nfs` | `nfs` or `nfs4` | — |
 | `sd` | NOT nfs/nfs4 | start with `/dev/` |
 | `local` | NOT nfs/nfs4 | start with `/dev/` |
-| `local_kernel` | NOT nfs/nfs4 | start with `/dev/nvme` |
+| `local_kernel` | NOT nfs/nfs4 | match `local_kernel_verify_match` (default `^/dev/nvme`) |
 | key in `extra_modes` | — | match the mode's `verify_match` regex |
 
 ## Outputs / side effects
