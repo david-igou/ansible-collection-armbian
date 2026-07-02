@@ -12,12 +12,24 @@
 #     -e armbian_boot_mode=nfs
 #
 # Role variables (see roles/board_boot_verify/README.md):
-#   board_boot_verify_mode        — one of nfs, sd, local, local_kernel, or an extra_modes key
-#   board_boot_verify_extra_modes — user-defined modes (mirrors armbian_extra_modes)
+#   board_boot_verify_mode                — one of nfs, sd, local, local_kernel, or an extra_modes key
+#   board_boot_verify_local_kernel_match  — root-device regex for local_kernel; the role
+#                                           falls back to armbian_board_config.local_kernel
+#                                           .verify_match, which is why the pre_task below
+#                                           resolves the board config (boards with a
+#                                           non-NVMe localcmd fallback declare it there)
+#   board_boot_verify_extra_modes         — user-defined modes (mirrors armbian_extra_modes)
 
 - name: Verify the board is on its declared boot mode
   hosts: "{{ armbian_boards_group | default('boards') }}"
   gather_facts: true   # role inspects ansible_facts['mounts']['/']
+
+  pre_tasks:
+    # Without this, armbian_board_config is undefined and the role's
+    # local_kernel check falls back to the plain ^/dev/nvme default —
+    # wrongly failing boards whose inventory widens verify_match.
+    - name: Resolve effective armbian_board_config (for local_kernel verify_match)
+      ansible.builtin.include_tasks: ../tasks/_resolve_board_config.yml
 
   tasks:
     - name: Assert rootfs matches boot mode

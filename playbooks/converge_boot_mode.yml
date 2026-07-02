@@ -114,11 +114,16 @@
         _wait_timeout: "{{ armbian_post_boot_wait_timeout | default(300) }}"
       when: armbian_cycle_board | default(true) | bool
 
+    # local_kernel verify_match needs no explicit passthrough here: the
+    # role falls back to armbian_board_config.local_kernel.verify_match,
+    # and armbian_board_config was resolved (set_fact) in the render
+    # play, persisting into this play for the same hosts.
     - name: Verify rootfs matches declared mode
       ansible.builtin.include_role:
         name: board_boot_verify
       vars:
         board_boot_verify_mode: "{{ armbian_boot_mode }}"
+        board_boot_verify_extra_modes: "{{ armbian_extra_modes | default({}) }}"
       when:
         - armbian_cycle_board | default(true) | bool
         - armbian_verify_state | default(true) | bool
