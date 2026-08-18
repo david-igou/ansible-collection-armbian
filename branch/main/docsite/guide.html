@@ -173,7 +173,7 @@ else is verbatim:</p>
 <span class="w">          </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian</span>
 
 <span class="c1"># inventory/group_vars/all.yml</span>
-<span class="nt">armbian_default_password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1234&quot;</span>
+<span class="nt">armbian_default_password</span><span class="p">:</span><span class="w"> </span><span class="s">"1234"</span>
 </pre></div>
 </div>
 </section>
@@ -214,13 +214,13 @@ it as its idempotency key on subsequent runs (re-running <code class="docutils l
 is a no-op until <code class="docutils literal notranslate"><span class="pre">board</span></code>, <code class="docutils literal notranslate"><span class="pre">branch</span></code>, <code class="docutils literal notranslate"><span class="pre">release</span></code>, <code class="docutils literal notranslate"><span class="pre">armbian_build_ref</span></code>,
 or <code class="docutils literal notranslate"><span class="pre">armbian_build_userpatches</span></code> change):</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;patch_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;armbian_build_ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v26.2.0-trunk.844&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;board&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;orangepi5pro&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;branch&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;current&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bookworm&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;image_filename&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;built_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-05-30T12:34:56Z&quot;</span>
+<span class="w">  </span><span class="nt">"patch_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"armbian_build_ref"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v26.2.0-trunk.844"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"board"</span><span class="p">:</span><span class="w">   </span><span class="s2">"orangepi5pro"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"branch"</span><span class="p">:</span><span class="w">  </span><span class="s2">"current"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"release"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bookworm"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"image_filename"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"built_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-05-30T12:34:56Z"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -263,15 +263,15 @@ drops Armbian’s first-login TUI, and disables password authentication.</p>
 <span class="w">    </span><span class="c1"># succeeds, subsequent plays connect as `armbian` (ansible_user in</span>
 <span class="w">    </span><span class="c1"># inventory) using key auth.</span>
 <span class="w">    </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
-<span class="w">    </span><span class="nt">ansible_password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1234&quot;</span>
-<span class="w">    </span><span class="nt">ansible_ssh_common_args</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;-o</span><span class="nv"> </span><span class="s">StrictHostKeyChecking=no</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">UserKnownHostsFile=/dev/null&quot;</span>
+<span class="w">    </span><span class="nt">ansible_password</span><span class="p">:</span><span class="w"> </span><span class="s">"1234"</span>
+<span class="w">    </span><span class="nt">ansible_ssh_common_args</span><span class="p">:</span><span class="w"> </span><span class="s">"-o</span><span class="nv"> </span><span class="s">StrictHostKeyChecking=no</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">UserKnownHostsFile=/dev/null"</span>
 <span class="w">    </span><span class="nt">ansible_become</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">roles</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.bootstrap_armbian</span>
 <span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">armbian_bootstrap_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian</span>
 <span class="w">        </span><span class="nt">armbian_bootstrap_ssh_keys</span><span class="p">:</span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;ssh-ed25519</span><span class="nv"> </span><span class="s">AAAA...your-public-key...</span><span class="nv"> </span><span class="s">you@workstation&quot;</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"ssh-ed25519</span><span class="nv"> </span><span class="s">AAAA...your-public-key...</span><span class="nv"> </span><span class="s">you@workstation"</span>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/local/bootstrap.yml

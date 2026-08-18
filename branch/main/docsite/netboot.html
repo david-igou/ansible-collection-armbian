@@ -197,7 +197,7 @@ addresses; everything else is verbatim:</p>
 <span class="w">            </span><span class="nt">orange-pi-5-pro-01</span><span class="p">:</span>
 <span class="w">              </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.0.2.111</span>
 <span class="w">              </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">armbian</span>
-<span class="w">              </span><span class="nt">armbian_board_mac</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;aa:bb:cc:dd:ee:ff&quot;</span>
+<span class="w">              </span><span class="nt">armbian_board_mac</span><span class="p">:</span><span class="w"> </span><span class="s">"aa:bb:cc:dd:ee:ff"</span>
 <span class="w">              </span><span class="nt">armbian_board_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro</span>
 <span class="w">              </span><span class="nt">armbian_boot_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nfs</span>
 <span class="w">              </span><span class="nt">armbian_poe_switch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rb5009</span>
@@ -208,7 +208,7 @@ addresses; everything else is verbatim:</p>
 <span class="nt">armbian_nfs_rootfs_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/srv/netboot/rootfs</span>
 <span class="nt">armbian_nfs_assets_export</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/srv/netboot/boot-files</span>
 <span class="nt">armbian_tftp_flash_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbc</span>
-<span class="nt">armbian_tftp_cache_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/../.cache/sbc-tftp&quot;</span>
+<span class="nt">armbian_tftp_cache_dir</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/../.cache/sbc-tftp"</span>
 <span class="nt">armbian_image_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/lib/armbian/cache</span>
 <span class="nt">armbian_router</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rb5009</span>
 
@@ -250,8 +250,8 @@ inventory layering — so you can read what the role actually consumes:</p>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config/boards/orangepi5pro.conf</span>
 <span class="w">            </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
 <span class="w">              </span><span class="no">function pre_config_uboot_target__orangepi5pro_pxe_first() {</span>
-<span class="w">                  </span><span class="no">declare -a t=(&quot;pxe&quot; &quot;dhcp&quot; &quot;mmc1&quot; &quot;mmc0&quot; &quot;nvme&quot; &quot;scsi&quot; &quot;usb&quot; &quot;spi&quot;)</span>
-<span class="w">                  </span><span class="no">sed -i -e &quot;s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \&quot;${t[*]}\&quot;/&quot; \</span>
+<span class="w">                  </span><span class="no">declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")</span>
+<span class="w">                  </span><span class="no">sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \</span>
 <span class="w">                      </span><span class="no">include/configs/rockchip-common.h</span>
 <span class="w">              </span><span class="no">}</span>
 </pre></div>
@@ -271,13 +271,13 @@ the builder:</p>
 <p>The accompanying <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> records what was built; the role uses
 it as its idempotency key on subsequent runs:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;patch_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;armbian_build_ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v26.2.0-trunk.844&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;board&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;orangepi5pro&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;branch&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;current&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bookworm&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;image_filename&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;built_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-05-30T12:34:56Z&quot;</span>
+<span class="w">  </span><span class="nt">"patch_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"armbian_build_ref"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v26.2.0-trunk.844"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"board"</span><span class="p">:</span><span class="w">   </span><span class="s2">"orangepi5pro"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"branch"</span><span class="p">:</span><span class="w">  </span><span class="s2">"current"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"release"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bookworm"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"image_filename"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"built_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-05-30T12:34:56Z"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -301,7 +301,7 @@ cache, and resets identity (hostname, machine-id, SSH host keys).</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.rootfs_provision</span>
 <span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">armbian_rootfs_src</span><span class="p">:</span><span class="w">  </span><span class="s">&quot;https://192.0.2.10/boot-files/images/orange-pi-5-pro-01/Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz&quot;</span>
+<span class="w">        </span><span class="nt">armbian_rootfs_src</span><span class="p">:</span><span class="w">  </span><span class="s">"https://192.0.2.10/boot-files/images/orange-pi-5-pro-01/Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz"</span>
 <span class="w">        </span><span class="nt">armbian_rootfs_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro-01</span>
 <span class="w">        </span><span class="nt">armbian_rootfs_dtb</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">rockchip/rk3588s-orangepi-5-pro.dtb</span>
 </pre></div>
@@ -333,10 +333,10 @@ per-host TFTP staging cache:</p>
 <code class="docutils literal notranslate"><span class="pre">rootfs.yml</span></code> is a no-op until <code class="docutils literal notranslate"><span class="pre">src</span></code> or <code class="docutils literal notranslate"><span class="pre">host</span></code> change (or you pass
 <code class="docutils literal notranslate"><span class="pre">-e</span> <span class="pre">armbian_rootfs_force_refresh=true</span></code>):</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;orange-pi-5-pro-01&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;provisioned_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-05-30T12:34:56Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;src&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://192.0.2.10/boot-files/images/orange-pi-5-pro-01/Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;src_sha256&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08&quot;</span>
+<span class="w">  </span><span class="nt">"host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"orange-pi-5-pro-01"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"provisioned_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-05-30T12:34:56Z"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"src"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://192.0.2.10/boot-files/images/orange-pi-5-pro-01/Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"src_sha256"</span><span class="p">:</span><span class="w"> </span><span class="s2">"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -363,7 +363,7 @@ no inventory wiring required:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/routeros/upload_tftp_assets.yml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_tftp_flash_dir</span><span class="o">=</span>sbc<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_tftp_cache_dir</span><span class="o">=</span><span class="nv">$PWD</span>/.cache/sbc-tftp<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;armbian_tftp_upload_models&quot;: [&quot;orange-pi-5-pro&quot;]}&#39;</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s1">'{"armbian_tftp_upload_models": ["orange-pi-5-pro"]}'</span>
 </pre></div>
 </div>
 <p>Afterwards the router’s flash holds the per-model directory with three
@@ -398,19 +398,19 @@ runs on <code class="docutils literal notranslate"><span class="pre">localhost</
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.pxelinux_render</span>
 <span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">pxelinux_render_board_mac</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;aa:bb:cc:dd:ee:ff&quot;</span>
+<span class="w">        </span><span class="nt">pxelinux_render_board_mac</span><span class="p">:</span><span class="w">     </span><span class="s">"aa:bb:cc:dd:ee:ff"</span>
 <span class="w">        </span><span class="nt">pxelinux_render_boot_mode</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nfs</span>
-<span class="w">        </span><span class="nt">pxelinux_render_nfs_server_ip</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;192.0.2.10&quot;</span>
+<span class="w">        </span><span class="nt">pxelinux_render_nfs_server_ip</span><span class="p">:</span><span class="w"> </span><span class="s">"192.0.2.10"</span>
 <span class="w">        </span><span class="nt">pxelinux_render_nfs_root_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/srv/netboot/rootfs</span>
 <span class="w">        </span><span class="nt">pxelinux_render_hostname</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">orange-pi-5-pro-01</span>
-<span class="w">        </span><span class="nt">pxelinux_render_output_dir</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/../.cache/pxelinux.cfg&quot;</span>
+<span class="w">        </span><span class="nt">pxelinux_render_output_dir</span><span class="p">:</span><span class="w">    </span><span class="s">"{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/../.cache/pxelinux.cfg"</span>
 <span class="w">        </span><span class="c1"># pxelinux_render reads .console / .earlycon / .armbian_board_name</span>
 <span class="w">        </span><span class="c1"># from armbian_board_config; supply it inline here so the template</span>
 <span class="w">        </span><span class="c1"># has what it needs without a resolver step.</span>
 <span class="w">        </span><span class="nt">armbian_board_config</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">armbian_board_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orangepi5pro</span>
-<span class="w">          </span><span class="nt">console</span><span class="p">:</span><span class="w">  </span><span class="s">&quot;ttyS2,1500000&quot;</span>
-<span class="w">          </span><span class="nt">earlycon</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;uart8250,mmio32,0xfeb50000&quot;</span>
+<span class="w">          </span><span class="nt">console</span><span class="p">:</span><span class="w">  </span><span class="s">"ttyS2,1500000"</span>
+<span class="w">          </span><span class="nt">earlycon</span><span class="p">:</span><span class="w"> </span><span class="s">"uart8250,mmio32,0xfeb50000"</span>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/local/pxelinux.yml
@@ -466,7 +466,7 @@ so the board must be in inventory:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ansible-playbook<span class="w"> </span>playbooks/routeros/upload_pxelinux_cfg.yml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_tftp_flash_dir</span><span class="o">=</span>sbc<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-e<span class="w"> </span><span class="nv">armbian_tftp_cache_dir</span><span class="o">=</span><span class="nv">$PWD</span>/.cache<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;armbian_pxelinux_upload_boards&quot;: [&quot;orange-pi-5-pro-01&quot;]}&#39;</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s1">'{"armbian_pxelinux_upload_boards": ["orange-pi-5-pro-01"]}'</span>
 </pre></div>
 </div>
 <p>Router-side, the pxelinux.cfg directory now holds one file per board,
@@ -475,7 +475,7 @@ request resolves to it:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>flash:/sbc/pxelinux.cfg/
 └── 01-aa-bb-cc-dd-ee-ff
 
-/ip tftp&gt; print where req-filename~&quot;01-&quot;
+/ip tftp&gt; print where req-filename~"01-"
  # REQ-FILENAME                  REAL-FILENAME                              IP-ADDRESSES
  3 01-aa-bb-cc-dd-ee-ff          flash/sbc/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff 0.0.0.0/0
 </pre></div>
