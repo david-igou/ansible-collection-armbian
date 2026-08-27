@@ -1,0 +1,3 @@
+---
+trivial:
+  - Remove the repo-level .claude/skills copies; agent skills now live in igou-io/igou-skills.
