@@ -221,7 +221,7 @@ ansible-playbook playbooks/cleanup_boot_files.yml
 ansible-playbook playbooks/tests/test_hardware_e2e.yml --limit orange-pi-5-pro-01
 
 # Deterministic whole-fleet E2E test: six phases × all target boards.
-# See `.claude/skills/running-fleet-e2e-test/` for the wrapper.
+# See the `running-fleet-e2e-test` skill in igou-io/igou-skills for the wrapper.
 ansible-playbook playbooks/tests/test_fleet_e2e.yml
 
 # Single-board reprovision regression test.
