@@ -41,6 +41,3 @@ also has the Makefile/CI target noted above.
 | `test_hardware_e2e.yml` | Single-board SD → NFS → SD assertion harness |
 | `test_manual_psu_cold_boot.yml` | NFS converge for USB-C / manual-PSU boards (operator-driven power) |
 | `test_reprovision_e2e.yml` | Single-board reprovision regression (wraps `../reprovision_to_local.yml`) |
-
-The `running-fleet-e2e-test` skill (igou-io/igou-skills, linked at `~/.claude/skills/`) drives `test_fleet_e2e.yml`
-with a wrapper script and per-phase recovery guidance.
