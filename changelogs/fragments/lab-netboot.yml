@@ -2,7 +2,8 @@
 minor_changes:
   - >-
     Added an opt-in Casval KubeVirt integration scenario covering staging,
-    RouterOS delivery, imaging, provisioning, bootstrap, retention and virtual-board boot transitions.
+    RouterOS delivery, imaging, provisioning, bootstrap, retention and virtual-board boot transitions
+    (https://github.com/david-igou/ansible-collection-armbian/pull/137).
   - Added a configurable armbian_publish_staging_dir for isolated build publication staging.
 bugfixes:
   - disk_provision removed stale generated partition definitions when layouts changed and preserved repart's original failure diagnostic.
