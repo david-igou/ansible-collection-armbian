@@ -37,12 +37,6 @@ it because it is absent from the root `requirements.yml`.
 | `persist_uboot_env` | `compose_uboot_env_vars.yml` task | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `pxelinux_render` | `pxelinux_render` | podman | `geerlingguy/docker-ubuntu2404-ansible` |
 | `rootfs_provision` | `rootfs_provision` | qemu | Debian 13 (Trixie) genericcloud |
-| `lab_netboot` | Lab integration (explicit opt-in) | kubevirt on Casval | Debian 13 and RouterOS CHR |
-
-See [`lab_netboot/README.md`](lab_netboot/README.md) for its live-cluster
-prerequisites, generated x86 boot fixture, optional real image build, cleanup,
-and hardware coverage boundary. `make molecule-kubevirt` selects this scenario;
-the default `make molecule` suite excludes it.
 
 Switch backend per invocation (only meaningful when the scenario's
 inventory ships multiple `mp.<backend>` blocks):
