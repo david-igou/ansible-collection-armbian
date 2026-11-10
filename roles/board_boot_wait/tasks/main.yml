@@ -5,7 +5,7 @@
 - name: Wait for TCP/22 to accept connections
   ansible.builtin.wait_for:
     host: "{{ ansible_host | default(inventory_hostname) }}"
-    port: 22
+    port: "{{ ansible_port | default(22) }}"
     timeout: "{{ armbian_boot_attempt_timeout }}"
     state: started
   delegate_to: localhost
