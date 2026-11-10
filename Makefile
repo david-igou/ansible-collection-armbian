@@ -56,11 +56,11 @@ ansible-lint: install-lint ## Run ansible-lint on roles/ and playbooks/
 
 molecule: ## Run molecule test (SCENARIO=<name> for one, omit for --all)
 	molecule test \
-		$(if $(SCENARIO),-s $(SCENARIO),--all --continue-on-failure) \
+		$(if $(SCENARIO),-s $(SCENARIO),--all --exclude lab_netboot --continue-on-failure) \
 		--report
 
-molecule-kubevirt: ## Run molecule test against kubevirt (SCENARIO=image_build)
-	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),image_build)
+molecule-kubevirt: ## Run the lab integration on KubeVirt (SCENARIO=lab_netboot)
+	PROVISIONER=kubevirt molecule test -s $(or $(SCENARIO),lab_netboot)
 
 test-build-and-publish-vars: ## Run the localhost-only build_and_publish_from_inventory vars contract test
 	ansible-playbook -i inventory/ playbooks/tests/test_build_and_publish_vars.yml

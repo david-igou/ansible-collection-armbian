@@ -100,6 +100,9 @@ ansible-playbook playbooks/build_and_publish_from_inventory.yml
 
 Produces a `.img.xz` on `armbian_builders` and publishes it to the
 netboot server's HTTP root.
+Set `armbian_publish_staging_dir` to give concurrent controller runs separate
+staging directories; it defaults to `/tmp/armbian_publish`. Transfers use each
+target's inventory SSH host, port, user, optional private key and common SSH arguments.
 
 ### Onboard a freshly flashed board
 

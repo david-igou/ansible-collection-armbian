@@ -28,13 +28,13 @@
     - "{{ __image_build_output_dir_host }}"
 
 - name: Clone or update armbian/build at the pinned ref
+  # Shallow tag clones omit origin/HEAD, which breaks repeated updates in Core 2.22.
   ansible.builtin.git:
     repo: https://github.com/armbian/build.git
     dest: "{{ __image_build_cache_dir_host }}/build"
     version: "{{ armbian_build_ref }}"
     force: false
     update: true
-    depth: 1
   become: false
   # Shield the clone from the connecting user's global git config
   # (insteadOf rewrites, credential helpers, signing requirements) by

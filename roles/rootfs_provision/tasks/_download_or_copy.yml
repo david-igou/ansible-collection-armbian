@@ -6,13 +6,21 @@
     state: directory
     mode: "0755"
 
+- name: Probe the URL-keyed image cache
+  ansible.builtin.stat:
+    path: "{{ __rootfs_provision_img_xz }}"
+    get_checksum: false
+  register: __rootfs_provision_cached_image
+
 - name: Download .img.xz from URL
   ansible.builtin.get_url:
     url: "{{ armbian_rootfs_src }}"
     dest: "{{ __rootfs_provision_img_xz }}"
     mode: "0644"
     timeout: 600
-  when: __rootfs_provision_is_url
+  when:
+    - __rootfs_provision_is_url
+    - not __rootfs_provision_cached_image.stat.exists
 
 - name: Copy .img.xz from local path
   ansible.builtin.copy:

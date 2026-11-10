@@ -1,0 +1,4 @@
+ansible-core==2.22.0
+molecule==26.10.0
+kubernetes==37.0.0
+ansible-pylibssh==1.4.0
