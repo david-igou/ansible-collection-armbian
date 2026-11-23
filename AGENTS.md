@@ -14,4 +14,8 @@ Do not create `docs/superpowers/` or repository-local agent execution plans.
 Keep public API/collection documentation, READMEs, and agent instructions
 beside the code. Update the relevant vault note when behavior changes.
 
+Keep this collection portable. Environment-specific integration scenarios,
+inventory, infrastructure placement and fixtures belong in consuming automation
+repositories.
+
 Lab-specific guidance: [Armbian Collection Design Decisions](https://github.com/igou-io/igou-docs/blob/main/reference/Armbian%20Collection%20Design%20Decisions.md).

@@ -22,7 +22,6 @@
     name: systemd-repart
     state: present
     update_cache: true
-    cache_valid_time: 3600
   become: true
   failed_when: false
 
@@ -115,7 +114,7 @@
   # systemd-repart --json=pretty emits a JSON array listing every
   # partition it touched; an empty array means the live layout
   # already matched the definitions and nothing was done.
-  changed_when: (__disk_provision_repart_run.stdout | from_json) | length > 0
+  changed_when: __disk_provision_repart_run.rc == 0 and (__disk_provision_repart_run.stdout | from_json) | length > 0
 
 - name: "Apply repart: report what repart did"
   ansible.builtin.debug:

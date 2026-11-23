@@ -11,6 +11,15 @@
   ansible.builtin.set_fact:
     __disk_provision_repart_dir: "/run/disk_provision/{{ __disk_provision_device_basename }}/repart.d"
 
+- name: "Render: remove previous generated definitions before resolving a new layout"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ __disk_provision_repart_dir }}"
+    - "{{ __disk_provision_repart_dir }}.filtered"
+  become: true
+
 - name: "Render: ensure repart.d directory exists"
   ansible.builtin.file:
     path: "{{ __disk_provision_repart_dir }}"

@@ -1,0 +1,13 @@
+---
+minor_changes:
+  - >-
+    Added a configurable armbian_publish_staging_dir for isolated build publication staging
+    (https://github.com/david-igou/ansible-collection-armbian/pull/137).
+bugfixes:
+  - disk_provision refreshed apt indexes before installing systemd-repart, including fresh images whose empty apt-list directory had a recent timestamp.
+  - disk_provision removed stale generated partition definitions when layouts changed and preserved repart's original failure diagnostic.
+  - image_build used a full checkout so repeated pinned-tag builds avoided Ansible Core's missing remote-HEAD failure on shallow clones.
+  - board_boot_wait and cold-boot retries honored the inventory SSH port.
+  - rootfs_provision reused URL-keyed cached images instead of downloading them again for each host.
+  - build_and_publish_from_inventory resolved delegated SSH endpoints from the target host and honored inventory private keys and forwarded agents.
+  - Collection packages excluded project-local Python virtual environments.

@@ -165,6 +165,10 @@ it as its idempotency key on subsequent runs:
 
 For the fleet workflow that runs this per board and publishes the result
 to the netboot server, use ``playbooks/build_and_publish_from_inventory.yml``.
+The optional ``armbian_publish_staging_dir`` selects the controller staging
+directory (default ``/tmp/armbian_publish``). Give concurrent runs separate
+directories. Transfers honor the target's inventory SSH endpoint, private key
+when supplied, and common SSH arguments.
 
 The rootfs
 ----------
