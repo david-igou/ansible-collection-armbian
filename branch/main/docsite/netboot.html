@@ -282,7 +282,11 @@ it as its idempotency key on subsequent runs:</p>
 </pre></div>
 </div>
 <p>For the fleet workflow that runs this per board and publishes the result
-to the netboot server, use <code class="docutils literal notranslate"><span class="pre">playbooks/build_and_publish_from_inventory.yml</span></code>.</p>
+to the netboot server, use <code class="docutils literal notranslate"><span class="pre">playbooks/build_and_publish_from_inventory.yml</span></code>.
+The optional <code class="docutils literal notranslate"><span class="pre">armbian_publish_staging_dir</span></code> selects the controller staging
+directory (default <code class="docutils literal notranslate"><span class="pre">/tmp/armbian_publish</span></code>). Give concurrent runs separate
+directories. Transfers honor the target’s inventory SSH endpoint, private key
+when supplied, and common SSH arguments.</p>
 </section>
 <section id="the-rootfs">
 <h2>The rootfs<a class="headerlink" href="#the-rootfs" title="Link to this heading"></a></h2>
