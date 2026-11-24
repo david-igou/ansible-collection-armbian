@@ -7,7 +7,7 @@
 <meta content="2.29.1" name="antsibull-docs" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source &mdash; David_Igou.Armbian Collection  documentation</title>
+  <title>david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz &mdash; David_Igou.Armbian Collection  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=41de9001" />
       <link rel="stylesheet" type="text/css" href="_static/css/ansible.css?v=b54c304f" />
       <link rel="stylesheet" type="text/css" href="_static/antsibull-minimal.css" />
@@ -22,7 +22,7 @@
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory" href="pxelinux_render_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+    <link rel="prev" title="david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory." href="pxelinux_render_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
 
 
 
@@ -73,29 +73,30 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
               <ul>
-<li class="toctree-l1"><a class="reference internal" href="docsite/guide.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="docsite/netboot.html">PXE netboot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/guide.html">Overview</a></li>
 </ul>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="docsite/board_config_role.html">david_igou.armbian.board_config role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/image_build_role.html">david_igou.armbian.image_build role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/rootfs_provision_role.html">david_igou.armbian.rootfs_provision role</a></li>
-<li class="toctree-l1"><a class="reference internal" href="docsite/disk_image_role.html">david_igou.armbian.disk_image role</a></li>
-<li class="toctree-l1"><a class="reference internal" href="docsite/disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/pxelinux_render_role.html">david_igou.armbian.pxelinux_render role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/board_boot_wait_role.html">david_igou.armbian.board_boot_wait role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/board_boot_verify_role.html">david_igou.armbian.board_boot_verify role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docsite/bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/disk_image_role.html">david_igou.armbian.disk_image role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
 </ul>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#entry-point-main-provision-a-per-host-nfs-rootfs-from-an-img-xz-source">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs from an .img.xz source</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s root filesystem matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Power-cycle a board and wait until it is reachable over SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_config_role.html">david_igou.armbian.board_config role – Merge the hardware layers into the board_config fact.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Create a passwordless-sudo, SSH-key-only automation user on a fresh Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream an .img or .img.xz onto a whole block device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory.</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#entry-point-main-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#parameters">Parameters</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#collection-links">Collection links</a></li>
@@ -122,7 +123,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source</li>
+      <li class="breadcrumb-item active">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -133,8 +134,8 @@
   
            <div itemprop="articleBody">
              
-  <span class="target" id="ansible-collections-david-igou-armbian-rootfs-provision-role"></span><section id="david-igou-armbian-rootfs-provision-role-provision-a-per-host-nfs-rootfs-from-an-img-xz-source">
-<h1>david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source<a class="headerlink" href="#david-igou-armbian-rootfs-provision-role-provision-a-per-host-nfs-rootfs-from-an-img-xz-source" title="Link to this heading"></a></h1>
+  <span class="target" id="ansible-collections-david-igou-armbian-rootfs-provision-role"></span><section id="david-igou-armbian-rootfs-provision-role-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz">
+<h1>david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz<a class="headerlink" href="#david-igou-armbian-rootfs-provision-role-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz" title="Link to this heading"></a></h1>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This role is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/david_igou/armbian/">david_igou.armbian collection</a> (version 0.0.5-alpha).</p>
@@ -145,7 +146,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div>
 <nav class="contents local" id="contents">
 <ul class="simple">
-<li><p><a class="reference internal" href="#entry-point-main-provision-a-per-host-nfs-rootfs-from-an-img-xz-source" id="id1">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs from an .img.xz source</a></p>
+<li><p><a class="reference internal" href="#entry-point-main-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz" id="id1">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a></p>
 <ul>
 <li><p><a class="reference internal" href="#synopsis" id="id2">Synopsis</a></p></li>
 <li><p><a class="reference internal" href="#parameters" id="id3">Parameters</a></p></li>
@@ -153,13 +154,13 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </li>
 </ul>
 </nav>
-<span class="target" id="ansible-collections-david-igou-armbian-rootfs-provision-role-entrypoint-main"></span><section id="entry-point-main-provision-a-per-host-nfs-rootfs-from-an-img-xz-source">
-<h2><a class="toc-backref" href="#id1" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs from an .img.xz source</a><a class="headerlink" href="#entry-point-main-provision-a-per-host-nfs-rootfs-from-an-img-xz-source" title="Link to this heading"></a></h2>
+<span class="target" id="ansible-collections-david-igou-armbian-rootfs-provision-role-entrypoint-main"></span><section id="entry-point-main-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a><a class="headerlink" href="#entry-point-main-provision-a-per-host-nfs-rootfs-and-tftp-boot-files-from-an-img-xz" title="Link to this heading"></a></h2>
 <section id="synopsis">
 <h3><a class="toc-backref" href="#id2" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>Downloads or copies an Armbian .img.xz, extracts the rootfs into a per-host directory on the netboot server, stages kernel/initrd/dtb to a TFTP cache directory, and resets host identity (hostname, machine-id, SSH host keys).</p></li>
-<li><p>Provisioning is purely per-host — the rootfs is extracted directly into the per-host target directory (no shared per-model template, no reflink cloning). Hosts pointing at the same upstream URL share only the .img.xz download, via the URL-keyed armbian_rootfs_image_cache.</p></li>
+<li><p>Fetches the image into a cache keyed by the source string, and unless the target’s sentinel already records the same source, image sha256 and hostname, extracts the image’s largest partition into <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-target-dir"><span class="std std-ref"><span class="pre">rootfs_provision_target_dir</span></span></a></strong></code> with <code class="docutils literal notranslate"><span class="pre">rsync</span> <span class="pre">--delete</span></code>, removes the <code class="docutils literal notranslate"><span class="pre">/etc/fstab</span></code> entries that name a block device or filesystem identity (<code class="docutils literal notranslate"><span class="pre">/dev/</span></code>, <code class="docutils literal notranslate"><span class="pre">UUID=</span></code>, <code class="docutils literal notranslate"><span class="pre">LABEL=</span></code>, <code class="docutils literal notranslate"><span class="pre">PARTUUID=</span></code>, <code class="docutils literal notranslate"><span class="pre">PARTLABEL=</span></code>), sets <code class="docutils literal notranslate"><span class="pre">MODULES=most</span></code> in an initramfs-tools <code class="docutils literal notranslate"><span class="pre">conf.d</span></code> drop-in when the image has one (<code class="docutils literal notranslate"><span class="pre">MODULES=dep</span></code> cannot resolve an NFS root), stages <code class="docutils literal notranslate"><span class="pre">vmlinuz</span></code>, <code class="docutils literal notranslate"><span class="pre">initrd.img</span></code> and optionally <code class="docutils literal notranslate"><span class="pre">board.dtb</span></code> into <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-tftp-dir"><span class="std std-ref"><span class="pre">rootfs_provision_tftp_dir</span></span></a></strong></code>, resets the host identity (hostname, <code class="docutils literal notranslate"><span class="pre">/etc/hosts</span></code>, machine-id, SSH host keys, Armbian first-login prompt) and writes the sentinel <code class="docutils literal notranslate"><span class="pre">.rootfs_provision.json</span></code> in the target.</p></li>
+<li><p>Runs as root on the host that exports the NFS rootfs. Needs xz, losetup, lsblk, udevadm, rsync and ssh-keygen there, and gathers the <code class="docutils literal notranslate"><span class="pre">mounts</span></code> fact subset itself. Refuses a target directory that is a mountpoint. Not check-mode safe. Sets no facts.</p></li>
 </ul>
 </section>
 <section id="parameters">
@@ -172,17 +173,35 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </thead>
 <tbody>
 <tr class="row-even"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_dtb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-dtb"><strong>armbian_rootfs_dtb</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_dtb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_cache_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-cache-dir"><strong>rootfs_provision_cache_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_cache_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>DTB path under /boot/dtb/ to stage as the TFTP board.dtb (e.g. “rockchip/rk3588-rock-5b.dtb”). Comes from the host’s resolved armbian_board_config.dtb.</p>
+<td><div class="ansible-option-cell"><p>Download cache. The image is kept at <code class="docutils literal notranslate"><span class="pre">&lt;cache_dir&gt;/&lt;sha256</span> <span class="pre">of</span> <span class="pre">src&gt;/&lt;basename</span> <span class="pre">of</span> <span class="pre">src&gt;</span></code>.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_force_refresh"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-force-refresh"><strong>armbian_rootfs_force_refresh</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_force_refresh" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_checksum"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-checksum"><strong>rootfs_provision_checksum</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_checksum" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>Force re-extract regardless of sentinel.</p>
+<td><div class="ansible-option-cell"><p>Passed to <code class="docutils literal notranslate"><span class="pre">ansible.builtin.get_url</span></code> as <code class="docutils literal notranslate"><span class="pre">checksum</span></code>, for example <code class="docutils literal notranslate"><span class="pre">sha256:https://host/image.img.xz.sha</span></code>.</p>
+<p>When empty, the cached image is revalidated on every run (If-Modified-Since for a URL, a content compare for a path).</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_dtb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-dtb"><strong>rootfs_provision_dtb</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_dtb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>DTB path relative to the image’s DTB directory, for example <code class="docutils literal notranslate"><span class="pre">rockchip/rk3588-rock-5b.dtb</span></code>, staged as <code class="docutils literal notranslate"><span class="pre">board.dtb</span></code>. It is looked up under <code class="docutils literal notranslate"><span class="pre">boot/dtb/</span></code>, <code class="docutils literal notranslate"><span class="pre">boot/dtbs/</span></code>, <code class="docutils literal notranslate"><span class="pre">boot/dtb-*/</span></code> and <code class="docutils literal notranslate"><span class="pre">boot/dtbs/*/</span></code>.</p>
+<p>Empty stages no DTB and removes a previously staged one.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_force"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-force"><strong>rootfs_provision_force</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_force" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Re-extract even when the sentinel matches.</p>
 <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
 <ul class="simple">
 <li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
@@ -191,46 +210,39 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_host"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-host"><strong>armbian_rootfs_host</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_host" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_hostname"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-hostname"><strong>rootfs_provision_hostname</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_hostname" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>inventory_hostname this rootfs is for. Drives identity reset (hostname, machine-id) and the default target_dir suffix.</p>
+<td><div class="ansible-option-cell"><p>Hostname written into the rootfs.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_image_cache"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-image-cache"><strong>armbian_rootfs_image_cache</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_image_cache" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_mount_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-mount-dir"><strong>rootfs_provision_mount_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_mount_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>URL-keyed shared download cache. Hosts pointing at the same URL share the download.</p>
+<td><div class="ansible-option-cell"><p>Where the image’s root partition is mounted read-only during extraction.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/mnt/rootfs_provision&quot;</span></code></p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_mount_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-mount-dir"><strong>armbian_rootfs_mount_dir</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_mount_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_src"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-src"><strong>rootfs_provision_src</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_src" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>Mount point for the image’s rootfs partition (loop device) during extraction.</p>
-<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;/mnt/armbian_rootfs_provision&quot;</span></code></p>
+<td><div class="ansible-option-cell"><p>The <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> to provision from, an http(s) URL or an absolute path on the host.</p>
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_src"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-src"><strong>armbian_rootfs_src</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_src" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_target_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-target-dir"><strong>rootfs_provision_target_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_target_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>.img.xz source. <a class="reference external" href="https://">https://</a> URL, <a class="reference external" href="http://">http://</a> URL, or absolute path. Resolved by the caller per the precedence in playbooks/tasks/_resolve_rootfs_src.yml.</p>
+<td><div class="ansible-option-cell"><p>Per-host NFS rootfs directory. Its contents are replaced by the image’s.</p>
 </div></td>
 </tr>
 <tr class="row-even"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_target_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-target-dir"><strong>armbian_rootfs_target_dir</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_target_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+<div class="ansibleOptionAnchor" id="parameter-main--rootfs_provision_tftp_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-rootfs-provision-tftp-dir"><strong>rootfs_provision_tftp_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--rootfs_provision_tftp_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
-<td><div class="ansible-option-cell"><p>NFS rootfs destination. Default per-host suffix under armbian_nfs_rootfs_path.</p>
-</div></td>
-</tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
-<div class="ansibleOptionAnchor" id="parameter-main--armbian_rootfs_tftp_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-rootfs-provision-role-parameter-main-armbian-rootfs-tftp-dir"><strong>armbian_rootfs_tftp_dir</strong></p>
-<a class="ansibleOptionLink" href="#parameter-main--armbian_rootfs_tftp_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
-</div></td>
-<td><div class="ansible-option-cell"><p>Per-host TFTP staging dir. Default per-host suffix under armbian_image_cache/sbc-tftp.</p>
+<td><div class="ansible-option-cell"><p>Per-host directory that receives <code class="docutils literal notranslate"><span class="pre">vmlinuz</span></code>, <code class="docutils literal notranslate"><span class="pre">initrd.img</span></code> and <code class="docutils literal notranslate"><span class="pre">board.dtb</span></code>.</p>
 </div></td>
 </tr>
 </tbody>
@@ -252,7 +264,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
           
 
 <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="pxelinux_render_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pxelinux_render_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory." accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
   <hr/>

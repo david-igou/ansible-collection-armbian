@@ -73,28 +73,29 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
   
               <ul>
-<li class="toctree-l1"><a class="reference internal" href="guide.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="netboot.html">PXE netboot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guide.html">Overview</a></li>
 </ul>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="board_config_role.html">david_igou.armbian.board_config role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role</a></li>
-<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.board_boot_verify role</a></li>
 <li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
 </ul>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s rootfs matches the declared boot mode.</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Wait for a board to come up over TCP/22 + SSH</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Provision an SSH-key user with passwordless sudo on a flashed Armbian board</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream a defined image to a defined block device</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Apply a declarative partition layout to one block device and populate it from a source rootfs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build a custom Armbian image with caller-supplied userpatches via armbian/build (Docker mode)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one per-board pxelinux.cfg file to a local directory</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs from an .img.xz source</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s root filesystem matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Power-cycle a board and wait until it is reachable over SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_config_role.html">david_igou.armbian.board_config role – Merge the hardware layers into the board_config fact.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Create a passwordless-sudo, SSH-key-only automation user on a fresh Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream an .img or .img.xz onto a whole block device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a></li>
 </ul>
 <!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
 
@@ -125,9 +126,9 @@
              
   <section id="david-igou-armbian-board-boot-verify-role">
 <span id="ansible-collections-david-igou-armbian-docsite-board-boot-verify-role"></span><h1>david_igou.armbian.board_boot_verify role<a class="headerlink" href="#david-igou-armbian-board-boot-verify-role" title="Link to this heading"></a></h1>
-<p>Runs on a board. Gathers facts and asserts that <code class="docutils literal notranslate"><span class="pre">ansible_mounts['/']</span></code> matches
-the declared boot mode (NFS for <code class="docutils literal notranslate"><span class="pre">nfs</span></code>; a block device for <code class="docutils literal notranslate"><span class="pre">sd</span></code> / <code class="docutils literal notranslate"><span class="pre">local</span></code> /
-<code class="docutils literal notranslate"><span class="pre">local_kernel</span></code>, with an additional NVMe check for <code class="docutils literal notranslate"><span class="pre">local_kernel</span></code>).</p>
+<p>Runs on a board. Gathers the mount facts and asserts the root filesystem matches
+the boot mode: NFS for <code class="docutils literal notranslate"><span class="pre">nfs</span></code>, a non-NFS block device for <code class="docutils literal notranslate"><span class="pre">sd</span></code>, <code class="docutils literal notranslate"><span class="pre">local</span></code> and
+<code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> (NVMe by default), or a caller-supplied regex for custom modes.</p>
 <p>See the <a class="reference internal" href="../board_boot_verify_role.html#ansible-collections-david-igou-armbian-board-boot-verify-role"><span class="std std-ref">full role reference</span></a>
 for all parameters and defaults.</p>
 </section>
