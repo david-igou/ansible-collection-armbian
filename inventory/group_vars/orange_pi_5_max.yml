@@ -1,8 +1,0 @@
-# inventory/group_vars/orange_pi_5_max.yml
----
-armbian_board_config_model:
-  armbian_board_name: orangepi5-max
-  dtb: rockchip/rk3588-orangepi-5-max.dtb
-
-armbian_build_model:
-  branch: edge   # RTL8125BG PCIe NIC requires mainline u-boot from edge

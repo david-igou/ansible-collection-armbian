@@ -1,158 +1,110 @@
 # disk_provision
 
-## Purpose
-
-Apply a declarative partition layout to one block device and populate it
-from a source rootfs. Given one `disk_provision_disk_binding` (device + layout list),
-the role validates the layout, renders `systemd-repart` `.repart.d/*.conf`
-files, invokes `systemd-repart` against the device, populates each
-filesystem by rsyncing `source` (default `/`), writes an `/etc/fstab` on
-the root partition referencing every mount by `LABEL=`, and unmounts.
-
-Single-disk contract: callers with multiple disks loop the role per
-binding. Transport-agnostic — knows nothing about netboot, PXE, boot
-modes, or what the rootfs will be used for. The typical caller is an
-NFS-booted board copying its running rootfs onto a local NVMe.
+Partition one block device from a declarative layout and populate it from
+a rootfs. The role renders one `systemd-repart` definition per layout
+entry, runs `systemd-repart` on the device, mounts the new filesystems by
+label, rsyncs `disk_provision_source` onto them with `--delete`, writes an
+`/etc/fstab` that references every mounted entry by `LABEL=`, and
+unmounts. The typical caller is a board booted from NFS copying its
+running rootfs onto its NVMe.
 
 ## Inputs
 
 See [`meta/argument_specs.yml`](meta/argument_specs.yml) for the full
-contract. Summary:
+contract, including the per-entry `layout` fields (`id`, `size`, `type`,
+`format`, `label`, `mount`, `mount_opts`, `preserve_on_reprovision`).
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `disk_provision_disk_binding` | yes | — | One entry from `armbian_local_disks`. Shape: `{device, wipe?, force?, fast_wipe?, layout: [...]}`. |
-| `disk_provision_source` | no | `/` | Source rootfs to rsync into the populated root partition. |
-| `disk_provision_installed_marker` | no | `true` | Write `INSTALLED=true` to `/etc/armbian-image-release` to suppress `armbian-resize-filesystem`. |
-| `disk_provision_reset_identity` | no | `false` | Zero machine-id files on the target. Default false because the typical caller wants the same identity across boot modes. |
-| `disk_provision_mount_dir_base` | no | `/var/lib/armbian/disk_provision_mnt` | Base for per-device temporary mount points. |
-| `disk_provision_render_only` | no | `false` | Render `.repart.d` configs + validate, then return without mutating the disk. Used by Layer 1 molecule tests. |
+| `disk_provision_disk_binding` | yes | — | `{device, force?, fast_wipe?, layout}` for one disk. |
+| `disk_provision_source` | no | `/` | Rootfs directory to copy. |
+| `disk_provision_installed_marker` | no | `true` | Set `INSTALLED=true` in `/etc/armbian-image-release` on the new root when that file exists. |
+| `disk_provision_reset_identity` | no | `false` | Empty the machine-id files on the new root. |
+| `disk_provision_mount_dir_base` | no | `/var/lib/armbian/disk_provision_mnt` | Temporary mount base. |
+| `disk_provision_render_only` | no | `false` | Validate and render the repart definitions only. |
 
-The per-partition `layout` entry shape — `id`, `size`, `type`, `format`,
-`label`, `mount`, `mount_opts`, `preserve_on_reprovision` — is fully
-described in the argument_specs file.
+The role sets no facts for callers.
 
-## Outputs / side effects
+## Preconditions
 
-After a successful run:
+- Root on the target host (tasks use `become`).
+- `systemd-repart`, `rsync`, `lsblk`, `blkid`, `partprobe` and `blkdiscard`.
+  The role installs the `systemd-repart` package with apt when
+  `/usr/bin/systemd-repart` is missing (Debian 13 ships it separately).
+- The device must not back `/`. The role gathers the `mounts` fact subset
+  itself and refuses otherwise.
+- The layout has unique ids, at most one `size: grow`, exactly one entry
+  mounted at `/`, a label on every mounted or preserved entry, and
+  uppercase vfat labels of at most 11 characters.
 
-- `disk_provision_disk_binding.device` carries the GPT layout described by `layout`.
-- Every partition in `layout` is formatted with the requested filesystem
-  and (when `label` is given) labelled.
-- Partitions marked `preserve_on_reprovision: true` with a matching
-  label already on disk are skipped from wipe and rsync — pre-existing
-  data is retained.
-- The root partition (`type: root`) is populated from `source` via rsync.
-- `/etc/fstab` on the root partition references every layout entry that
-  has a `mount` set, by `LABEL=`.
-- When `armbian_installed_marker: true`: `/etc/armbian-image-release`
-  on the target carries `INSTALLED=true`.
-- All temporary mount points under `mount_dir_base` are unmounted at
-  the end of the run.
+## Behaviour
 
-## Idempotency & check mode
+- **No preserved partitions** (first run, `force: true`, or no
+  `preserve_on_reprovision` entries): the partition table is rebuilt with
+  `systemd-repart --empty=force`; with `fast_wipe` (default) the device is
+  discarded first.
+- **Preserved partitions**: an entry with `preserve_on_reprovision: true`
+  whose label already exists on the device keeps its partition and data.
+  The role runs `systemd-repart --empty=refuse --factory-reset=yes`, which
+  deletes and re-creates (and so reformats) every other entry; their
+  definitions carry `FactoryReset=yes`. Preserved filesystems are not
+  mounted and their mount paths are excluded from rsync.
+- **Render only**: the definitions are written under
+  `/run/disk_provision/<device basename>/repart.d/` and the role stops. It
+  does not gather facts or touch the device.
 
-- **Preserve idempotency.** A partition declared
-  `preserve_on_reprovision: true` whose `label` already exists on the
-  disk is skipped at the `systemd-repart` step and excluded from the
-  rsync populate step. Set `force: true` on the binding to bypass
-  preservation and destructively re-partition.
-- **Render-only mode.** `render_only: true` performs validation and
-  config rendering, then ends the host before any mutation. Used by the
-  WS-7 molecule scenario.
-- **`--check` mode.** Not currently supported beyond what
-  `systemd-repart --dry-run` does upstream; running with `--check`
-  exercises validation but skips the populate step.
+The role always rewrites the disk, so it is not idempotent and does not
+support check mode.
 
 ## Example
 
-This mirrors the canonical single-partition `local_kernel` layout for an
-Orange Pi 5 Pro (and the other rk3588/rk3588s boards): one root partition
-grown to fill the NVMe, populated by rsyncing the board's running rootfs
-(`disk_provision_source: /`). Run it while the board is booted from NFS
-(so `/` is the source, not the disk being wiped) — that's the lifecycle
-`playbooks/reprovision_to_local.yml` and the fleet e2e Phase 5 wrap around
-this role.
-
 ```yaml
-- name: Provision the local NVMe for local_kernel boot
-  hosts: orange-pi-5-pro-01   # your real board, e.g. via --limit
-  become: true
-  gather_facts: true
-  vars:
-    armbian_local_disks:
-      - device: /dev/nvme0n1
-        fast_wipe: true        # skip the slow full-device zero pass
-        layout:
-          - id: root
-            size: grow
-            type: root
-            format: ext4
-            label: armbi_root_local
-            mount: /
+- name: Provision the NVMe for local boot
+  hosts: orange-pi-5-pro-01
+  gather_facts: false
   tasks:
-    - ansible.builtin.include_role:
+    - name: Partition and populate the NVMe
+      ansible.builtin.include_role:
         name: david_igou.armbian.disk_provision
       vars:
-        disk_provision_disk_binding: "{{ armbian_local_disks[0] }}"
-        disk_provision_source: /
-        disk_provision_reset_identity: false
+        disk_provision_disk_binding:
+          device: /dev/nvme0n1
+          layout:
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: armbi_root_local
+              mount: /
 ```
 
-For the full headless lifecycle (boot NFS → provision → flip pxelinux to
-`local_kernel` → verify, auto-revert on failure), use
-`playbooks/reprovision_to_local.yml --limit <board>`, which loops this
-role over every entry in `armbian_local_disks`.
+## Generated files
 
-## Generated assets
-
-The role renders two kinds of files. The `systemd-repart` configs are
-transient (under `/run/` on the host running the role, one per layout
-entry); the `/etc/fstab` is written persistently onto the newly-imaged
-root partition. For the single-root `local_kernel` layout in the example
-above — one ext4 partition that grows to fill the NVMe — the role renders
-exactly one repart config and a two-line fstab:
-
-```text
-/run/disk_provision/nvme0n1/repart.d/      # transient, on the booted board
-└── 10-root.conf
-
-<root partition>/etc/fstab                  # persistent, on the imaged NVMe
-```
-
-The rendered `10-root.conf` (the `grow` root partition) looks like:
+For the example layout the role renders
+`/run/disk_provision/nvme0n1/repart.d/10-root.conf`:
 
 ```ini
 # Ansible managed
-# Generated by david_igou.armbian.disk_provision.
-# Source: layout entry id=root
+# Layout entry id=root
 
 [Partition]
 Type=root
 Label=armbi_root_local
 Format=ext4
 SizeMinBytes=4G
+FactoryReset=yes
 ```
 
-The generated `/etc/fstab` references every layout entry that has a
-`mount`, by `LABEL=`, sorted by mount point (root first), with `tmpfs
-/tmp` prepended. With a single root partition that's just:
+and writes `/etc/fstab` on the new root:
 
 ```text
 # Ansible managed
-# Generated by david_igou.armbian.disk_provision.
-# Do not edit; re-run reprovision_to_local.yml (or equivalent) to change.
+# Generated by david_igou.armbian.disk_provision from the disk layout.
 #
 # <file system>	<mount point>	<type>	<options>	<dump>	<pass>
 tmpfs	/tmp	tmpfs	defaults,nosuid	0	0
 LABEL=armbi_root_local	/	ext4	defaults,noatime	0	1
 ```
 
-The `armbi_root_local` label is what ties the NVMe to `local_kernel`
-boot: it matches `pxelinux_render`'s `pxelinux_render_local_root` default
-(`LABEL=armbi_root_local`), so the rendered pxelinux `local`/
-`local_kernel` `root=` line resolves to this partition. These Rockchip
-SBCs don't EFI-boot — there's no ESP; `/boot` (kernel + extlinux/boot.scr)
-lives inside the ext4 root, rsynced from the running rootfs. Multi-partition
-layouts (separate `boot`/`var`, or an `esp` for EFI platforms) are
-supported by the DSL but aren't what these boards use.
+When `/boot/extlinux/extlinux.conf` exists on the new root, its `root=`
+argument is rewritten to `root=LABEL=<root label>`.

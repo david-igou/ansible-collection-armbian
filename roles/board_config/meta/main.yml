@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: board_config
+  author: David Igou
+  description: Resolve layered board inventory data into hardware, build and rootfs-source facts.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: GenericLinux
+      versions:
+        - all
+  galaxy_tags:
+    - armbian
+    - inventory
+dependencies: []

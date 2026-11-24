@@ -1,21 +1,111 @@
 ---
-# disk_image — stream an image to a block device.
-# See meta/argument_specs.yml for the contract.
-
-- name: Refuse to run in check mode (disk_image performs irreversible writes)
+- name: Refuse to run in check mode
   ansible.builtin.assert:
     that:
       - not ansible_check_mode
     fail_msg: >-
-      disk_image streams .img.xz to a block device — there is no
-      dry-run mode. Run without --check, or wrap consumers in a
-      `when: not ansible_check_mode` guard.
+      disk_image streams an image onto a block device and cannot be
+      simulated. Run without --check.
 
-- name: "Block A — validate inputs (no side effects)"
-  ansible.builtin.import_tasks: _validate.yml
+- name: Stat the target device
+  ansible.builtin.stat:
+    path: "{{ disk_image_target_device }}"
+  register: __disk_image_target_stat
 
-- name: "Block B — stream and write"
-  ansible.builtin.import_tasks: _write.yml
+- name: Assert the target is a block device
+  ansible.builtin.assert:
+    that:
+      - __disk_image_target_stat.stat.isblk | default(false)
+    fail_msg: "not a block device: {{ disk_image_target_device }}"
 
-- name: "Block C — settle (sync + partprobe + udev settle)"
-  ansible.builtin.import_tasks: _settle.yml
+# The kernel exposes a `partition` attribute only for partition nodes.
+- name: Stat the target's sysfs partition attribute
+  ansible.builtin.stat:
+    path: "/sys/class/block/{{ disk_image_target_device | basename }}/partition"
+  register: __disk_image_partition_attr
+
+- name: Assert the target is a whole disk, not a partition
+  ansible.builtin.assert:
+    that:
+      - not __disk_image_partition_attr.stat.exists
+    fail_msg: >-
+      disk_image_target_device is a partition, not a whole disk:
+      {{ disk_image_target_device }}. Pass the parent disk (e.g. /dev/mmcblk0).
+
+- name: List mountpoints of the target and its partitions
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --json
+      - --list
+      - --paths
+      - --output
+      - NAME,MOUNTPOINTS
+      - "{{ disk_image_target_device }}"
+  register: __disk_image_lsblk
+  changed_when: false
+
+- name: Assert nothing on the target is mounted
+  ansible.builtin.assert:
+    that:
+      - __disk_image_mounted | length == 0
+    fail_msg: >-
+      target device {{ disk_image_target_device }} backs a mounted
+      filesystem: {{ __disk_image_mounted | join(', ') }}
+  vars:
+    __disk_image_mounted: >-
+      {{ (__disk_image_lsblk.stdout | from_json).blockdevices
+         | map(attribute='mountpoints') | flatten | select | list }}
+
+- name: Assert disk_image_source is a URL or an absolute path
+  ansible.builtin.assert:
+    that:
+      - __disk_image_src_is_url or __disk_image_src_is_path
+    fail_msg: "disk_image_source must be an http(s):// URL or an absolute path, got: {{ disk_image_source }}"
+
+- name: Assert disk_image_source ends in .img or .img.xz
+  ansible.builtin.assert:
+    that:
+      - __disk_image_format != 'unknown'
+    fail_msg: "unsupported format; disk_image_source must end in .img or .img.xz: {{ disk_image_source }}"
+
+- name: Stat a local source image
+  ansible.builtin.stat:
+    path: "{{ disk_image_source }}"
+    get_checksum: false
+  register: __disk_image_src_stat
+  when: __disk_image_src_is_path
+
+- name: Assert a local source image is a regular file
+  ansible.builtin.assert:
+    that:
+      - __disk_image_src_stat.stat.isreg | default(false)
+    fail_msg: "disk_image_source path does not exist or is not a regular file: {{ disk_image_source }}"
+  when: __disk_image_src_is_path
+
+# shell: the image is streamed through a pipe; pipefail surfaces a curl,
+# cat or xz failure that dd's own exit status would hide.
+- name: Stream the image onto the target device
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; {{ __disk_image_pipeline }}"
+    executable: /bin/bash
+  become: true
+  changed_when: true
+
+- name: Flush filesystem buffers
+  ansible.builtin.command: sync
+  become: true
+  changed_when: false
+
+- name: Re-read the target's partition table
+  ansible.builtin.command:
+    argv:
+      - partprobe
+      - "{{ disk_image_target_device }}"
+  become: true
+  changed_when: false
+
+- name: Wait for udev to create the new partition nodes
+  ansible.builtin.command: udevadm settle
+  become: true
+  changed_when: false

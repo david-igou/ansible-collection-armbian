@@ -1,6 +1,5 @@
 ---
-- name: bootstrap_armbian | Restart sshd
-  listen: "Restart sshd"
+- name: Restart sshd
   ansible.builtin.systemd_service:
     name: ssh
     state: restarted

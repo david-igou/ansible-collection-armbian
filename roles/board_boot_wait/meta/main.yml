@@ -2,13 +2,13 @@
 galaxy_info:
   role_name: board_boot_wait
   author: David Igou
-  author_email: igou.david@gmail.com
-  description: "Wait for a board to come up over TCP/22 + SSH."
+  description: Power-cycle a board and wait until it is reachable over SSH.
   license: MIT
-  min_ansible_version: "2.15"
+  min_ansible_version: "2.19"
   platforms:
-    - name: Generic
-      versions: [all]
+    - name: GenericLinux
+      versions:
+        - all
   galaxy_tags:
     - armbian
     - netboot

@@ -1,20 +1,22 @@
 ---
-- hosts: all
-  gather_facts: true
+- name: Converge
+  hosts: all
+  gather_facts: false
   become: true
   tasks:
-    - name: "Read target loop device path"
+    - name: Read the fixture loop devices
       ansible.builtin.slurp:
-        src: /tmp/target_loop
-      register: _target_b64
+        src: /tmp/disk_image_targets.json
+      register: __targets_raw
 
-    - name: "Set target loop fact"
-      ansible.builtin.set_fact:
-        _target_loop: "{{ (_target_b64.content | b64decode).strip() }}"
-
-    - name: "Converge: invoke full role on a clean (unmounted) target"
+    - name: Write the raw image and the xz image to their own targets
       ansible.builtin.include_role:
         name: david_igou.armbian.disk_image
       vars:
-        disk_image_source: "/tmp/test.img.xz"
-        disk_image_target_device: "{{ _target_loop }}"
+        disk_image_source: "/tmp/{{ item.source }}"
+        disk_image_target_device: "{{ (__targets_raw.content | b64decode | from_json)[item.target] }}"
+      loop:
+        - source: test.img
+          target: target_raw
+        - source: test.img.xz
+          target: target_xz

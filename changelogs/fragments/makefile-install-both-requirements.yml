@@ -1,0 +1,3 @@
+---
+trivial:
+  - Makefile - install the runtime and test requirements with separate ``ansible-galaxy`` calls; a repeated ``-r`` only honours the last file, which left ``ansible.posix`` uninstalled for the lint job.

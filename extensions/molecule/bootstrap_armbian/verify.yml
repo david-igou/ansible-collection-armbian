@@ -1,54 +1,142 @@
 ---
-- name: Verify the role made the expected changes
-  hosts: all
+- name: Verify as the bootstrapped user
+  hosts: molecule
   gather_facts: false
-  become: false
-
+  vars:
+    ansible_user: ansibletest
+    ansible_ssh_private_key_file: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/fixture_user_key"
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes
   tasks:
-    - name: User ansibletest exists
-      ansible.builtin.command: id -un ansibletest
-      register: _id
+    - name: Log in as the bootstrapped user with its key
+      ansible.builtin.command:
+        argv:
+          - id
+          - -un
+      register: __login
       changed_when: false
 
-    - name: Sudoers drop-in exists with NOPASSWD line
-      ansible.builtin.slurp:
-        src: /etc/sudoers.d/ansibletest
-      register: _sudoers
+    - name: Become root without a password
+      ansible.builtin.command:
+        argv:
+          - id
+          - -u
+      become: true
+      register: __sudo
+      changed_when: false
 
-    - name: Assert sudoers content
-      ansible.builtin.assert:
-        that:
-          - "(_sudoers.content | b64decode) is search('^ansibletest ALL=\\(ALL\\) NOPASSWD: ALL')"
-        fail_msg: "sudoers drop-in content unexpected:\n{{ _sudoers.content | b64decode }}"
+    - name: Read the effective sshd configuration
+      ansible.builtin.command:
+        argv:
+          - sshd
+          - -T
+      become: true
+      register: __sshd
+      changed_when: false
 
-    - name: Read /etc/ssh/sshd_config
-      ansible.builtin.slurp:
-        src: /etc/ssh/sshd_config
-      register: _sshd
-
-    - name: Assert PasswordAuthentication is no
-      ansible.builtin.assert:
-        that:
-          - "(_sshd.content | b64decode) is search('(?m)^PasswordAuthentication no')"
-        fail_msg: "sshd_config does not have PasswordAuthentication no"
-
-    - name: First-login sentinel removed
+    - name: Check for the first-login prompt
       ansible.builtin.stat:
         path: /root/.not_logged_in_yet
-      register: _sentinel
+      become: true
+      register: __prompt
 
-    - name: Assert sentinel gone
-      ansible.builtin.assert:
-        that: not _sentinel.stat.exists
-        fail_msg: "/root/.not_logged_in_yet still exists — role did not remove the Armbian first-login marker."
-
-    - name: Read /home/ansibletest/.ssh/authorized_keys
-      ansible.builtin.slurp:
-        src: /home/ansibletest/.ssh/authorized_keys
-      register: _auth_keys
-
-    - name: Assert fixture pubkey present
+    - name: Assert key login, passwordless sudo and sshd settings
       ansible.builtin.assert:
         that:
-          - "(_auth_keys.content | b64decode) is search('fixture@bootstrap_armbian')"
-        fail_msg: "Fixture pubkey not authorised for ansibletest."
+          - __login.stdout == 'ansibletest'
+          - __sudo.stdout == '0'
+          - "'passwordauthentication no' in __sshd.stdout_lines"
+          - "'permitrootlogin no' not in __sshd.stdout_lines"
+          - not __prompt.stat.exists
+
+- name: Lock root as the bootstrapped user
+  hosts: molecule
+  gather_facts: false
+  become: true
+  vars:
+    ansible_user: ansibletest
+    ansible_ssh_private_key_file: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/fixture_user_key"
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes
+    fixture_keys:
+      - "{{ lookup('ansible.builtin.file', ansible_ssh_private_key_file ~ '.pub') }}"
+  tasks:
+    - name: Lock root
+      ansible.builtin.include_role:
+        name: david_igou.armbian.bootstrap_armbian
+      vars:
+        bootstrap_armbian_user: ansibletest
+        bootstrap_armbian_ssh_keys: "{{ fixture_keys }}"
+        bootstrap_armbian_lock_root: true
+
+    - name: Restart sshd with the locked configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Read the effective sshd configuration
+      ansible.builtin.command:
+        argv:
+          - sshd
+          - -T
+      register: __sshd_locked
+      changed_when: false
+
+    - name: Read the root password status
+      ansible.builtin.command:
+        argv:
+          - passwd
+          - -S
+          - root
+      register: __root_status
+      changed_when: false
+
+    - name: Assert root login is disabled and the password locked
+      ansible.builtin.assert:
+        that:
+          - "'permitrootlogin no' in __sshd_locked.stdout_lines"
+          - __root_status.stdout.split()[1] == 'L'
+        fail_msg: "{{ __root_status.stdout }}"
+
+    - name: Reject an empty key list
+      block:
+        - name: Bootstrap without keys
+          ansible.builtin.include_role:
+            name: david_igou.armbian.bootstrap_armbian
+          vars:
+            bootstrap_armbian_user: ansibletest
+            bootstrap_armbian_ssh_keys: []
+
+        - name: Fail because an empty key list was accepted
+          ansible.builtin.fail:
+            msg: SENTINEL bootstrap_armbian accepted an empty key list
+      rescue:
+        - name: Assert the role refused the empty key list
+          ansible.builtin.assert:
+            that:
+              - "'bootstrap_armbian_ssh_keys is empty' in ansible_failed_result.msg"
+
+- name: Verify root can no longer log in
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Try to log in as root with the run's key
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -o
+          - BatchMode=yes
+          - -o
+          - StrictHostKeyChecking=no
+          - -o
+          - UserKnownHostsFile=/dev/null
+          - -o
+          - IdentitiesOnly=yes
+          - -i
+          - "{{ hostvars['instance'].ansible_ssh_private_key_file }}"
+          - -p
+          - "{{ hostvars['instance'].ansible_port }}"
+          - root@{{ hostvars['instance'].ansible_host }}
+          - "true"
+      register: __root_login
+      changed_when: false
+      failed_when: __root_login.rc == 0

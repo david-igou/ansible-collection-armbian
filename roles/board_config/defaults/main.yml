@@ -1,0 +1,16 @@
+---
+# Hardware layers merged by the main entry point (low to high precedence).
+board_config_family: {}
+board_config_model: {}
+board_config_host: {}
+
+# Lowest build layer for the build entry point. The family, model and host
+# build layers (board_config_build_family, board_config_build_model,
+# board_config_build_host) have no default on purpose: whether any of them is
+# defined decides board_config_build_enabled.
+board_config_build_defaults: {}
+
+# rootfs_src entry point. Set the override to skip the manifest lookup.
+# board_config_assets_base_url: https://assets.example.com/boot-files
+board_config_rootfs_src_override: ""
+board_config_rootfs_checksum_override: ""

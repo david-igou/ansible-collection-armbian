@@ -1,0 +1,34 @@
+#
+# Ansible managed
+#
+# pxelinux.cfg for board-01 (rock-5b)
+# MAC: AA:BB:CC:DD:EE:FF
+
+default nfs
+timeout 50
+prompt  0
+
+label nfs
+  menu label Armbian NFS root (board-01)
+  kernel armbian/instance/vmlinuz
+  initrd armbian/instance/initrd.img
+  fdt    armbian/instance/board.dtb
+  append root=/dev/nfs nfsroot=192.0.2.10:/srv/netboot/rootfs/board-01,nfsvers=3,rw ip=dhcp rootwait rw console=ttyS2,1500000
+
+label sd
+  menu label Armbian on SD (board-01)
+  kernel armbian/instance/vmlinuz
+  initrd armbian/instance/initrd.img
+  fdt    armbian/instance/board.dtb
+  append root=LABEL=armbi_root rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local
+  menu label Armbian on local disk (board-01)
+  kernel armbian/instance/vmlinuz
+  initrd armbian/instance/initrd.img
+  fdt    armbian/instance/board.dtb
+  append root=LABEL=armbi_root_local rootfstype=ext4 rootwait rw console=ttyS2,1500000
+
+label local_kernel
+  menu label Boot the local disk's kernel (board-01)
+  localboot 0

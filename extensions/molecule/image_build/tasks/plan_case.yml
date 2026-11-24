@@ -1,0 +1,17 @@
+---
+# Run the role's plan entry point with one changed input and check the
+# rebuild decision.
+- name: "Plan with {{ case.name }}"
+  ansible.builtin.include_role:
+    name: david_igou.armbian.image_build
+    tasks_from: plan
+  vars:
+    image_build_compile_args: "{{ case.compile_args | default(scenario_compile_args) }}"
+    image_build_userpatches: "{{ case.userpatches | default(scenario_userpatches) }}"
+    image_build_force: "{{ case.force | default(false) }}"
+
+- name: "Assert the decision for {{ case.name }}"
+  ansible.builtin.assert:
+    that:
+      - image_build_needed | bool == case.needed
+    fail_msg: "{{ case.name }}: expected image_build_needed={{ case.needed }}, got {{ image_build_needed }}"

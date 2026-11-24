@@ -1,0 +1,5 @@
+---
+trivial:
+  - molecule - share the create, destroy and generic prepare playbooks from
+    ``extensions/molecule/shared``, add ``idempotence`` to the default test sequence and pin
+    ``david_igou.molecule_provisioners`` 0.0.8-alpha.

@@ -1,0 +1,15 @@
+---
+- name: Stop the fixture HTTP server
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Stop the fixture HTTP server
+      ansible.builtin.command:
+        argv:
+          - pkill
+          - -f
+          - "http.server --bind 127.0.0.1 --directory {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/assets"
+      register: __fixture_pkill
+      changed_when: __fixture_pkill.rc == 0
+      failed_when: __fixture_pkill.rc > 1

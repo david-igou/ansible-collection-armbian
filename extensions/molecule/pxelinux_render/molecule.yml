@@ -1,6 +1,7 @@
 ---
-# Scenario-specific config only — the shared scenario shape
-# (executor args, playbook map, test_sequence, verifier) lives in
-# extensions/molecule/config.yml and is deep-merged by molecule.
+ansible:
+  playbooks:
+    prepare: ../shared/prepare.yml
+
 scenario:
   name: pxelinux_render

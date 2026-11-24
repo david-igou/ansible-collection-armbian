@@ -1,65 +1,56 @@
 # board_boot_verify
 
-## Purpose
-
-Assert that a board's currently-mounted rootfs matches the declared
-`board_boot_verify_mode`. Single-host role: gathers facts, inspects
-`ansible_facts['mounts']['/']`, and asserts that the fstype + device path are
-consistent with the boot mode the caller claims is active. Used to
-catch silent fall-through (e.g. PXE skipped pxelinux.cfg and U-Boot
-fell to the local SD card) before downstream plays mutate state under
-the wrong assumption.
+Asserts that a board's root filesystem matches the boot mode it is supposed to
+be in, so a silent fall-through (PXE skipped, U-Boot booted the SD card) is
+caught before later plays act on the wrong system. Runs on the board; gathers
+only the `mounts` fact subset itself.
 
 ## Inputs
 
 See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `board_boot_verify_mode` | yes | — | One of `nfs`, `sd`, `local`, `local_kernel`, or a key in `board_boot_verify_extra_modes`. |
-| `board_boot_verify_extra_modes` | no | `{}` | Mirrors `armbian_extra_modes`. When `board_boot_verify_mode` is a key here, the role reads that mode's `verify_match` regex and asserts `ansible_facts['mounts']['/'].device` matches it. |
-| `board_boot_verify_local_kernel_match` | no | `^/dev/nvme` | Regex the rootfs device must match when `board_boot_verify_mode=local_kernel`. Falls back to `armbian_board_config.local_kernel.verify_match` when that is resolved on the host. Widen for boards with non-NVMe localcmd fallbacks, e.g. `^/dev/(nvme\|mmcblk0)`. |
-
-### Built-in assertion table
-
-| `board_boot_verify_mode` | rootfs fstype must be | rootfs device must |
+| Variable | Required | Purpose |
 |---|---|---|
-| `nfs` | `nfs` or `nfs4` | — |
-| `sd` | NOT nfs/nfs4 | start with `/dev/` |
-| `local` | NOT nfs/nfs4 | start with `/dev/` |
-| `local_kernel` | NOT nfs/nfs4 | match `board_boot_verify_local_kernel_match` (default `^/dev/nvme`) |
-| key in `board_boot_verify_extra_modes` | — | match the mode's `verify_match` regex |
+| `board_boot_verify_mode` | yes | `nfs`, `sd`, `local`, `local_kernel` or a custom mode name |
+| `board_boot_verify_root_match` | custom modes only | Regex the root device must match; replaces the mode's default |
 
-## Outputs / side effects
+| Mode | Root fstype | Root device must match (default) |
+|---|---|---|
+| `nfs` | `nfs` or `nfs4` | not checked |
+| `sd` | not NFS | `^/dev/` |
+| `local` | not NFS | `^/dev/` |
+| `local_kernel` | not NFS | `^/dev/nvme` |
+| custom | not checked | `board_boot_verify_root_match` |
 
-After a successful run:
-
-- The board's rootfs matches the declared mode (otherwise the role
-  hard-fails with a mode-specific `fail_msg` describing the most
-  likely upstream cause — wrong pxelinux fall-through, wrong U-Boot
-  `localcmd`, missing partition label, etc.).
-- No filesystem or configuration mutations on the board.
-
-## Idempotency & check mode
-
-- Pure read-only assertion role; running it twice with the same boot
-  mode produces the same result.
-- `--check` mode is fully supported — `setup` and `assert` both work
-  in check mode.
+The modes and their defaults are one table in [`vars/main.yml`](vars/main.yml).
+On mismatch the role fails with the actual root device and fstype, what was
+expected, and a mode-specific hint.
 
 ## Example
 
 ```yaml
-- name: Verify the board is on the declared boot mode
-  hosts: orange-pi-5-pro-01
-  gather_facts: true   # role inspects ansible_facts['mounts']['/']
+- name: Verify the boot mode
+  hosts: boards
+  gather_facts: false
   tasks:
-    - ansible.builtin.include_role:
+    - name: Assert the board booted from NFS
+      ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_verify
       vars:
-        board_boot_verify_mode: "{{ armbian_boot_mode }}"
-        board_boot_verify_extra_modes: "{{ armbian_extra_modes | default({}) }}"
+        board_boot_verify_mode: nfs
+
+    - name: Assert a board with an eMMC fallback booted its local kernel
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_verify
+      vars:
+        board_boot_verify_mode: local_kernel
+        board_boot_verify_root_match: ^/dev/(nvme|mmcblk0)
 ```
 
-Typically reached via `playbooks/converge_boot_mode.yml` and
-`playbooks/tests/test_hardware_e2e.yml` as the post-boot assertion step.
+## Idempotency and check mode
+
+Read-only: gathers facts and asserts. Works in check mode.
+
+## License
+
+MIT

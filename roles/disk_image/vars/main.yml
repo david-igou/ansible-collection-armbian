@@ -1,0 +1,18 @@
+---
+__disk_image_src_is_url: "{{ disk_image_source is match('^https?://') }}"
+__disk_image_src_is_path: "{{ disk_image_source is match('^/') }}"
+
+# Character classes instead of backslash escapes: the pattern passes
+# through YAML and Jinja string parsing before it reaches the regex engine.
+__disk_image_format: >-
+  {{ 'xz' if disk_image_source is search('[.]img[.]xz$')
+     else 'raw' if disk_image_source is search('[.]img$')
+     else 'unknown' }}
+
+# reader | [xz -dc |] dd, assembled as data so one task covers every
+# source/format combination.
+__disk_image_pipeline: >-
+  {{ ([('curl -fsSL ' if __disk_image_src_is_url else 'cat ') ~ (disk_image_source | quote)]
+      + (['xz -dc'] if __disk_image_format == 'xz' else [])
+      + ['dd of=' ~ (disk_image_target_device | quote) ~ ' bs=' ~ (disk_image_dd_bs | quote) ~ ' conv=fsync'])
+     | join(' | ') }}

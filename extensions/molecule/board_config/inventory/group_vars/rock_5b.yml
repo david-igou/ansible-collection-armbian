@@ -1,0 +1,10 @@
+---
+board_config_model:
+  armbian_board_name: rock-5b
+  dtb: rockchip/rk3588-rock-5b.dtb
+  earlycon: model-earlycon
+board_config_build_model:
+  branch: edge
+  userpatches:
+    - dest: config/boards/rock-5b.conf
+      content: model hook

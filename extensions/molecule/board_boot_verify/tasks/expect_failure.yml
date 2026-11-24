@@ -1,0 +1,20 @@
+---
+- name: Run board_boot_verify with a mismatched mode
+  block:
+    - name: Include board_boot_verify
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_verify
+      vars:
+        board_boot_verify_mode: "{{ case.mode }}"
+        board_boot_verify_root_match: "{{ case.root_match | default('') }}"
+
+    - name: Fail because the mismatch was accepted
+      ansible.builtin.fail:
+        msg: SENTINEL board_boot_verify accepted mode {{ case.mode }}
+  rescue:
+    - name: Assert the role failed with the expected message
+      ansible.builtin.assert:
+        that:
+          - "'SENTINEL' not in ansible_failed_result.msg"
+          - case.error in ansible_failed_result.msg
+        fail_msg: "Expected '{{ case.error }}', got: {{ ansible_failed_result.msg }}"

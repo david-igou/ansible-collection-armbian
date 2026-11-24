@@ -27,6 +27,5 @@ You can expect:
   remain anonymous
 
 For vulnerabilities in upstream Ansible itself or in dependent
-collections (`ansible.posix`, `community.routeros`,
-`ansible.netcommon`), follow the
+collections (`ansible.posix`), follow the
 [Ansible community security disclosure process](https://docs.ansible.com/ansible/latest/community/reporting_bugs_and_features.html#reporting-security-vulnerabilities).

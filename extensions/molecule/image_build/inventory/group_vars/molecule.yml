@@ -1,17 +1,28 @@
 ---
 mp_backend: "{{ lookup('env', 'PROVISIONER') | default('qemu', true) }}"
 
-# Shared between prepare.yml (pre-seeds manifest.json with a matching
-# patch_hash) and converge.yml (passes the same list to the image_build
-# role). MUST stay byte-identical in both places — patch_hash is sha256
-# of the canonical-JSON-encoded list, so any drift breaks the role's
-# check_manifest short-circuit and the scenario falls back to a real
-# (~30 min) Armbian build.
+# Role inputs shared by prepare, converge and verify. The scenario never
+# runs compile.sh, so it needs far less than the role's default free space.
+image_build_board: orangepi5pro
+image_build_name: build-orangepi5pro
+image_build_cache_dir: /home/debian/armbian_build
+image_build_min_free_gb: 5
+image_build_userpatches: "{{ scenario_userpatches }}"
+image_build_compile_args: "{{ scenario_compile_args }}"
+
+# Named separately so verify can derive changed inputs from them.
+scenario_compile_args:
+  BUILD_MINIMAL: "yes"
+  COMPRESS_OUTPUTIMAGE: sha,xz
+
 scenario_userpatches:
-  - dest: "config/boards/orangepi5pro.conf"
+  - dest: config/boards/orangepi5pro.conf
     content: |
       function pre_config_uboot_target__orangepi5pro_pxe_first() {
           declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
           sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
               include/configs/rockchip-common.h
       }
+  - dest: overlay/molecule-marker
+    content: |
+      written by the image_build scenario

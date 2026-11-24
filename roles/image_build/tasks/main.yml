@@ -1,49 +1,72 @@
 ---
-# Build a custom Armbian image with the supplied userpatches.
-#
-# Single-purpose, intent-agnostic role. The caller (typically a workflow
-# playbook) supplies the board, host, branch, release, and userpatches list;
-# this role enforces the desired output state under
-# armbian_build_output_dir/<host>/.
+- name: Prepare the build tree and decide whether to build
+  ansible.builtin.import_tasks: plan.yml
 
-- name: Validate required inputs
-  ansible.builtin.assert:
-    that:
-      - armbian_build_board | length > 0
-      - armbian_build_host  | length > 0
-      - "'/' not in armbian_build_host"
-      - "'..' not in armbian_build_host"
-    fail_msg: >-
-      armbian_build_board and armbian_build_host are required. Set
-      armbian_build_host to the inventory_hostname of the target board
-      (e.g. via host_vars or the calling playbook's vars block).
-      armbian_build_host must not contain '/' or '..' — it is
-      interpolated directly into filesystem paths.
+- name: Build the image as the connecting user
+  when: image_build_needed | bool
+  become: false
+  block:
+    # compile.sh relaunches itself in Docker when run by a non-root user
+    # in the docker group.
+    - name: Run armbian/build compile.sh
+      ansible.builtin.command:
+        argv: "{{ __image_build_compile_argv }}"
+        chdir: "{{ __image_build_checkout }}"
+      environment: "{{ __image_build_git_env }}"
+      async: "{{ image_build_timeout }}"
+      poll: 30
+      changed_when: true
 
-- name: Compute per-host cache + output paths
+    # The kernel version in the file name is not known in advance.
+    - name: Find the image this run produced
+      ansible.builtin.find:
+        paths: "{{ __image_build_checkout }}/output/images"
+        patterns: "(?i)Armbian.*{{ image_build_board }}.*{{ image_build_release }}.*{{ image_build_branch }}.*[.]img[.]xz$"
+        use_regex: true
+        age: -10m
+      register: __image_build_produced
+
+    - name: Assert exactly one image was produced
+      ansible.builtin.assert:
+        that:
+          - __image_build_produced.files | length == 1
+        fail_msg: >-
+          Expected one .img.xz for {{ image_build_board }}/{{ image_build_release }}/{{ image_build_branch }},
+          found {{ __image_build_produced.files | map(attribute='path') | list }}.
+
+    - name: Stat the image's .sha sidecar
+      ansible.builtin.stat:
+        path: "{{ __image_build_produced.files[0].path }}.sha"
+        get_checksum: false
+      register: __image_build_sha
+
+    - name: Move the image and its .sha sidecar into the output directory
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ item }}"
+          - "{{ __image_build_output_dir }}/"
+      loop: "{{ [__image_build_produced.files[0].path] + ([__image_build_produced.files[0].path ~ '.sha'] if __image_build_sha.stat.exists else []) }}"
+      changed_when: true
+
+    - name: Assemble the manifest
+      ansible.builtin.set_fact:
+        __image_build_new_manifest:
+          board: "{{ image_build_board }}"
+          name: "{{ image_build_name }}"
+          branch: "{{ image_build_branch }}"
+          release: "{{ image_build_release }}"
+          armbian_build_ref: "{{ image_build_ref }}"
+          image_filename: "{{ __image_build_produced.files[0].path | basename }}"
+          built_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+          inputs_hash: "{{ __image_build_inputs_hash }}"
+
+    - name: Write manifest.json
+      ansible.builtin.copy:
+        dest: "{{ __image_build_manifest_path }}"
+        content: "{{ __image_build_new_manifest | to_nice_json(sort_keys=true) }}\n"
+        mode: "0644"
+
+- name: Expose the manifest of the image in the output directory
   ansible.builtin.set_fact:
-    __image_build_cache_dir_host: "{{ armbian_build_cache_dir }}/{{ armbian_build_host }}"
-    __image_build_output_dir_host: "{{ armbian_build_output_dir }}/{{ armbian_build_host }}"
-
-- name: Preflight (docker, disk, egress)
-  ansible.builtin.include_tasks: preflight.yml
-
-- name: Manage armbian/build checkout
-  ansible.builtin.include_tasks: manage_checkout.yml
-
-- name: Apply userpatches
-  ansible.builtin.include_tasks: apply_userpatches.yml
-
-- name: Compute build inputs (patch_hash, manifest fact)
-  ansible.builtin.include_tasks: compute_inputs.yml
-
-- name: Check existing manifest for skip-build decision
-  ansible.builtin.include_tasks: check_manifest.yml
-
-- name: Invoke armbian/build (skipped when manifest matches)
-  ansible.builtin.include_tasks: invoke_build.yml
-  when: not (__image_build_skip_build | bool)
-
-- name: Write manifest
-  ansible.builtin.include_tasks: write_manifest.yml
-  when: not (__image_build_skip_build | bool)
+    image_build_manifest: "{{ __image_build_new_manifest if image_build_needed | bool else __image_build_existing_manifest }}"

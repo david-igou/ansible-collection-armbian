@@ -59,7 +59,7 @@ labels: ["hardware", "board-tracker"]
 
 **Workaround in this collection**: <link to commit/role/variable, or "none — operator-side only">
 
-**Workaround manual**: <e.g. "longer PoE drain (-e armbian_poe_cycle_delay=20-30) helps", "physically reseat SD card">
+**Workaround manual**: <e.g. "a longer power-off in the power-cycle hook helps", "physically reseat SD card">
 
 **Upstream / hardware tracking**: <links to Armbian forum, Rockchip BSP issues, vendor support tickets>
 
@@ -74,11 +74,8 @@ labels: ["hardware", "board-tracker"]
   to keep this board reliable. Update when adding new mitigations.
 -->
 
-- <e.g. `playbooks/routeros/upload_tftp_assets.yml` always force-removes
-  the router's vmlinuz before net_put — guards against the
-  kernel/module version-mismatch class of mount-time failure>
-- <e.g. `playbooks/tests/test_hardware_e2e.yml` `_wait_timeout: 300` — chosen
-  to absorb U-Boot's PXE → EFI → MMC fall-through on cold boots>
+- <e.g. `board_boot_wait_port_timeout: 300` chosen to absorb U-Boot's
+  PXE → EFI → MMC fall-through on cold boots>
 
 ## Resolution checklist
 

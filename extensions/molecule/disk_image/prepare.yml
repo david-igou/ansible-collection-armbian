@@ -2,37 +2,69 @@
 - name: Prepare molecule instances
   import_playbook: david_igou.molecule_provisioners.prepare
 
-- name: Build the loop-device fixture inside the VM
+- name: Build the image and loop-device fixtures
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: true
-
   tasks:
-    - name: Ensure xz-utils, util-linux, parted are installed
+    - name: Install the tools the role and the fixtures need
       ansible.builtin.apt:
-        name: [xz-utils, util-linux, parted]
+        name:
+          - curl
+          - parted
+          - util-linux
+          - xz-utils
         state: present
         update_cache: true
 
-    - name: Write a 64 MiB random fixture image
-      ansible.builtin.command: "dd if=/dev/urandom of=/tmp/test.img bs=1M count=64"
+    - name: Write a 64 MiB random raw image
+      ansible.builtin.command:
+        argv:
+          - dd
+          - if=/dev/urandom
+          - of=/tmp/test.img
+          - bs=1M
+          - count=64
+        creates: /tmp/test.img
+
+    - name: Compress a copy of the image to test.img.xz
+      ansible.builtin.command:
+        argv:
+          - xz
+          - --keep
+          - -T0
+          - /tmp/test.img
+        creates: /tmp/test.img.xz
+
+    - name: Create sparse 1 GiB target files
+      ansible.builtin.command:
+        argv:
+          - truncate
+          - --size=1G
+          - "/tmp/{{ item }}.img"
+        creates: "/tmp/{{ item }}.img"
+      loop:
+        - target_raw
+        - target_xz
+
+    - name: Attach the target files as loop devices
+      ansible.builtin.command:
+        argv:
+          - losetup
+          - --find
+          - --show
+          - "/tmp/{{ item }}.img"
+      loop:
+        - target_raw
+        - target_xz
+      register: __fixture_loops
       changed_when: true
 
-    - name: Compress the fixture to test.img.xz (removes test.img)
-      ansible.builtin.command: "xz -9 -f /tmp/test.img"
-      changed_when: true
-
-    - name: Create the 1 GiB sparse target
-      ansible.builtin.command: "truncate -s 1G /tmp/target.img"
-      changed_when: true
-
-    - name: Attach the sparse file as a loop device
-      ansible.builtin.command: "losetup -f --show /tmp/target.img"
-      register: _loop
-      changed_when: true
-
-    - name: Persist the loop device path
+    - name: Record the loop device of each target
       ansible.builtin.copy:
-        dest: /tmp/target_loop
-        content: "{{ _loop.stdout }}\n"
+        dest: /tmp/disk_image_targets.json
+        content: >-
+          {{ dict(__fixture_loops.results | map(attribute='item')
+                  | zip(__fixture_loops.results | map(attribute='stdout')))
+             | to_json }}
         mode: "0644"

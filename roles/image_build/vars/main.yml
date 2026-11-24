@@ -1,0 +1,31 @@
+---
+__image_build_cache_dir: "{{ image_build_cache_dir }}/{{ image_build_name }}"
+__image_build_checkout: "{{ __image_build_cache_dir }}/build"
+__image_build_userpatches_dir: "{{ __image_build_checkout }}/userpatches"
+__image_build_output_dir: "{{ image_build_output_dir }}/{{ image_build_name }}"
+__image_build_manifest_path: "{{ __image_build_output_dir }}/manifest.json"
+
+# Keep git and compile.sh away from the connecting user's global git config
+# (insteadOf rewrites, credential helpers, signing). A missing file reads
+# as an empty config.
+__image_build_git_env:
+  GIT_CONFIG_GLOBAL: "{{ __image_build_cache_dir }}/.gitconfig"
+
+# Everything that changes the produced image. A different hash means rebuild.
+__image_build_inputs:
+  board: "{{ image_build_board }}"
+  branch: "{{ image_build_branch }}"
+  release: "{{ image_build_release }}"
+  ref: "{{ image_build_ref }}"
+  userpatches: "{{ image_build_userpatches }}"
+  compile_args: "{{ image_build_compile_args }}"
+__image_build_inputs_hash: "sha256:{{ __image_build_inputs | to_json(sort_keys=true) | hash('sha256') }}"
+
+__image_build_compile_argv: >-
+  {{ [
+       './compile.sh',
+       'BOARD=' ~ image_build_board,
+       'BRANCH=' ~ image_build_branch,
+       'RELEASE=' ~ image_build_release
+     ]
+     + (image_build_compile_args.keys() | list | zip(image_build_compile_args.values() | list) | map('join', '=') | list) }}

@@ -1,2 +1,10 @@
 ---
 mp_backend: "{{ lookup('env', 'PROVISIONER') | default('qemu', true) }}"
+
+# Role inputs shared by converge and verify.
+rootfs_provision_src: /srv/images/board.img.xz
+rootfs_provision_hostname: board-01
+rootfs_provision_dtb: rockchip/rk3588-test.dtb
+rootfs_provision_target_dir: /srv/netboot/rootfs/board-01
+rootfs_provision_tftp_dir: /srv/netboot/tftp/board-01
+rootfs_provision_cache_dir: /var/cache/rootfs_provision

@@ -1,8 +1,0 @@
-# inventory/group_vars/orange_pi_5_pro.yml
----
-armbian_board_config_model:
-  armbian_board_name: orangepi5pro
-  dtb: rockchip/rk3588s-orangepi-5-pro.dtb
-
-armbian_build_model:
-  branch: edge   # YT6801 PCIe NIC requires mainline u-boot v2026.04 from edge

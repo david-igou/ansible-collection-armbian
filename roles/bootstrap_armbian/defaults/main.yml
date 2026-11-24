@@ -1,5 +1,4 @@
 ---
-armbian_bootstrap_user: "armbian"
-# armbian_bootstrap_ssh_keys is intentionally undefined here.
-# It is declared `required: true` in meta/argument_specs.yml; callers
-# MUST supply at least one public key — see roles/bootstrap_armbian/README.md.
+bootstrap_armbian_user: armbian
+# bootstrap_armbian_ssh_keys is required: at least one public key.
+bootstrap_armbian_lock_root: false

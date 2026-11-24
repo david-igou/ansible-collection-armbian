@@ -1,5 +1,6 @@
 ---
 mp_defaults:
-  podman:
-    command: sleep 1d
-    privileged: false
+  qemu:
+    cpus: 2
+    memory: 2048
+    ssh_user: debian

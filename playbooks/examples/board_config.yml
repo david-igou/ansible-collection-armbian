@@ -1,0 +1,29 @@
+---
+# Resolve a board's hardware, build and rootfs-source facts from layered
+# inventory (board_config_family / _model / _host, board_config_build_*).
+- name: Resolve board facts
+  hosts: boards
+  gather_facts: false
+  tasks:
+    - name: Resolve hardware facts
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+
+    - name: Resolve the build profile
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+        tasks_from: build
+
+    - name: Resolve the rootfs source from the published manifest
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+        tasks_from: rootfs_src
+      vars:
+        board_config_assets_base_url: https://assets.example.com/boot-files
+
+    - name: Show the resolved facts
+      ansible.builtin.debug:
+        msg:
+          board_config: "{{ board_config }}"
+          build_enabled: "{{ board_config_build_enabled }}"
+          rootfs_src: "{{ board_config_rootfs_src }}"

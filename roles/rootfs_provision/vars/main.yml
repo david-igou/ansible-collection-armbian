@@ -1,0 +1,24 @@
+---
+__rootfs_provision_src_is_url: "{{ rootfs_provision_src is match('^https?://') }}"
+
+# One cache entry per source string, shared by every host using that source.
+__rootfs_provision_img_xz: "{{ rootfs_provision_cache_dir }}/{{ rootfs_provision_src | hash('sha256') }}/{{ rootfs_provision_src | basename }}"
+__rootfs_provision_img_raw: "{{ __rootfs_provision_img_xz | regex_replace('[.]xz$', '') }}"
+
+__rootfs_provision_sentinel: "{{ rootfs_provision_target_dir }}/.rootfs_provision.json"
+
+__rootfs_provision_ssh_key_types:
+  - type: rsa
+    bits: 4096
+  - type: ecdsa
+    bits: 521
+  - type: ed25519
+
+# Built from the find results in tasks/_extract.yml.
+__rootfs_provision_kernels: "{{ __rootfs_provision_boot_files.files | map(attribute='path') | select('search', '/vmlinuz-[^/]+$') | list }}"
+__rootfs_provision_initrds: "{{ __rootfs_provision_boot_files.files | map(attribute='path') | select('search', '/initrd[.]img-[^/]+$') | list }}"
+# Armbian keeps DTBs under boot/dtb-<version>/ (boot/dtb links to it); other
+# images use boot/dtb/ or boot/dtbs/[<version>/].
+__rootfs_provision_dtb_paths: >-
+  {{ __rootfs_provision_dtb_files.files | map(attribute='path')
+     | select('search', '/boot/(dtb|dtbs|dtb-[^/]+|dtbs/[^/]+)/' ~ (rootfs_provision_dtb | regex_escape) ~ '$') | sort | list }}

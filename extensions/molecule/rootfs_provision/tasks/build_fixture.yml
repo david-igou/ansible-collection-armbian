@@ -1,0 +1,150 @@
+---
+# Build /tmp/fixtures/<version>.img.xz: a GPT image whose larger first
+# partition holds a small Armbian-like rootfs and whose smaller second
+# partition is a decoy that must never be extracted.
+- name: "Create the raw fixture image: {{ version }}"
+  ansible.builtin.command:
+    argv:
+      - truncate
+      - --size=64M
+      - "/tmp/fixtures/{{ version }}.img"
+    creates: "/tmp/fixtures/{{ version }}.img"
+
+- name: "Partition the fixture image: {{ version }}"
+  ansible.builtin.command:
+    argv:
+      - parted
+      - --script
+      - "/tmp/fixtures/{{ version }}.img"
+      - mklabel
+      - gpt
+      - mkpart
+      - rootfs
+      - ext4
+      - 1MiB
+      - 49MiB
+      - mkpart
+      - decoy
+      - ext4
+      - 49MiB
+      - 100%
+  changed_when: true
+
+- name: "Attach the fixture image: {{ version }}"
+  ansible.builtin.command:
+    argv:
+      - losetup
+      - --find
+      - --show
+      - --partscan
+      - "/tmp/fixtures/{{ version }}.img"
+  register: __fixture_loop
+  changed_when: true
+
+- name: Wait for the partition nodes
+  ansible.builtin.command: udevadm settle
+  changed_when: false
+
+- name: Format both partitions
+  ansible.builtin.command:
+    argv:
+      - mkfs.ext4
+      - -q
+      - "{{ __fixture_loop.stdout }}p{{ item }}"
+  loop:
+    - 1
+    - 2
+  changed_when: true
+
+- name: Mount both partitions
+  ansible.posix.mount:
+    path: "/mnt/fixture_p{{ item }}"
+    src: "{{ __fixture_loop.stdout }}p{{ item }}"
+    fstype: ext4
+    state: ephemeral
+  loop:
+    - 1
+    - 2
+
+- name: Create the rootfs directories
+  ansible.builtin.file:
+    path: "/mnt/fixture_p1/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - boot/dtb-6.0.0-test/rockchip
+    - etc/initramfs-tools/conf.d
+    - etc/ssh
+    - root
+    - var/lib/dbus
+
+- name: Link boot/dtb to the versioned DTB directory, as Armbian does
+  ansible.builtin.file:
+    src: dtb-6.0.0-test
+    dest: /mnt/fixture_p1/boot/dtb
+    state: link
+
+- name: Write the rootfs files
+  ansible.builtin.copy:
+    dest: "/mnt/fixture_p{{ item.part | default(1) }}/{{ item.path }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+  loop:
+    - path: boot/vmlinuz-6.0.0-test
+      content: "kernel-{{ version }}\n"
+    - path: boot/initrd.img-6.0.0-test
+      content: "initrd-{{ version }}\n"
+    - path: boot/dtb-6.0.0-test/rockchip/rk3588-test.dtb
+      content: "dtb-{{ version }}\n"
+    - path: etc/fstab
+      content: |
+        /dev/mmcblk0p1 / ext4 defaults,noatime 0 1
+        UUID=4f2c1d9e-0b7a-4c55-9d1e-3a6b8f0c2e71 /boot ext4 defaults 0 2
+        LABEL=data /data ext4 defaults 0 2
+          PARTUUID=0a1b2c3d-02 /srv ext4 defaults 0 2
+        PARTLABEL=swap none swap sw 0 0
+        tmpfs /tmp tmpfs defaults,nosuid 0 0
+        proc /proc proc defaults 0 0
+    - path: etc/hostname
+      content: "armbian\n"
+    - path: etc/initramfs-tools/conf.d/armbian-uefi.conf
+      content: "MODULES=dep\n"
+    - path: etc/hosts
+      content: |
+        127.0.0.1 localhost
+        127.0.1.1 armbian
+    - path: etc/machine-id
+      content: "0123456789abcdef0123456789abcdef\n"
+    - path: etc/ssh/ssh_host_ed25519_key
+      content: "stale-key\n"
+    - path: "etc/only-in-{{ version }}"
+      content: "{{ version }}\n"
+    - path: decoy-marker
+      content: "from the decoy partition\n"
+      part: 2
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Unmount both partitions
+  ansible.posix.mount:
+    path: "/mnt/fixture_p{{ item }}"
+    state: unmounted
+  loop:
+    - 1
+    - 2
+
+- name: "Detach the fixture image: {{ version }}"
+  ansible.builtin.command:
+    argv:
+      - losetup
+      - --detach
+      - "{{ __fixture_loop.stdout }}"
+  changed_when: true
+
+- name: "Compress the fixture image: {{ version }}"
+  ansible.builtin.command:
+    argv:
+      - xz
+      - --force
+      - "/tmp/fixtures/{{ version }}.img"
+  changed_when: true

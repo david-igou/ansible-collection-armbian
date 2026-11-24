@@ -1,0 +1,19 @@
+---
+breaking_changes:
+  - >-
+    disk_provision - the layout must have exactly one entry mounted at C(/), and
+    every mounted or preserved entry needs a label.
+minor_changes:
+  - >-
+    disk_provision - gather the C(mounts) fact subset inside the role, implement
+    C(disk_provision_render_only) with conditional imports instead of
+    C(meta: end_host), and read on-disk labels from C(lsblk --json).
+bugfixes:
+  - >-
+    disk_provision - re-provisioning with preserved partitions now deletes,
+    re-creates and reformats every non-preserved partition (C(FactoryReset=yes)
+    with C(systemd-repart --factory-reset)) instead of reusing them.
+  - >-
+    disk_provision - systemd-repart installation, partprobe and the optional
+    extlinux.conf and armbian-image-release edits no longer hide errors; missing
+    optional files are detected with C(stat).

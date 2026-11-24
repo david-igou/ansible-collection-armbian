@@ -1,0 +1,35 @@
+---
+__board_boot_verify_nfs_fstypes:
+  - nfs
+  - nfs4
+
+# nfs_root: whether the root fstype must (true) or must not (false) be NFS.
+# root_match: default regex for the root device; empty means not checked.
+# expect and hint only shape the failure message.
+__board_boot_verify_modes:
+  nfs:
+    nfs_root: true
+    root_match: ""
+    expect: an NFS root
+    hint: The board skipped its pxelinux.cfg or fell through to local boot.
+  sd:
+    nfs_root: false
+    root_match: ^/dev/
+    expect: a non-NFS root
+    hint: Check the sd label's root= argument and the SD card's filesystem label.
+  local:
+    nfs_root: false
+    root_match: ^/dev/
+    expect: a non-NFS root
+    hint: Check the local label's root= argument against the label disk_provision wrote.
+  local_kernel:
+    nfs_root: false
+    root_match: ^/dev/nvme
+    expect: a non-NFS root
+    hint: localboot ran U-Boot's localcmd; check which disk it booted.
+
+__board_boot_verify_spec: "{{ __board_boot_verify_modes[board_boot_verify_mode] | default({}) }}"
+__board_boot_verify_match: >-
+  {{ board_boot_verify_root_match | default(__board_boot_verify_spec.root_match | default(''), true) }}
+__board_boot_verify_root: >-
+  {{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | first | default({}) }}

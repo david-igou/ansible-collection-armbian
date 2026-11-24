@@ -1,0 +1,26 @@
+---
+- name: Render with invalid input
+  block:
+    - name: Include pxelinux_render
+      ansible.builtin.include_role:
+        name: david_igou.armbian.pxelinux_render
+      vars:
+        pxelinux_render_output_dir: "{{ fixture_output_base }}/invalid"
+        pxelinux_render_board_mac: AA:BB:CC:DD:EE:FF
+        pxelinux_render_boot_mode: "{{ case.vars.pxelinux_render_boot_mode }}"
+        pxelinux_render_pxe_verbose: "{{ case.vars.pxelinux_render_pxe_verbose | default(false) }}"
+        pxelinux_render_console: ttyS2,1500000
+        pxelinux_render_nfs_server_ip: 192.0.2.10
+        pxelinux_render_nfs_root_path: /srv/netboot/rootfs
+        pxelinux_render_hostname: board-01
+
+    - name: Fail because the invalid input was accepted
+      ansible.builtin.fail:
+        msg: SENTINEL pxelinux_render accepted {{ case.name }}
+  rescue:
+    - name: Assert the role's own validation failed
+      ansible.builtin.assert:
+        that:
+          - "'SENTINEL' not in ansible_failed_result.msg"
+          - "'pxelinux_render_boot_mode must be one of nfs, sd, local, local_kernel' in ansible_failed_result.msg"
+        fail_msg: "{{ case.name }}: {{ ansible_failed_result.msg }}"

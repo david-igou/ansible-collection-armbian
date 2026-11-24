@@ -1,6 +1,16 @@
 ---
-# Scenario-specific config only — the shared scenario shape
-# (executor args, playbook map, test_sequence, verifier) lives in
-# extensions/molecule/config.yml and is deep-merged by molecule.
 scenario:
   name: disk_image
+  # disk_image always rewrites the whole device and reports changed, so the
+  # shared sequence's idempotence step cannot pass by design.
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+ansible:
+  playbooks:
+    prepare: prepare.yml

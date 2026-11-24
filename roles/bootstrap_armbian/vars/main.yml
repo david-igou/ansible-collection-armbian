@@ -1,0 +1,4 @@
+---
+# sshd keeps the first value it reads and Debian includes sshd_config.d at
+# the top of sshd_config, so an early-sorting drop-in wins.
+__bootstrap_armbian_sshd_dropin: /etc/ssh/sshd_config.d/00-bootstrap-armbian.conf

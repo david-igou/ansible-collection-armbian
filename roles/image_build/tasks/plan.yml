@@ -1,0 +1,157 @@
+---
+# Entry point (tasks_from: plan) and the first half of main: check the
+# builder, check out armbian/build, write the userpatches and decide whether
+# a build is needed, without running compile.sh. Everything runs as the
+# connecting user: compile.sh only delegates to Docker for a non-root user
+# and needs that user to own the build tree.
+- name: Prepare the build tree and decide whether to build
+  become: false
+  block:
+    - name: Assert image_build_name is a single path component
+      ansible.builtin.assert:
+        that:
+          - image_build_name | length > 0
+          - "'/' not in image_build_name"
+          - image_build_name not in ['.', '..']
+        fail_msg: "image_build_name is used as a directory name and must not contain '/': {{ image_build_name }}"
+
+    - name: Assert userpatch destinations stay inside userpatches/
+      ansible.builtin.assert:
+        that:
+          - not item.dest.startswith('/')
+          - "'..' not in item.dest.split('/')"
+        fail_msg: "userpatch dest must be a relative path without '..': {{ item.dest }}"
+      loop: "{{ image_build_userpatches }}"
+      loop_control:
+        label: "{{ item.dest }}"
+
+    - name: Create the per-target cache and output directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ __image_build_cache_dir }}"
+        - "{{ __image_build_output_dir }}"
+
+    - name: Measure free space at the cache directory
+      ansible.builtin.command:
+        argv:
+          - df
+          - --output=avail
+          - --block-size=1G
+          - "{{ __image_build_cache_dir }}"
+      register: __image_build_df
+      changed_when: false
+
+    - name: Assert enough free space for a build
+      ansible.builtin.assert:
+        that:
+          - __image_build_df.stdout_lines[-1] | trim | int >= image_build_min_free_gb
+        fail_msg: >-
+          {{ __image_build_df.stdout_lines[-1] | trim }} GiB free at {{ __image_build_cache_dir }},
+          image_build_min_free_gb is {{ image_build_min_free_gb }}.
+
+    - name: Check that the Docker daemon is reachable
+      ansible.builtin.command: docker info
+      changed_when: false
+
+    - name: Check HTTPS reachability of the build's egress hosts
+      ansible.builtin.uri:
+        url: "https://{{ item }}"
+        method: HEAD
+        timeout: 10
+        status_code:
+          - 200
+          - 301
+          - 302
+          - 404
+          - 405
+      loop: "{{ image_build_required_egress_hosts }}"
+
+    # Full clone: shallow tag clones lack origin/HEAD, which breaks updates.
+    - name: Check out armbian/build at the pinned ref
+      ansible.builtin.git:
+        repo: https://github.com/armbian/build.git
+        dest: "{{ __image_build_checkout }}"
+        version: "{{ image_build_ref }}"
+        force: false
+        update: true
+      environment: "{{ __image_build_git_env }}"
+
+    # compile.sh's Docker mode bind-mounts <checkout>/userpatches into the
+    # build container.
+    - name: Create the userpatches directory
+      ansible.builtin.file:
+        path: "{{ __image_build_userpatches_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Find files already in userpatches/
+      ansible.builtin.find:
+        paths: "{{ __image_build_userpatches_dir }}"
+        recurse: true
+        hidden: true
+        file_type: any
+      register: __image_build_existing_userpatches
+
+    # userpatches/ is authoritative: anything not declared would silently
+    # change the image without changing the inputs hash.
+    - name: Remove userpatch files that are no longer declared
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ __image_build_existing_userpatches.files | rejectattr('isdir') | map(attribute='path')
+           | reject('in', image_build_userpatches | map(attribute='dest') | map('regex_replace', '^', __image_build_userpatches_dir ~ '/') | list)
+           | list }}
+
+    - name: Create userpatch parent directories
+      ansible.builtin.file:
+        path: "{{ (__image_build_userpatches_dir ~ '/' ~ item.dest) | dirname }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ image_build_userpatches }}"
+      loop_control:
+        label: "{{ item.dest }}"
+
+    - name: Write the userpatch files
+      ansible.builtin.copy:
+        dest: "{{ __image_build_userpatches_dir }}/{{ item.dest }}"
+        content: "{{ item.content }}"
+        mode: "0644"
+      loop: "{{ image_build_userpatches }}"
+      loop_control:
+        label: "{{ item.dest }}"
+
+    - name: Stat the existing manifest
+      ansible.builtin.stat:
+        path: "{{ __image_build_manifest_path }}"
+      register: __image_build_manifest_stat
+
+    - name: Read the existing manifest
+      ansible.builtin.slurp:
+        src: "{{ __image_build_manifest_path }}"
+      register: __image_build_manifest_raw
+      when: __image_build_manifest_stat.stat.exists
+
+    - name: Parse the existing manifest
+      ansible.builtin.set_fact:
+        __image_build_existing_manifest: >-
+          {{ __image_build_manifest_raw.content | b64decode | from_json
+             if __image_build_manifest_stat.stat.exists else {} }}
+
+    - name: Stat the image the manifest names
+      ansible.builtin.stat:
+        path: "{{ __image_build_output_dir }}/{{ __image_build_existing_manifest.image_filename | default('') }}"
+        get_checksum: false
+      register: __image_build_existing_image
+      when: __image_build_existing_manifest.image_filename | default('') | length > 0
+
+    - name: Decide whether to build
+      ansible.builtin.set_fact:
+        image_build_inputs_hash: "{{ __image_build_inputs_hash }}"
+        image_build_needed: >-
+          {{ image_build_force | bool
+             or __image_build_existing_manifest.inputs_hash | default('') != __image_build_inputs_hash
+             or not (__image_build_existing_image.stat.isreg | default(false)) }}

@@ -1,0 +1,17 @@
+---
+# The output fact is named board_config by contract, not board_config_*.
+- name: Merge the hardware layers into board_config  # noqa: var-naming[no-role-prefix]
+  ansible.builtin.set_fact:
+    board_config: >-
+      {{ [board_config_family, board_config_model, board_config_host]
+         | ansible.builtin.combine(recursive=true) }}
+
+- name: Assert the required hardware fields are present
+  ansible.builtin.assert:
+    that:
+      - __board_config_missing_fields | length == 0
+    fail_msg: >-
+      {{ inventory_hostname }}: board_config is missing required field(s)
+      {{ __board_config_missing_fields | join(', ') }}. Set them in
+      board_config_family, board_config_model or board_config_host.
+    quiet: true

@@ -1,44 +1,141 @@
 ---
-- name: Verify — board_boot_wait covered both happy and timeout paths
-  hosts: all
+- name: Verify board_boot_wait
+  hosts: molecule
   gather_facts: false
-  become: false
-
+  vars:
+    count_hook: "{{ playbook_dir }}/tasks/count_power_cycle.yml"
   tasks:
-    - name: Stat both markers
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: _stats
-      loop:
-        - /tmp/board_boot_wait_happy_path
-        - /tmp/board_boot_wait_timeout_rescue
+    - name: Reset the power-cycle counter
+      ansible.builtin.set_fact:
+        fixture_power_cycles: 0
 
-    - name: Assert both markers exist
-      ansible.builtin.assert:
-        that: item.stat.exists
-        fail_msg: >-
-          {{ item.item }} missing — board_boot_wait either failed the
-          happy path or silently accepted the unroutable host.
-      loop: "{{ _stats.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - name: Boot a reachable instance
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        board_boot_wait_power_cycle_tasks: "{{ count_hook }}"
+        board_boot_wait_attempts: 3
+        board_boot_wait_port_timeout: 30
+        board_boot_wait_ssh_timeout: 30
 
-    # Marker existence alone is insufficient: if the role regresses and
-    # does NOT fail on the unroutable host, the converge's explicit
-    # sentinel `fail` ("accepted an unroutable host") still triggers
-    # rescue and writes this marker. Assert the marker came from the
-    # role's own failure, not the sentinel.
-    - name: Slurp the timeout-rescue marker
-      ansible.builtin.slurp:
-        src: /tmp/board_boot_wait_timeout_rescue
-      register: _timeout_msg
-
-    - name: Assert the timeout came from board_boot_wait, not the sentinel fail
+    - name: Assert a reachable instance needs exactly one attempt
       ansible.builtin.assert:
         that:
-          - "'accepted an unroutable host' not in (_timeout_msg.content | b64decode)"
-          - "(_timeout_msg.content | b64decode | trim) | length > 0"
+          - fixture_power_cycles | int == 1
+        fail_msg: "Expected 1 power cycle, got {{ fixture_power_cycles }}"
+
+    - name: Reset the power-cycle counter
+      ansible.builtin.set_fact:
+        fixture_power_cycles: 0
+
+    - name: Retry an unroutable board and fail at the port stage
+      block:
+        - name: Wait for an unroutable board
+          ansible.builtin.include_role:
+            name: david_igou.armbian.board_boot_wait
+          vars:
+            # TEST-NET-2 (RFC 5737): nothing answers.
+            ansible_host: 198.51.100.99
+            board_boot_wait_power_cycle_tasks: "{{ count_hook }}"
+            board_boot_wait_attempts: 2
+            board_boot_wait_port_timeout: 3
+
+        - name: Fail because the role accepted an unroutable board
+          ansible.builtin.fail:
+            msg: SENTINEL board_boot_wait accepted an unroutable board
+      rescue:
+        - name: Assert both attempts ran and the port stage is named
+          ansible.builtin.assert:
+            that:
+              - fixture_power_cycles | int == 2
+              - "'after 2 attempt(s): the port stage timed out' in ansible_failed_result.msg"
+            fail_msg: "cycles={{ fixture_power_cycles }} msg={{ ansible_failed_result.msg }}"
+
+    - name: Fail at the ssh stage when the inventory user cannot log in
+      block:
+        - name: Wait as a user that does not exist
+          ansible.builtin.include_role:
+            name: david_igou.armbian.board_boot_wait
+          vars:
+            ansible_user: fixture-no-such-user
+            board_boot_wait_port_timeout: 30
+            board_boot_wait_ssh_timeout: 5
+
+        - name: Fail because the role accepted a failed login
+          ansible.builtin.fail:
+            msg: SENTINEL board_boot_wait accepted a failed login
+      rescue:
+        - name: Assert the ssh stage is named
+          ansible.builtin.assert:
+            that:
+              - "'after 1 attempt(s): the ssh stage timed out' in ansible_failed_result.msg"
+            fail_msg: "msg={{ ansible_failed_result.msg }}"
+
+    - name: Skip the login wait when board_boot_wait_ssh is false
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        ansible_user: fixture-no-such-user
+        board_boot_wait_ssh: false
+        board_boot_wait_port_timeout: 30
+
+    # wait_for_connection resets its own connection, so only the ssh=false
+    # path shows whether the role drops the master opened before the power
+    # cycle. SSH_CONNECTION carries the client port of the TCP session behind
+    # the multiplexed master; a new port means a new session.
+    - name: Read the SSH session before the power cycle
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - env
+      register: __session_before
+
+    - name: Power-cycle without the login wait
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        board_boot_wait_power_cycle_tasks: "{{ count_hook }}"
+        board_boot_wait_ssh: false
+        board_boot_wait_port_timeout: 30
+
+    - name: Read the SSH session after the power cycle
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - env
+      register: __session_after
+
+    - name: Assert the next task used a fresh SSH session
+      ansible.builtin.assert:
+        that:
+          - __session_before.ansible_facts.ansible_env.SSH_CONNECTION | length > 0
+          - __session_after.ansible_facts.ansible_env.SSH_CONNECTION != __session_before.ansible_facts.ansible_env.SSH_CONNECTION
         fail_msg: >-
-          board_boot_wait did not raise on the unroutable host — the
-          rescue marker holds the converge sentinel message, indicating
-          the role silently accepted an unreachable target.
+          The SSH session from before the power cycle was reused:
+          {{ __session_after.ansible_facts.ansible_env.SSH_CONNECTION }}
+
+    - name: Reset the power-cycle counter
+      ansible.builtin.set_fact:
+        fixture_power_cycles: 0
+
+    - name: Propagate a power-cycle failure without retrying
+      block:
+        - name: Boot through a failing power-cycle hook
+          ansible.builtin.include_role:
+            name: david_igou.armbian.board_boot_wait
+          vars:
+            board_boot_wait_power_cycle_tasks: "{{ playbook_dir }}/tasks/failing_power_cycle.yml"
+            board_boot_wait_attempts: 3
+
+        - name: Fail because the hook failure was swallowed
+          ansible.builtin.fail:
+            msg: SENTINEL board_boot_wait swallowed a power-cycle failure
+      rescue:
+        - name: Assert the hook failure propagated after one attempt
+          ansible.builtin.assert:
+            that:
+              - fixture_power_cycles | int == 1
+              - ansible_failed_result.msg == 'FIXTURE power controller unreachable'
+            fail_msg: "cycles={{ fixture_power_cycles }} msg={{ ansible_failed_result.msg }}"

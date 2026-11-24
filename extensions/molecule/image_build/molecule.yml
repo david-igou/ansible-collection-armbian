@@ -1,19 +1,9 @@
 ---
-# Skip-build scenario for the image_build role on a qemu VM. Exercises
-# preflight + manage_checkout + apply_userpatches + compute_inputs +
-# check_manifest (the skip-build short-circuit) without invoking
-# compile.sh. prepare.yml pre-seeds a manifest.json + placeholder .img.xz
-# so the role's check_manifest decides to skip invoke_build.
-#
-# Real-image production is intentionally out of scope; that belongs to
-# playbooks/build_and_publish_from_inventory.yml against the armbian_builders inventory.
-#
-# Run with:  molecule test --scenario-name image_build
-#
-# Wall time: ~5–7 minutes (Docker install + shallow armbian/build clone).
-#
-# Scenario-specific config only — the shared scenario shape
-# (executor args, playbook map, test_sequence, verifier) lives in
-# extensions/molecule/config.yml and is deep-merged by molecule.
+# Exercises image_build without compile.sh: prepare seeds a manifest for the
+# current inputs, so converge takes the skip path, and verify runs the
+# `plan` entry point to prove input changes flip the decision.
 scenario:
   name: image_build
+ansible:
+  playbooks:
+    prepare: prepare.yml

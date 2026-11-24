@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    board_boot_wait - reset the board's connection after the power-cycle
+    tasks and before waiting, so a multiplexed SSH master opened before the
+    power cut is not reused and cannot hang the login wait for minutes.

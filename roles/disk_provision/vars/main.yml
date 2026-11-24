@@ -1,14 +1,22 @@
 ---
-# Internal constants (double-underscore prefix = not part of the role's
-# public interface). These live in vars/ rather than defaults/ so the
-# user-facing knob surface in defaults/main.yml stays exactly the set of
-# options declared in meta/argument_specs.yml.
-
-# Default mount_opts per fstype, used by the fstab template when a
-# layout entry does not specify mount_opts explicitly.
+# fstab mount options per filesystem when a layout entry sets no mount_opts.
 __disk_provision_default_mount_opts:
-  ext4: "defaults,noatime"
-  vfat: "defaults,noatime"
-  xfs: "defaults,noatime"
-  btrfs: "defaults,noatime,compress=zstd"
-  swap: "sw"
+  ext4: defaults,noatime
+  vfat: defaults,noatime
+  xfs: defaults,noatime
+  btrfs: defaults,noatime,compress=zstd
+  swap: sw
+
+__disk_provision_layout: "{{ disk_provision_disk_binding.layout }}"
+__disk_provision_device_basename: "{{ disk_provision_disk_binding.device | basename }}"
+__disk_provision_repart_dir: "/run/disk_provision/{{ __disk_provision_device_basename }}/repart.d"
+__disk_provision_mount_root: "{{ disk_provision_mount_dir_base }}/{{ __disk_provision_device_basename }}"
+__disk_provision_excludes_file: "{{ __disk_provision_mount_root }}.excludes"
+
+# Mounted entries sorted by path so parents mount before children.
+__disk_provision_mounts: "{{ __disk_provision_layout | selectattr('mount', 'defined') | sort(attribute='mount') | list }}"
+__disk_provision_root_label: "{{ __disk_provision_mounts | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
+
+# Set by tasks/_repart.yml from the on-disk labels.
+__disk_provision_preserving: "{{ __disk_provision_preserve_ids | default([]) | length > 0 }}"
+__disk_provision_fast_wipe: "{{ not __disk_provision_preserving and (disk_provision_disk_binding.fast_wipe | default(true) | bool) }}"

@@ -1,246 +1,147 @@
 # david_igou.armbian
 
 ![Galaxy Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgalaxy.ansible.com%2Fapi%2Fv3%2Fplugin%2Fansible%2Fcontent%2Fpublished%2Fcollections%2Findex%2Fdavid_igou%2Farmbian%2F&query=%24.highest_version.version&label=galaxy)
-![Ansible](https://img.shields.io/badge/ansible-%3E%3D2.15-blue?logo=ansible)
+![Ansible](https://img.shields.io/badge/ansible-%3E%3D2.19-blue?logo=ansible)
 ![CI](https://img.shields.io/github/actions/workflow/status/david-igou/ansible-collection-armbian/tests.yml?branch=main&label=CI)
 ![License](https://img.shields.io/github/license/david-igou/ansible-collection-armbian)
-![Last Commit](https://img.shields.io/github/last-commit/david-igou/ansible-collection-armbian)
 [![Docs](https://img.shields.io/badge/docs-online-success?logo=readthedocs)](https://david-igou.github.io/ansible-collection-armbian/)
 
-📖 **Documentation site:** <https://david-igou.github.io/ansible-collection-armbian/>
-— generated collection + role reference (rebuilt on every push to `main`).
+Roles for Armbian single-board computers that netboot and get reimaged:
+build a custom image, stage a per-host NFS root, render the board's
+pxelinux.cfg, power-cycle and wait for it, check which root it booted, and
+write images or partition layouts to local disks.
 
-## Description
+The collection ships **roles only**. Inventory, orchestration and transport
+(TFTP upload, PoE or PDU control) live in the consuming repository; the one
+place they plug in is the `board_boot_wait` power-cycle hook.
 
-Ansible collection for end-to-end management of Armbian-based ARM SBCs:
-build custom images with PXE-first U-Boot, stage NFS rootfs templates and
-TFTP assets, toggle boards between SD and NFS rootfs via PXE, provision
-local disks via `systemd-repart`, and drive PoE power cycles.
+> Early-stage (0.0.x): role interfaces can change between releases. Pin a
+> version.
 
-Roles are single-purpose state enforcers; playbooks compose them into
-workflows. Switch-ecosystem-specific behaviour lives in swappable
-reference playbooks under [`playbooks/routeros/`](playbooks/routeros/);
-substitute a parallel directory to target a different ecosystem.
+## Roles
 
-Targeted at homelab / lab operators running a fleet of Armbian-supported
-SBCs with PXE-netboot from a router and NFS-from-NAS topology.
+| Role | Runs on | Does |
+|---|---|---|
+| `board_config` | a board | Merges layered inventory into `board_config`, `board_config_build` and the rootfs image source |
+| `image_build` | a Docker-capable builder | Builds an Armbian image with `armbian/build` and the board's userpatches |
+| `rootfs_provision` | the netboot server | Extracts an image into a per-host NFS root and stages kernel, initrd and dtb for TFTP |
+| `pxelinux_render` | the control node (delegated) | Renders the board's `01-<mac>` pxelinux.cfg |
+| `board_boot_wait` | a board | Power-cycles through the caller's hook and waits for SSH, with retries |
+| `board_boot_verify` | a board | Asserts the root filesystem matches the boot mode |
+| `bootstrap_armbian` | a fresh board, as root | Creates an SSH-key automation user with passwordless sudo |
+| `disk_image` | a board | Streams an image onto a block device |
+| `disk_provision` | a board | Applies a GPT layout with `systemd-repart` and copies a root filesystem onto it |
 
-> **Status: early-stage (0.0.x) — expect breaking changes.** Inventory
-> variables, defaults, group names, role names, and playbook names may
-> shift between 0.0.x releases without long deprecation windows. Pin a
-> specific version in your `requirements.yml`.
+Each role's README and `meta/argument_specs.yml` are the parameter reference;
+[`playbooks/examples/`](playbooks/examples/) has one short call per role.
+
+## Boot modes
+
+Every board's pxelinux.cfg carries all labels; its `default` line picks one.
+
+| Mode | Kernel from | Root filesystem | `board_boot_verify` expects |
+|---|---|---|---|
+| `nfs` | TFTP | NFS export `<root path>/<hostname>` | an `nfs`/`nfs4` root |
+| `sd` | TFTP | `root=LABEL=armbi_root` (SD card) | a non-NFS root on `/dev/*` |
+| `local` | TFTP | `root=LABEL=armbi_root_local` (written by `disk_provision`) | a non-NFS root on `/dev/*` |
+| `local_kernel` | the local disk (`localboot 0`, U-Boot's `localcmd`) | the local disk | a non-NFS root on `/dev/nvme*` |
+
+## Wiring it together
+
+A consumer typically:
+
+1. layers board data in inventory (`board_config_family` in a SoC group,
+   `board_config_model` in a model group, `board_config_host` in host vars,
+   and the matching `board_config_build_*` layers) and runs `board_config`;
+2. on a builder, feeds `board_config_build` into `image_build` and publishes
+   `<name>/{image, image.sha, manifest.json}` under an HTTP assets tree;
+3. resolves the image URL with `board_config` `tasks_from: rootfs_src` and runs
+   `rootfs_provision` on the netboot server;
+4. renders the pxelinux.cfg with `pxelinux_render` (console and earlycon from
+   `board_config`) and uploads `pxelinux_render_file` to its TFTP server;
+5. boots with `board_boot_wait`, passing its own power-cycle tasks file, then
+   checks the result with `board_boot_verify`.
+
+```yaml
+- name: Boot a board from NFS
+  hosts: boards
+  gather_facts: false
+  tasks:
+    - name: Resolve hardware facts
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+
+    - name: Render the pxelinux.cfg
+      ansible.builtin.include_role:
+        name: david_igou.armbian.pxelinux_render
+        apply:
+          delegate_to: localhost
+      vars:
+        pxelinux_render_board_mac: "{{ board_mac }}"
+        pxelinux_render_boot_mode: nfs
+        pxelinux_render_console: "{{ board_config.console }}"
+        pxelinux_render_nfs_server_ip: 192.0.2.10
+        pxelinux_render_nfs_root_path: /srv/netboot/rootfs
+        pxelinux_render_hostname: "{{ inventory_hostname }}"
+        pxelinux_render_output_dir: "{{ playbook_dir }}/.cache/pxelinux.cfg"
+
+    # Upload pxelinux_render_file to the TFTP server here (consumer-specific).
+
+    - name: Power-cycle and wait
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        board_boot_wait_power_cycle_tasks: "{{ playbook_dir }}/tasks/power_cycle.yml"
+        board_boot_wait_attempts: 3
+
+    - name: Check the board booted from NFS
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_verify
+      vars:
+        board_boot_verify_mode: nfs
+```
 
 ## Requirements
 
-- **Ansible** >= 2.15 on the control node
-- **Netboot server** reachable via SSH (`become: true`) that exports
-  per-host NFS rootfs to the boards. Anything that speaks NFSv4 + SSH.
-- **RouterOS device** (or equivalent) reachable via
-  `ansible.netcommon.network_cli`. The SBC subnet's DHCP `next-server`
-  must already point at this device (owned externally).
-- **Docker-capable build host** in the `armbian_builders` inventory
-  group — only needed if you build your own images.
-
-### Collection dependencies
-
-| Collection | Required for | Version |
-|---|---|---|
-| `ansible.posix` | always (auto-resolved by Galaxy) | >= 1.5.0 |
-| `community.routeros` | RouterOS reference playbooks | >= 2.0.0 |
-| `ansible.netcommon` | RouterOS reference playbooks | >= 5.0.0 |
-
-The RouterOS deps are not auto-resolved (only the reference playbooks
-under `playbooks/routeros/` import them):
-
-```bash
-ansible-galaxy collection install -r playbooks/routeros/requirements.yml
-```
-
-See the [getting-started guide](docs/docsite/rst/guide.rst) for a
-copy-paste SD-boot walkthrough (build → flash → bootstrap) and the
-[PXE netboot guide](docs/docsite/rst/netboot.rst) for the full
-always-netboot workflow (Build / Rootfs / PXE assets); per-role detail
-lives in the
-[documentation site](https://david-igou.github.io/ansible-collection-armbian/).
+- ansible-core 2.19 or later.
+- `ansible.posix` (installed with the collection).
+- Host-side tools per role, listed in each role's README (for example Docker
+  on the builder, `losetup` and `rsync` on the netboot server).
 
 ## Installation
-
-Install from Ansible Galaxy:
 
 ```bash
 ansible-galaxy collection install david_igou.armbian
 ```
 
-Or pin a version in `requirements.yml`:
-
 ```yaml
----
+# requirements.yml
 collections:
   - name: david_igou.armbian
     version: 0.0.5-alpha
 ```
 
-Upgrade to the latest:
-
-```bash
-ansible-galaxy collection install david_igou.armbian --upgrade
-```
-
-## Use Cases
-
-### Build a custom PXE-first Armbian image
-
-Stock Armbian images put PXE at position 6 in U-Boot's `BOOT_TARGETS`.
-This collection patches U-Boot to put PXE first so a board reliably
-netboots from a fresh power-up.
-
-```bash
-ansible-playbook playbooks/build_and_publish_from_inventory.yml
-```
-
-Produces a `.img.xz` on `armbian_builders` and publishes it to the
-netboot server's HTTP root.
-Set `armbian_publish_staging_dir` to give concurrent controller runs separate
-staging directories; it defaults to `/tmp/armbian_publish`. Transfers use each
-target's inventory SSH host, port, user, optional private key and common SSH arguments.
-
-### Onboard a freshly flashed board
-
-After flashing the custom image to an SD card and powering the board on:
-
-```bash
-ansible-playbook playbooks/bootstrap_armbian.yml --limit orange-pi-5-pro-01
-ansible-playbook playbooks/stage_netboot_assets.yml
-ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
-```
-
-Creates the SSH-key user, stages the per-host NFS rootfs, writes the
-per-board `pxelinux.cfg/01-<MAC>`, cold-cycles the board via PoE, and
-verifies it comes up on the declared rootfs.
-
-### Toggle a board between NFS and SD rootfs
-
-Flip a board's boot mode without touching the board:
-
-```bash
-# Inventory-driven (persists across runs):
-#   edit armbian_boot_mode on the host, then converge.
-ansible-playbook playbooks/converge_boot_mode.yml -e target_hosts=orange-pi-5-pro-01
-
-# Ad-hoc (single-run override):
-ansible-playbook playbooks/set_boot_mode.yml \
-  --limit orange-pi-5-pro-01 -e armbian_boot_mode=sd
-```
-
-The inventory value persists across converge runs; the `-e` override
-applies to a single run.
-
-### Provision a board's local NVMe for high-IO workloads
-
-Boot a board into NFS so its `/` is the cleanly-identity-reset per-host
-rootfs, then copy it onto a local NVMe with a declarative GPT layout
-(supports `preserve_on_reprovision: true` per partition for state you
-want to survive re-runs):
-
-```bash
-ansible-playbook playbooks/reprovision_to_local.yml --limit orange-pi-5-max-01
-```
-
-Auto-reverts to NFS on local-boot failure with a diagnostic bundle
-captured.
-
-### Recover a wedged board via PoE
-
-```bash
-ansible-playbook playbooks/routeros/poe_control.yml \
-  --limit orange-pi-5-pro-01 -e armbian_poe_action=cycle
-```
-
-Delegates the PoE command to each board's `armbian_poe_switch`. Also
-takes `armbian_poe_action=off` / `=on`.
-
-## Roles
-
-| Role | Runs on | Enforces / produces |
-|---|---|---|
-| [`image_build`](roles/image_build/) | `armbian_builders` | Custom Armbian `.img.xz` with PXE-first U-Boot baked in; staged to controller (companion `build_and_publish_from_inventory.yml` publishes to the netboot server; runs per-host after resolving the `armbian_build` profile) |
-| [`rootfs_provision`](roles/rootfs_provision/) | netboot server | Per-host NFS rootfs: resolves `armbian_rootfs_src`, extracts the `.img.xz` rootfs directly into a per-host directory (same-URL hosts share only the download via a URL-keyed cache), resets identity (hostname / machine-id / SSH host keys), emits TFTP artefacts |
-| [`disk_image`](roles/disk_image/) | a board | Stream an `.img.xz` or `.img` (URL or absolute path) to a whole-disk block device via `curl \| xz -dc \| dd` with a mount-aware refusal guard |
-| [`disk_provision`](roles/disk_provision/) | a board | Apply a declarative GPT layout to one block device via `systemd-repart`, rsync `source` rootfs onto it, regenerate `/etc/fstab` (root by `LABEL=`). Idempotent on filesystem label; supports `preserve_on_reprovision: true` per partition for state preservation (e.g. `/var` for k3s). Single-disk contract — multi-disk hosts loop the role. |
-| [`pxelinux_render`](roles/pxelinux_render/) | `localhost` (via `delegate_to`) | One `01-<mac>` pxelinux.cfg file in a local directory |
-| [`board_boot_wait`](roles/board_boot_wait/) | a board | `wait_for` TCP/22 + `wait_for_connection` SSH (no power knowledge) |
-| [`board_boot_verify`](roles/board_boot_verify/) | a board | Asserts `ansible_mounts['/']` matches declared boot mode |
-| [`bootstrap_armbian`](roles/bootstrap_armbian/) | a board | SSH-key user with passwordless sudo on a freshly flashed board |
-
 ## Testing
 
-[Molecule](https://ansible.readthedocs.io/projects/molecule/) scenarios
-live in `extensions/molecule/`. They use a pluggable provisioner pattern
-so the same converge / verify plays can run against either local
-containers or real VMs.
+Every role has a [Molecule](https://ansible.readthedocs.io/projects/molecule/)
+scenario under [`extensions/molecule/`](extensions/molecule/), provisioned
+with `david_igou.molecule_provisioners` (podman or local qemu VMs).
 
 ```bash
-make molecule                       # podman driver, all scenarios
-make molecule SCENARIO=rootfs_provision
-make molecule-kubevirt              # KubeVirt driver (heavier scenarios)
+make lint
+make molecule SCENARIO=board_config   # one scenario
+make molecule                          # all scenarios
 ```
 
-See [`extensions/molecule/README.md`](extensions/molecule/README.md) for
-the scenarios list, driver-selection knobs, and what each scenario
-covers.
+## Contributing and support
 
-End-to-end hardware tests against a real fleet (`test_hardware_e2e.yml`,
-`test_fleet_e2e.yml`, `test_reprovision_e2e.yml`, etc.) are not run in
-CI — they require physical boards.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). This is a personal project with
+best-effort support through
+[GitHub issues](https://github.com/david-igou/ansible-collection-armbian/issues);
+security reports follow [SECURITY.md](SECURITY.md). Release notes are in
+[CHANGELOG.rst](CHANGELOG.rst).
 
-## Contributing
+## License
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev runbook (Makefile
-targets, PR checklist, board onboarding pointer). The project follows
-the [Ansible Community Code of Conduct](https://docs.ansible.com/ansible/devel/community/code_of_conduct.html);
-local copy at [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-Bug reports and feature requests:
-<https://github.com/david-igou/ansible-collection-armbian/issues/new/choose>.
-
-## Support
-
-This is a personal-project collection — **not an Ansible Certified
-Collection**, no commercial support. Best-effort community support via
-GitHub:
-
-- **Issues**: <https://github.com/david-igou/ansible-collection-armbian/issues>
-- **Security**: see [SECURITY.md](SECURITY.md) for the private-disclosure flow
-- **Discussions / questions**: open an issue; there is no separate forum
-
-Only the most recent release receives fixes. The collection is at
-0.0.x (alpha) — pin to a specific version if you depend on a given
-shape.
-
-## Release Notes and Roadmap
-
-- **Release notes**: [CHANGELOG.rst](CHANGELOG.rst)
-- **Galaxy listing**: <https://galaxy.ansible.com/ui/repo/published/david_igou/armbian/>
-- **Roadmap**: no formal roadmap. Open issues tagged `enhancement` at
-  <https://github.com/david-igou/ansible-collection-armbian/issues?q=label%3Aenhancement>
-  are the de-facto backlog.
-
-## Related Information
-
-- [**Documentation site**](https://david-igou.github.io/ansible-collection-armbian/)
-  — getting-started + PXE netboot guides and the generated collection /
-  role reference (antsibull-docs).
-- [Getting-started guide](docs/docsite/rst/guide.rst) — copy-paste SD-boot
-  walkthrough (build → flash → bootstrap).
-- [PXE netboot guide](docs/docsite/rst/netboot.rst) — full always-netboot
-  workflow with concrete playbooks, file trees, and a rendered
-  ``pxelinux.cfg``.
-
-External:
-
-- [Armbian](https://www.armbian.com/) — upstream OS
-- [armbian/build](https://github.com/armbian/build) — used by `image_build`
-
-## License Information
-
-MIT License. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

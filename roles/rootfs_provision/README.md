@@ -1,20 +1,7 @@
 # rootfs_provision
 
-## Purpose
-
-Provision a per-host NFS rootfs from an `.img.xz` source. Downloads or
-copies an Armbian `.img.xz`, extracts the rootfs into a per-host directory
-on the netboot server, stages kernel/initrd/dtb to a TFTP cache directory,
-and resets host identity (hostname, machine-id, SSH host keys).
-
-Replaces the two-step `image_extract` + `rootfs_clone` workflow with a
-single role invocation. With per-host builds each host may have a unique
-image, so extract-and-provision happens in one shot; there is no shared
-rootfs-template cross-contamination across hosts.
-
-Runs on the **netboot server** (the host that exports NFS rootfs). The
-caller supplies `armbian_rootfs_src`, `armbian_rootfs_host`, and
-`armbian_rootfs_dtb`; everything else has defaults.
+Provision a per-host NFS rootfs and its TFTP boot files from an Armbian
+`.img.xz`. Runs on the host that exports the NFS rootfs.
 
 ## Inputs
 
@@ -22,152 +9,88 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml) for the full contract.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `armbian_rootfs_src` | yes | — | `.img.xz` source: `https://` URL, `http://` URL, or absolute path on the netboot server. |
-| `armbian_rootfs_host` | yes | — | `inventory_hostname` this rootfs is for. Drives identity reset and the target directory suffix. |
-| `armbian_rootfs_dtb` | yes | — | DTB path under `/boot/dtb/` to stage as the TFTP `board.dtb` (e.g. `rockchip/rk3588-rock-5b.dtb`). |
-| `armbian_rootfs_target_dir` | no | `{{ armbian_nfs_rootfs_path }}/{{ armbian_rootfs_host }}` | NFS rootfs destination directory. |
-| `armbian_rootfs_tftp_dir` | no | `{{ armbian_image_cache }}/sbc-tftp/{{ armbian_rootfs_host }}` | Per-host TFTP staging directory. |
-| `armbian_rootfs_image_cache` | no | `{{ armbian_image_cache }}/downloads` | URL-keyed shared download cache. Hosts pointing at the same URL share the `.img.xz` download. |
-| `armbian_rootfs_force_refresh` | no | `false` | Force re-extract regardless of sentinel. |
+| `rootfs_provision_src` | yes | — | `.img.xz` http(s) URL or absolute path on the host |
+| `rootfs_provision_checksum` | no | `""` | `get_url` checksum, e.g. `sha256:https://host/image.img.xz.sha` |
+| `rootfs_provision_hostname` | yes | — | Hostname written into the rootfs |
+| `rootfs_provision_target_dir` | yes | — | Per-host NFS rootfs directory; its contents are replaced |
+| `rootfs_provision_tftp_dir` | yes | — | Per-host TFTP staging directory |
+| `rootfs_provision_cache_dir` | yes | — | Download cache, `<cache_dir>/<sha256 of src>/<basename>` |
+| `rootfs_provision_dtb` | no | `""` | DTB to stage as `board.dtb`, e.g. `rockchip/rk3588-rock-5b.dtb`; empty stages none |
+| `rootfs_provision_mount_dir` | no | `/mnt/rootfs_provision` | Temporary read-only mount of the image |
+| `rootfs_provision_force` | no | `false` | Re-extract even when the sentinel matches |
 
-## Outputs / side effects
+The role sets no facts.
 
-After a successful run:
+## What it does
 
-- `<armbian_rootfs_target_dir>/` is populated with the extracted rootfs.
-  Machine-id is zeroed, SSH host keys are regenerated, and `/etc/hostname`
-  is updated to `armbian_rootfs_host`.
-- `<armbian_rootfs_tftp_dir>/vmlinuz`, `initrd.img`, and `board.dtb` are
-  staged and ready for `stage_router.yml` to push to the TFTP server.
-- `<armbian_rootfs_target_dir>/.armbian_rootfs_provision_complete` sentinel
-  JSON is written; subsequent invocations with the same `src` + `host` skip
-  the full provision.
-- `<armbian_rootfs_image_cache>/<url-hash>/` holds the cached `.img.xz`;
-  shared across all hosts that reference the same URL, so only one download
-  occurs per unique URL per run.
+1. Validates the inputs (URL or absolute path ending in `.img.xz`;
+   absolute directories other than `/`) and refuses a target directory
+   that is a mountpoint (it gathers the `mounts` fact subset itself).
+2. Fetches the image into the cache on every run. With a checksum,
+   `get_url` downloads only on a mismatch; without one it revalidates the
+   cached copy (If-Modified-Since for a URL, a content compare for a path).
+3. Hashes the cached image and compares `src`, `image_sha256` and
+   `hostname` with `<target_dir>/.rootfs_provision.json`. When all three
+   match and `rootfs_provision_force` is false, it stops here.
+4. Otherwise it decompresses the image, attaches it read-only to a loop
+   device, mounts the largest partition (`lsblk --json`) and mirrors it
+   into the target with `rsync --delete` (excluding `/proc`, `/sys`, `/dev`
+   and `/run` contents). Files in the target that are not in the image are
+   removed. The loop device, mount and decompressed copy are always
+   cleaned up.
+5. Removes the rootfs `/etc/fstab` lines that name a block device or
+   filesystem identity (`/dev/`, `UUID=`, `LABEL=`, `PARTUUID=`,
+   `PARTLABEL=`): over an NFS root they would send systemd to emergency
+   mode. Adds `/etc/initramfs-tools/conf.d/zz-rootfs-provision.conf`
+   with `MODULES=most` when the image uses initramfs-tools, because
+   `MODULES=dep` (Armbian's UEFI images) cannot find an NFS root's device
+   and fails every package configuration that rebuilds the initrd. Stages
+   `boot/vmlinuz-*` and `boot/initrd.img-*` (exactly one each) as
+   `vmlinuz` and `initrd.img`, and the DTB, if requested, as `board.dtb`.
+6. Writes `/etc/hostname` and the `127.0.1.1` line of `/etc/hosts` (when
+   the file exists), empties both machine-id files, replaces the SSH host
+   keys with fresh rsa, ecdsa and ed25519 keys, creates
+   `/root/.no_armbian_first_login`, and writes the sentinel.
 
-## Idempotency & check mode
+## Preconditions
 
-**Sentinel-based skip.** The role writes a JSON sentinel at
-`<armbian_rootfs_target_dir>/.armbian_rootfs_provision_complete` on success.
-On subsequent runs it skips the full provision if the sentinel's `src` and
-`host` fields match the current inputs. Force a re-extract with
-`armbian_rootfs_force_refresh: true` (or `-e armbian_rootfs_force_refresh=true`
-on the command line).
-
-**Not check-mode safe.** The extraction pipeline uses `losetup`, `mount`,
-and `dd` — these require real kernel interaction and will fail under
-`--check`. Do not run this role with `--check`; the sentinel check runs
-cleanly but any host that needs extraction will fail at the loop-device step.
-
-## Rollback
-
-If a provision fails mid-extract, the `always:` cleanup block in `main.yml`
-detaches loop devices and unmounts any in-progress mount. The
-`<armbian_rootfs_target_dir>` may be partially populated. To recover:
-
-1. Manually `rm -rf <armbian_rootfs_target_dir>` on the netboot server.
-2. Re-run with `armbian_rootfs_force_refresh: true` to bypass any stale
-   sentinel and start fresh.
-
-## Example inventory
-
-The example below reads `armbian_rootfs_src` and `armbian_board_config.dtb`
-from each board's hostvars. A matching inventory (doc-safe placeholders):
-
-```yaml
-# inventory/hosts.yml
-all:
-  children:
-    netboot_server:               # exports the NFS rootfs
-      hosts:
-        truenas-01:
-          ansible_host: 192.0.2.10
-          ansible_user: admin
-          ansible_become: true
-    boards:
-      children:
-        orange_pi_5_pro:          # <model_group> — carries the model layer
-          hosts:
-            orange-pi-5-pro-01:
-              ansible_host: 192.0.2.111
-              armbian_board_model: orange-pi-5-pro
-              armbian_rootfs_src: "https://images.example.lan/orange-pi-5-pro-01.img.xz"
-
-# inventory/group_vars/orange_pi_5_pro.yml   (model layer sets the dtb)
-armbian_board_config_model:
-  armbian_board_name: orangepi5pro
-  dtb: rockchip/rk3588s-orangepi-5-pro.dtb
-
-# inventory/group_vars/all.yml
-armbian_nfs_rootfs_path: /srv/netboot/rootfs
-armbian_image_cache: /var/lib/armbian/cache
-```
-
-`armbian_board_config` is the resolved fact produced by merging the
-family/model/host layers — run `tasks/_resolve_board_config.yml` on the
-board hosts before this role reads `armbian_board_config.dtb` (the
-`playbooks/examples/rootfs_provision.yml` and `stage_netboot_assets.yml` plays do
-this in a first play).
+Root on the host (use `become`), and `xz`, `losetup`, `lsblk`, `udevadm`,
+`rsync` and `ssh-keygen` installed. Not check-mode safe.
 
 ## Example
 
 ```yaml
-- name: Provision per-host NFS rootfs on the netboot server
+- name: Provision NFS rootfs for the boards
   hosts: netboot_server
   become: true
   gather_facts: false
   tasks:
-    - ansible.builtin.include_role:
+    - name: Provision one board
+      ansible.builtin.include_role:
         name: david_igou.armbian.rootfs_provision
       vars:
-        armbian_rootfs_src:    "{{ hostvars[item].armbian_rootfs_src }}"
-        armbian_rootfs_host:   "{{ item }}"
-        armbian_rootfs_dtb:    "{{ hostvars[item].armbian_board_config.dtb }}"
-      loop: "{{ groups['boards'] }}"
+        rootfs_provision_src: https://images.example.lan/orange-pi-5-pro-01.img.xz
+        rootfs_provision_checksum: sha256:https://images.example.lan/orange-pi-5-pro-01.img.xz.sha
+        rootfs_provision_hostname: orange-pi-5-pro-01
+        rootfs_provision_dtb: rockchip/rk3588s-orangepi-5-pro.dtb
+        rootfs_provision_target_dir: /srv/netboot/rootfs/orange-pi-5-pro-01
+        rootfs_provision_tftp_dir: /srv/netboot/tftp/orange-pi-5-pro-01
+        rootfs_provision_cache_dir: /var/cache/rootfs_provision
 ```
 
-Typically reached via `playbooks/stage_netboot_assets.yml`.
-
-## Generated assets
-
-Per host, the role populates two directories. The NFS rootfs target gets
-the extracted rootfs with identity rewritten inside it; the TFTP staging
-dir gets the three boot artefacts U-Boot needs. With the defaults and
-`armbian_rootfs_host: orange-pi-5-pro-01`:
-
-```text
-/srv/netboot/rootfs/orange-pi-5-pro-01/          # armbian_rootfs_target_dir
-├── etc/
-│   ├── hostname                                  # → orange-pi-5-pro-01
-│   ├── hosts                                     # + 127.0.1.1 line (best-effort)
-│   ├── machine-id                                # zeroed (first-boot trigger)
-│   └── ssh/
-│       ├── ssh_host_rsa_key(.pub)                # freshly regenerated
-│       ├── ssh_host_ecdsa_key(.pub)
-│       └── ssh_host_ed25519_key(.pub)
-├── var/lib/dbus/machine-id                        # zeroed
-├── root/.no_armbian_first_login                   # touched
-├── ...                                            # rest of extracted rootfs
-└── .armbian_rootfs_provision_complete             # idempotency sentinel (JSON)
-
-<armbian_image_cache>/sbc-tftp/orange-pi-5-pro-01/   # armbian_rootfs_tftp_dir
-├── vmlinuz
-├── initrd.img
-└── board.dtb                                       # located via armbian_rootfs_dtb
-```
-
-The DTB is always staged under the fixed name `board.dtb` (the
-`armbian_rootfs_dtb` value only locates the source under `/boot/dtb/`).
-The sentinel records what it was provisioned from (the `src` + `host`
-fields are what subsequent runs compare against to decide whether to
-skip):
+## Sentinel
 
 ```json
 {
-  "host": "orange-pi-5-pro-01",
+  "hostname": "orange-pi-5-pro-01",
+  "image_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
   "provisioned_at": "2026-05-28T12:34:56Z",
-  "src": "https://images.example.org/orange-pi-5-pro.img.xz",
-  "src_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  "src": "https://images.example.lan/orange-pi-5-pro-01.img.xz"
 }
 ```
+
+## Recovery
+
+If a run fails mid-extract the target may be partly populated and has no
+matching sentinel, so the next run extracts again. `rootfs_provision_force:
+true` re-extracts regardless.

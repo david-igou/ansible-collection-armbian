@@ -1,42 +1,28 @@
 ---
-- name: "Validate pxelinux_render_boot_mode is built-in or in pxelinux_render_extra_modes"
+- name: Assert the boot mode and verbose inputs are consistent
   ansible.builtin.assert:
     that:
-      - pxelinux_render_boot_mode in (['nfs', 'sd', 'local', 'local_kernel'] + (pxelinux_render_extra_modes | default({}) | dict2items | map(attribute='key') | list))
+      - pxelinux_render_boot_mode in __pxelinux_render_modes
+      - not pxelinux_render_pxe_verbose or pxelinux_render_earlycon | length > 0
     fail_msg: >-
-      pxelinux_render_boot_mode={{ pxelinux_render_boot_mode }} is not valid. Must be one of
-      nfs|sd|local|local_kernel or a key in pxelinux_render_extra_modes.
-      Defined extra_modes keys:
-      {{ pxelinux_render_extra_modes | default({}) | dict2items | map(attribute='key') | list }}.
+      pxelinux_render_boot_mode must be one of {{ __pxelinux_render_modes | join(', ') }}
+      (got {{ pxelinux_render_boot_mode }}), and pxelinux_render_pxe_verbose needs
+      pxelinux_render_earlycon (e.g. uart8250,mmio32,0xfeb50000).
+    quiet: true
 
-- name: Validate armbian_board_config.earlycon is set when pxelinux_render_pxe_verbose is true
-  ansible.builtin.assert:
-    that:
-      - armbian_board_config is defined
-      - armbian_board_config.earlycon | default('') | length > 0
-    fail_msg: >-
-      pxelinux_render_pxe_verbose=true was requested but
-      armbian_board_config.earlycon was not resolved. Either ensure
-      the calling playbook ran _resolve_board_config.yml before
-      pxelinux_render so the host's family-layer earlycon flows
-      through, or unset pxelinux_render_pxe_verbose.
-      Expected format: <driver>,<bus>,<mmio_addr>
-      (e.g. uart8250,mmio32,0xfeb50000 for RK3588S UART2).
-  when: pxelinux_render_pxe_verbose | bool
-
-- name: Compute pxelinux filename
-  ansible.builtin.set_fact:
-    __pxelinux_render_pxe_filename: "01-{{ pxelinux_render_board_mac | lower | replace(':', '-') }}"
-
-- name: Ensure pxelinux_render_output_dir exists
+- name: Ensure the output directory exists
   ansible.builtin.file:
     path: "{{ pxelinux_render_output_dir }}"
     state: directory
     mode: "0755"
 
-- name: Render pxelinux.cfg for {{ pxelinux_render_hostname }}
+- name: Render the pxelinux.cfg
   ansible.builtin.template:
     src: pxelinux_cfg.j2
-    dest: "{{ pxelinux_render_output_dir }}/{{ __pxelinux_render_pxe_filename }}"
+    dest: "{{ pxelinux_render_output_dir }}/{{ __pxelinux_render_filename }}"
     mode: "0644"
-    backup: true
+
+- name: Publish the rendered file path
+  ansible.builtin.set_fact:
+    pxelinux_render_filename: "{{ __pxelinux_render_filename }}"
+    pxelinux_render_file: "{{ pxelinux_render_output_dir }}/{{ __pxelinux_render_filename }}"

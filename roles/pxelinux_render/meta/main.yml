@@ -2,13 +2,13 @@
 galaxy_info:
   role_name: pxelinux_render
   author: David Igou
-  author_email: igou.david@gmail.com
   description: "Render one per-board pxelinux.cfg file to a local directory."
   license: MIT
-  min_ansible_version: "2.15"
+  min_ansible_version: "2.19"
   platforms:
-    - name: Generic
-      versions: [all]
+    - name: GenericLinux
+      versions:
+        - all
   galaxy_tags:
     - armbian
     - netboot

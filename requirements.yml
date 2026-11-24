@@ -1,15 +1,4 @@
 ---
-# Runtime collection dependencies for roles/ only.
-#
-# This file intentionally does NOT include collections used by the
-# RouterOS reference playbooks under playbooks/routeros/ — those are
-# documentation/illustrative orchestrations, swappable per the
-# transport-agnostic design. Users who run those playbooks should
-# install playbooks/routeros/requirements.yml separately.
-#
-# Test-only dependencies (molecule provisioners) live in
-# extensions/molecule/requirements-test.yml and are pulled by
-# molecule's dependency step via extensions/molecule/config.yml.
 collections:
   - name: ansible.posix
     version: ">=1.5.0"

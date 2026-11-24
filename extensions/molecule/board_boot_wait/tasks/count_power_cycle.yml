@@ -1,0 +1,4 @@
+---
+- name: Count the power cycle
+  ansible.builtin.set_fact:
+    fixture_power_cycles: "{{ fixture_power_cycles | default(0) | int + 1 }}"

@@ -1,42 +1,185 @@
-# roles/rootfs_provision/tasks/_extract.yml
-#
-# Extracts an Armbian .img.xz rootfs partition directly into the
-# per-host target_dir (no template indirection).
 ---
-- name: Ensure mount dir + target_dir exist
+- name: Create the mount and target directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: "0755"
   loop:
-    - "{{ armbian_rootfs_mount_dir }}"
-    - "{{ armbian_rootfs_target_dir }}"
+    - "{{ rootfs_provision_mount_dir }}"
+    - "{{ rootfs_provision_target_dir }}"
+    - "{{ rootfs_provision_tftp_dir }}"
 
-- name: Decompress image (creates {{ __rootfs_provision_img_raw }})
-  ansible.builtin.shell: |
-    xz -dk "{{ __rootfs_provision_img_xz }}"
-  args:
-    creates: "{{ __rootfs_provision_img_raw }}"
+- name: Copy the image's root partition into the target directory
+  block:
+    - name: Decompress the cached image
+      ansible.builtin.command:
+        argv:
+          - xz
+          - --decompress
+          - --keep
+          - --force
+          - "{{ __rootfs_provision_img_xz }}"
+      changed_when: true
 
-- name: Attach .img to a loop device with partition scan
-  ansible.builtin.shell: |
-    losetup --find --show --partscan "{{ __rootfs_provision_img_raw }}"
-  register: __rootfs_provision_loop_dev
-  changed_when: true
+    - name: Attach the image to a loop device
+      ansible.builtin.command:
+        argv:
+          - losetup
+          - --find
+          - --show
+          - --partscan
+          - --read-only
+          - "{{ __rootfs_provision_img_raw }}"
+      register: __rootfs_provision_loop
+      changed_when: true
 
-- name: Mount the largest (rootfs) partition
-  ansible.builtin.shell: |
-    set -o pipefail
-    PART=$(lsblk -ln -o NAME {{ __rootfs_provision_loop_dev.stdout }} | tail -1)
-    mount "/dev/${PART}" "{{ armbian_rootfs_mount_dir }}"
-  args:
-    executable: /bin/bash
-  changed_when: true
+    - name: Wait for the partition device nodes
+      ansible.builtin.command: udevadm settle
+      changed_when: false
 
-- name: Rsync rootfs into target_dir
-  ansible.builtin.shell: |
-    rsync -aHAX \
-      --exclude '/proc/*' --exclude '/sys/*' \
-      --exclude '/dev/*' --exclude '/run/*' \
-      "{{ armbian_rootfs_mount_dir }}/" "{{ armbian_rootfs_target_dir }}/"
-  changed_when: true
+    - name: List the image's partitions
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --json
+          - --list
+          - --bytes
+          - --output
+          - PATH,SIZE,TYPE
+          - "{{ __rootfs_provision_loop.stdout }}"
+      register: __rootfs_provision_lsblk
+      changed_when: false
+
+    # Armbian images carry the rootfs in their largest partition.
+    - name: Mount the largest partition read-only
+      ansible.posix.mount:
+        path: "{{ rootfs_provision_mount_dir }}"
+        src: >-
+          {{ (__rootfs_provision_lsblk.stdout | from_json).blockdevices
+             | selectattr('type', 'equalto', 'part') | sort(attribute='size') | map(attribute='path') | last }}
+        fstype: auto
+        opts: ro
+        state: ephemeral
+
+    - name: Mirror the rootfs into the target directory
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --hard-links
+          - --acls
+          - --xattrs
+          - --numeric-ids
+          - --delete
+          - --itemize-changes
+          - --exclude=/proc/*
+          - --exclude=/sys/*
+          - --exclude=/dev/*
+          - --exclude=/run/*
+          - "{{ rootfs_provision_mount_dir }}/"
+          - "{{ rootfs_provision_target_dir }}/"
+      register: __rootfs_provision_rsync
+      changed_when: __rootfs_provision_rsync.stdout_lines | length > 0
+  always:
+    - name: Unmount the image
+      ansible.posix.mount:
+        path: "{{ rootfs_provision_mount_dir }}"
+        state: unmounted
+
+    - name: Detach the loop device
+      ansible.builtin.command:
+        argv:
+          - losetup
+          - --detach
+          - "{{ __rootfs_provision_loop.stdout }}"
+      when: __rootfs_provision_loop.stdout | default('') | length > 0
+      changed_when: true
+
+    - name: Remove the decompressed image
+      ansible.builtin.file:
+        path: "{{ __rootfs_provision_img_raw }}"
+        state: absent
+
+# Over an NFS root no image block device or filesystem exists, and systemd
+# drops to emergency mode waiting for one; disk_provision writes fresh
+# LABEL= entries when the rootfs later moves to a local disk.
+- name: Remove block-device and filesystem-identity entries from the rootfs fstab
+  ansible.builtin.lineinfile:
+    path: "{{ rootfs_provision_target_dir }}/etc/fstab"
+    regexp: '^\s*(/dev/|UUID=|LABEL=|PARTUUID=|PARTLABEL=)'
+    state: absent
+
+# mkinitramfs cannot resolve an NFS root's device under MODULES=dep (set by
+# Armbian's UEFI images), so any package configuration on the NFS-booted
+# board that regenerates the initrd fails. conf.d is read in order: zz wins.
+- name: Stat the rootfs initramfs-tools configuration
+  ansible.builtin.stat:
+    path: "{{ rootfs_provision_target_dir }}/etc/initramfs-tools/conf.d"
+  register: __rootfs_provision_initramfs_conf
+
+- name: Let the initrd be regenerated on the NFS root
+  ansible.builtin.copy:
+    dest: "{{ rootfs_provision_target_dir }}/etc/initramfs-tools/conf.d/zz-rootfs-provision.conf"
+    content: "MODULES=most\n"
+    mode: "0644"
+  when: __rootfs_provision_initramfs_conf.stat.isdir | default(false)
+
+- name: Find the kernel and initrd in the rootfs
+  ansible.builtin.find:
+    paths: "{{ rootfs_provision_target_dir }}/boot"
+    patterns:
+      - vmlinuz-*
+      - initrd.img-*
+  register: __rootfs_provision_boot_files
+
+- name: Assert the rootfs has exactly one kernel and one initrd
+  ansible.builtin.assert:
+    that:
+      - __rootfs_provision_kernels | length == 1
+      - __rootfs_provision_initrds | length == 1
+    fail_msg: >-
+      Expected one vmlinuz-* and one initrd.img-* in {{ rootfs_provision_target_dir }}/boot,
+      found {{ __rootfs_provision_kernels + __rootfs_provision_initrds }}.
+
+- name: Stage the kernel and initrd for TFTP
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ rootfs_provision_tftp_dir }}/{{ item.dest }}"
+    remote_src: true
+    mode: "0644"
+  loop:
+    - src: "{{ __rootfs_provision_kernels | first }}"
+      dest: vmlinuz
+    - src: "{{ __rootfs_provision_initrds | first }}"
+      dest: initrd.img
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Find the board DTB in the rootfs
+  ansible.builtin.find:
+    paths: "{{ rootfs_provision_target_dir }}/boot"
+    patterns: "{{ rootfs_provision_dtb | basename }}"
+    recurse: true
+  register: __rootfs_provision_dtb_files
+  when: rootfs_provision_dtb | length > 0
+
+- name: Assert the board DTB exists
+  ansible.builtin.assert:
+    that:
+      - __rootfs_provision_dtb_paths | length > 0
+    fail_msg: "{{ rootfs_provision_dtb }} not found under {{ rootfs_provision_target_dir }}/boot/{dtb,dtbs,dtb-*,dtbs/*}/"
+  when: rootfs_provision_dtb | length > 0
+
+- name: Stage the board DTB for TFTP
+  ansible.builtin.copy:
+    src: "{{ __rootfs_provision_dtb_paths | first }}"
+    dest: "{{ rootfs_provision_tftp_dir }}/board.dtb"
+    remote_src: true
+    mode: "0644"
+  when: rootfs_provision_dtb | length > 0
+
+- name: Remove a previously staged DTB when none is requested
+  ansible.builtin.file:
+    path: "{{ rootfs_provision_tftp_dir }}/board.dtb"
+    state: absent
+  when: rootfs_provision_dtb | length == 0
