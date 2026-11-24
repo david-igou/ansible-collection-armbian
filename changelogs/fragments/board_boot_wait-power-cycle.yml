@@ -1,0 +1,8 @@
+---
+breaking_changes:
+  - board_boot_wait - the inputs are renamed and extended. ``armbian_boot_attempt_timeout`` is
+    replaced by ``board_boot_wait_port_timeout`` and ``armbian_post_boot_wait_timeout`` by
+    ``board_boot_wait_ssh_timeout``. New ``board_boot_wait_power_cycle_tasks`` (the
+    collection's only transport hook), ``board_boot_wait_attempts`` and
+    ``board_boot_wait_ssh``. Each attempt power-cycles, waits for the SSH banner and
+    optionally an SSH login; the final failure names the stage that timed out.

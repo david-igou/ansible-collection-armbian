@@ -1,32 +1,37 @@
 ---
 argument_specs:
   main:
-    short_description: "Wait for a board to come up over TCP/22 + SSH"
+    short_description: Power-cycle a board and wait until it is reachable over SSH.
     description:
-      - >-
-        Single-host role. Waits for the inventory host to accept TCP/22
-        connections, then performs a wait_for_connection probe. No
-        notion of how the board was powered — the caller cycles PoE
-        (or the operator presses a button) before invoking this role.
-      - >-
-        Retry knobs share names with the playbook-level retry
-        primitives in `playbooks/tasks/cold_boot_with_retry.yml` so an
-        operator can override a single inventory variable to tune both
-        the cold-boot loop and this final wait.
-
+      - Each attempt includes the caller's power-cycle tasks file (if any), waits for the
+        SSH banner on C(ansible_host):C(ansible_port) from the control node, then
+        optionally waits for an SSH login as the inventory user.
+      - A timed-out wait starts the next attempt. After the last attempt the role fails
+        naming the stage (C(port) or C(ssh)) that timed out.
+      - A failure inside the power-cycle tasks file is not retried and propagates.
     options:
-      armbian_boot_attempt_timeout:
+      board_boot_wait_power_cycle_tasks:
+        description:
+          - Absolute path of a tasks file included at the start of every attempt, for
+            example a PoE, PDU or VM restart. This is the collection's only transport hook.
+          - Empty means the board is powered by other means.
+        type: str
+        default: ""
+      board_boot_wait_attempts:
+        description: Number of power-cycle and wait attempts.
+        type: int
+        default: 1
+      board_boot_wait_port_timeout:
+        description: Seconds to wait for the SSH banner in each attempt.
         type: int
         default: 180
-        description: >-
-          Seconds to wait for the board to start accepting TCP/22
-          connections (the `wait_for` port probe). Shares its name with
-          the cold-boot retry primitive so one inventory override tunes
-          both.
-      armbian_post_boot_wait_timeout:
+      board_boot_wait_ssh:
+        description:
+          - Also wait for an SSH login as the inventory user.
+          - Pass false when booting a fresh image whose automation user does not exist yet.
+        type: bool
+        default: true
+      board_boot_wait_ssh_timeout:
+        description: Seconds to wait for the SSH login in each attempt.
         type: int
         default: 300
-        description: >-
-          Seconds for the post-boot `wait_for_connection` SSH probe that
-          runs once TCP/22 is reachable, confirming SSH can actually
-          authenticate.

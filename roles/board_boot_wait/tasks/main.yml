@@ -1,17 +1,12 @@
 ---
-# board_boot_wait — runs on a board; waits for TCP/22 then SSH.
-# Does NOT cycle power; the caller is responsible for that.
+- name: Reset the boot state from any earlier call
+  ansible.builtin.set_fact:
+    __board_boot_wait_ready: false
 
-- name: Wait for TCP/22 to accept connections
-  ansible.builtin.wait_for:
-    host: "{{ ansible_host | default(inventory_hostname) }}"
-    port: "{{ ansible_port | default(22) }}"
-    timeout: "{{ armbian_boot_attempt_timeout }}"
-    state: started
-  delegate_to: localhost
-  become: false
-
-- name: Wait for SSH to authenticate
-  ansible.builtin.wait_for_connection:
-    timeout: "{{ armbian_post_boot_wait_timeout }}"
-    sleep: 5
+# The skip after success lives inside attempt.yml: a when on a looped
+# include is evaluated for every item before the first attempt runs.
+- name: Boot the board until it is reachable
+  ansible.builtin.include_tasks: attempt.yml
+  loop: "{{ range(1, board_boot_wait_attempts + 1) | list }}"
+  loop_control:
+    loop_var: __board_boot_wait_attempt

@@ -1,2 +1,2 @@
 ---
-mp_backend: "{{ lookup('env', 'PROVISIONER') | default('podman', true) }}"
+mp_backend: "{{ lookup('ansible.builtin.env', 'PROVISIONER') | default('qemu', true) }}"

@@ -1,58 +1,75 @@
 # board_boot_wait
 
-## Purpose
+Gets a board booted and reachable. Runs on the board host with
+`gather_facts: false` (the board may be off when the play starts).
 
-Wait for a board to come up over TCP/22 plus SSH. Single-host role
-targeting the board itself: waits for the inventory host to accept TCP
-connections on port 22 (probed from `localhost`, no `become`), then
-performs a `wait_for_connection` SSH probe.
+Each attempt:
 
-No notion of how the board was powered — the caller is responsible for
-cycling PoE (or pressing a button) before invoking this role. The
-companion `playbooks/tasks/cold_boot_with_retry.yml` wraps the role in
-the outer retry loop.
+1. includes `board_boot_wait_power_cycle_tasks`, when set;
+2. waits, from the control node, for the SSH banner on
+   `ansible_host`:`ansible_port` (default port 22);
+3. when `board_boot_wait_ssh` is true, waits for an SSH login as the inventory
+   user (`wait_for_connection`).
+
+A timed-out wait starts the next attempt. After the last attempt the role
+fails with a message naming the stage (`port` or `ssh`) that timed out. A
+failure inside the power-cycle tasks file is not retried and propagates.
 
 ## Inputs
 
 See [`meta/argument_specs.yml`](meta/argument_specs.yml).
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `armbian_boot_attempt_timeout` | no | `180` | Per-attempt TCP/22 wait, seconds. |
-| `armbian_post_boot_wait_timeout` | no | `300` | Final `wait_for_connection` wait, seconds. |
+| Variable | Default | Purpose |
+|---|---|---|
+| `board_boot_wait_power_cycle_tasks` | `""` | Absolute path of a tasks file that power-cycles the board |
+| `board_boot_wait_attempts` | `1` | Number of power-cycle and wait attempts |
+| `board_boot_wait_port_timeout` | `180` | Seconds to wait for the SSH banner per attempt |
+| `board_boot_wait_ssh` | `true` | Also wait for an SSH login as the inventory user |
+| `board_boot_wait_ssh_timeout` | `300` | Seconds to wait for the SSH login per attempt |
 
-## Outputs / side effects
+## The power-cycle hook
 
-After a successful run:
+`board_boot_wait_power_cycle_tasks` is the only transport hook in the
+collection. The file runs in the board's host context, so it can read the
+board's inventory variables and delegate to whatever controls power (a PoE
+switch, a PDU, a hypervisor). Make it fail loudly when the power action fails.
 
-- The board accepts SSH connections from the control node.
-- No filesystem or configuration mutations on the board itself; the
-  role's purpose is purely to gate downstream tasks on the board being
-  reachable.
+```yaml
+# tasks/poe_cycle.yml in the consuming repository
+- name: Cut PoE power
+  ansible.builtin.uri:
+    url: "https://pdu.example.com/api/outlets/{{ pdu_outlet }}/off"
+    method: POST
+  delegate_to: localhost
 
-## Idempotency & check mode
-
-- Trivially idempotent — both module calls (`wait_for`,
-  `wait_for_connection`) are pure probes and report `changed` based on
-  their own internal logic.
-- `--check` mode: probes still run; the role does not write anything.
-- The role does NOT retry across boot attempts itself; chain it with
-  `playbooks/tasks/cold_boot_with_retry.yml` when the upstream power
-  state is uncertain.
+- name: Restore PoE power
+  ansible.builtin.uri:
+    url: "https://pdu.example.com/api/outlets/{{ pdu_outlet }}/on"
+    method: POST
+  delegate_to: localhost
+```
 
 ## Example
 
 ```yaml
-- name: Wait for a board to finish booting
-  hosts: orange-pi-5-pro-01
+- name: Power-cycle a board and wait for it
+  hosts: boards
   gather_facts: false
   tasks:
-    - ansible.builtin.include_role:
+    - name: Boot the board
+      ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_wait
       vars:
-        armbian_boot_attempt_timeout: 180
-        armbian_post_boot_wait_timeout: 300
+        board_boot_wait_power_cycle_tasks: "{{ playbook_dir }}/tasks/poe_cycle.yml"
+        board_boot_wait_attempts: 3
 ```
 
-Typically reached via `playbooks/converge_boot_mode.yml` after the
-PoE-cycle step.
+## Idempotency and check mode
+
+The waits are probes and never report a change; whatever the power-cycle file
+does is reported as its own tasks report it. In check mode the waits still
+run.
+
+## License
+
+MIT
