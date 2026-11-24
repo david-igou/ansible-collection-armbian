@@ -1,8 +1,0 @@
-# inventory/group_vars/orange_pi_5.yml
----
-armbian_board_config_model:
-  armbian_board_name: orangepi5
-  dtb: rockchip/rk3588s-orangepi-5.dtb
-
-armbian_build_model:
-  branch: current   # YT8531C handled by armbian/build's family fork; edge optional

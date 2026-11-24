@@ -1,0 +1,14 @@
+---
+removed_features:
+  - The collection now ships roles only. All operational playbooks, ``playbooks/tasks``,
+    ``playbooks/routeros`` and ``playbooks/tests`` are removed; orchestration and transport
+    belong in the consuming automation. ``playbooks/examples`` keeps one example per role.
+  - The sample ``inventory/`` directory is removed.
+  - The SPI U-Boot environment path (``persist_uboot_env``, ``compose_uboot_env_vars``,
+    ``validate_local_kernel`` and the ``render_localcmd_chain.j2`` template) is removed,
+    together with its ``persist_uboot_env`` and ``local_kernel_render`` molecule scenarios.
+  - The ``community.routeros`` and ``ansible.netcommon`` collections are no longer used or
+    installed anywhere in the collection.
+  - Empty plugin directories, the EDA rulebook stub, ``devfile.yaml`` and the Python-only
+    tool configuration (``.isort.cfg``, ``pyproject.toml``, ``requirements.txt``,
+    ``.prettierignore``) are removed.
