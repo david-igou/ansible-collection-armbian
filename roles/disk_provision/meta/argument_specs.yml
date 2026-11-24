@@ -1,116 +1,138 @@
 ---
 argument_specs:
   main:
-    short_description: "Apply a declarative partition layout to one block device and populate it from a source rootfs"
+    short_description: Partition one block device from a declarative layout and populate it from a rootfs
     description:
       - >-
-        Given one disk_provision_disk_binding (device + layout list), validates the
-        layout, translates it to systemd-repart .repart.d/*.conf files,
-        invokes systemd-repart against the device, populates the
-        resulting filesystems by rsyncing `source` (default /), writes
-        a generated /etc/fstab on the root partition referencing every
-        mount by LABEL=, and unmounts.
+        Validates the layout, renders one systemd-repart definition per layout
+        entry under C(/run/disk_provision/<device>/repart.d/), runs
+        systemd-repart against the device, mounts the new filesystems by label,
+        rsyncs O(disk_provision_source) onto them with C(--delete), writes an
+        C(/etc/fstab) on the root filesystem that references every mounted
+        entry by C(LABEL=), and unmounts.
       - >-
-        Single-disk contract. Callers with multiple disks loop the
-        role per disk binding.
+        Without preserved partitions the partition table is rebuilt from
+        scratch. When an entry has O(disk_provision_disk_binding.layout[].preserve_on_reprovision=true)
+        and its label already exists on the device, that partition keeps its
+        data and is not mounted or copied; every other entry is deleted,
+        re-created and reformatted (systemd-repart C(--factory-reset)).
       - >-
-        Preserved partitions (preserve_on_reprovision: true with a
-        matching label already present on the disk) are skipped at
-        systemd-repart and excluded from rsync. Set `force: true` on
-        the binding to bypass preserve idempotency.
-      - >-
-        Transport-agnostic. Knows nothing about netboot, PXE, boot
-        modes, or what the rootfs will be used for.
-
+        Gathers the C(mounts) fact subset itself and refuses to wipe the disk
+        that backs C(/). Needs root (tasks use C(become)), and systemd-repart,
+        rsync, lsblk, blkid, partprobe and blkdiscard on the host; installs the
+        C(systemd-repart) package when the binary is missing. One disk per
+        call; loop the role for several disks. Always writes, so it is not
+        idempotent.
     options:
       disk_provision_disk_binding:
         type: dict
         required: true
-        description: >-
-          One entry from armbian_local_disks. Shape:
-          {device, force?, fast_wipe?, layout: [partition_spec, ...]}.
+        description:
+          - The device to provision and its layout.
         options:
           device:
             type: path
             required: true
-            description: "Whole-disk path, e.g. /dev/nvme0n1. WILL BE WIPED unless preserve rules apply."
+            description:
+              - Whole-disk path, for example C(/dev/nvme0n1). Partition paths are rejected.
           force:
             type: bool
             default: false
-            description: "Bypass preserve_on_reprovision idempotency — destructively wipe preserved partitions too."
+            description:
+              - Ignore O(disk_provision_disk_binding.layout[].preserve_on_reprovision) and rebuild every partition.
           fast_wipe:
             type: bool
             default: true
-            description: >-
-              When true, issue `blkdiscard <device>` (full-device TRIM using the
-              storage's native chunk size) before systemd-repart, AND suppress
-              mkfs.ext4's per-block discard at format time (`-E nodiscard` via
-              SYSTEMD_REPART_MKFS_OPTIONS_EXT4).
-              Net effect: ~30x speedup on large NVMe (>200 GiB), no functional
-              change on small disks. Set false for devices with broken TRIM
-              firmware (some old eMMC) where blkdiscard hangs.
+            description:
+              - When nothing is preserved, discard the whole device with C(blkdiscard) first and skip the
+                per-partition discards of systemd-repart and mkfs.ext4.
+              - Set false for devices whose TRIM support hangs.
           layout:
             type: list
             elements: dict
             required: true
+            description:
+              - Partitions in on-disk order. Exactly one entry must mount at C(/).
             options:
               id:
                 type: str
                 required: true
-                description: "Unique within this layout. Drives the .repart.d filename ordering."
+                description:
+                  - Unique within the layout; names the rendered C(NN-<id>.conf) definition.
               size:
                 type: str
                 required: true
-                description: "Size string: <number>MiB|GiB|TiB, or 'grow' (exactly one 'grow' per disk)."
+                description:
+                  - C(<number>MiB), C(<number>GiB) or C(<number>TiB), or C(grow) (at least 4G, fills the
+                    remaining space; at most one per layout).
               type:
                 type: str
                 required: true
-                choices: [esp, linux, root, var, home, srv, swap]
-                description: "GPT partition type purpose. systemd-repart resolves to the architecture-appropriate GUID."
+                choices:
+                  - esp
+                  - linux
+                  - root
+                  - var
+                  - home
+                  - srv
+                  - swap
+                description:
+                  - GPT partition type; systemd-repart picks the architecture-specific GUID.
               format:
                 type: str
                 required: true
-                choices: [vfat, ext4, xfs, btrfs, swap]
-                description: "Filesystem type."
+                choices:
+                  - vfat
+                  - ext4
+                  - xfs
+                  - btrfs
+                  - swap
+                description:
+                  - Filesystem to create.
               label:
                 type: str
-                description: "Filesystem label. Required if preserve_on_reprovision is true. Recommended otherwise (fstab references it)."
+                description:
+                  - Filesystem and partition label. Required for mounted and preserved entries.
+                  - vfat labels must be uppercase and at most 11 characters.
               mount:
                 type: path
-                description: "Absolute mount path written to /etc/fstab. Optional (e.g. swap has no mount)."
+                description:
+                  - Absolute mount path written to C(/etc/fstab). Omit for unmounted entries such as swap.
               mount_opts:
                 type: str
-                description: "fstab mount options. Defaults: ext4='defaults,noatime'; vfat='defaults,noatime'; swap='sw'; xfs='defaults,noatime'; btrfs='defaults,noatime,compress=zstd'."
+                description:
+                  - fstab options. Defaults to C(defaults,noatime) for ext4, xfs and vfat,
+                    C(defaults,noatime,compress=zstd) for btrfs and C(sw) for swap.
               preserve_on_reprovision:
                 type: bool
                 default: false
-                description: "If true and a partition with matching label already exists, skip wipe + exclude from rsync. Requires label."
+                description:
+                  - Keep this partition and its data when a partition with the same label already exists.
       disk_provision_source:
         type: path
-        default: "/"
-        description: >-
-          Source rootfs to rsync. Typically "/" when the role runs on
-          a board copying its currently-mounted rootfs; can be any
-          directory containing a populated Linux rootfs.
+        default: /
+        description:
+          - Directory holding the rootfs to copy, usually C(/) on a host booted from NFS.
       disk_provision_installed_marker:
         type: bool
         default: true
-        description: "Write INSTALLED=true to /etc/armbian-image-release on the target to suppress armbian-resize-filesystem."
+        description:
+          - Set C(INSTALLED=true) in C(/etc/armbian-image-release) on the new root, when that file exists,
+            so armbian-resize-filesystem does not resize the partition.
       disk_provision_reset_identity:
         type: bool
         default: false
-        description: >-
-          Zero /etc/machine-id and /var/lib/dbus/machine-id on the
-          target. Default false because the typical caller (NFS-booted
-          board copying its rootfs to local disk) wants the same
-          machine-id across both boot modes — it's the same machine.
-          Set true when provisioning a disk for a *different* host
-          than the source.
+        description:
+          - Empty C(/etc/machine-id) and C(/var/lib/dbus/machine-id) on the new root. Leave false when
+            the disk is for the same machine as the source.
       disk_provision_mount_dir_base:
         type: path
-        default: "/var/lib/armbian/disk_provision_mnt"
-        description: "Base for per-device temporary mount points. Each device mounts under <base>/<device-basename>/."
+        default: /var/lib/armbian/disk_provision_mnt
+        description:
+          - Directory under which the new filesystems are mounted temporarily, at C(<base>/<device basename>).
       disk_provision_render_only:
         type: bool
         default: false
-        description: "When true, render .repart.d configs and run validation, then return. Used by Layer 1 molecule test."
+        description:
+          - Validate the layout and render the repart definitions, then stop. Does not gather facts,
+            touch the device or require it to exist.

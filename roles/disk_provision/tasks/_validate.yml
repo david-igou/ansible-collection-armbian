@@ -1,110 +1,81 @@
 ---
-# Pre-flight validation for one disk_provision_disk_binding. Runs before any
-# destructive op. All failures abort the playbook.
-
-- name: "Validate: device is set, starts with /dev/, is whole-disk path"
+- name: Assert the device is a whole-disk path under /dev
   ansible.builtin.assert:
     that:
-      - disk_provision_disk_binding.device is defined
       - disk_provision_disk_binding.device.startswith('/dev/')
-      - not (disk_provision_disk_binding.device is match('/dev/(nvme[0-9]+n[0-9]+p|mmcblk[0-9]+p|loop[0-9]+p|sd[a-z]|vd[a-z]|hd[a-z])[0-9]+$'))
+      - disk_provision_disk_binding.device is not match('/dev/(nvme[0-9]+n[0-9]+p|mmcblk[0-9]+p|loop[0-9]+p|sd[a-z]|vd[a-z]|hd[a-z])[0-9]+$')
     fail_msg: >-
-      device must be a whole-disk path under /dev/ (e.g. /dev/nvme0n1).
-      Got: {{ disk_provision_disk_binding.device | default('<unset>') }}.
-      Partition-suffixed paths (nvme0n1p1, sda1) are not accepted —
-      that would target a partition, not the disk.
+      device must be a whole-disk path under /dev/ (e.g. /dev/nvme0n1), not a
+      partition. Got: {{ disk_provision_disk_binding.device }}.
 
-- name: "Validate: device is a real block device"
-  ansible.builtin.stat:
-    path: "{{ disk_provision_disk_binding.device }}"
-  register: __disk_provision_device_stat
-  become: true
-  when: not (disk_provision_render_only | default(false) | bool)
-
-- name: "Validate: device stat returned a block device"
+- name: Assert entry ids are unique
   ansible.builtin.assert:
     that:
-      - __disk_provision_device_stat.stat.exists
-      - __disk_provision_device_stat.stat.isblk
-    fail_msg: |
-      device {{ disk_provision_disk_binding.device }}: exists={{ __disk_provision_device_stat.stat.exists }}, isblk={{ __disk_provision_device_stat.stat.isblk | default(false) }}.
-      Confirm the device path with `lsblk` on the target host.
-  when: not (disk_provision_render_only | default(false) | bool)
+      - __disk_provision_layout | map(attribute='id') | unique | length == __disk_provision_layout | length
+    fail_msg: "Duplicate id values in the layout for {{ disk_provision_disk_binding.device }}."
 
-- name: "Validate: find source of running rootfs"
-  ansible.builtin.set_fact:
-    __disk_provision_root_source: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
-  when: not (disk_provision_render_only | default(false) | bool)
-
-- name: "Validate: refuse to wipe the disk the board is booted from"
+- name: Assert at most one entry uses size grow
   ansible.builtin.assert:
     that:
-      - not __disk_provision_root_source.startswith(disk_provision_disk_binding.device)
-    fail_msg: >-
-      REFUSING: / is on {{ __disk_provision_root_source }}, which is on
-      {{ disk_provision_disk_binding.device }} (the disk this binding would wipe).
-      Boot the board into a different rootfs (NFS or another local
-      disk) before provisioning this one.
-  when: not (disk_provision_render_only | default(false) | bool)
+      - __disk_provision_layout | selectattr('size', 'equalto', 'grow') | list | length <= 1
+    fail_msg: "More than one layout entry for {{ disk_provision_disk_binding.device }} has size: grow."
 
-- name: "Validate: every preserve_on_reprovision: true partition has a label"
+- name: Assert exactly one entry mounts at /
   ansible.builtin.assert:
     that:
-      - item.label is defined
-      - item.label | length > 0
+      - __disk_provision_mounts | selectattr('mount', 'equalto', '/') | list | length == 1
+    fail_msg: "The layout for {{ disk_provision_disk_binding.device }} needs exactly one entry with mount: /."
+
+# fstab and the mounts use LABEL=, and preserve detection is keyed on it.
+- name: Assert mounted and preserved entries have absolute mounts and labels
+  ansible.builtin.assert:
+    that:
+      - item.label | default('') | length > 0
+      - item.mount is not defined or item.mount.startswith('/')
     fail_msg: >-
-      Partition id={{ item.id }} has preserve_on_reprovision: true but
-      no `label` field. Preserve idempotency is keyed on label —
-      labels are required for preserved partitions.
-  loop: "{{ disk_provision_disk_binding.layout }}"
+      Layout entry id={{ item.id }} needs a non-empty label (it is mounted or
+      preserved) and an absolute mount path.
+  loop: >-
+    {{ __disk_provision_mounts
+       + __disk_provision_layout | selectattr('preserve_on_reprovision', 'defined') | selectattr('preserve_on_reprovision') | list }}
   loop_control:
     label: "{{ item.id }}"
-  when: item.preserve_on_reprovision | default(false)
 
-- name: "Validate: every mount path is absolute"
-  ansible.builtin.assert:
-    that:
-      - item.mount.startswith('/')
-    fail_msg: >-
-      Partition id={{ item.id }} has mount={{ item.mount }} — must be
-      an absolute path starting with /.
-  loop: "{{ disk_provision_disk_binding.layout }}"
-  loop_control:
-    label: "{{ item.id }}"
-  when: item.mount is defined
-
-- name: "Validate: at most one 'grow' partition per disk"
-  ansible.builtin.assert:
-    that:
-      - (disk_provision_disk_binding.layout | selectattr('size', 'equalto', 'grow') | list | length) <= 1
-    fail_msg: >-
-      Disk {{ disk_provision_disk_binding.device }} has more than one partition with
-      size: grow. At most one partition per disk may use size: grow.
-
-- name: "Validate: ids are unique within this layout"
-  ansible.builtin.assert:
-    that:
-      - (disk_provision_disk_binding.layout | map(attribute='id') | list | unique | length) == (disk_provision_disk_binding.layout | length)
-    fail_msg: >-
-      Duplicate id values in layout for {{ disk_provision_disk_binding.device }}.
-      Each partition must have a unique id.
-
-- name: "Validate: vfat labels are uppercase (FAT volume label spec)"
-  # vfat volume labels are uppercase-only by spec (and ≤11 chars).
-  # If you pass lowercase, systemd-repart silently uppercases on
-  # write, but then our blkid label-lookup + generated fstab
-  # mismatch the on-disk label. Catch upfront with a clear message.
+# systemd-repart uppercases FAT labels, which would break the LABEL= lookups.
+- name: Assert vfat labels are uppercase and at most 11 characters
   ansible.builtin.assert:
     that:
       - item.label == item.label | upper
       - item.label | length <= 11
     fail_msg: >-
-      Partition id={{ item.id }} (format=vfat) has label={{ item.label }}.
-      FAT volume labels must be uppercase and ≤11 chars. Use e.g.
-      {{ (item.label | upper)[:11] }}.
-  loop: "{{ disk_provision_disk_binding.layout }}"
+      Layout entry id={{ item.id }} has vfat label {{ item.label }}; FAT labels
+      must be uppercase and at most 11 characters, e.g. {{ (item.label | upper)[:11] }}.
+  loop: "{{ __disk_provision_layout | selectattr('format', 'equalto', 'vfat') | selectattr('label', 'defined') | list }}"
   loop_control:
     label: "{{ item.id }}"
-  when:
-    - item.format == 'vfat'
-    - item.label is defined
+
+- name: Stat the device
+  ansible.builtin.stat:
+    path: "{{ disk_provision_disk_binding.device }}"
+  register: __disk_provision_device_stat
+  become: true
+  when: not disk_provision_render_only | bool
+
+- name: Assert the device is a block device
+  ansible.builtin.assert:
+    that:
+      - __disk_provision_device_stat.stat.isblk | default(false)
+    fail_msg: "{{ disk_provision_disk_binding.device }} is not a block device; check the path with lsblk."
+  when: not disk_provision_render_only | bool
+
+- name: Refuse to wipe the disk the host booted from
+  ansible.builtin.assert:
+    that:
+      - not __disk_provision_root_source.startswith(disk_provision_disk_binding.device)
+    fail_msg: >-
+      REFUSING: / is on {{ __disk_provision_root_source }}, which is on
+      {{ disk_provision_disk_binding.device }}. Boot from another rootfs (NFS or
+      another disk) before provisioning this one.
+  vars:
+    __disk_provision_root_source: "{{ ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
+  when: not disk_provision_render_only | bool

@@ -1,8 +1,6 @@
 ---
-# Defaults mirror meta/argument_specs.yml so the role is callable
-# without argument-spec validation enabled.
-disk_provision_source: "/"
+disk_provision_source: /
 disk_provision_installed_marker: true
 disk_provision_reset_identity: false
-disk_provision_mount_dir_base: "/var/lib/armbian/disk_provision_mnt"
+disk_provision_mount_dir_base: /var/lib/armbian/disk_provision_mnt
 disk_provision_render_only: false

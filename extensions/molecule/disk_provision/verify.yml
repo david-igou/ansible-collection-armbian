@@ -1,83 +1,202 @@
 ---
-- hosts: all
-  gather_facts: true
+- name: Verify the provisioned disk
+  hosts: all
+  gather_facts: false
   become: true
+  vars:
+    __loops: "{{ __loops_raw.content | b64decode | from_json }}"
+    __created_pass1: "{{ __pass1_raw.content | b64decode | from_json }}"
+    __created_now: >-
+      {{ dict(__tune2fs_now.results | map(attribute='item')
+              | zip(__tune2fs_now.results | map(attribute='stdout') | map('regex_search', '(?m)^Filesystem created:.*$'))) }}
+    __files: "{{ dict(__slurped.results | map(attribute='item') | zip(__slurped.results | map(attribute='content') | map('b64decode'))) }}"
   tasks:
-    - name: Read loop device path
+    - name: Read the fixture loop devices
       ansible.builtin.slurp:
-        src: /tmp/loop_device
-      register: _loop_b64
+        src: /tmp/disk_provision_loops.json
+      register: __loops_raw
 
-    - name: Set loop device fact
-      ansible.builtin.set_fact:
-        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
+    - name: Read the pass 1 filesystem creation times
+      ansible.builtin.slurp:
+        src: /tmp/disk_provision_pass1.json
+      register: __pass1_raw
 
-    # Pass 1 + 2 assertions
-    - name: lsblk -no NAME,FSTYPE,LABEL on the loop device
-      ansible.builtin.command: "lsblk -no NAME,FSTYPE,LABEL {{ _loop }}"
-      register: _lsblk
+    - name: List the target's partitions
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --json
+          - --list
+          - --output
+          - LABEL,FSTYPE
+          - "{{ __loops.target }}"
+      register: __lsblk_now
       changed_when: false
 
-    - name: Three labelled ext4 partitions exist
+    - name: Assert three labelled ext4 partitions exist
       ansible.builtin.assert:
         that:
-          - "'lp_boot' in _lsblk.stdout"
-          - "'lp_var'  in _lsblk.stdout"
-          - "'lp_root' in _lsblk.stdout"
-          - _lsblk.stdout.count('ext4') == 3
-        fail_msg: "Unexpected lsblk output:\n{{ _lsblk.stdout }}"
+          - >-
+            (__lsblk_now.stdout | from_json).blockdevices | selectattr('fstype', 'equalto', 'ext4')
+            | map(attribute='label') | sort == ['lp_boot', 'lp_root', 'lp_var']
+        fail_msg: "Unexpected partitions: {{ __lsblk_now.stdout }}"
 
-    - name: Mount /var and verify the sentinel was preserved across the re-provision
-      ansible.builtin.shell: |
-        set -euo pipefail
-        mount LABEL=lp_var /mnt
-        cat /mnt/preserve_test
-        umount /mnt
-      args:
-        executable: /bin/bash
-      register: _sentinel
+    - name: Read the filesystem creation times now
+      ansible.builtin.command:
+        argv:
+          - tune2fs
+          - -l
+          - "/dev/disk/by-label/{{ item }}"
+      loop:
+        - lp_boot
+        - lp_var
+        - lp_root
+      register: __tune2fs_now
       changed_when: false
 
-    - name: Sentinel content matches what Pass 1 wrote
+    - name: Assert pass 2 reformatted boot and root and kept var
       ansible.builtin.assert:
-        that: _sentinel.stdout.strip() == 'SENTINEL'
-        fail_msg: "/var was reformatted across passes; preserve_on_reprovision is broken."
+        that:
+          - __created_now.lp_boot != __created_pass1.lp_boot
+          - __created_now.lp_root != __created_pass1.lp_root
+          - __created_now.lp_var == __created_pass1.lp_var
+        fail_msg: "pass 1 {{ __created_pass1 }}, now {{ __created_now }}"
 
-    # Pass 3 (render-only) assertions
-    - name: Render-only dropped four .repart.d files for /dev/loop1
+    - name: Mount the provisioned filesystems read-only
+      ansible.posix.mount:
+        path: "/mnt/verify_{{ item }}"
+        src: "LABEL=lp_{{ item }}"
+        fstype: ext4
+        opts: ro
+        state: ephemeral
+      loop:
+        - root
+        - boot
+        - var
+
+    - name: Read the files the role wrote or copied
+      ansible.builtin.slurp:
+        src: "/mnt/verify_{{ item }}"
+      loop:
+        - root/etc/fstab
+        - root/etc/disk_provision_marker
+        - root/etc/armbian-image-release
+        - boot/extlinux/extlinux.conf
+        - var/written_between_passes
+      register: __slurped
+
+    - name: Look for files that must not exist after pass 2
+      ansible.builtin.stat:
+        path: "/mnt/verify_{{ item }}"
+        get_checksum: false
+      loop:
+        - root/written_between_passes
+        - root/var/lib/source_var_file
+      register: __absent
+
+    - name: Unmount the provisioned filesystems
+      ansible.posix.mount:
+        path: "/mnt/verify_{{ item }}"
+        state: unmounted
+      loop:
+        - root
+        - boot
+        - var
+
+    - name: Assert fstab mounts every layout entry by label
+      ansible.builtin.assert:
+        that:
+          - __entries == __expected
+        fail_msg: "fstab LABEL= entries {{ __entries }}, expected {{ __expected }}"
+      vars:
+        __entries: "{{ __files['root/etc/fstab'].splitlines() | select('match', '^LABEL=') | map('regex_replace', '\\s+', ' ') | list }}"
+        __expected:
+          - LABEL=lp_root / ext4 defaults,noatime 0 1
+          - LABEL=lp_boot /boot ext4 defaults,noatime 0 2
+          - LABEL=lp_var /var ext4 defaults,noatime 0 2
+
+    - name: Assert the source content was copied and adjusted
+      ansible.builtin.assert:
+        that:
+          - __files['root/etc/disk_provision_marker'] == "copied from /tmp/testroot\n"
+          - "'INSTALLED=true' in __files['root/etc/armbian-image-release'].splitlines()"
+          - "'root=LABEL=lp_root' in __files['boot/extlinux/extlinux.conf']"
+          - "'/dev/mmcblk1p1' not in __files['boot/extlinux/extlinux.conf']"
+        fail_msg: "Copied files: {{ __files }}"
+
+    - name: Assert the preserved var data survived and root was rebuilt
+      ansible.builtin.assert:
+        that:
+          - __files['var/written_between_passes'] == "var\n"
+          - not __absent.results[0].stat.exists
+          - not __absent.results[1].stat.exists
+        fail_msg: >-
+          Expected var data kept, the root marker gone and the preserved /var
+          not copied into root; got {{ __absent.results | map(attribute='stat.exists') }}
+
+- name: Verify render-only mode
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    __repart_dir: "/run/disk_provision/{{ __render_loop | basename }}/repart.d"
+    __render_loop: "{{ (__loops_raw.content | b64decode | from_json).render_only }}"
+    __confs: "{{ dict(__conf_raw.results | map(attribute='item') | zip(__conf_raw.results | map(attribute='content') | map('b64decode'))) }}"
+  tasks:
+    - name: Read the fixture loop devices
+      ansible.builtin.slurp:
+        src: /tmp/disk_provision_loops.json
+      register: __loops_raw
+
+    - name: Find the rendered definitions
       ansible.builtin.find:
-        paths: "/run/disk_provision/loop1/repart.d"
+        paths: "{{ __repart_dir }}"
         patterns: "*.conf"
-      register: _confs
+      register: __found
 
-    - name: Four ordered .conf files present
+    - name: Assert one ordered definition per layout entry
       ansible.builtin.assert:
         that:
-          - (_confs.files | map(attribute='path') | map('basename') | sort) ==
-              ['10-esp.conf', '20-boot.conf', '30-var.conf', '40-root.conf']
-        fail_msg: "Expected 10-esp / 20-boot / 30-var / 40-root, got: {{ _confs.files | map(attribute='path') | map('basename') | sort }}"
+          - __found.files | map(attribute='path') | map('basename') | sort == ['10-esp.conf', '20-boot.conf', '30-var.conf', '40-root.conf']
+        fail_msg: "Got {{ __found.files | map(attribute='path') | map('basename') | sort }}"
 
-    - name: Read 10-esp.conf for ESP-specific assertions
+    - name: Read the rendered definitions
       ansible.builtin.slurp:
-        src: "/run/disk_provision/loop1/repart.d/10-esp.conf"
-      register: _esp
+        src: "{{ __repart_dir }}/{{ item }}"
+      loop:
+        - 10-esp.conf
+        - 30-var.conf
+        - 40-root.conf
+      register: __conf_raw
 
-    - name: ESP config has Type=esp, Label=ARMBI_ESP, Format=vfat, 512M size
+    - name: Assert the definitions carry type, size and factory-reset settings
       ansible.builtin.assert:
         that:
-          - (_esp.content | b64decode) is search('Type=esp')
-          - (_esp.content | b64decode) is search('Label=ARMBI_ESP')
-          - (_esp.content | b64decode) is search('Format=vfat')
-          - (_esp.content | b64decode) is search('SizeMinBytes=512M')
-          - (_esp.content | b64decode) is search('SizeMaxBytes=512M')
+          - __confs['10-esp.conf'] is search('(?m)^Type=esp$')
+          - __confs['10-esp.conf'] is search('(?m)^Label=ARMBI_ESP$')
+          - __confs['10-esp.conf'] is search('(?m)^Format=vfat$')
+          - __confs['10-esp.conf'] is search('(?m)^SizeMinBytes=512M$')
+          - __confs['10-esp.conf'] is search('(?m)^SizeMaxBytes=512M$')
+          - __confs['10-esp.conf'] is search('(?m)^FactoryReset=yes$')
+          - __confs['30-var.conf'] is not search('FactoryReset')
+          - __confs['40-root.conf'] is search('(?m)^Type=root$')
+          - __confs['40-root.conf'] is not search('SizeMaxBytes=')
+        fail_msg: "Rendered definitions: {{ __confs }}"
 
-    - name: Read 40-root.conf for root-specific (grow) assertions
-      ansible.builtin.slurp:
-        src: "/run/disk_provision/loop1/repart.d/40-root.conf"
-      register: _root
+    - name: Probe the render-only disk for a partition table
+      ansible.builtin.command:
+        argv:
+          - blkid
+          - --probe
+          - "{{ __render_loop }}"
+      register: __render_probe
+      changed_when: false
+      failed_when:
+        - __render_probe.rc != 0
+        - __render_probe.rc != 2
 
-    - name: Root config has Type=root and no SizeMaxBytes (grow)
+    - name: Assert render-only mode left the disk blank
       ansible.builtin.assert:
         that:
-          - (_root.content | b64decode) is search('Type=root')
-          - (_root.content | b64decode) is not search('SizeMaxBytes=')
+          - __render_probe.rc == 2
+        fail_msg: "render-only wrote to {{ __render_loop }}: {{ __render_probe.stdout }}"
