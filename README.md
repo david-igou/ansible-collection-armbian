@@ -126,7 +126,7 @@ ansible-galaxy collection install david_igou.armbian
 # requirements.yml
 collections:
   - name: david_igou.armbian
-    version: 0.0.5-alpha
+    version: 0.1.0-alpha
 ```
 
 ## Testing

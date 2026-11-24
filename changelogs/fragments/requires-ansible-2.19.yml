@@ -1,3 +1,0 @@
----
-breaking_changes:
-  - The collection requires ansible-core 2.19 or later, the oldest release CI tests.

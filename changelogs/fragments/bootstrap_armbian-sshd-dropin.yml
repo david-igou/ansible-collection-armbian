@@ -1,9 +1,0 @@
----
-breaking_changes:
-  - bootstrap_armbian - ``armbian_bootstrap_user`` and ``armbian_bootstrap_ssh_keys`` are renamed
-    to ``bootstrap_armbian_user`` and ``bootstrap_armbian_ssh_keys``. sshd settings are written
-    to the validated drop-in ``/etc/ssh/sshd_config.d/00-bootstrap-armbian.conf`` instead of
-    editing ``sshd_config``.
-minor_changes:
-  - bootstrap_armbian - new ``bootstrap_armbian_lock_root`` sets ``PermitRootLogin no`` and locks
-    the root password.
