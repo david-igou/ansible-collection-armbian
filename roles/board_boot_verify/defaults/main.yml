@@ -1,3 +1,4 @@
 ---
-# board_boot_verify_mode is required and has no default.
-board_boot_verify_extra_modes: {}
+# board_boot_verify_mode is required.
+# board_boot_verify_root_match overrides the mode's root device regex and is
+# required for custom modes.

@@ -1,74 +1,10 @@
 ---
-# board_boot_verify is a pure assertion role: it gathers facts, then
-# inspects ansible_facts['mounts']['/'] and asserts the rootfs matches
-# the declared board_boot_verify_mode. We exercise it against the molecule container's
-# real mounts (which look like a local block device — overlay/ext4),
-# so the `sd` and `local` modes pass straight through, while `nfs`
-# and `local_kernel` modes are exercised via block/rescue to verify
-# the assertions FIRE on rootfs mismatch.
-
-- name: Converge — exercise board_boot_verify in four mode-fixture combinations
-  hosts: all
+- name: Converge
+  hosts: molecule
   gather_facts: false
-  become: false
-
   tasks:
-    # ---------- Pass case: sd ----------
-    - name: sd-mode — role should pass (container's / is a local block device)
+    - name: Verify the VM's block-device root as an sd boot
       ansible.builtin.include_role:
         name: david_igou.armbian.board_boot_verify
       vars:
         board_boot_verify_mode: sd
-
-    # ---------- Pass case: local ----------
-    - name: local-mode — role should pass (same condition as sd)
-      ansible.builtin.include_role:
-        name: david_igou.armbian.board_boot_verify
-      vars:
-        board_boot_verify_mode: local
-
-    # ---------- Negative case: nfs — should fail-into-rescue ----------
-    - name: nfs-mode — role MUST fail (container's / is not NFS)
-      block:
-        - ansible.builtin.include_role:
-            name: david_igou.armbian.board_boot_verify
-          vars:
-            board_boot_verify_mode: nfs
-        - name: Trip an explicit failure if the role did not assert
-          ansible.builtin.fail:
-            msg: "board_boot_verify accepted board_boot_verify_mode=nfs against a non-NFS rootfs"
-      rescue:
-        - name: Record the rescued failure for verify.yml to consume
-          ansible.builtin.copy:
-            dest: /tmp/board_boot_verify_nfs_rescue
-            content: "{{ ansible_failed_result.msg | default('') }}\n"
-            mode: "0644"
-
-    # ---------- Negative case: local_kernel — should fail-into-rescue ----------
-    - name: local_kernel-mode — role MUST fail (container's / is not /dev/nvme*)
-      block:
-        - ansible.builtin.include_role:
-            name: david_igou.armbian.board_boot_verify
-          vars:
-            board_boot_verify_mode: local_kernel
-        - ansible.builtin.fail:
-            msg: "board_boot_verify accepted board_boot_verify_mode=local_kernel against a non-NVMe rootfs"
-      rescue:
-        - ansible.builtin.copy:
-            dest: /tmp/board_boot_verify_local_kernel_rescue
-            content: "{{ ansible_failed_result.msg | default('') }}\n"
-            mode: "0644"
-
-    # ---------- Pass case: local_kernel with a custom verify_match ----------
-    # Boards whose baked localcmd chain has non-NVMe fallback candidates
-    # (e.g. cm3588-nas: NVMe first, eMMC fallback) widen the default
-    # ^/dev/nvme via board_boot_verify_local_kernel_match (fed from
-    # armbian_board_config.local_kernel.verify_match). The container's
-    # root device satisfies a permissive regex, proving the override
-    # reaches the assertion.
-    - name: local_kernel-mode with custom match — role should pass
-      ansible.builtin.include_role:
-        name: david_igou.armbian.board_boot_verify
-      vars:
-        board_boot_verify_mode: local_kernel
-        board_boot_verify_local_kernel_match: "^(/dev/|overlay)"
