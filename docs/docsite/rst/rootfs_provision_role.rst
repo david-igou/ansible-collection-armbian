@@ -3,11 +3,11 @@
 david_igou.armbian.rootfs_provision role
 ========================================
 
-Runs on the netboot server. Resolves a per-host ``.img.xz`` source, extracts the
-rootfs directly into a per-host directory (hosts pointing at the same upstream
-URL share only the download, via a URL-keyed image cache), and resets identity
-(hostname, machine-id, SSH host keys) so same-model boards stay independent on
-the wire.
+Runs on the netboot server. Fetches a per-host ``.img.xz`` into a source-keyed
+cache, mirrors its largest partition into a per-host NFS rootfs directory with
+``rsync --delete``, stages the kernel, initrd and optional DTB for TFTP, and
+resets identity (hostname, machine-id, SSH host keys). A re-run is skipped while
+the source, image sha256 and hostname are unchanged.
 
 See the :ansplugin:`full role reference <david_igou.armbian.rootfs_provision#role>`
 for all parameters and defaults.

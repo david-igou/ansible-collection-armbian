@@ -3,9 +3,10 @@
 david_igou.armbian.image_build role
 ===================================
 
-Runs on an ``armbian_builders`` host. Builds a custom Armbian ``.img.xz`` with
-caller-supplied userpatches via ``armbian/build`` (Docker mode), baking PXE-first
-U-Boot ``BOOT_TARGETS`` into the image so a board reliably netboots from power-up.
+Runs on a builder host. Builds a custom Armbian ``.img.xz`` with caller-supplied
+userpatches via ``armbian/build`` (Docker mode) and rebuilds only when the inputs
+hash (board, branch, release, ref, userpatches, compile args) changes. The
+``plan`` entry point reports whether a build is due without compiling.
 
 See the :ansplugin:`full role reference <david_igou.armbian.image_build#role>`
 for all parameters and defaults.
