@@ -1,60 +1,70 @@
-# roles/rootfs_provision/meta/argument_specs.yml
 ---
 argument_specs:
   main:
-    short_description: Provision a per-host NFS rootfs from an .img.xz source
+    short_description: Provision a per-host NFS rootfs and TFTP boot files from an .img.xz
     description:
       - >-
-        Downloads or copies an Armbian .img.xz, extracts the rootfs into a
-        per-host directory on the netboot server, stages
-        kernel/initrd/dtb to a TFTP cache directory, and resets host
-        identity (hostname, machine-id, SSH host keys).
+        Fetches the image into a cache keyed by the source string, and unless
+        the target's sentinel already records the same source, image sha256 and
+        hostname, extracts the image's largest partition into
+        O(rootfs_provision_target_dir) with C(rsync --delete), removes C(/dev/)
+        entries from its C(/etc/fstab), stages C(vmlinuz), C(initrd.img) and
+        optionally C(board.dtb) into O(rootfs_provision_tftp_dir), resets the
+        host identity (hostname, C(/etc/hosts), machine-id, SSH host keys,
+        Armbian first-login prompt) and writes the sentinel
+        C(.rootfs_provision.json) in the target.
       - >-
-        Provisioning is purely per-host — the rootfs is extracted
-        directly into the per-host target directory (no shared per-model
-        template, no reflink cloning). Hosts pointing at the same
-        upstream URL share only the .img.xz download, via the URL-keyed
-        armbian_rootfs_image_cache.
+        Runs as root on the host that exports the NFS rootfs. Needs xz,
+        losetup, lsblk, udevadm, rsync and ssh-keygen there, and gathers the
+        C(mounts) fact subset itself. Refuses a target directory that is a
+        mountpoint. Not check-mode safe. Sets no facts.
     options:
-      armbian_rootfs_src:
+      rootfs_provision_src:
         type: str
         required: true
-        description: >-
-          .img.xz source. https:// URL, http:// URL, or absolute path.
-          Resolved by the caller per the precedence in
-          playbooks/tasks/_resolve_rootfs_src.yml.
-      armbian_rootfs_host:
+        description:
+          - The C(.img.xz) to provision from, an http(s) URL or an absolute path on the host.
+      rootfs_provision_checksum:
+        type: str
+        default: ""
+        description:
+          - Passed to C(ansible.builtin.get_url) as C(checksum), for example C(sha256:https://host/image.img.xz.sha).
+          - When empty, the cached image is revalidated on every run (If-Modified-Since for a URL, a content
+            compare for a path).
+      rootfs_provision_hostname:
         type: str
         required: true
-        description: >-
-          inventory_hostname this rootfs is for. Drives identity reset
-          (hostname, machine-id) and the default target_dir suffix.
-      armbian_rootfs_dtb:
-        type: str
+        description:
+          - Hostname written into the rootfs.
+      rootfs_provision_target_dir:
+        type: path
         required: true
-        description: >-
-          DTB path under /boot/dtb/ to stage as the TFTP board.dtb
-          (e.g. "rockchip/rk3588-rock-5b.dtb"). Comes from the host's
-          resolved armbian_board_config.dtb.
-      armbian_rootfs_target_dir:
+        description:
+          - Per-host NFS rootfs directory. Its contents are replaced by the image's.
+      rootfs_provision_tftp_dir:
+        type: path
+        required: true
+        description:
+          - Per-host directory that receives C(vmlinuz), C(initrd.img) and C(board.dtb).
+      rootfs_provision_cache_dir:
+        type: path
+        required: true
+        description:
+          - Download cache. The image is kept at C(<cache_dir>/<sha256 of src>/<basename of src>).
+      rootfs_provision_dtb:
         type: str
-        required: false
-        description: NFS rootfs destination. Default per-host suffix under armbian_nfs_rootfs_path.
-      armbian_rootfs_tftp_dir:
-        type: str
-        required: false
-        description: Per-host TFTP staging dir. Default per-host suffix under armbian_image_cache/sbc-tftp.
-      armbian_rootfs_image_cache:
-        type: str
-        required: false
-        description: URL-keyed shared download cache. Hosts pointing at the same URL share the download.
-      armbian_rootfs_mount_dir:
-        type: str
-        required: false
-        default: "/mnt/armbian_rootfs_provision"
-        description: Mount point for the image's rootfs partition (loop device) during extraction.
-      armbian_rootfs_force_refresh:
+        default: ""
+        description:
+          - DTB path relative to the image's DTB directory, for example C(rockchip/rk3588-rock-5b.dtb), staged as
+            C(board.dtb). It is looked up under C(boot/dtb/), C(boot/dtbs/), C(boot/dtb-*/) and C(boot/dtbs/*/).
+          - Empty stages no DTB and removes a previously staged one.
+      rootfs_provision_mount_dir:
+        type: path
+        default: /mnt/rootfs_provision
+        description:
+          - Where the image's root partition is mounted read-only during extraction.
+      rootfs_provision_force:
         type: bool
-        required: false
         default: false
-        description: Force re-extract regardless of sentinel.
+        description:
+          - Re-extract even when the sentinel matches.

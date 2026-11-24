@@ -1,0 +1,67 @@
+---
+- name: Write the hostname
+  ansible.builtin.copy:
+    dest: "{{ rootfs_provision_target_dir }}/etc/hostname"
+    content: "{{ rootfs_provision_hostname }}\n"
+    mode: "0644"
+
+- name: Stat /etc/hosts in the rootfs
+  ansible.builtin.stat:
+    path: "{{ rootfs_provision_target_dir }}/etc/hosts"
+    get_checksum: false
+  register: __rootfs_provision_hosts
+
+- name: Point 127.0.1.1 at the hostname
+  ansible.builtin.lineinfile:
+    path: "{{ rootfs_provision_target_dir }}/etc/hosts"
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1\t{{ rootfs_provision_hostname }}"
+  when: __rootfs_provision_hosts.stat.exists
+
+# An empty machine-id (not a missing one) is what systemd treats as first
+# boot.
+- name: Empty the machine-id files
+  ansible.builtin.copy:
+    dest: "{{ rootfs_provision_target_dir }}/{{ item }}"
+    content: ""
+    mode: "0444"
+  loop:
+    - etc/machine-id
+    - var/lib/dbus/machine-id
+
+# Generated here rather than by sshd-keygen on first boot: on NFS boots
+# systemd-machine-id-setup can fill machine-id before ConditionFirstBoot is
+# evaluated, so the keygen unit never runs and sshd resets every connection.
+- name: Find the image's SSH host keys
+  ansible.builtin.find:
+    paths: "{{ rootfs_provision_target_dir }}/etc/ssh"
+    patterns: ssh_host_*
+    file_type: any
+  register: __rootfs_provision_host_keys
+
+- name: Remove the image's SSH host keys
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ __rootfs_provision_host_keys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Generate per-host SSH host keys
+  ansible.builtin.command:
+    argv: >-
+      {{ ['ssh-keygen', '-q', '-N', '', '-t', item.type,
+          '-f', rootfs_provision_target_dir ~ '/etc/ssh/ssh_host_' ~ item.type ~ '_key']
+         + (['-b', item.bits | string] if item.bits is defined else []) }}
+    creates: "{{ rootfs_provision_target_dir }}/etc/ssh/ssh_host_{{ item.type }}_key"
+  loop: "{{ __rootfs_provision_ssh_key_types }}"
+  loop_control:
+    label: "{{ item.type }}"
+
+# Skips armbian-firstrun's interactive root password prompt, which would
+# block the first non-interactive SSH session.
+- name: Disable the Armbian first-login prompt
+  ansible.builtin.copy:
+    dest: "{{ rootfs_provision_target_dir }}/root/.no_armbian_first_login"
+    content: ""
+    mode: "0644"

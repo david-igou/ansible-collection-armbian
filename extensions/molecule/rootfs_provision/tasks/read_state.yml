@@ -1,0 +1,25 @@
+---
+# Read the provisioned files into __state: name -> content, for the files
+# that exist. A missing file has no key.
+- name: Stat the provisioned files
+  ansible.builtin.stat:
+    path: "{{ item.value }}"
+    get_checksum: false
+  loop: "{{ __state_files | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: __state_stat
+
+- name: Read the provisioned files that exist
+  ansible.builtin.slurp:
+    src: "{{ item.item.value }}"
+  loop: "{{ __state_stat.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  register: __state_read
+
+- name: Index the provisioned files by name
+  ansible.builtin.set_fact:
+    __state: >-
+      {{ dict(__state_read.results | map(attribute='item.item.key')
+              | zip(__state_read.results | map(attribute='content') | map('b64decode'))) }}

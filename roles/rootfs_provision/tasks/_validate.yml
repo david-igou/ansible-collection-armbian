@@ -1,0 +1,28 @@
+---
+- name: Assert the inputs are well-formed
+  ansible.builtin.assert:
+    that:
+      - rootfs_provision_src is match('^(https?://|/)')
+      - rootfs_provision_src is search('[.]img[.]xz$')
+      - rootfs_provision_hostname | length > 0
+      - rootfs_provision_target_dir is match('^/.')
+      - rootfs_provision_tftp_dir is match('^/.')
+      - rootfs_provision_cache_dir is match('^/.')
+    fail_msg: >-
+      rootfs_provision_src must be an http(s) URL or absolute path ending in
+      .img.xz, rootfs_provision_hostname must be set, and the target, tftp and
+      cache directories must be absolute paths other than /.
+
+- name: Gather mount facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - mounts
+
+# rsync --delete into a mounted export would wipe whatever is mounted there.
+- name: Refuse a target directory that is a mountpoint
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['mounts'] | selectattr('mount', 'equalto', rootfs_provision_target_dir | regex_replace('/+$', '')) | list | length == 0
+    fail_msg: "rootfs_provision_target_dir {{ rootfs_provision_target_dir }} is a mountpoint; unmount it first."
