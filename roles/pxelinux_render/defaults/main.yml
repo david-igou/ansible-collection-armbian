@@ -1,36 +1,14 @@
 ---
-# Render-time knobs. All inputs that have inventory-level analogues
-# default to undefined here and are validated as required in argspec.
-#
-# Breaking change (per-host refactor): every external pxelinux_render
-# variable is now `pxelinux_render_*`-prefixed. Callers must update their
-# `vars:` blocks accordingly. See the role README for the full table.
-
-# Per-board kernel command-line knob: which device specifier the
-# kernel uses to find the root filesystem when booting from local SD.
-# Default LABEL=armbi_root works for stock Armbian; per-host overrides
-# (PARTUUID=, UUID=, PARTLABEL=) handle multi-drive boards.
-pxelinux_render_sd_root: "LABEL=armbi_root"
-
-# Per-host kernel command-line knob: which device specifier the
-# kernel uses to find the root filesystem when pxelinux_render_boot_mode=local.
-# Default LABEL=armbi_root_local matches disk_provision's default
-# label; override per-host (UUID=, PARTUUID=, PARTLABEL=) when needed.
-pxelinux_render_local_root: "LABEL=armbi_root_local"
-
-# When true, append earlycon + verbose kernel params to both labels.
-# earlycon value is read from armbian_board_config.earlycon (resolved
-# by _resolve_board_config.yml before this role runs).
+pxelinux_render_earlycon: ""
+pxelinux_render_board_name: ""
+pxelinux_render_extra_modes: {}
+pxelinux_render_nfs_version: 3
+pxelinux_render_sd_root: LABEL=armbi_root
+# Must match the label disk_provision writes.
+pxelinux_render_local_root: LABEL=armbi_root_local
 pxelinux_render_pxe_verbose: false
-
-# TFTP-relative paths written verbatim into pxelinux.cfg. These are
-# strings the netboot client passes to the TFTP server — not local FS
-# paths on the rendering host. Defaults use inventory_hostname for the
-# per-host TFTP layout (armbian/<hostname>/<file>).
+# TFTP-relative paths the board requests, not paths on the rendering host.
 pxelinux_render_tftp_kernel: "armbian/{{ inventory_hostname }}/vmlinuz"
 pxelinux_render_tftp_initrd: "armbian/{{ inventory_hostname }}/initrd.img"
+# Empty renders no fdt line (boards without a device tree).
 pxelinux_render_tftp_dtb: "armbian/{{ inventory_hostname }}/board.dtb"
-
-# User-defined extra boot modes. Each key becomes a pxelinux label
-# coexisting with nfs/sd/local. Empty by default.
-pxelinux_render_extra_modes: {}

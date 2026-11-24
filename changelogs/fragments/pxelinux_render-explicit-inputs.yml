@@ -1,0 +1,10 @@
+---
+breaking_changes:
+  - pxelinux_render - the role no longer reads ``armbian_board_config``. Pass
+    ``pxelinux_render_console`` (required), ``pxelinux_render_earlycon`` (required with
+    ``pxelinux_render_pxe_verbose``) and optionally ``pxelinux_render_board_name``. The
+    rendered file is no longer backed up and its "Active mode" header comment is gone.
+minor_changes:
+  - pxelinux_render - an empty ``pxelinux_render_tftp_dtb`` renders no ``fdt`` line, the NFS
+    version is set by ``pxelinux_render_nfs_version`` (default 3), and the role sets the
+    ``pxelinux_render_file`` and ``pxelinux_render_filename`` facts.

@@ -1,115 +1,103 @@
 ---
-- name: Verify — pxelinux.cfg output for both modes
-  hosts: all
+- name: Verify pxelinux_render
+  hosts: molecule
   gather_facts: false
-  become: false
-
   vars:
-    _nfs_file: /tmp/fixture/pxelinux.cfg_nfs/01-aa-bb-cc-dd-ee-ff
-    _sd_file: /tmp/fixture/pxelinux.cfg_sd/01-aa-bb-cc-dd-ee-ff
-    _verbose_file: /tmp/fixture/pxelinux.cfg_verbose/01-aa-bb-cc-dd-ee-ff
-
+    rendered: "{{ dict(fixture_cases.keys() | zip(__slurped.results | map(attribute='content') | map('b64decode') | map('split', '\n'))) }}"
+    nfs_append: "  append root=/dev/nfs nfsroot=192.0.2.10:/srv/netboot/rootfs/board-01,nfsvers=3,rw ip=dhcp rootwait rw console=ttyS2,1500000"
   tasks:
-    - name: Slurp all three rendered files
+    - name: Read every rendered file
       ansible.builtin.slurp:
-        src: "{{ item }}"
-      register: _renders
+        src: "{{ fixture_output_base }}/{{ item }}/01-aa-bb-cc-dd-ee-ff"
+      loop: "{{ fixture_cases.keys() }}"
+      register: __slurped
+
+    - name: Assert the nfs render matches the reference file exactly
+      ansible.builtin.assert:
+        that:
+          - rendered.nfs == lookup('ansible.builtin.file', 'expected/nfs', rstrip=false).split('\n')
+        fail_msg: "nfs render differs from expected/nfs:\n{{ rendered.nfs | join('\n') }}"
+
+    - name: Assert each case selects its mode on exactly one default line
+      ansible.builtin.assert:
+        that:
+          - rendered[item.key] | select('match', '^default ') | list == ['default ' ~ item.value.pxelinux_render_boot_mode]
+        fail_msg: "{{ item.key }}: {{ rendered[item.key] | select('match', '^default ') | list }}"
+      loop: "{{ fixture_cases | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Assert the built-in labels are identical across the built-in modes
+      ansible.builtin.assert:
+        that:
+          - rendered[item] | reject('match', '^default ') | list == rendered.nfs | reject('match', '^default ') | list
+        fail_msg: "{{ item }} differs from nfs outside the default line"
       loop:
-        - "{{ _nfs_file }}"
-        - "{{ _sd_file }}"
-        - "{{ _verbose_file }}"
+        - sd
+        - local
+        - local_kernel
 
-    - name: Decode contents
-      ansible.builtin.set_fact:
-        _nfs_content: "{{ _renders.results[0].content | b64decode }}"
-        _sd_content: "{{ _renders.results[1].content | b64decode }}"
-        _verbose_content: "{{ _renders.results[2].content | b64decode }}"
-
-    - name: Assert nfs-mode file has default=nfs and both labels
+    - name: Assert verbose mode appends earlycon to the three kernel labels only
       ansible.builtin.assert:
         that:
-          - "'default nfs' in _nfs_content"
-          - "'label nfs' in _nfs_content"
-          - "'label sd' in _nfs_content"
-          - "'nfsroot=10.0.0.10:/mnt/ssd/netboot/rootfs/smoke-host' in _nfs_content"
-          - "'kernel armbian/instance/vmlinuz' in _nfs_content"
-          - "'fdt    armbian/instance/board.dtb' in _nfs_content"
-          - "'console=ttyS2,1500000' in _nfs_content"
-          - "'root=LABEL=armbi_root' in _nfs_content"
-        fail_msg: "nfs render is wrong:\n{{ _nfs_content }}"
+          - rendered.verbose | select('search', ' earlycon=uart8250,mmio32,0xfeb50000 loglevel=8 ') | list | length == 3
+          - rendered.verbose | select('match', '^  append ') | list | length == 3
+          - (nfs_append ~ ' earlycon=uart8250,mmio32,0xfeb50000 loglevel=8 ignore_loglevel initcall_debug printk.devkmsg=on'
+             ~ ' systemd.log_level=debug systemd.log_target=console systemd.journald.forward_to_console=1') in rendered.verbose
+        fail_msg: "{{ rendered.verbose | join('\n') }}"
 
-    - name: Assert sd-mode file flips only default; keeps both label bodies
+    - name: Assert an empty dtb drops the fdt lines and NFS version 4 is honoured
       ansible.builtin.assert:
         that:
-          - "'default sd' in _sd_content"
-          - "'label nfs' in _sd_content"
-          - "'label sd' in _sd_content"
-          - "'default nfs' not in _sd_content"
-        fail_msg: "sd render is wrong:\n{{ _sd_content }}"
+          - rendered.no_dtb_nfs4 | select('match', '^  fdt') | list == []
+          - nfs_append | replace('nfsvers=3', 'nfsvers=4') in rendered.no_dtb_nfs4
+          - "'# pxelinux.cfg for board-01' in rendered.no_dtb_nfs4"
+        fail_msg: "{{ rendered.no_dtb_nfs4 | join('\n') }}"
 
-    - name: Assert verbose render contains the earlycon suffix on all built-in labels
+    - name: Assert the extra mode renders its own label after the built-ins
       ansible.builtin.assert:
         that:
-          - "'earlycon=uart8250,mmio32,0xfeb50000' in _verbose_content"
-          - "'loglevel=8' in _verbose_content"
-          - _verbose_content.split('earlycon=uart8250,mmio32,0xfeb50000') | length == 4  # 3 occurrences (nfs/sd/local) = 4 splits
-        fail_msg: "verbose render is wrong:\n{{ _verbose_content }}"
-
-    - name: Slurp local_kernel rendered file
-      ansible.builtin.slurp:
-        src: /tmp/fixture/pxelinux.cfg_local_kernel/01-aa-bb-cc-dd-ee-ff
-      register: _local_kernel_render
-
-    - name: Decode local_kernel content
-      ansible.builtin.set_fact:
-        _local_kernel_content: "{{ _local_kernel_render.content | b64decode }}"
-
-    - name: Assert local_kernel render emits localboot-only label and selects it
-      ansible.builtin.assert:
-        that:
-          - "'default local_kernel' in _local_kernel_content"
-          - "'label local_kernel' in _local_kernel_content"
-          - "'localboot 0' in _local_kernel_content"
-          # Built-in labels still rendered so the operator can flip back
-          # without re-uploading.
-          - "'label nfs' in _local_kernel_content"
-          - "'label sd' in _local_kernel_content"
-          - "'label local' in _local_kernel_content"
-        fail_msg: "local_kernel render is wrong:\n{{ _local_kernel_content }}"
-
-    - name: Assert local_kernel label body has no kernel/initrd/fdt/append directives
+          - rendered.extra[:-1] | reject('match', '^default ') | list
+            == (rendered.nfs | reject('match', '^default ') | list)[:-1] + extra_stanza
+        fail_msg: "{{ rendered.extra | join('\n') }}"
       vars:
-        # After the label header, find the next label boundary. Use
-        # '\nlabel ' (newline + 'label ') to avoid false-matching the
-        # `menu label` directive within the same body.
-        _after_header: "{{ _local_kernel_content.split('label local_kernel')[1] }}"
-        _local_kernel_body: "{{ _after_header.split('\nlabel ')[0] }}"
+        extra_stanza:
+          - ""
+          - label usb_rescue
+          - "  menu label USB rescue rootfs (board-01)"
+          - "  kernel armbian/instance/vmlinuz"
+          - "  initrd armbian/instance/initrd.img"
+          - "  fdt    armbian/instance/board.dtb"
+          - "  append root=LABEL=rescue_root rootfstype=ext4 rootwait rw console=ttyS2,1500000"
+
+    - name: Render once more to read the output facts
+      ansible.builtin.include_role:
+        name: david_igou.armbian.pxelinux_render
+      vars:
+        pxelinux_render_output_dir: "{{ fixture_output_base }}/facts"
+        pxelinux_render_board_mac: AA:BB:CC:DD:EE:FF
+        pxelinux_render_boot_mode: sd
+        pxelinux_render_console: ttyS2,1500000
+        pxelinux_render_nfs_server_ip: 192.0.2.10
+        pxelinux_render_nfs_root_path: /srv/netboot/rootfs
+        pxelinux_render_hostname: board-01
+
+    - name: Assert the output facts name the rendered file
       ansible.builtin.assert:
         that:
-          - "'localboot 0' in _local_kernel_body"
-          # Indented directives — won't match the label header line itself.
-          - "'\n  kernel ' not in _local_kernel_body"
-          - "'\n  initrd ' not in _local_kernel_body"
-          - "'\n  fdt ' not in _local_kernel_body"
-          - "'\n  append ' not in _local_kernel_body"
-        fail_msg: |
-          local_kernel label body should contain only `localboot 0`.
-          Got:
-          {{ _local_kernel_body }}
+          - pxelinux_render_filename == '01-aa-bb-cc-dd-ee-ff'
+          - pxelinux_render_file == fixture_output_base ~ '/facts/01-aa-bb-cc-dd-ee-ff'
 
-    - name: Slurp extra_modes rendered file
-      ansible.builtin.slurp:
-        src: /tmp/fixture/pxelinux.cfg_extra/01-aa-bb-cc-dd-ee-ff
-      register: _extra_render
-
-    - name: Decode extra_modes content
-      ansible.builtin.set_fact:
-        _extra_content: "{{ _extra_render.content | b64decode }}"
-
-    - name: Assert extra_modes render has usb_rescue label active and correct append
-      ansible.builtin.assert:
-        that:
-          - "'default usb_rescue' in _extra_content"
-          - "'label usb_rescue' in _extra_content"
-          - "'append root=LABEL=rescue_root' in _extra_content"
-        fail_msg: "extra_modes render is wrong:\n{{ _extra_content }}"
+    - name: Reject invalid inputs
+      ansible.builtin.include_tasks: tasks/expect_failure.yml
+      loop:
+        - name: unknown mode
+          vars:
+            pxelinux_render_boot_mode: nfs4
+        - name: verbose without earlycon
+          vars:
+            pxelinux_render_boot_mode: nfs
+            pxelinux_render_pxe_verbose: true
+      loop_control:
+        loop_var: case
+        label: "{{ case.name }}"

@@ -1,127 +1,25 @@
 ---
-- name: Converge — render pxelinux.cfg in both modes
-  hosts: all
+- name: Converge
+  hosts: molecule
   gather_facts: false
-  become: false
-
-  vars:
-    _output_base: /tmp/fixture/pxelinux.cfg
-
   tasks:
-    - name: Render in nfs mode
+    - name: Render one pxelinux.cfg per case
       ansible.builtin.include_role:
         name: david_igou.armbian.pxelinux_render
       vars:
-        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        armbian_board_config:
-          console: "ttyS2,1500000"
-          earlycon: "uart8250,mmio32,0xfeb50000"
-          armbian_board_name: "orangepi5pro"
-          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
-        pxelinux_render_nfs_server_ip: "10.0.0.10"
-        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
-        pxelinux_render_hostname: smoke-host
-        pxelinux_render_boot_mode: nfs
-        pxelinux_render_output_dir: "{{ _output_base }}_nfs"
-
-    - name: Render in sd mode
-      ansible.builtin.include_role:
-        name: david_igou.armbian.pxelinux_render
-      vars:
-        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        armbian_board_config:
-          console: "ttyS2,1500000"
-          earlycon: "uart8250,mmio32,0xfeb50000"
-          armbian_board_name: "orangepi5pro"
-          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
-        pxelinux_render_nfs_server_ip: "10.0.0.10"
-        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
-        pxelinux_render_hostname: smoke-host
-        pxelinux_render_boot_mode: sd
-        pxelinux_render_output_dir: "{{ _output_base }}_sd"
-
-    - name: Render in nfs verbose mode (requires earlycon)
-      ansible.builtin.include_role:
-        name: david_igou.armbian.pxelinux_render
-      vars:
-        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        armbian_board_config:
-          console: "ttyS2,1500000"
-          earlycon: "uart8250,mmio32,0xfeb50000"
-          armbian_board_name: "orangepi5pro"
-          dtb: "rockchip/rk3588s-orangepi-5-pro.dtb"
-        pxelinux_render_nfs_server_ip: "10.0.0.10"
-        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
-        pxelinux_render_hostname: smoke-host
-        pxelinux_render_boot_mode: nfs
-        pxelinux_render_output_dir: "{{ _output_base }}_verbose"
-        pxelinux_render_pxe_verbose: true
-
-    - name: Render in local_kernel mode (localboot-only label active)
-      ansible.builtin.include_role:
-        name: david_igou.armbian.pxelinux_render
-      vars:
-        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        armbian_board_config:
-          console: "ttyS2,1500000"
-          earlycon: "uart8250,mmio32,0xfeb50000"
-          armbian_board_name: "orangepi5max"
-          dtb: "rockchip/rk3588-orangepi-5-max.dtb"
-        pxelinux_render_nfs_server_ip: "10.0.0.10"
-        pxelinux_render_nfs_root_path: /mnt/ssd/netboot/rootfs
-        pxelinux_render_hostname: smoke-host
-        pxelinux_render_boot_mode: local_kernel
-        pxelinux_render_output_dir: "{{ _output_base }}_local_kernel"
-
-    - name: Render with extra_modes (usb_rescue active)
-      ansible.builtin.include_role:
-        name: david_igou.armbian.pxelinux_render
-      vars:
-        pxelinux_render_board_mac: "AA:BB:CC:DD:EE:FF"
-        armbian_board_config:
-          console: "ttyS2,1500000"
-          earlycon: ""
-          armbian_board_name: "test-model"
-          dtb: "test/test-model.dtb"
-        pxelinux_render_nfs_server_ip: "10.0.0.10"
-        pxelinux_render_nfs_root_path: /srv/nfs
-        pxelinux_render_hostname: test-board
-        pxelinux_render_boot_mode: usb_rescue
-        pxelinux_render_output_dir: "{{ _output_base }}_extra"
-        pxelinux_render_extra_modes:
-          usb_rescue:
-            menu_label: "USB rescue rootfs"
-            root: "LABEL=rescue_root"
-            rootfstype: ext4
-
-    - name: Negative — bad boot_mode must fail fast (block/rescue)
-      block:
-        - name: Attempt render with nonexistent boot_mode (should fail)
-          ansible.builtin.include_role:
-            name: david_igou.armbian.pxelinux_render
-          vars:
-            pxelinux_render_board_mac: "11:22:33:44:55:66"
-            armbian_board_config:
-              console: "ttyS2,1500000"
-              earlycon: ""
-              armbian_board_name: "test-model"
-              dtb: "test/test-model.dtb"
-            pxelinux_render_nfs_server_ip: "10.0.0.10"
-            pxelinux_render_nfs_root_path: /srv/nfs
-            pxelinux_render_hostname: test-board
-            pxelinux_render_boot_mode: nonexistent_mode
-            pxelinux_render_output_dir: /tmp/fixture/pxelinux.cfg_neg
-
-        - name: Sentinel — role did NOT fail; mark unexpected success
-          ansible.builtin.set_fact:
-            _boot_mode_negative_failed: false
-      rescue:
-        - name: Record expected failure
-          ansible.builtin.set_fact:
-            _boot_mode_negative_failed: true
-
-    - name: Assert negative fixture did fail as expected
-      ansible.builtin.assert:
-        that:
-          - _boot_mode_negative_failed | bool
-        fail_msg: "Role accepted boot_mode=nonexistent_mode but should have failed validation."
+        pxelinux_render_output_dir: "{{ fixture_output_base }}/{{ item.key }}"
+        pxelinux_render_board_mac: "{{ fixture_common.pxelinux_render_board_mac }}"
+        pxelinux_render_console: "{{ fixture_common.pxelinux_render_console }}"
+        pxelinux_render_earlycon: "{{ fixture_common.pxelinux_render_earlycon }}"
+        pxelinux_render_board_name: "{{ item.value.pxelinux_render_board_name | default(fixture_common.pxelinux_render_board_name) }}"
+        pxelinux_render_nfs_server_ip: "{{ fixture_common.pxelinux_render_nfs_server_ip }}"
+        pxelinux_render_nfs_root_path: "{{ fixture_common.pxelinux_render_nfs_root_path }}"
+        pxelinux_render_hostname: "{{ fixture_common.pxelinux_render_hostname }}"
+        pxelinux_render_boot_mode: "{{ item.value.pxelinux_render_boot_mode }}"
+        pxelinux_render_pxe_verbose: "{{ item.value.pxelinux_render_pxe_verbose | default(false) }}"
+        pxelinux_render_nfs_version: "{{ item.value.pxelinux_render_nfs_version | default(3) }}"
+        pxelinux_render_tftp_dtb: "{{ item.value.pxelinux_render_tftp_dtb | default('armbian/' ~ inventory_hostname ~ '/board.dtb') }}"
+        pxelinux_render_extra_modes: "{{ item.value.pxelinux_render_extra_modes | default({}) }}"
+      loop: "{{ fixture_cases | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"

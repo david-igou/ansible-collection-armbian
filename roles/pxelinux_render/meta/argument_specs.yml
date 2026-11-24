@@ -1,107 +1,87 @@
 ---
 argument_specs:
   main:
-    short_description: "Render one per-board pxelinux.cfg file to a local directory"
+    short_description: Render one board's pxelinux.cfg to a local directory.
     description:
-      - >-
-        Renders an 01-<mac> pxelinux.cfg file using the supplied board
-        identity and netboot parameters. Always writes — never uploads.
-        The caller is responsible for moving the rendered file to the
-        TFTP server.
-      - >-
-        Typically reached via `delegate_to: localhost` inside a
-        `hosts: boards` play, so per-board hostvars are in scope and
-        one invocation per board renders one file.
-      - >-
-        Requires the caller to have resolved `armbian_board_config` on
-        the running host before invocation (typically via
-        `_resolve_board_config.yml` in the calling playbook's
-        pre_tasks). The template reads `armbian_board_config.console`
-        and `armbian_board_config.earlycon` directly.
-      - >-
-        Breaking change (per-host refactor): every external input is now
-        `pxelinux_render_*`-prefixed (previously unprefixed). See the
-        role README for the full rename table.
-
+      - Writes C(01-<mac>) with a label for every boot mode (C(nfs), C(sd), C(local),
+        C(local_kernel) and each key of C(pxelinux_render_extra_modes)) and a C(default)
+        line selecting C(pxelinux_render_boot_mode). Never uploads; the caller moves the
+        file to its TFTP server.
+      - Usually run with C(delegate_to=localhost) inside a play on the boards, so each
+        board's variables are in scope.
+      - Sets the facts C(pxelinux_render_file) (full path of the rendered file) and
+        C(pxelinux_render_filename) (C(01-<mac>)).
     options:
       pxelinux_render_board_mac:
+        description: Board MAC address; the file is named C(01-<mac>), lower case with dashes.
         type: str
         required: true
-        description: "Board MAC address; used to compute the 01-<mac> filename."
       pxelinux_render_boot_mode:
+        description:
+          - Label selected by the C(default) line. C(nfs), C(sd), C(local), C(local_kernel)
+            or a key of C(pxelinux_render_extra_modes).
+          - C(local_kernel) is a C(localboot 0) label; U-Boot's C(localcmd) decides what boots.
         type: str
         required: true
-        description: >-
-          Which label the rendered pxelinux.cfg's `default` directive
-          points at. Built-in choices: nfs, sd, local, local_kernel.
-          May also be any key in pxelinux_render_extra_modes. Validated
-          at task level against the union {nfs, sd, local, local_kernel}
-          ∪ keys(pxelinux_render_extra_modes). `local_kernel` selects a
-          localboot-only label whose body is `localboot 0`; the U-Boot
-          environment's `localcmd` decides what runs (typically a
-          `bootflow scan -b` that hands off to the extlinux bootmeth on
-          a local disk).
+      pxelinux_render_console:
+        description: Kernel C(console=) value, for example C(ttyS2,1500000).
+        type: str
+        required: true
+      pxelinux_render_earlycon:
+        description: Kernel C(earlycon=) value. Required when C(pxelinux_render_pxe_verbose) is true.
+        type: str
+        default: ""
+      pxelinux_render_board_name:
+        description: Board name shown in the file's header comment. Omitted when empty.
+        type: str
+        default: ""
+      pxelinux_render_nfs_server_ip:
+        description: NFS server address written into C(nfsroot=).
+        type: str
+        required: true
+      pxelinux_render_nfs_root_path:
+        description: NFS export root; the board's root is C(<path>/<pxelinux_render_hostname>).
+        type: str
+        required: true
+      pxelinux_render_nfs_version:
+        description: NFS protocol version written as C(nfsvers=).
+        type: int
+        default: 3
+      pxelinux_render_hostname:
+        description: Board name used for the per-host NFS directory and the menu labels.
+        type: str
+        required: true
+      pxelinux_render_output_dir:
+        description: Local directory the file is written to.
+        type: path
+        required: true
       pxelinux_render_extra_modes:
+        description:
+          - Additional labels, keyed by label name. Each value has C(menu_label), C(root),
+            optional C(rootfstype) (default C(ext4)) and optional C(extra_append).
         type: dict
         default: {}
-        description: >-
-          User-defined named boot modes. Each entry adds a label to the
-          rendered pxelinux.cfg with the supplied root= and rootfstype.
-          Keys become label names and valid pxelinux_render_boot_mode
-          values.
-      pxelinux_render_nfs_server_ip:
-        type: str
-        required: true
-        description: "Server IP written into nfsroot=."
-      pxelinux_render_nfs_root_path:
-        type: path
-        required: true
-        description: >-
-          NFS export root path. Per-host directory is composed as
-          <pxelinux_render_nfs_root_path>/<pxelinux_render_hostname>.
-      pxelinux_render_hostname:
-        type: str
-        required: true
-        description: "Inventory hostname — used as both the per-host NFS subdir and the menu-label suffix."
-      pxelinux_render_output_dir:
-        type: path
-        required: true
-        description: "Local directory where 01-<mac> is written."
       pxelinux_render_sd_root:
+        description: C(root=) argument of the C(sd) label.
         type: str
-        default: "LABEL=armbi_root"
-        description: >-
-          root= kernel argument for the `sd` label. Defaults to the
-          Armbian SD-card filesystem label armbi_root; override per-host
-          (via armbian_sd_root) when the board's SD rootfs uses a
-          different label, UUID, or PARTUUID.
+        default: LABEL=armbi_root
       pxelinux_render_local_root:
+        description: C(root=) argument of the C(local) label; must match the label C(disk_provision) writes.
         type: str
-        default: "LABEL=armbi_root_local"
-        description: >-
-          root= kernel argument for the `local` label. Must match the
-          filesystem label disk_provision wrote at mkfs time (default
-          armbi_root_local). Override per-host when the board has
-          multiple local disks carrying that label or when you want
-          to refer to the partition by UUID / PARTUUID / PARTLABEL.
+        default: LABEL=armbi_root_local
       pxelinux_render_pxe_verbose:
+        description: Append C(earlycon) and verbose kernel and systemd logging arguments to every kernel label.
         type: bool
         default: false
-        description: >-
-          When true, appends verbose console/debug kernel arguments
-          (earlycon, loglevel=8, ignore_loglevel, initcall_debug, and
-          systemd console logging) to every label's append line, for
-          diagnosing boot failures over serial. Default false renders a
-          quiet boot.
       pxelinux_render_tftp_kernel:
+        description: TFTP path of the kernel.
         type: str
-        default: "armbian/{{ inventory_hostname }}/vmlinuz"
-        description: "TFTP-relative path to the kernel. Defaults to a per-host layout keyed by inventory_hostname."
+        default: armbian/{{ inventory_hostname }}/vmlinuz
       pxelinux_render_tftp_initrd:
+        description: TFTP path of the initrd.
         type: str
-        default: "armbian/{{ inventory_hostname }}/initrd.img"
-        description: "TFTP-relative path to the initrd. Defaults to a per-host layout keyed by inventory_hostname."
+        default: armbian/{{ inventory_hostname }}/initrd.img
       pxelinux_render_tftp_dtb:
+        description: TFTP path of the device tree. Empty renders no C(fdt) line.
         type: str
-        default: "armbian/{{ inventory_hostname }}/board.dtb"
-        description: "TFTP-relative path to the DTB. Defaults to a per-host layout keyed by inventory_hostname."
+        default: armbian/{{ inventory_hostname }}/board.dtb

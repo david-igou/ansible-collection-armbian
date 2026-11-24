@@ -1,0 +1,17 @@
+---
+__pxelinux_render_builtin_modes:
+  - nfs
+  - sd
+  - local
+  - local_kernel
+
+__pxelinux_render_modes: "{{ __pxelinux_render_builtin_modes + pxelinux_render_extra_modes.keys() | list }}"
+
+__pxelinux_render_filename: "01-{{ pxelinux_render_board_mac | lower | replace(':', '-') }}"
+
+__pxelinux_render_verbose_args: >-
+  {{ (' earlycon=' ~ pxelinux_render_earlycon
+      ~ ' loglevel=8 ignore_loglevel initcall_debug printk.devkmsg=on'
+      ~ ' systemd.log_level=debug systemd.log_target=console'
+      ~ ' systemd.journald.forward_to_console=1')
+     if pxelinux_render_pxe_verbose else '' }}
