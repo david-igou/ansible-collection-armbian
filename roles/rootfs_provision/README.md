@@ -38,7 +38,10 @@ The role sets no facts.
    and `/run` contents). Files in the target that are not in the image are
    removed. The loop device, mount and decompressed copy are always
    cleaned up.
-5. Removes `/dev/` lines from the rootfs `/etc/fstab`, stages
+5. Removes the rootfs `/etc/fstab` lines that name a block device or
+   filesystem identity (`/dev/`, `UUID=`, `LABEL=`, `PARTUUID=`,
+   `PARTLABEL=`): over an NFS root they would send systemd to emergency
+   mode. Stages
    `boot/vmlinuz-*` and `boot/initrd.img-*` (exactly one each) as
    `vmlinuz` and `initrd.img`, and the DTB, if requested, as `board.dtb`.
 6. Writes `/etc/hostname` and the `127.0.1.1` line of `/etc/hosts` (when

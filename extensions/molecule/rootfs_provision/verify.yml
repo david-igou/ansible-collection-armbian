@@ -50,10 +50,10 @@
           - (__state.sentinel | from_json).image_sha256 == __src_v1.stat.checksum
         fail_msg: "Provisioned state: {{ __state | dict2items | rejectattr('key', 'in', ['ed25519_key', 'rsa_key']) | items2dict }}"
 
-    - name: Assert fstab lost only its /dev/ entries
+    - name: Assert fstab lost only its block-device and filesystem-identity entries
       ansible.builtin.assert:
         that:
-          - __state.fstab.splitlines() == ['LABEL=data /data ext4 defaults 0 2', 'tmpfs /tmp tmpfs defaults,nosuid 0 0']
+          - __state.fstab.splitlines() == ['tmpfs /tmp tmpfs defaults,nosuid 0 0', 'proc /proc proc defaults 0 0']
         fail_msg: "fstab is {{ __state.fstab.splitlines() }}"
 
     - name: Assert the v1 kernel, initrd and DTB were staged for TFTP

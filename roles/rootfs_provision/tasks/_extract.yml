@@ -100,12 +100,13 @@
         path: "{{ __rootfs_provision_img_raw }}"
         state: absent
 
-# NFS root makes /dev/ entries harmful; disk_provision writes LABEL= entries
-# when the rootfs later moves to a local disk.
-- name: Remove /dev/ entries from the rootfs fstab
+# Over an NFS root no image block device or filesystem exists, and systemd
+# drops to emergency mode waiting for one; disk_provision writes fresh
+# LABEL= entries when the rootfs later moves to a local disk.
+- name: Remove block-device and filesystem-identity entries from the rootfs fstab
   ansible.builtin.lineinfile:
     path: "{{ rootfs_provision_target_dir }}/etc/fstab"
-    regexp: "^/dev/"
+    regexp: '^\s*(/dev/|UUID=|LABEL=|PARTUUID=|PARTLABEL=)'
     state: absent
 
 - name: Find the kernel and initrd in the rootfs

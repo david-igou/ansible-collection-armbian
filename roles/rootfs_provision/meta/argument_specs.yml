@@ -7,8 +7,9 @@ argument_specs:
         Fetches the image into a cache keyed by the source string, and unless
         the target's sentinel already records the same source, image sha256 and
         hostname, extracts the image's largest partition into
-        O(rootfs_provision_target_dir) with C(rsync --delete), removes C(/dev/)
-        entries from its C(/etc/fstab), stages C(vmlinuz), C(initrd.img) and
+        O(rootfs_provision_target_dir) with C(rsync --delete), removes the
+        C(/etc/fstab) entries that name a block device or filesystem identity
+        (C(/dev/), C(UUID=), C(LABEL=), C(PARTUUID=), C(PARTLABEL=)), stages C(vmlinuz), C(initrd.img) and
         optionally C(board.dtb) into O(rootfs_provision_tftp_dir), resets the
         host identity (hostname, C(/etc/hosts), machine-id, SSH host keys,
         Armbian first-login prompt) and writes the sentinel

@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    rootfs_provision - remove every C(/etc/fstab) entry that names a block
+    device or filesystem identity (C(/dev/), C(UUID=), C(LABEL=),
+    C(PARTUUID=), C(PARTLABEL=)), not only C(/dev/) ones. The upstream
+    Armbian UEFI images use C(UUID=) entries, which sent an NFS-root boot
+    into emergency mode.
