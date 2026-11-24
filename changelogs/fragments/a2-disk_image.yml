@@ -1,7 +1,0 @@
----
-minor_changes:
-  - >-
-    disk_image - write the image with one data-driven pipeline task
-    (C(curl -fsSL) or C(cat), optional C(xz -dc), C(dd conv=fsync)), detect
-    mounted targets from C(lsblk --json), wait with C(udevadm settle) instead
-    of a fixed pause, and drop C(status=progress).

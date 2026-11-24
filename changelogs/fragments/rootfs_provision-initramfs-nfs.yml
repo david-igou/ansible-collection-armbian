@@ -1,9 +1,0 @@
----
-bugfixes:
-  - >-
-    rootfs_provision - add C(MODULES=most) as an initramfs-tools C(conf.d)
-    drop-in when the image uses initramfs-tools. Under C(MODULES=dep), set
-    by Armbian's UEFI images, mkinitramfs cannot resolve an NFS root's
-    device, so any package configuration on the NFS-booted board that
-    rebuilds the initrd failed (for example disk_provision installing
-    systemd-repart).

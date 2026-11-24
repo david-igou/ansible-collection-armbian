@@ -1,6 +1,0 @@
----
-breaking_changes:
-  - board_boot_verify - ``board_boot_verify_extra_modes`` and ``board_boot_verify_local_kernel_match``
-    are replaced by ``board_boot_verify_root_match``, which overrides any mode's root device regex
-    and is required for custom modes. The role no longer reads ``armbian_board_config`` and gathers
-    only the ``mounts`` fact subset.

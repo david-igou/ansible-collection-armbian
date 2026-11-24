@@ -4,6 +4,82 @@ david\_igou.armbian Collection Release Notes
 
 .. contents:: Topics
 
+v0.1.0-alpha
+============
+
+Release Summary
+---------------
+
+The collection now ships roles only, each with an explicit, role-prefixed interface. This release is not compatible with 0.0.5-alpha: the operational playbooks, the sample inventory and the SPI U-Boot environment path are gone. To upgrade, move orchestration into your own playbooks that call the roles (``playbooks/examples`` has one example per role, and the README shows how they chain), resolve board facts with ``board_config``, and supply your own power-cycle task file through ``board_boot_wait_power_cycle_tasks``. Pin ``0.0.5-alpha`` to keep the playbook-based interface.
+
+Minor Changes
+-------------
+
+- Added a configurable armbian_publish_staging_dir for isolated build publication staging (https://github.com/david-igou/ansible-collection-armbian/pull/137).
+- board_config - new role that resolves layered inventory data into the ``board_config``, ``board_config_build``/``board_config_build_enabled`` and ``board_config_rootfs_src``/``board_config_rootfs_checksum`` facts through its ``main``, ``build`` and ``rootfs_src`` entry points. ``build`` renders ``template`` userpatch entries in the board's variable context.
+- bootstrap_armbian - new ``bootstrap_armbian_lock_root`` sets ``PermitRootLogin no`` and locks the root password.
+- disk_image - write the image with one data-driven pipeline task (C(curl -fsSL) or C(cat), optional C(xz -dc), C(dd conv=fsync)), detect mounted targets from C(lsblk --json), wait with C(udevadm settle) instead of a fixed pause, and drop C(status=progress).
+- disk_provision - gather the C(mounts) fact subset inside the role, implement C(disk_provision_render_only) with conditional imports instead of C(meta: end_host), and read on-disk labels from C(lsblk --json).
+- image_build - compile.sh runs with C(argv), C(built_at) comes from C(now(utc=true)), and free space is measured with C(df) at the cache directory.
+- image_build - new C(tasks_from: plan) entry point prepares the tree and sets C(image_build_needed) and C(image_build_inputs_hash) without compiling; C(main) also sets C(image_build_manifest).
+- image_build - the rebuild decision is one C(inputs_hash) over board, branch, release, ref, userpatches and compile args, so changing a compile arg now triggers a build.
+- pxelinux_render - an empty ``pxelinux_render_tftp_dtb`` renders no ``fdt`` line, the NFS version is set by ``pxelinux_render_nfs_version`` (default 3), and the role sets the ``pxelinux_render_file`` and ``pxelinux_render_filename`` facts.
+- rootfs_provision - extraction mirrors the image with C(rsync --delete), picks the largest partition from C(lsblk --json), and the role uses four task files.
+- rootfs_provision - new C(rootfs_provision_checksum) input passed to C(get_url); the fetch runs on every invocation and the skip decision compares the image sha256, so a republished image at the same source is picked up.
+
+Breaking Changes / Porting Guide
+--------------------------------
+
+- The collection requires ansible-core 2.19 or later, the oldest release CI tests.
+- board_boot_verify - ``board_boot_verify_extra_modes`` and ``board_boot_verify_local_kernel_match`` are replaced by ``board_boot_verify_root_match``, which overrides any mode's root device regex and is required for custom modes. The role no longer reads ``armbian_board_config`` and gathers only the ``mounts`` fact subset.
+- board_boot_wait - the inputs are renamed and extended. ``armbian_boot_attempt_timeout`` is replaced by ``board_boot_wait_port_timeout`` and ``armbian_post_boot_wait_timeout`` by ``board_boot_wait_ssh_timeout``. New ``board_boot_wait_power_cycle_tasks`` (the collection's only transport hook), ``board_boot_wait_attempts`` and ``board_boot_wait_ssh``. Each attempt power-cycles, waits for the SSH banner and optionally an SSH login; the final failure names the stage that timed out.
+- bootstrap_armbian - ``armbian_bootstrap_user`` and ``armbian_bootstrap_ssh_keys`` are renamed to ``bootstrap_armbian_user`` and ``bootstrap_armbian_ssh_keys``. sshd settings are written to the validated drop-in ``/etc/ssh/sshd_config.d/00-bootstrap-armbian.conf`` instead of editing ``sshd_config``.
+- disk_provision - the layout must have exactly one entry mounted at C(/), and every mounted or preserved entry needs a label.
+- image_build - C(image_build_userpatches) is authoritative; files under the checkout's C(userpatches/) that are not declared are removed.
+- image_build - inputs are renamed from C(armbian_build_*) to C(image_build_*); C(image_build_name) replaces C(armbian_build_host) and C(image_build_cache_dir) is now required (no default derived from gathered facts).
+- image_build - the manifest replaces C(patch_hash) and C(host) with C(inputs_hash) and C(name); existing manifests no longer match, so the first run after upgrading rebuilds.
+- pxelinux_render - the role no longer reads ``armbian_board_config``. Pass ``pxelinux_render_console`` (required), ``pxelinux_render_earlycon`` (required with ``pxelinux_render_pxe_verbose``) and optionally ``pxelinux_render_board_name``. The rendered file is no longer backed up and its "Active mode" header comment is gone.
+- rootfs_provision - C(rootfs_provision_dtb) is optional; when empty no C(board.dtb) is staged and a previously staged one is removed.
+- rootfs_provision - inputs are renamed from C(armbian_rootfs_*) to C(rootfs_provision_*) (C(rootfs_provision_hostname) replaces C(armbian_rootfs_host), C(rootfs_provision_force) replaces C(armbian_rootfs_force_refresh), C(rootfs_provision_cache_dir) replaces C(armbian_rootfs_image_cache)). C(rootfs_provision_target_dir), C(rootfs_provision_tftp_dir) and C(rootfs_provision_cache_dir) are required; the role no longer reads C(armbian_nfs_rootfs_path) or C(armbian_image_cache).
+- rootfs_provision - the sentinel is now C(.rootfs_provision.json) with C(src), C(image_sha256), C(hostname) and C(provisioned_at); targets provisioned by earlier versions are extracted once more.
+
+Removed Features (previously deprecated)
+----------------------------------------
+
+- Empty plugin directories, the EDA rulebook stub, ``devfile.yaml`` and the Python-only tool configuration (``.isort.cfg``, ``pyproject.toml``, ``requirements.txt``, ``.prettierignore``) are removed.
+- The SPI U-Boot environment path (``persist_uboot_env``, ``compose_uboot_env_vars``, ``validate_local_kernel`` and the ``render_localcmd_chain.j2`` template) is removed, together with its ``persist_uboot_env`` and ``local_kernel_render`` molecule scenarios.
+- The ``community.routeros`` and ``ansible.netcommon`` collections are no longer used or installed anywhere in the collection.
+- The collection now ships roles only. All operational playbooks, ``playbooks/tasks``, ``playbooks/routeros`` and ``playbooks/tests`` are removed; orchestration and transport belong in the consuming automation. ``playbooks/examples`` keeps one example per role.
+- The sample ``inventory/`` directory is removed.
+
+Bugfixes
+--------
+
+- Collection packages excluded project-local Python virtual environments.
+- board_boot_wait - reset the board's connection after the power-cycle tasks and before waiting, so a multiplexed SSH master opened before the power cut is not reused and cannot hang the login wait for minutes.
+- board_boot_wait and cold-boot retries honored the inventory SSH port.
+- build_and_publish_from_inventory resolved delegated SSH endpoints from the target host and honored inventory private keys and forwarded agents.
+- disk_image, disk_provision, image_build, rootfs_provision - the role metadata declared ``min_ansible_version`` 2.15 while the collection requires ansible-core 2.19.
+- disk_provision - re-provisioning with preserved partitions now deletes, re-creates and reformats every non-preserved partition (C(FactoryReset=yes) with C(systemd-repart --factory-reset)) instead of reusing them.
+- disk_provision - systemd-repart installation, partprobe and the optional extlinux.conf and armbian-image-release edits no longer hide errors; missing optional files are detected with C(stat).
+- disk_provision refreshed apt indexes before installing systemd-repart, including fresh images whose empty apt-list directory had a recent timestamp.
+- disk_provision removed stale generated partition definitions when layouts changed and preserved repart's original failure diagnostic.
+- image_build used a full checkout so repeated pinned-tag builds avoided Ansible Core's missing remote-HEAD failure on shallow clones.
+- rootfs_provision - add C(MODULES=most) as an initramfs-tools C(conf.d) drop-in when the image uses initramfs-tools. Under C(MODULES=dep), set by Armbian's UEFI images, mkinitramfs cannot resolve an NFS root's device, so any package configuration on the NFS-booted board that rebuilds the initrd failed (for example disk_provision installing systemd-repart).
+- rootfs_provision - remove every C(/etc/fstab) entry that names a block device or filesystem identity (C(/dev/), C(UUID=), C(LABEL=), C(PARTUUID=), C(PARTLABEL=)), not only C(/dev/) ones. The upstream Armbian UEFI images use C(UUID=) entries, which sent an NFS-root boot into emergency mode.
+- rootfs_provision reused URL-keyed cached images instead of downloading them again for each host.
+
+Known Issues
+------------
+
+- The ``local_kernel`` boot mode needs a U-Boot that defines ``localcmd``. Stock Armbian U-Boot does not, and the collection does not ship one; add it through an Armbian userpatch.
+
+Documentation Changes
+---------------------
+
+- README, docsite and examples describe the roles-only collection - the role set, the boot modes, the single ``board_boot_wait`` power-cycle hook and how a consumer wires the roles together. The RouterOS netboot walkthrough is removed.
+- bootstrap_armbian - documented that password login needs ``sshpass`` on the control node.
+
 v0.0.5-alpha
 ============
 

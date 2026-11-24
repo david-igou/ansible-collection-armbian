@@ -1,5 +1,0 @@
----
-doc_changes:
-  - README, docsite and examples describe the roles-only collection - the role set, the boot modes,
-    the single ``board_boot_wait`` power-cycle hook and how a consumer wires the roles together.
-    The RouterOS netboot walkthrough is removed.
