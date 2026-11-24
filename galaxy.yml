@@ -10,13 +10,10 @@ authors:
   - David Igou <igou.david@gmail.com>
 
 description: >-
-  Ansible collection for end-to-end management of Armbian-based ARM SBCs:
-  custom image build, per-host rootfs provisioning, netboot/SD boot-mode
-  convergence, and PoE-driven hardware lifecycle. Roles are single-purpose,
-  single-host, and transport-agnostic; networking-gear-specific code
-  (e.g. RouterOS) lives in swappable reference playbooks under
-  playbooks/<transport>/. Early-stage 0.0.x — expect breaking changes
-  between releases.
+  Roles for Armbian single-board computers that netboot and get reimaged:
+  layered board facts, custom image builds, per-host NFS roots, pxelinux.cfg
+  rendering, boot wait and verification, first-boot bootstrap and local-disk
+  imaging. Roles only; orchestration and transport belong to the consumer.
 
 license:
   - MIT
@@ -40,20 +37,15 @@ homepage: https://github.com/david-igou/ansible-collection-armbian
 issues: https://github.com/david-igou/ansible-collection-armbian/issues
 
 build_ignore:
-  - .venv
   - .ansible
-  - .ansible-lint
   - .cache
-  - .claude
-  - .cursor
   - .devcontainer
   - .github
-  - .gitignore
-  - .isort.cfg
-  - .pre-commit-config.yaml
-  - .prettierignore
   - .vscode
-  - .worktrees
+  - .venv
+  - .ansible-lint
+  - .gitignore
+  - .pre-commit-config.yaml
   - .yamllint.yml
   - AGENTS.md
   - CLAUDE.md
@@ -61,15 +53,7 @@ build_ignore:
   - MAINTAINERS
   - Makefile
   - ansible.cfg
-  # Local docsite build output (gitignored, but present in working trees
-  # that have built docs — without this entry it ships in locally built
-  # tarballs and fails ansible-test sanity's no-smart-quotes check).
   - build
   - changelogs/.plugin-cache.yaml
-  - devfile.yaml
-  # Internal design documents — not user-facing collection docs.
-  - docs/superpowers
   - extensions
-  - pyproject.toml
-  - requirements.txt
   - tox-ansible.ini
