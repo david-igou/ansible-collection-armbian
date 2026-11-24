@@ -1,0 +1,54 @@
+---
+- name: Serve the published-images fixture over HTTP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fixture_root: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/assets"
+    fixture_manifests:
+      board-full:
+        board: rock-5b
+        image_filename: Armbian-board-full.img.xz
+      board-bad-manifest:
+        board: rock-5b
+  tasks:
+    - name: Create the per-board image directories
+      ansible.builtin.file:
+        path: "{{ fixture_root }}/images/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ fixture_manifests.keys() }}"
+
+    - name: Write the fixture manifests
+      ansible.builtin.copy:
+        dest: "{{ fixture_root }}/images/{{ item.key }}/manifest.json"
+        content: "{{ item.value | to_nice_json }}"
+        mode: "0644"
+      loop: "{{ fixture_manifests | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    # The standard library server is on every controller; timeout bounds its
+    # life if cleanup never runs.
+    - name: Start the fixture HTTP server
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "1800"
+          - "{{ ansible_playbook_python }}"
+          - -m
+          - http.server
+          - --bind
+          - 127.0.0.1
+          - --directory
+          - "{{ fixture_root }}"
+          - "{{ fixture_http_port }}"
+      async: 1800
+      poll: 0
+      changed_when: false
+
+    - name: Wait for the fixture HTTP server
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ fixture_http_port }}"
+        timeout: 30

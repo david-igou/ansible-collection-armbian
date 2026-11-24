@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - board_config - new role that resolves layered inventory data into the ``board_config``,
+    ``board_config_build``/``board_config_build_enabled`` and
+    ``board_config_rootfs_src``/``board_config_rootfs_checksum`` facts through its ``main``,
+    ``build`` and ``rootfs_src`` entry points. ``build`` renders ``template`` userpatch entries
+    in the board's variable context.

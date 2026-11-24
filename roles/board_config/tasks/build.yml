@@ -1,0 +1,34 @@
+---
+- name: Assert every userpatch dest is unique across the build layers
+  ansible.builtin.assert:
+    that:
+      - __board_config_userpatch_dests | unique | length == __board_config_userpatch_dests | length
+    fail_msg: >-
+      {{ inventory_hostname }}: duplicate userpatch dest across the build
+      layers. dests = {{ __board_config_userpatch_dests }}. Rename one entry
+      or drop it from the lower layer.
+    quiet: true
+
+# Rendered here so a template entry sees this board's variables.
+- name: Render the userpatch entries
+  ansible.builtin.set_fact:
+    __board_config_userpatch:
+      dest: "{{ item.dest }}"
+      content: >-
+        {{ item.content if item.content is defined
+           else lookup('ansible.builtin.template', item.template) }}
+  loop: "{{ __board_config_userpatches }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: __board_config_rendered
+
+- name: Set the resolved build profile
+  ansible.builtin.set_fact:
+    board_config_build: >-
+      {{ __board_config_build_scalars
+         | ansible.builtin.combine({'userpatches': __board_config_rendered.results
+                                    | map(attribute='ansible_facts.__board_config_userpatch') | list}) }}
+    board_config_build_enabled: >-
+      {{ board_config_build_family is defined
+         or board_config_build_model is defined
+         or board_config_build_host is defined }}

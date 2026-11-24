@@ -1,0 +1,25 @@
+---
+__board_config_required_fields:
+  - armbian_board_name
+  - console
+
+__board_config_missing_fields: >-
+  {{ __board_config_required_fields
+     | reject('in', board_config | dict2items | selectattr('value') | map(attribute='key') | list)
+     | list }}
+
+__board_config_build_layers:
+  - "{{ board_config_build_defaults }}"
+  - "{{ board_config_build_family | default({}) }}"
+  - "{{ board_config_build_model | default({}) }}"
+  - "{{ board_config_build_host | default({}) }}"
+
+# combine() replaces lists, so userpatches are concatenated separately.
+__board_config_build_scalars: >-
+  {{ __board_config_build_layers | ansible.builtin.combine(recursive=true) }}
+__board_config_userpatches: >-
+  {{ __board_config_build_layers | map(attribute='userpatches', default=[]) | flatten(levels=1) }}
+__board_config_userpatch_dests: "{{ __board_config_userpatches | map(attribute='dest') | list }}"
+
+__board_config_images_url: >-
+  {{ board_config_assets_base_url | regex_replace('/+$', '') }}/images/{{ inventory_hostname }}

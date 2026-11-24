@@ -1,0 +1,31 @@
+---
+- name: Resolve every entry point for the well-formed boards
+  hosts: case_ok
+  gather_facts: false
+  tasks:
+    - name: Resolve hardware facts
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+
+    - name: Resolve the build profile
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+        tasks_from: build
+
+    - name: Resolve the rootfs source
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_config
+        tasks_from: rootfs_src
+
+    - name: Record the resolved facts for verify
+      ansible.builtin.copy:
+        dest: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ inventory_hostname }}.json"
+        content: "{{ resolved | to_nice_json }}"
+        mode: "0644"
+      vars:
+        resolved:
+          board_config: "{{ board_config }}"
+          board_config_build: "{{ board_config_build }}"
+          board_config_build_enabled: "{{ board_config_build_enabled }}"
+          board_config_rootfs_src: "{{ board_config_rootfs_src }}"
+          board_config_rootfs_checksum: "{{ board_config_rootfs_checksum }}"

@@ -1,0 +1,87 @@
+---
+- name: Verify the layered board resolved correctly
+  hosts: board-full
+  gather_facts: false
+  vars:
+    resolved: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') ~ '/board-full.json') | from_json }}"
+    images_url: http://127.0.0.1:18580/images/board-full
+  tasks:
+    - name: Assert hardware layer precedence
+      ansible.builtin.assert:
+        that:
+          - resolved.board_config.console == 'ttyS2,1500000'
+          - resolved.board_config.armbian_board_name == 'rock-5b'
+          - resolved.board_config.dtb == 'rockchip/rk3588-rock-5b.dtb'
+          - resolved.board_config.earlycon == 'model-earlycon'
+          - resolved.board_config.extras.storage == 'nvme 0:4'
+          - resolved.board_config.extras.storage_scan == 'nvme scan'
+        fail_msg: "Unexpected board_config: {{ resolved.board_config }}"
+
+    - name: Assert the build layers merged
+      ansible.builtin.assert:
+        that:
+          - resolved.board_config_build_enabled
+          - resolved.board_config_build.branch == 'edge'
+          - resolved.board_config_build.release == 'bookworm'
+          - resolved.board_config_build.compile_args.KERNEL_CONFIGURE == 'no'
+          - resolved.board_config_build.compile_args.BUILD_MINIMAL == 'no'
+          - resolved.board_config_build.userpatches == expected_userpatches
+        fail_msg: "Unexpected board_config_build: {{ resolved.board_config_build }}"
+      vars:
+        expected_userpatches:
+          - dest: config/sources/families/rockchip-rk3588.conf
+            content: family hook
+          - dest: config/boards/rock-5b.conf
+            content: model hook
+          - dest: customize-image.sh
+            content: |
+              echo "hello from the host layer on board-full"
+
+    - name: Assert the rootfs source came from the published manifest
+      ansible.builtin.assert:
+        that:
+          - resolved.board_config_rootfs_src == images_url ~ '/Armbian-board-full.img.xz'
+          - resolved.board_config_rootfs_checksum == 'sha256:' ~ images_url ~ '/Armbian-board-full.img.xz.sha'
+        fail_msg: "Unexpected rootfs source: {{ resolved.board_config_rootfs_src }} / {{ resolved.board_config_rootfs_checksum }}"
+
+- name: Verify the override board resolved correctly
+  hosts: board-override
+  gather_facts: false
+  vars:
+    resolved: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') ~ '/board-override.json') | from_json }}"
+  tasks:
+    - name: Assert the override path and a disabled build
+      ansible.builtin.assert:
+        that:
+          - resolved.board_config == expected_board_config
+          - not resolved.board_config_build_enabled
+          - resolved.board_config_build.userpatches == []
+          - resolved.board_config_rootfs_src == 'https://images.example.com/generic.img.xz'
+          - resolved.board_config_rootfs_checksum == 'sha256:0123abcd'
+        fail_msg: "Unexpected override resolution: {{ resolved }}"
+      vars:
+        expected_board_config:
+          armbian_board_name: generic-x86
+          console: ttyS0,115200
+
+- name: Verify malformed boards fail with an actionable message
+  hosts: case_negative
+  gather_facts: false
+  tasks:
+    - name: Run the entry point that must fail
+      block:
+        - name: Include the board_config entry point
+          ansible.builtin.include_role:
+            name: david_igou.armbian.board_config
+            tasks_from: "{{ negative_entry }}"
+
+        - name: Fail because the entry point succeeded
+          ansible.builtin.fail:
+            msg: SENTINEL board_config accepted malformed input
+      rescue:
+        - name: Assert the role failed with the expected message
+          ansible.builtin.assert:
+            that:
+              - "'SENTINEL' not in ansible_failed_result.msg"
+              - negative_error in ansible_failed_result.msg
+            fail_msg: "Expected '{{ negative_error }}', got: {{ ansible_failed_result.msg }}"

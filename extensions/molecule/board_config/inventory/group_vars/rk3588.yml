@@ -1,0 +1,11 @@
+---
+board_config_family:
+  console: ttyS2,1500000
+  earlycon: family-earlycon
+  extras:
+    storage: nvme 0:1
+    storage_scan: nvme scan
+board_config_build_family:
+  userpatches:
+    - dest: config/sources/families/rockchip-rk3588.conf
+      content: family hook

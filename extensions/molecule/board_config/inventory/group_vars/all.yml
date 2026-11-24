@@ -1,0 +1,10 @@
+---
+fixture_http_port: 18580
+board_config_assets_base_url: "http://127.0.0.1:{{ fixture_http_port }}"
+board_config_build_defaults:
+  release: bookworm
+  ref: v26.2.0
+  compile_args:
+    KERNEL_CONFIGURE: "no"
+    BUILD_MINIMAL: "yes"
+  userpatches: []

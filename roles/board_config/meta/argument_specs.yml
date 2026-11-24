@@ -1,0 +1,75 @@
+---
+argument_specs:
+  main:
+    short_description: Merge the hardware layers into the board_config fact.
+    description:
+      - Recursively combines C(board_config_family), C(board_config_model) and
+        C(board_config_host), later layers winning, and sets the fact C(board_config).
+      - Fails naming the missing field when C(armbian_board_name) or C(console) is empty.
+        C(dtb) and every other key are optional and passed through.
+    options:
+      board_config_family:
+        description: SoC-family hardware layer, lowest precedence.
+        type: dict
+        default: {}
+      board_config_model:
+        description: Board-model hardware layer.
+        type: dict
+        default: {}
+      board_config_host:
+        description: Per-host hardware layer, highest precedence.
+        type: dict
+        default: {}
+
+  build:
+    short_description: Merge the build layers into the board_config_build fact.
+    description:
+      - Merges C(board_config_build_defaults), C(board_config_build_family),
+        C(board_config_build_model) and C(board_config_build_host), in that order, into
+        the fact C(board_config_build).
+      - Scalars and C(compile_args) are combined recursively. C(userpatches) lists are
+        concatenated; a C(dest) that appears twice fails the role.
+      - A userpatch is C({dest, content}) or C({dest, template}). A template entry is
+        rendered with the C(ansible.builtin.template) lookup in this host's variable
+        context and emitted as C({dest, content}).
+      - Also sets the fact C(board_config_build_enabled), true when any of the family,
+        model or host build layers is defined.
+    options:
+      board_config_build_defaults:
+        description: Lowest build layer, typically set once for all builds.
+        type: dict
+        default: {}
+      board_config_build_family:
+        description: SoC-family build layer. No default; defining it enables the build.
+        type: dict
+      board_config_build_model:
+        description: Board-model build layer. No default; defining it enables the build.
+        type: dict
+      board_config_build_host:
+        description: Per-host build layer. No default; defining it enables the build.
+        type: dict
+
+  rootfs_src:
+    short_description: Resolve the board's rootfs image URL and checksum.
+    description:
+      - Sets the facts C(board_config_rootfs_src) and C(board_config_rootfs_checksum).
+      - With C(board_config_rootfs_src_override) set, uses it and
+        C(board_config_rootfs_checksum_override).
+      - Otherwise fetches C(<board_config_assets_base_url>/images/<inventory_hostname>/manifest.json)
+        from the control node and derives the image URL from its C(image_filename), with
+        checksum C(sha256:<image url>.sha). A missing manifest (HTTP 404) or one without
+        C(image_filename) fails with a remediation message.
+    options:
+      board_config_assets_base_url:
+        description:
+          - Base URL of the published images tree. Required unless
+            C(board_config_rootfs_src_override) is set.
+        type: str
+      board_config_rootfs_src_override:
+        description: Explicit image URL or path. Skips the manifest lookup when non-empty.
+        type: str
+        default: ""
+      board_config_rootfs_checksum_override:
+        description: Checksum used with C(board_config_rootfs_src_override), in C(get_url) checksum format.
+        type: str
+        default: ""

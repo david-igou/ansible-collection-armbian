@@ -1,0 +1,52 @@
+---
+- name: Use the rootfs source override
+  ansible.builtin.set_fact:
+    board_config_rootfs_src: "{{ board_config_rootfs_src_override }}"
+    board_config_rootfs_checksum: "{{ board_config_rootfs_checksum_override }}"
+  when: board_config_rootfs_src_override | length > 0
+
+- name: Resolve the rootfs source from the published manifest
+  when: board_config_rootfs_src_override | length == 0
+  block:
+    - name: Assert the assets base URL is set
+      ansible.builtin.assert:
+        that:
+          - board_config_assets_base_url | default('') | length > 0
+        fail_msg: >-
+          {{ inventory_hostname }}: set board_config_assets_base_url, or
+          board_config_rootfs_src_override, to resolve the rootfs source.
+        quiet: true
+
+    - name: Fetch the published image manifest
+      ansible.builtin.uri:
+        url: "{{ __board_config_images_url }}/manifest.json"
+        return_content: true
+        status_code:
+          - 200
+          - 404
+      delegate_to: localhost
+      become: false
+      check_mode: false
+      register: __board_config_manifest
+
+    - name: Fail when no manifest is published for this board
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }}: no manifest at
+          {{ __board_config_images_url }}/manifest.json (HTTP 404). Publish an
+          image for this board, or set board_config_rootfs_src_override.
+      when: __board_config_manifest.status == 404
+
+    - name: Fail when the manifest has no image_filename
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }}: manifest at
+          {{ __board_config_images_url }}/manifest.json has no image_filename.
+          Republish the image, or set board_config_rootfs_src_override.
+      when: (__board_config_manifest.json | default({})).image_filename | default('') | length == 0
+
+    - name: Set the rootfs source from the manifest
+      ansible.builtin.set_fact:
+        board_config_rootfs_src: "{{ __board_config_images_url }}/{{ __board_config_manifest.json.image_filename }}"
+        board_config_rootfs_checksum: >-
+          sha256:{{ __board_config_images_url }}/{{ __board_config_manifest.json.image_filename }}.sha
