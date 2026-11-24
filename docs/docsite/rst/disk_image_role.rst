@@ -3,9 +3,8 @@
 david_igou.armbian.disk_image role
 ==================================
 
-Runs on a board (or any host owning the target). Streams one ``.img.xz`` / ``.img``
-source onto a whole block device via ``curl | xz | dd``, refusing to write to a
-device that is currently mounted.
+Runs on a board (or any host owning the target). Streams an ``.img.xz`` or ``.img``
+onto a whole block device, refusing a device that backs a mounted filesystem.
 
 See the :ansplugin:`full role reference <david_igou.armbian.disk_image#role>`
 for all parameters and defaults.

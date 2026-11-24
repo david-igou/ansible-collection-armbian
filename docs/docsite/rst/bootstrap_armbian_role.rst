@@ -3,9 +3,9 @@
 david_igou.armbian.bootstrap_armbian role
 =========================================
 
-Runs on a board. Connects as ``root`` with the Armbian default password and
-provisions an unprivileged SSH-key user with passwordless sudo, drops Armbian's
-first-login prompt, and disables sshd password authentication. Idempotent.
+Runs on a freshly flashed board as ``root``. Creates an SSH-key automation user with
+passwordless sudo, removes Armbian's first-login prompt, and writes a validated sshd
+drop-in that disables password authentication (and, optionally, root login).
 
 See the :ansplugin:`full role reference <david_igou.armbian.bootstrap_armbian#role>`
 for all parameters and defaults.

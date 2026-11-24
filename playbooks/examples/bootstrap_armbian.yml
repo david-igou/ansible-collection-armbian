@@ -1,0 +1,24 @@
+---
+# Take over freshly flashed boards as root with the first-boot password and
+# leave an SSH-key-only automation user with passwordless sudo.
+- name: Bootstrap the boards
+  hosts: boards
+  gather_facts: false
+  vars:
+    ansible_user: root
+    ansible_password: "{{ armbian_first_boot_password }}"
+  tasks:
+    - name: Wait for the fresh image's sshd
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        board_boot_wait_ssh: false
+
+    - name: Create the automation user
+      ansible.builtin.include_role:
+        name: david_igou.armbian.bootstrap_armbian
+      vars:
+        bootstrap_armbian_user: automation
+        bootstrap_armbian_ssh_keys:
+          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyOnly automation@example
+        bootstrap_armbian_lock_root: true

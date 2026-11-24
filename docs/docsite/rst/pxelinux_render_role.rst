@@ -3,9 +3,9 @@
 david_igou.armbian.pxelinux_render role
 =======================================
 
-Runs on ``localhost`` (typically via ``delegate_to``). Renders one per-board
-``01-<mac>`` pxelinux.cfg into a local directory, with a ``default`` directive
-selecting the active boot mode (nfs, sd, local, or local_kernel).
+Runs on the control node, usually delegated from a play on the boards. Renders
+one ``01-<mac>`` pxelinux.cfg with a label per boot mode and a ``default`` line
+selecting the active one, and sets ``pxelinux_render_file`` for the caller's upload.
 
 See the :ansplugin:`full role reference <david_igou.armbian.pxelinux_render#role>`
 for all parameters and defaults.
