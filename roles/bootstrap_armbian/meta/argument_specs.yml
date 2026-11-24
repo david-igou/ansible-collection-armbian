@@ -1,40 +1,29 @@
 ---
 argument_specs:
   main:
-    short_description: "Provision an SSH-key user with passwordless sudo on a flashed Armbian board"
+    short_description: Create a passwordless-sudo, SSH-key-only automation user on a fresh Armbian board.
     description:
-      - >-
-        Connects as the Armbian default user (root) using the supplied
-        password, creates an unprivileged user, authorises a fixed set
-        of SSH keys for it, grants passwordless sudo via a
-        visudo-validated drop-in, removes Armbian's first-login TUI
-        sentinel, and disables PasswordAuthentication in sshd (handler
-        restarts sshd).
-      - >-
-        Idempotent: re-running against an already-bootstrapped board
-        reconciles authorized_keys and is otherwise a no-op.
-      - >-
-        Fail-fasts when armbian_bootstrap_ssh_keys is empty —
-        otherwise the role would create a user with no authorised keys
-        and then disable password auth, leaving the board permanently
-        unreachable.
-
+      - Run as root on a freshly flashed board (stock Armbian accepts root with its default
+        password). Creates the user, authorizes its keys, grants passwordless sudo through a
+        visudo-validated drop-in and removes Armbian's first-login prompt.
+      - Writes one sshd drop-in, validated with C(sshd -t), that disables password
+        authentication and, with C(bootstrap_armbian_lock_root), root login. With
+        C(bootstrap_armbian_lock_root) the root password is also locked.
+      - Fails before changing anything when no SSH key is given, since the board would
+        become unreachable.
     options:
-      armbian_bootstrap_user:
+      bootstrap_armbian_user:
+        description: User to create. Match the C(ansible_user) later plays connect as.
         type: str
-        required: false
-        default: "armbian"
-        description: >-
-          Username to create on the board. Should match the
-          ansible_user the rest of the inventory connects as so
-          subsequent plays land as this user.
-      armbian_bootstrap_ssh_keys:
+        default: armbian
+      bootstrap_armbian_ssh_keys:
+        description: Public keys to authorize for the user. Must not be empty.
         type: list
         elements: str
         required: true
-        description: >-
-          Public SSH keys to authorise for the new user. MUST be
-          non-empty — an empty list combined with the role's
-          PasswordAuthentication=no step would render the board
-          permanently unreachable. The runtime assertion in
-          tasks/main.yml enforces this.
+      bootstrap_armbian_lock_root:
+        description:
+          - Also set C(PermitRootLogin no) and lock the root password.
+          - Later plays must then connect as C(bootstrap_armbian_user).
+        type: bool
+        default: false

@@ -1,46 +1,52 @@
 ---
-- name: Validate that at least one SSH key was provided
+- name: Assert at least one SSH key was provided
   ansible.builtin.assert:
-    that: armbian_bootstrap_ssh_keys | length > 0
+    that:
+      - bootstrap_armbian_ssh_keys | length > 0
     fail_msg: >-
-      armbian_bootstrap_ssh_keys is empty. Pass at least one public key.
+      bootstrap_armbian_ssh_keys is empty; with password authentication
+      disabled the board would be unreachable.
+    quiet: true
 
-- name: Create user {{ armbian_bootstrap_user }}
+- name: Create the automation user
   ansible.builtin.user:
-    name: "{{ armbian_bootstrap_user }}"
+    name: "{{ bootstrap_armbian_user }}"
     shell: /bin/bash
     create_home: true
     state: present
 
-# NOPASSWD: ALL is intentional — the bootstrap user is the
-# automation user, equivalent to root. Tighten via your own
-# inventory post-deploy if you want a narrower scope; the role
-# itself never re-touches this file once written.
-- name: Grant passwordless sudo
+# NOPASSWD: ALL is intentional: this is the root-equivalent automation user.
+- name: Grant the automation user passwordless sudo
   ansible.builtin.copy:
-    dest: "/etc/sudoers.d/{{ armbian_bootstrap_user }}"
-    content: "{{ armbian_bootstrap_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    dest: /etc/sudoers.d/{{ bootstrap_armbian_user }}
+    content: "{{ bootstrap_armbian_user }} ALL=(ALL) NOPASSWD: ALL\n"
     mode: "0440"
-    validate: "visudo -cf %s"
+    validate: visudo -cf %s
 
-- name: Set authorized keys
+- name: Authorize the SSH keys
   ansible.posix.authorized_key:
-    user: "{{ armbian_bootstrap_user }}"
-    state: present
+    user: "{{ bootstrap_armbian_user }}"
     key: "{{ item }}"
-    exclusive: false
-  loop: "{{ armbian_bootstrap_ssh_keys }}"
+    state: present
+  loop: "{{ bootstrap_armbian_ssh_keys }}"
   loop_control:
-    label: "{{ item.split() | last | default('(no comment)') }}"
+    label: "{{ item.split() | last }}"
 
-- name: Remove Armbian first-login TUI prompt
+- name: Remove the Armbian first-login prompt
   ansible.builtin.file:
     path: /root/.not_logged_in_yet
     state: absent
 
-- name: Disable password authentication in sshd
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PasswordAuthentication"
-    line: "PasswordAuthentication no"
-  notify: Restart sshd
+- name: Configure sshd authentication
+  ansible.builtin.template:
+    src: sshd_config.conf.j2
+    dest: "{{ __bootstrap_armbian_sshd_dropin }}"
+    mode: "0644"
+    validate: sshd -t -f %s
+  notify: bootstrap_armbian | Restart sshd
+
+- name: Lock the root password
+  ansible.builtin.user:
+    name: root
+    password_lock: true
+  when: bootstrap_armbian_lock_root
