@@ -73,6 +73,7 @@
     mode: "0755"
   loop:
     - boot/dtb-6.0.0-test/rockchip
+    - etc/initramfs-tools/conf.d
     - etc/ssh
     - root
     - var/lib/dbus
@@ -106,6 +107,8 @@
         proc /proc proc defaults 0 0
     - path: etc/hostname
       content: "armbian\n"
+    - path: etc/initramfs-tools/conf.d/armbian-uefi.conf
+      content: "MODULES=dep\n"
     - path: etc/hosts
       content: |
         127.0.0.1 localhost

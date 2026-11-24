@@ -109,6 +109,21 @@
     regexp: '^\s*(/dev/|UUID=|LABEL=|PARTUUID=|PARTLABEL=)'
     state: absent
 
+# mkinitramfs cannot resolve an NFS root's device under MODULES=dep (set by
+# Armbian's UEFI images), so any package configuration on the NFS-booted
+# board that regenerates the initrd fails. conf.d is read in order: zz wins.
+- name: Stat the rootfs initramfs-tools configuration
+  ansible.builtin.stat:
+    path: "{{ rootfs_provision_target_dir }}/etc/initramfs-tools/conf.d"
+  register: __rootfs_provision_initramfs_conf
+
+- name: Let the initrd be regenerated on the NFS root
+  ansible.builtin.copy:
+    dest: "{{ rootfs_provision_target_dir }}/etc/initramfs-tools/conf.d/zz-rootfs-provision.conf"
+    content: "MODULES=most\n"
+    mode: "0644"
+  when: __rootfs_provision_initramfs_conf.stat.isdir | default(false)
+
 - name: Find the kernel and initrd in the rootfs
   ansible.builtin.find:
     paths: "{{ rootfs_provision_target_dir }}/boot"

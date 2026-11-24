@@ -9,7 +9,9 @@ argument_specs:
         hostname, extracts the image's largest partition into
         O(rootfs_provision_target_dir) with C(rsync --delete), removes the
         C(/etc/fstab) entries that name a block device or filesystem identity
-        (C(/dev/), C(UUID=), C(LABEL=), C(PARTUUID=), C(PARTLABEL=)), stages C(vmlinuz), C(initrd.img) and
+        (C(/dev/), C(UUID=), C(LABEL=), C(PARTUUID=), C(PARTLABEL=)), sets
+        C(MODULES=most) in an initramfs-tools C(conf.d) drop-in when the image
+        has one (C(MODULES=dep) cannot resolve an NFS root), stages C(vmlinuz), C(initrd.img) and
         optionally C(board.dtb) into O(rootfs_provision_tftp_dir), resets the
         host identity (hostname, C(/etc/hosts), machine-id, SSH host keys,
         Armbian first-login prompt) and writes the sentinel

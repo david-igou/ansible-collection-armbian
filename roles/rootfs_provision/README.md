@@ -41,7 +41,10 @@ The role sets no facts.
 5. Removes the rootfs `/etc/fstab` lines that name a block device or
    filesystem identity (`/dev/`, `UUID=`, `LABEL=`, `PARTUUID=`,
    `PARTLABEL=`): over an NFS root they would send systemd to emergency
-   mode. Stages
+   mode. Adds `/etc/initramfs-tools/conf.d/zz-rootfs-provision.conf`
+   with `MODULES=most` when the image uses initramfs-tools, because
+   `MODULES=dep` (Armbian's UEFI images) cannot find an NFS root's device
+   and fails every package configuration that rebuilds the initrd. Stages
    `boot/vmlinuz-*` and `boot/initrd.img-*` (exactly one each) as
    `vmlinuz` and `initrd.img`, and the DTB, if requested, as `board.dtb`.
 6. Writes `/etc/hostname` and the `127.0.1.1` line of `/etc/hosts` (when

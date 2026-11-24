@@ -8,6 +8,7 @@
       hostname: "{{ rootfs_provision_target_dir }}/etc/hostname"
       hosts: "{{ rootfs_provision_target_dir }}/etc/hosts"
       fstab: "{{ rootfs_provision_target_dir }}/etc/fstab"
+      initramfs_modules: "{{ rootfs_provision_target_dir }}/etc/initramfs-tools/conf.d/zz-rootfs-provision.conf"
       machine_id: "{{ rootfs_provision_target_dir }}/etc/machine-id"
       dbus_machine_id: "{{ rootfs_provision_target_dir }}/var/lib/dbus/machine-id"
       ed25519_key: "{{ rootfs_provision_target_dir }}/etc/ssh/ssh_host_ed25519_key"
@@ -55,6 +56,12 @@
         that:
           - __state.fstab.splitlines() == ['tmpfs /tmp tmpfs defaults,nosuid 0 0', 'proc /proc proc defaults 0 0']
         fail_msg: "fstab is {{ __state.fstab.splitlines() }}"
+
+    - name: Assert the initrd can be rebuilt on the NFS root
+      ansible.builtin.assert:
+        that:
+          - __state.initramfs_modules | default('') == "MODULES=most\n"
+        fail_msg: "initramfs drop-in: {{ __state.initramfs_modules | default('missing') }}"
 
     - name: Assert the v1 kernel, initrd and DTB were staged for TFTP
       ansible.builtin.assert:
