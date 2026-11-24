@@ -1,6 +1,8 @@
 ---
 # Pure fact resolution: the boards are local-connection hosts, so no
-# instance is created and the runtime inventory is not loaded.
+# instance is created and the runtime inventory is not loaded. destroy
+# matches no instance but resets molecule's state, so prepare (which starts
+# the fixture server) runs on every test.
 ansible:
   executor:
     args:
@@ -13,9 +15,12 @@ scenario:
   name: board_config
   test_sequence:
     - dependency
+    - cleanup
+    - destroy
     - syntax
     - prepare
     - converge
     - idempotence
     - verify
     - cleanup
+    - destroy
