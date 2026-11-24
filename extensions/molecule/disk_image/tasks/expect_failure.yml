@@ -1,0 +1,26 @@
+---
+# Run disk_image with inputs a guard must reject. The sentinel fail after
+# the role call makes a regressed guard fail the scenario instead of
+# passing silently.
+- name: "Expect rejection: {{ case.name }}"
+  block:
+    - name: "Run disk_image with bad inputs: {{ case.name }}"
+      ansible.builtin.include_role:
+        name: david_igou.armbian.disk_image
+      vars:
+        disk_image_source: "{{ case.source }}"
+        disk_image_target_device: "{{ case.target }}"
+
+    - name: "Fail because the guard did not fire: {{ case.name }}"
+      ansible.builtin.fail:
+        msg: GUARD_DID_NOT_FIRE
+  rescue:
+    - name: "Assert the expected guard rejected the run: {{ case.name }}"
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_result.msg is defined
+          - ansible_failed_result.msg != 'GUARD_DID_NOT_FIRE'
+          - case.expect in ansible_failed_result.msg
+        fail_msg: >-
+          Expected a failure mentioning '{{ case.expect }}', got:
+          {{ ansible_failed_result.msg | default(ansible_failed_result) }}
