@@ -1,0 +1,25 @@
+---
+breaking_changes:
+  - >-
+    image_build - inputs are renamed from C(armbian_build_*) to C(image_build_*);
+    C(image_build_name) replaces C(armbian_build_host) and C(image_build_cache_dir)
+    is now required (no default derived from gathered facts).
+  - >-
+    image_build - the manifest replaces C(patch_hash) and C(host) with
+    C(inputs_hash) and C(name); existing manifests no longer match, so the first
+    run after upgrading rebuilds.
+  - >-
+    image_build - C(image_build_userpatches) is authoritative; files under the
+    checkout's C(userpatches/) that are not declared are removed.
+minor_changes:
+  - >-
+    image_build - the rebuild decision is one C(inputs_hash) over board, branch,
+    release, ref, userpatches and compile args, so changing a compile arg now
+    triggers a build.
+  - >-
+    image_build - new C(tasks_from: plan) entry point prepares the tree and sets
+    C(image_build_needed) and C(image_build_inputs_hash) without compiling; C(main)
+    also sets C(image_build_manifest).
+  - >-
+    image_build - compile.sh runs with C(argv), C(built_at) comes from
+    C(now(utc=true)), and free space is measured with C(df) at the cache directory.

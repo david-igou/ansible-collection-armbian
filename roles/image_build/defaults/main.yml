@@ -1,57 +1,21 @@
 ---
-# armbian/build pinning. Upstream uses a vX.Y.Z-trunk.NNN release scheme;
-# pin to a specific trunk release for reproducibility. Bumping the ref is
-# a deliberate role-level change.
-armbian_build_ref: "v26.2.0-trunk.844"
-
-# Filesystem layout on the builder host. Defaults under the connecting
-# user's real $HOME (ansible_facts['env']['HOME'], resolved from gathered facts — so
-# it's correct for root's /root and any non-/home home, unlike a hardcoded
-# /home/<user>) so the role runs become-free out of the box — every task
-# sets become: false because compile.sh needs user (not root) ownership
-# of the build tree for Docker auto-delegation. Relocate to a roomier
-# mount if $HOME is small (preflight asserts >= armbian_build_min_free_gb);
-# if you move it under a root-owned path like /var/lib, pre-create + chown
-# it to the connecting user once — the role will not sudo to create it.
-armbian_build_cache_dir: "{{ ansible_facts['env']['HOME'] }}/armbian_build"         # armbian/build checkout + cache + userpatches
-armbian_build_output_dir: "{{ ansible_facts['env']['HOME'] }}/armbian_build/output" # final .img.xz + manifest.json land here
-
-# Per-build inputs. Branch/release default to a CLI-friendly modern
-# Armbian Rockchip image. armbian_build_board and armbian_build_host are
-# intentionally NOT defaulted here — they are declared `required: true`
-# in meta/argument_specs.yml, and a default (even an empty string) would
-# satisfy that check and defeat it. Callers must supply both;
-# armbian_build_host (the inventory_hostname this build targets) drives
-# per-host output + cache paths.
-armbian_build_branch: "current"
-armbian_build_release: "bookworm"
-
-# Userpatches to apply before the build. Each entry is { dest, content }
-# where `dest` is a path relative to USERPATCHES_DIR (no leading slash,
-# no `..`). Empty by default — the caller decides what patches (if any)
-# to apply. The role is fully agnostic to what the patches do.
-armbian_build_userpatches: []
-
-# Preflight thresholds and egress check list
-armbian_build_min_free_gb: 50
-armbian_build_required_egress_hosts:
+# Bumping the pinned armbian/build ref is a deliberate role change.
+image_build_ref: v26.2.0-trunk.844
+image_build_branch: current
+image_build_release: bookworm
+image_build_output_dir: "{{ image_build_cache_dir }}/output"
+image_build_userpatches: []
+image_build_compile_args:
+  KERNEL_CONFIGURE: "no"
+  BUILD_DESKTOP: "no"
+  BUILD_MINIMAL: "yes"
+  COMPRESS_OUTPUTIMAGE: sha,xz
+  EXPERT: "yes"
+image_build_timeout: 7200
+image_build_min_free_gb: 50
+image_build_force: false
+image_build_required_egress_hosts:
   - github.com
   - apt.armbian.com
   - ghcr.io
   - registry-1.docker.io
-
-# compile.sh argument knobs. Overridable per-run, NOT folded into
-# patch_hash — manifest fields like `branch` and `release` cover the
-# rebuild-decision dimensions; these are operator-tunable diagnostics.
-armbian_build_compile_args:
-  KERNEL_CONFIGURE: "no"
-  BUILD_DESKTOP: "no"
-  BUILD_MINIMAL: "yes"
-  COMPRESS_OUTPUTIMAGE: "sha,xz"
-  EXPERT: "yes"
-
-# Build timeout in seconds. 2h covers cold-cache full builds.
-armbian_build_timeout: 7200
-
-# Set true via -e to bypass manifest-match skip and force a rebuild.
-armbian_build_force: false

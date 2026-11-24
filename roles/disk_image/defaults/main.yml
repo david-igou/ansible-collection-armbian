@@ -1,7 +1,2 @@
 ---
-# disk_image role defaults.
-# Inputs are documented in meta/argument_specs.yml — defaults here
-# are only for optional knobs.
-
-# dd block size. 4 MiB is a good default for SD and NVMe.
-disk_image_dd_bs: "4M"
+disk_image_dd_bs: 4M

@@ -1,72 +1,107 @@
 ---
-- hosts: all
-  gather_facts: true
+- name: Verify
+  hosts: all
+  gather_facts: false
   become: true
+  vars:
+    __targets: "{{ __targets_raw.content | b64decode | from_json }}"
   tasks:
-    - name: "Read target loop device path"
+    - name: Read the fixture loop devices
       ansible.builtin.slurp:
-        src: /tmp/target_loop
-      register: _target_b64
+        src: /tmp/disk_image_targets.json
+      register: __targets_raw
 
-    - name: "Set target loop fact"
-      ansible.builtin.set_fact:
-        _target_loop: "{{ (_target_b64.content | b64decode).strip() }}"
-
-    - name: "Decompress the source fixture to /tmp/source.img for cmp"
-      ansible.builtin.shell: "xz -dkc /tmp/test.img.xz > /tmp/source.img"
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: "cmp the first 64 MiB of the loop device against the source"
+    - name: Compare each target's first 64 MiB with the source image
       ansible.builtin.command:
-        cmd: "cmp -n 67108864 /tmp/source.img {{ _target_loop }}"
+        argv:
+          - cmp
+          - --bytes=67108864
+          - /tmp/test.img
+          - "{{ __targets[item] }}"
+      loop:
+        - target_raw
+        - target_xz
       changed_when: false
 
-    # --- Negative tests ---
-    - name: "Negative: reject when target is a partition node"
-      block:
-        - name: "Create a child partition on the loop device"
-          ansible.builtin.shell: |
-            set -euo pipefail
-            parted -s {{ _target_loop }} mklabel msdos
-            parted -s {{ _target_loop }} mkpart primary ext4 1MiB 100%
-            partprobe {{ _target_loop }}
-            sleep 1
-          args:
-            executable: /bin/bash
-          changed_when: true
+    - name: Partition the raw target so a partition node exists
+      ansible.builtin.command:
+        argv:
+          - parted
+          - --script
+          - "{{ __targets.target_raw }}"
+          - mklabel
+          - msdos
+          - mkpart
+          - primary
+          - ext4
+          - 1MiB
+          - 100%
+      changed_when: true
 
-        - name: "Call role with the partition as disk_image_target_device — must fail"
-          ansible.builtin.include_role:
-            name: david_igou.armbian.disk_image
-          vars:
-            disk_image_source: "/tmp/test.img.xz"
-            disk_image_target_device: "{{ _target_loop }}p1"
-      rescue:
-        - name: "Confirm role failed because target was a partition"
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.msg is defined
-              - "'partition' in ansible_failed_result.msg"
-            fail_msg: >-
-              Expected failure mentioning 'partition'; got:
-              {{ ansible_failed_result | default({}) }}
+    - name: Re-read the raw target's partition table
+      ansible.builtin.command:
+        argv:
+          - partprobe
+          - "{{ __targets.target_raw }}"
+      changed_when: false
 
-    - name: "Negative: reject when disk_image_source is gibberish"
-      block:
-        - name: "Call role with a non-URL, non-abs-path disk_image_source"
-          ansible.builtin.include_role:
-            name: david_igou.armbian.disk_image
-          vars:
-            disk_image_source: "not-a-url-and-not-a-path"
-            disk_image_target_device: "{{ _target_loop }}"
-      rescue:
-        - name: "Confirm role failed because disk_image_source is invalid"
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.msg is defined
-              - "'disk_image_source' in ansible_failed_result.msg"
-            fail_msg: >-
-              Expected failure mentioning 'disk_image_source'; got:
-              {{ ansible_failed_result | default({}) }}
+    - name: Wait for the partition node
+      ansible.builtin.wait_for:
+        path: "{{ __targets.target_raw }}p1"
+        timeout: 10
+
+    - name: Reject inputs that do not need a mounted target
+      ansible.builtin.include_tasks: tasks/expect_failure.yml
+      loop:
+        - name: source is neither URL nor absolute path
+          source: not-a-url-and-not-a-path.img.xz
+          target: "{{ __targets.target_xz }}"
+          expect: disk_image_source must be
+        - name: source has an unsupported extension
+          source: /tmp/test.iso
+          target: "{{ __targets.target_xz }}"
+          expect: unsupported format
+        - name: local source does not exist
+          source: /tmp/missing.img.xz
+          target: "{{ __targets.target_xz }}"
+          expect: not a regular file
+        - name: target is not a block device
+          source: /tmp/test.img.xz
+          target: /tmp/test.img
+          expect: not a block device
+        - name: target is a partition node
+          source: /tmp/test.img.xz
+          target: "{{ __targets.target_raw }}p1"
+          expect: is a partition
+      loop_control:
+        loop_var: case
+        label: "{{ case.name }}"
+
+    - name: Format the raw target's partition
+      ansible.builtin.command:
+        argv:
+          - mkfs.ext4
+          - -q
+          - "{{ __targets.target_raw }}p1"
+      changed_when: true
+
+    - name: Mount the raw target's partition
+      ansible.posix.mount:
+        path: /mnt/disk_image_busy
+        src: "{{ __targets.target_raw }}p1"
+        fstype: ext4
+        state: ephemeral
+
+    - name: Reject a target whose partition is mounted
+      ansible.builtin.include_tasks: tasks/expect_failure.yml
+      vars:
+        case:
+          name: target backs a mounted filesystem
+          source: /tmp/test.img.xz
+          target: "{{ __targets.target_raw }}"
+          expect: backs a mounted filesystem
+
+    - name: Unmount the raw target's partition
+      ansible.posix.mount:
+        path: /mnt/disk_image_busy
+        state: unmounted

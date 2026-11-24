@@ -1,0 +1,107 @@
+---
+- name: List the labels already on the device
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --json
+      - --list
+      - --output
+      - LABEL
+      - "{{ disk_provision_disk_binding.device }}"
+  register: __disk_provision_lsblk
+  changed_when: false
+  become: true
+
+# A preserved entry is kept only when its label is already on the disk;
+# force: true on the binding discards every preserve.
+- name: Decide which partitions to preserve
+  ansible.builtin.set_fact:
+    __disk_provision_preserve_ids: >-
+      {{ [] if (disk_provision_disk_binding.force | default(false) | bool) else
+         __disk_provision_layout
+         | selectattr('preserve_on_reprovision', 'defined')
+         | selectattr('preserve_on_reprovision')
+         | selectattr('label', 'in', (__disk_provision_lsblk.stdout | from_json).blockdevices | map(attribute='label') | select | list)
+         | map(attribute='id')
+         | list }}
+
+- name: Check for the systemd-repart binary
+  ansible.builtin.stat:
+    path: /usr/bin/systemd-repart
+    get_checksum: false
+  register: __disk_provision_repart_bin
+
+# Debian 13 ships systemd-repart as its own package; Debian 12 has it in
+# systemd. A freshly copied rootfs may carry stale apt lists, hence the
+# cache update.
+- name: Install systemd-repart
+  ansible.builtin.apt:
+    name: systemd-repart
+    state: present
+    update_cache: true
+  become: true
+  when: not __disk_provision_repart_bin.stat.exists
+
+# One BLKDISCARD over the whole device is far faster than the per-chunk
+# discards repart and mkfs issue on a large NVMe. -f because util-linux
+# 2.41+ refuses a device that carries a partition table.
+- name: Discard the whole device
+  ansible.builtin.command:
+    argv:
+      - blkdiscard
+      - -f
+      - "{{ disk_provision_disk_binding.device }}"
+  become: true
+  when: __disk_provision_fast_wipe | bool
+  register: __disk_provision_blkdiscard
+  changed_when: true
+  # rc 2: the device does not support discard.
+  failed_when:
+    - __disk_provision_blkdiscard.rc != 0
+    - __disk_provision_blkdiscard.rc != 2
+
+# Without preserves the table is rebuilt from scratch. With preserves the
+# existing table is kept and --factory-reset deletes and re-creates every
+# definition marked FactoryReset=yes (all non-preserved entries), so they
+# are reformatted; preserved partitions are matched and left untouched.
+- name: Run systemd-repart
+  ansible.builtin.command:
+    argv:
+      - systemd-repart
+      - "--definitions={{ __disk_provision_repart_dir }}"
+      - "--empty={{ 'refuse' if __disk_provision_preserving else 'force' }}"
+      - "--factory-reset={{ 'yes' if __disk_provision_preserving else 'no' }}"
+      - --dry-run=no
+      - --json=short
+      - "--discard={{ 'no' if __disk_provision_fast_wipe else 'yes' }}"
+      - "{{ disk_provision_disk_binding.device }}"
+  environment:
+    SYSTEMD_REPART_MKFS_OPTIONS_EXT4: "{{ '-E nodiscard' if __disk_provision_fast_wipe else '' }}"
+  become: true
+  register: __disk_provision_repart_run
+  changed_when: true
+
+- name: Re-read the partition table
+  ansible.builtin.command:
+    argv:
+      - partprobe
+      - "{{ disk_provision_disk_binding.device }}"
+  changed_when: false
+  become: true
+
+- name: Wait for every labelled partition to appear
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -L
+      - "{{ partition.label }}"
+  register: __disk_provision_blkid
+  retries: 5
+  delay: 1
+  until: __disk_provision_blkid.rc == 0
+  loop: "{{ __disk_provision_layout | selectattr('label', 'defined') | list }}"
+  loop_control:
+    loop_var: partition
+    label: "{{ partition.id }}"
+  changed_when: false
+  become: true

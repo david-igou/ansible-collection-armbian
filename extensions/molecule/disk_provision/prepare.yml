@@ -2,44 +2,80 @@
 - name: Prepare molecule instances
   import_playbook: david_igou.molecule_provisioners.prepare
 
-- name: Build the loop-device fixture inside the VM
+- name: Build the loop-device and source rootfs fixtures
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: true
-
   tasks:
-    - name: Install systemd-repart support tools (util-linux + rsync + fs tooling)
+    - name: Install the tools the role needs
       ansible.builtin.apt:
-        name: [systemd, util-linux, rsync, e2fsprogs, dosfstools, parted]
+        name:
+          - dosfstools
+          - e2fsprogs
+          - parted
+          - rsync
+          - systemd
+          - util-linux
         state: present
         update_cache: true
 
-    - name: Create a 6 GiB sparse file
-      ansible.builtin.command: "truncate -s 6G /tmp/loopback.img"
+    - name: Create sparse backing files for the target and the render-only disk
+      ansible.builtin.command:
+        argv:
+          - truncate
+          - --size=6G
+          - "/tmp/{{ item }}.img"
+        creates: "/tmp/{{ item }}.img"
+      loop:
+        - target
+        - render_only
+
+    - name: Attach the backing files as loop devices
+      ansible.builtin.command:
+        argv:
+          - losetup
+          - --find
+          - --show
+          - "/tmp/{{ item }}.img"
+      loop:
+        - target
+        - render_only
+      register: __fixture_loops
       changed_when: true
 
-    - name: Attach as a loop device
-      ansible.builtin.command: "losetup -f --show /tmp/loopback.img"
-      register: _loop
-      changed_when: true
-
-    - name: Persist the loop device path for converge + verify
+    - name: Record the loop device of each disk
       ansible.builtin.copy:
-        dest: /tmp/loop_device
-        content: "{{ _loop.stdout }}\n"
+        dest: /tmp/disk_provision_loops.json
+        content: >-
+          {{ dict(__fixture_loops.results | map(attribute='item')
+                  | zip(__fixture_loops.results | map(attribute='stdout')))
+             | to_json }}
         mode: "0644"
 
-    - name: Create a minimal stub rootfs for rsync source
+    - name: Create the source rootfs directories
       ansible.builtin.file:
         path: "/tmp/testroot/{{ item }}"
         state: directory
         mode: "0755"
       loop:
+        - boot/extlinux
         - etc
-        - usr
         - usr/bin
-        - usr/lib
-        - bin
-        - lib
-        - var
-        - var/log
+        - var/lib/dbus
+
+    - name: Write the source rootfs files the verify step checks
+      ansible.builtin.copy:
+        dest: "/tmp/testroot/{{ item.path }}"
+        content: "{{ item.content }}"
+        mode: "0644"
+      loop:
+        - path: etc/disk_provision_marker
+          content: "copied from /tmp/testroot\n"
+        - path: etc/armbian-image-release
+          content: "BOARD=test\nINSTALLED=false\n"
+        - path: boot/extlinux/extlinux.conf
+          content: "label armbian\n  append root=/dev/mmcblk1p1 rw\n"
+        - path: var/lib/source_var_file
+          content: "from the source /var\n"
+      loop_control:
+        label: "{{ item.path }}"

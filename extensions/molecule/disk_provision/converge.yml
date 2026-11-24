@@ -1,93 +1,143 @@
 ---
-- hosts: all
-  gather_facts: true
+- name: Provision, mark, then re-provision the target disk
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    __loops: "{{ __loops_raw.content | b64decode | from_json }}"
+    __binding:
+      device: "{{ __loops.target }}"
+      layout:
+        - id: boot
+          size: 256MiB
+          type: linux
+          format: ext4
+          label: lp_boot
+          mount: /boot
+        - id: var
+          size: 512MiB
+          type: var
+          format: ext4
+          label: lp_var
+          mount: /var
+          preserve_on_reprovision: true
+        - id: root
+          size: grow
+          type: root
+          format: ext4
+          label: lp_root
+          mount: /
+  tasks:
+    - name: Read the fixture loop devices
+      ansible.builtin.slurp:
+        src: /tmp/disk_provision_loops.json
+      register: __loops_raw
+
+    - name: "Pass 1: provision the empty disk"
+      ansible.builtin.include_role:
+        name: david_igou.armbian.disk_provision
+      vars:
+        disk_provision_source: /tmp/testroot
+        disk_provision_disk_binding: "{{ __binding }}"
+
+    # systemd-repart derives filesystem UUIDs from the machine-id, so a
+    # reformat keeps the UUID; the ext4 creation time shows it instead.
+    - name: Read the filesystem creation times after pass 1
+      ansible.builtin.command:
+        argv:
+          - tune2fs
+          - -l
+          - "/dev/disk/by-label/{{ item }}"
+      loop:
+        - lp_boot
+        - lp_var
+        - lp_root
+      register: __pass1_tune2fs
+      changed_when: false
+
+    - name: Save the pass 1 creation times for verify
+      ansible.builtin.copy:
+        dest: /tmp/disk_provision_pass1.json
+        content: >-
+          {{ dict(__pass1_tune2fs.results | map(attribute='item')
+                  | zip(__pass1_tune2fs.results | map(attribute='stdout') | map('regex_search', '(?m)^Filesystem created:.*$')))
+             | to_json }}
+        mode: "0644"
+
+    - name: Mount the root and var filesystems
+      ansible.posix.mount:
+        path: "/mnt/{{ item }}"
+        src: "LABEL=lp_{{ item }}"
+        fstype: ext4
+        state: ephemeral
+      loop:
+        - root
+        - var
+
+    - name: Write data that must survive (var) or disappear (root)
+      ansible.builtin.copy:
+        dest: "/mnt/{{ item }}/written_between_passes"
+        content: "{{ item }}\n"
+        mode: "0644"
+      loop:
+        - root
+        - var
+
+    - name: Unmount the root and var filesystems
+      ansible.posix.mount:
+        path: "/mnt/{{ item }}"
+        state: unmounted
+      loop:
+        - root
+        - var
+
+    - name: "Pass 2: re-provision, keeping the preserved var partition"
+      ansible.builtin.include_role:
+        name: david_igou.armbian.disk_provision
+      vars:
+        disk_provision_source: /tmp/testroot
+        disk_provision_disk_binding: "{{ __binding }}"
+
+- name: Render repart definitions without touching the disk
+  hosts: all
+  gather_facts: false
   become: true
   tasks:
-    - name: Read loop device path
+    - name: Read the fixture loop devices
       ansible.builtin.slurp:
-        src: /tmp/loop_device
-      register: _loop_b64
+        src: /tmp/disk_provision_loops.json
+      register: __loops_raw
 
-    - name: Set loop device fact
-      ansible.builtin.set_fact:
-        _loop: "{{ (_loop_b64.content | b64decode).strip() }}"
-
-    - name: "Pass 1: initial provision — full layout, no preserves yet"
-      ansible.builtin.include_role:
-        name: david_igou.armbian.disk_provision
-      vars:
-        disk_provision_source: "/tmp/testroot"
-        disk_provision_disk_binding:
-          device: "{{ _loop }}"
-          layout:
-            - id: boot
-              size: 256MiB
-              type: linux
-              format: ext4
-              label: lp_boot
-              mount: /boot
-            - id: var
-              size: 512MiB
-              type: var
-              format: ext4
-              label: lp_var
-              mount: /var
-              preserve_on_reprovision: true
-            - id: root
-              size: grow
-              type: root
-              format: ext4
-              label: lp_root
-              mount: /
-
-    - name: Write a sentinel into /var on the loop disk
-      ansible.builtin.shell: |
-        set -euo pipefail
-        mount LABEL=lp_var /mnt
-        echo SENTINEL > /mnt/preserve_test
-        sync
-        umount /mnt
-      args:
-        executable: /bin/bash
-      changed_when: true
-
-    - name: "Pass 2: re-provision — preserve_on_reprovision=true keeps /var sentinel"
-      ansible.builtin.include_role:
-        name: david_igou.armbian.disk_provision
-      vars:
-        disk_provision_source: "/tmp/testroot"
-        disk_provision_disk_binding:
-          device: "{{ _loop }}"
-          layout:
-            - id: boot
-              size: 256MiB
-              type: linux
-              format: ext4
-              label: lp_boot
-              mount: /boot
-            - id: var
-              size: 512MiB
-              type: var
-              format: ext4
-              label: lp_var
-              mount: /var
-              preserve_on_reprovision: true
-            - id: root
-              size: grow
-              type: root
-              format: ext4
-              label: lp_root
-              mount: /
-
-    - name: "Pass 3: render-only mode — write .repart.d files but don't apply"
+    - name: Run disk_provision in render-only mode
       ansible.builtin.include_role:
         name: david_igou.armbian.disk_provision
       vars:
         disk_provision_render_only: true
         disk_provision_disk_binding:
-          device: /dev/loop1
+          device: "{{ (__loops_raw.content | b64decode | from_json).render_only }}"
           layout:
-            - { id: esp,  size: 512MiB, type: esp,   format: vfat, label: ARMBI_ESP,         mount: /boot/efi }
-            - { id: boot, size: 1GiB,   type: linux, format: ext4, label: armbi_boot,       mount: /boot }
-            - { id: var,  size: 20GiB,  type: var,   format: ext4, label: armbi_var,        mount: /var, preserve_on_reprovision: true }
-            - { id: root, size: grow,   type: root,  format: ext4, label: armbi_root_local, mount: / }
+            - id: esp
+              size: 512MiB
+              type: esp
+              format: vfat
+              label: ARMBI_ESP
+              mount: /boot/efi
+            - id: boot
+              size: 1GiB
+              type: linux
+              format: ext4
+              label: armbi_boot
+              mount: /boot
+            - id: var
+              size: 20GiB
+              type: var
+              format: ext4
+              label: armbi_var
+              mount: /var
+              preserve_on_reprovision: true
+            - id: root
+              size: grow
+              type: root
+              format: ext4
+              label: armbi_root_local
+              mount: /

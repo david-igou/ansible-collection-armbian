@@ -1,56 +1,34 @@
 ---
-# Mount partitions in dependency order, rsync source rootfs onto root,
-# write /etc/fstab, rewrite /boot/extlinux/extlinux.conf root= reference,
-# unmount in reverse order.
-
-- name: "Populate: define per-device mount root"
-  ansible.builtin.set_fact:
-    __disk_provision_mount_root: "{{ disk_provision_mount_dir_base }}/{{ __disk_provision_device_basename }}"
-
-- name: "Populate: ensure mount root exists"
+- name: Create the mount points under the mount root
   ansible.builtin.file:
-    path: "{{ __disk_provision_mount_root }}"
+    path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
     state: directory
     mode: "0755"
+  loop: "{{ __disk_provision_mounts }}"
+  loop_control:
+    loop_var: p
+    label: "{{ p.id }}"
   become: true
 
-- name: "Populate: build ordered mount list (by path depth)"
-  ansible.builtin.set_fact:
-    __disk_provision_mount_order: >-
-      {{ disk_provision_disk_binding.layout
-         | selectattr('mount', 'defined')
-         | sort(attribute='mount')
-         | list }}
-
-- name: "Populate: mount partitions in dependency order"
+- name: Mount, populate and unmount the new filesystems
+  become: true
   block:
-    - name: "Populate: ensure each mount point exists under mount_root"
-      ansible.builtin.file:
-        path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
-        state: directory
-        mode: "0755"
-      loop: "{{ __disk_provision_mount_order }}"
-      loop_control:
-        loop_var: p
-        label: "{{ p.id }}"
-      become: true
-
-    - name: "Populate: mount each partition by label"
+    - name: Mount each new filesystem by label
       ansible.posix.mount:
         path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
         src: "LABEL={{ p.label }}"
         fstype: "{{ p.format }}"
         state: ephemeral
-      loop: "{{ __disk_provision_mount_order }}"
+      loop: "{{ __disk_provision_mounts | rejectattr('id', 'in', __disk_provision_preserve_ids) | list }}"
       loop_control:
         loop_var: p
         label: "{{ p.id }}"
-      when: p.id not in __disk_provision_preserve_ids
-      become: true
 
-    - name: "Populate: write rsync exclude file"
+    # Preserved filesystems are not mounted; excluding their contents keeps
+    # rsync --delete from touching the empty mount point directories.
+    - name: Write the rsync exclude list
       ansible.builtin.copy:
-        dest: "{{ __disk_provision_mount_root }}.excludes"
+        dest: "{{ __disk_provision_excludes_file }}"
         content: |
           /dev/*
           /proc/*
@@ -60,17 +38,14 @@
           /mnt/*
           /media/*
           /var/log/journal
-          {% for p in __disk_provision_mount_order %}{% if p.id in __disk_provision_preserve_ids %}{{ p.mount }}/*
-          {% endif %}{% endfor %}
+          {% for p in __disk_provision_mounts | selectattr('id', 'in', __disk_provision_preserve_ids) %}
+          {{ p.mount }}/*
+          {% endfor %}
         mode: "0644"
-      become: true
 
-    - name: "Populate: rsync source into mounted root"
-      # ansible.posix.synchronize has known --rsh splitting bugs in this
-      # collection (see playbooks/build_and_publish_from_inventory.yml), so we keep
-      # command: rsync but use argv form (declarative tokenisation) and
-      # --itemize-changes so changed_when reflects whether any file
-      # actually transferred.
+    # command, not ansible.posix.synchronize: synchronize wraps rsync for
+    # controller-to-host copies, this copy is local to the host.
+    - name: Copy the source rootfs onto the new filesystems
       ansible.builtin.command:
         argv:
           - rsync
@@ -81,14 +56,13 @@
           - --one-file-system
           - --delete
           - --itemize-changes
-          - "--exclude-from={{ __disk_provision_mount_root }}.excludes"
+          - "--exclude-from={{ __disk_provision_excludes_file }}"
           - "{{ disk_provision_source }}/"
           - "{{ __disk_provision_mount_root }}/"
       register: __disk_provision_rsync
-      changed_when: (__disk_provision_rsync.stdout_lines | length) > 0
-      become: true
+      changed_when: __disk_provision_rsync.stdout_lines | length > 0
 
-    - name: "Populate: recreate virtual mount-point directories on target"
+    - name: Recreate the virtual filesystem mount points
       ansible.builtin.file:
         path: "{{ __disk_provision_mount_root }}/{{ item }}"
         state: directory
@@ -101,68 +75,64 @@
         - tmp
         - mnt
         - media
-      become: true
 
-    - name: "Populate: write generated /etc/fstab on target root"
+    - name: Write /etc/fstab on the new root
       ansible.builtin.template:
         src: fstab.j2
         dest: "{{ __disk_provision_mount_root }}/etc/fstab"
         mode: "0644"
-        backup: true
-      become: true
 
-    - name: "Populate: rewrite /boot/extlinux/extlinux.conf root= if present"
+    - name: Stat the boot and release files the role may rewrite
+      ansible.builtin.stat:
+        path: "{{ __disk_provision_mount_root }}/{{ item }}"
+        get_checksum: false
+      loop:
+        - boot/extlinux/extlinux.conf
+        - etc/armbian-image-release
+      register: __disk_provision_optional_files
+
+    - name: Point extlinux.conf at the new root label
       ansible.builtin.replace:
         path: "{{ __disk_provision_mount_root }}/boot/extlinux/extlinux.conf"
         regexp: 'root=\S+'
         replace: "root=LABEL={{ __disk_provision_root_label }}"
-      vars:
-        __disk_provision_root_label: "{{ disk_provision_disk_binding.layout | selectattr('mount', 'equalto', '/') | map(attribute='label') | first }}"
-      failed_when: false  # extlinux.conf may not exist; not on boot path under passthrough model
-      become: true
+      when: __disk_provision_optional_files.results[0].stat.exists
 
-    - name: "Populate: write INSTALLED=true marker on target"
+    # INSTALLED=true stops armbian-resize-filesystem from resizing the
+    # partition repart already sized.
+    - name: Mark the Armbian install as complete
       ansible.builtin.lineinfile:
         path: "{{ __disk_provision_mount_root }}/etc/armbian-image-release"
         regexp: "^INSTALLED="
-        line: "INSTALLED=true"
-        create: false
-      when: disk_provision_installed_marker | bool
-      failed_when: false
-      become: true
+        line: INSTALLED=true
+      when:
+        - disk_provision_installed_marker | bool
+        - __disk_provision_optional_files.results[1].stat.exists
 
-    - name: "Populate: reset machine-id files if requested"
+    - name: Empty the machine-id files
       ansible.builtin.copy:
         dest: "{{ __disk_provision_mount_root }}/{{ item }}"
         content: ""
         mode: "0444"
-        force: true
       loop:
         - etc/machine-id
         - var/lib/dbus/machine-id
       when: disk_provision_reset_identity | bool
-      become: true
 
-    - name: "Populate: sync to flush rsync data"
-      ansible.builtin.command: "sync"
+    - name: Flush the copied data to disk
+      ansible.builtin.command: sync
       changed_when: false
-      become: true
-
   always:
-    - name: "Populate: unmount in reverse order"
+    - name: Unmount the new filesystems, children first
       ansible.posix.mount:
         path: "{{ __disk_provision_mount_root }}{{ p.mount }}"
         state: unmounted
-      loop: "{{ __disk_provision_mount_order | reverse | list }}"
+      loop: "{{ __disk_provision_mounts | rejectattr('id', 'in', __disk_provision_preserve_ids) | reverse | list }}"
       loop_control:
         loop_var: p
         label: "{{ p.id }}"
-      when: p.id not in __disk_provision_preserve_ids
-      failed_when: false
-      become: true
 
-    - name: "Populate: remove excludes file"
+    - name: Remove the rsync exclude list
       ansible.builtin.file:
-        path: "{{ __disk_provision_mount_root }}.excludes"
+        path: "{{ __disk_provision_excludes_file }}"
         state: absent
-      become: true
