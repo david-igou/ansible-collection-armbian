@@ -46,6 +46,12 @@ Every board's pxelinux.cfg carries all labels; its `default` line picks one.
 | `local` | TFTP | `root=LABEL=armbi_root_local` (written by `disk_provision`) | a non-NFS root on `/dev/*` |
 | `local_kernel` | the local disk (`localboot 0`, U-Boot's `localcmd`) | the local disk | a non-NFS root on `/dev/nvme*` |
 
+`local_kernel` needs a U-Boot that defines `localcmd`, the command `localboot`
+runs. Stock Armbian U-Boot does not define one, and the collection does not
+ship it: add it to your image through an Armbian userpatch (`image_build`
+installs userpatches). The other three modes work with stock U-Boot once the
+board tries PXE.
+
 ## Wiring it together
 
 A consumer typically:
@@ -107,6 +113,8 @@ A consumer typically:
 - `ansible.posix` (installed with the collection).
 - Host-side tools per role, listed in each role's README (for example Docker
   on the builder, `losetup` and `rsync` on the netboot server).
+- `sshpass` on the control node for `bootstrap_armbian`, which first logs in
+  with a password.
 
 ## Installation
 

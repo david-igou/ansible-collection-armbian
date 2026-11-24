@@ -2,7 +2,8 @@
 
 Takes over a freshly flashed Armbian board: creates an SSH-key-only
 automation user with passwordless sudo. Run it as `root`, which stock Armbian
-accepts with its default password before first login. After it runs:
+accepts with its default password before first login. Password login needs
+`sshpass` on the control node. After it runs:
 
 - `bootstrap_armbian_user` exists with `bootstrap_armbian_ssh_keys` authorized;
 - `/etc/sudoers.d/<user>` (visudo-validated) grants `NOPASSWD: ALL`;
