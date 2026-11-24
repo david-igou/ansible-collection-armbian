@@ -15,7 +15,8 @@ help: ## Show this help
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install the runtime and test collection dependencies
-	ansible-galaxy collection install -r requirements.yml -r extensions/molecule/requirements-test.yml
+	ansible-galaxy collection install -r requirements.yml
+	ansible-galaxy collection install -r extensions/molecule/requirements-test.yml
 
 lint: yamllint ansible-lint ## Run yamllint and ansible-lint over the repository
 
