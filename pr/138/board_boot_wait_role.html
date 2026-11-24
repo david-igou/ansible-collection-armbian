@@ -160,7 +160,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <section id="synopsis">
 <h3><a class="toc-backref" href="#id2" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>Each attempt includes the caller’s power-cycle tasks file (if any), waits for the SSH banner on <code class="docutils literal notranslate"><span class="pre">ansible_host</span></code>:<code class="docutils literal notranslate"><span class="pre">ansible_port</span></code> from the control node, then optionally waits for an SSH login as the inventory user.</p></li>
+<li><p>Each attempt includes the caller’s power-cycle tasks file (if any), resets the board’s connection so a multiplexed SSH session from before the power cycle is not reused, waits for the SSH banner on <code class="docutils literal notranslate"><span class="pre">ansible_host</span></code>:<code class="docutils literal notranslate"><span class="pre">ansible_port</span></code> from the control node, then optionally waits for an SSH login as the inventory user.</p></li>
 <li><p>A timed-out wait starts the next attempt. After the last attempt the role fails naming the stage (<code class="docutils literal notranslate"><span class="pre">port</span></code> or <code class="docutils literal notranslate"><span class="pre">ssh</span></code>) that timed out.</p></li>
 <li><p>A failure inside the power-cycle tasks file is not retried and propagates.</p></li>
 </ul>
