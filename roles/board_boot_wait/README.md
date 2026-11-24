@@ -6,9 +6,12 @@ Gets a board booted and reachable. Runs on the board host with
 Each attempt:
 
 1. includes `board_boot_wait_power_cycle_tasks`, when set;
-2. waits, from the control node, for the SSH banner on
+2. resets the board's connection (`meta: reset_connection`), so a
+   multiplexed SSH master opened before the power cut cannot hang the
+   login wait;
+3. waits, from the control node, for the SSH banner on
    `ansible_host`:`ansible_port` (default port 22);
-3. when `board_boot_wait_ssh` is true, waits for an SSH login as the inventory
+4. when `board_boot_wait_ssh` is true, waits for an SSH login as the inventory
    user (`wait_for_connection`).
 
 A timed-out wait starts the next attempt. After the last attempt the role

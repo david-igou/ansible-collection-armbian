@@ -79,6 +79,43 @@
         board_boot_wait_ssh: false
         board_boot_wait_port_timeout: 30
 
+    # wait_for_connection resets its own connection, so only the ssh=false
+    # path shows whether the role drops the master opened before the power
+    # cycle. SSH_CONNECTION carries the client port of the TCP session behind
+    # the multiplexed master; a new port means a new session.
+    - name: Read the SSH session before the power cycle
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - env
+      register: __session_before
+
+    - name: Power-cycle without the login wait
+      ansible.builtin.include_role:
+        name: david_igou.armbian.board_boot_wait
+      vars:
+        board_boot_wait_power_cycle_tasks: "{{ count_hook }}"
+        board_boot_wait_ssh: false
+        board_boot_wait_port_timeout: 30
+
+    - name: Read the SSH session after the power cycle
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - env
+      register: __session_after
+
+    - name: Assert the next task used a fresh SSH session
+      ansible.builtin.assert:
+        that:
+          - __session_before.ansible_facts.ansible_env.SSH_CONNECTION | length > 0
+          - __session_after.ansible_facts.ansible_env.SSH_CONNECTION != __session_before.ansible_facts.ansible_env.SSH_CONNECTION
+        fail_msg: >-
+          The SSH session from before the power cycle was reused:
+          {{ __session_after.ansible_facts.ansible_env.SSH_CONNECTION }}
+
     - name: Reset the power-cycle counter
       ansible.builtin.set_fact:
         fixture_power_cycles: 0

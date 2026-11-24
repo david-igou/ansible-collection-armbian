@@ -1,46 +1,53 @@
 ---
-- name: Run one boot attempt
+# Outside the wait block: a failing power-cycle hook must not be retried.
+- name: Power-cycle the board
+  ansible.builtin.include_tasks: "{{ board_boot_wait_power_cycle_tasks }}"
+  when:
+    - not __board_boot_wait_ready
+    - board_boot_wait_power_cycle_tasks | length > 0
+
+# A multiplexed SSH master opened before the power cut outlives the board's
+# TCP session and would hang the login wait for minutes. meta tasks ignore
+# when:, so this also runs in the attempts skipped after success, where it
+# only drops a healthy master.
+- name: Drop the SSH connection opened before the power cycle
+  ansible.builtin.meta: reset_connection
+
+- name: Wait for the board to come up
   when: not __board_boot_wait_ready
   block:
-    # Outside the inner block: a failing power-cycle hook must not be retried.
-    - name: Power-cycle the board
-      ansible.builtin.include_tasks: "{{ board_boot_wait_power_cycle_tasks }}"
-      when: board_boot_wait_power_cycle_tasks | length > 0
+    - name: Record the port stage
+      ansible.builtin.set_fact:
+        __board_boot_wait_stage: port
 
-    - name: Wait for the board to come up
-      block:
-        - name: Record the port stage
-          ansible.builtin.set_fact:
-            __board_boot_wait_stage: port
+    # The SSH banner proves sshd answered, not a NAT or port forwarder.
+    - name: Wait for the SSH banner
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: "{{ ansible_port | default(22) }}"
+        search_regex: SSH-
+        timeout: "{{ board_boot_wait_port_timeout }}"
+      delegate_to: localhost
+      become: false
 
-        # The SSH banner proves sshd answered, not a NAT or port forwarder.
-        - name: Wait for the SSH banner
-          ansible.builtin.wait_for:
-            host: "{{ ansible_host | default(inventory_hostname) }}"
-            port: "{{ ansible_port | default(22) }}"
-            search_regex: SSH-
-            timeout: "{{ board_boot_wait_port_timeout }}"
-          delegate_to: localhost
-          become: false
+    - name: Record the ssh stage
+      ansible.builtin.set_fact:
+        __board_boot_wait_stage: ssh
 
-        - name: Record the ssh stage
-          ansible.builtin.set_fact:
-            __board_boot_wait_stage: ssh
+    - name: Wait for an SSH login as the inventory user
+      ansible.builtin.wait_for_connection:
+        timeout: "{{ board_boot_wait_ssh_timeout }}"
+        sleep: 5
+      when: board_boot_wait_ssh
 
-        - name: Wait for an SSH login as the inventory user
-          ansible.builtin.wait_for_connection:
-            timeout: "{{ board_boot_wait_ssh_timeout }}"
-            sleep: 5
-          when: board_boot_wait_ssh
-
-        - name: Mark the board as reachable
-          ansible.builtin.set_fact:
-            __board_boot_wait_ready: true
-      rescue:
-        - name: Fail after the last attempt
-          ansible.builtin.fail:
-            msg: >-
-              {{ inventory_hostname }} did not come up after
-              {{ board_boot_wait_attempts }} attempt(s): the {{ __board_boot_wait_stage }}
-              stage timed out. Last error: {{ ansible_failed_result.msg | default('none') }}
-          when: __board_boot_wait_attempt == board_boot_wait_attempts
+    - name: Mark the board as reachable
+      ansible.builtin.set_fact:
+        __board_boot_wait_ready: true
+  rescue:
+    - name: Fail after the last attempt
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }} did not come up after
+          {{ board_boot_wait_attempts }} attempt(s): the {{ __board_boot_wait_stage }}
+          stage timed out. Last error: {{ ansible_failed_result.msg | default('none') }}
+      when: __board_boot_wait_attempt == board_boot_wait_attempts

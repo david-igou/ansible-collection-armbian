@@ -3,9 +3,10 @@ argument_specs:
   main:
     short_description: Power-cycle a board and wait until it is reachable over SSH.
     description:
-      - Each attempt includes the caller's power-cycle tasks file (if any), waits for the
-        SSH banner on C(ansible_host):C(ansible_port) from the control node, then
-        optionally waits for an SSH login as the inventory user.
+      - Each attempt includes the caller's power-cycle tasks file (if any), resets the
+        board's connection so a multiplexed SSH session from before the power cycle is
+        not reused, waits for the SSH banner on C(ansible_host):C(ansible_port) from the
+        control node, then optionally waits for an SSH login as the inventory user.
       - A timed-out wait starts the next attempt. After the last attempt the role fails
         naming the stage (C(port) or C(ssh)) that timed out.
       - A failure inside the power-cycle tasks file is not retried and propagates.
