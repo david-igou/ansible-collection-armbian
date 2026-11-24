@@ -1,123 +1,94 @@
 ---
-# Scenario-specific prepare. Two plays:
-#   1. Import the molecule_provisioners prepare (SSH wait + ephemeral inventory).
-#   2. Install Docker CE, add the debian user to the docker group, and
-#      pre-seed manifest.json + a placeholder .img.xz so the image_build
-#      role's check_manifest step short-circuits invoke_build.
-#
-# This scenario does NOT run a real Armbian build. Its job is to exercise
-# preflight + manage_checkout + apply_userpatches + compute_inputs +
-# check_manifest (the skip path). compile.sh is never invoked, so this
-# prepare does not configure binfmt_misc, daemon MTU, ext4 checks, or any
-# of the other apparatus needed to launch armbian/build's container.
-
 - name: Prepare molecule instances
   import_playbook: david_igou.molecule_provisioners.prepare
 
-- name: Install Docker and pre-seed manifest for skip-build short-circuit
+- name: Install Docker for the debian user
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: true
-
-  vars:
-    # Path uses armbian_build_host (per-host re-key), NOT
-    # armbian_build_board. The converge passes
-    # armbian_build_host=build-orangepi5pro so the role's per-host suffix
-    # writes to /var/lib/armbian_build/output/build-orangepi5pro/.
-    _build_host: build-orangepi5pro
-    _output_dir: "/var/lib/armbian_build/output/{{ _build_host }}"
-    _placeholder_image: Armbian_PRESEED-orangepi5pro-bookworm-current.img.xz
-    # Default from roles/image_build/defaults/main.yml; must match what the
-    # role will compute in compute_inputs.yml so check_manifest accepts.
-    _armbian_build_ref: v26.2.0-trunk.844
-    _sentinel_built_at: 2026-01-01T00:00:00Z-PRESEED
-
   tasks:
-    - name: Install Docker apt prerequisites
+    - name: Install the Docker apt prerequisites
       ansible.builtin.apt:
         name:
           - ca-certificates
           - curl
+          - git
           - gnupg
         state: present
         update_cache: true
 
-    - name: Add Docker apt repo key
+    - name: Add the Docker apt key
       ansible.builtin.get_url:
         url: https://download.docker.com/linux/debian/gpg
         dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
 
-    - name: Add Docker apt repository (Debian trixie)
+    - name: Add the Docker apt repository
       ansible.builtin.apt_repository:
         repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable"
-        state: present
         filename: docker
-        update_cache: true
+        state: present
 
-    - name: Install Docker engine
+    - name: Install Docker
       ansible.builtin.apt:
         name:
+          - containerd.io
           - docker-ce
           - docker-ce-cli
-          - containerd.io
         state: present
 
-    - name: Enable and start docker.service
-      ansible.builtin.systemd:
+    - name: Start Docker
+      ansible.builtin.systemd_service:
         name: docker
         state: started
         enabled: true
 
-    - name: Add debian user to docker group
+    - name: Add debian to the docker group
       ansible.builtin.user:
         name: debian
         groups: docker
         append: true
 
-    - name: Reset SSH connection so debian user picks up the docker group
+    - name: Reconnect so the new group membership applies
       ansible.builtin.meta: reset_connection
 
-    - name: Ensure per-board output directory exists (owned by debian)
-      ansible.builtin.file:
-        path: "{{ _output_dir }}"
-        state: directory
-        owner: debian
-        group: debian
-        mode: "0755"
+# The seeded manifest uses the hash the role itself computes, so the
+# scenario repeats neither the pinned ref nor the hash formula.
+- name: Seed a manifest that matches the current inputs
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    __output_dir: "{{ image_build_cache_dir }}/output/{{ image_build_name }}"
+  tasks:
+    - name: Plan the build
+      ansible.builtin.include_role:
+        name: david_igou.armbian.image_build
+        tasks_from: plan
 
-    # check_manifest.yml does `stat` on the file referenced by
-    # manifest.image_filename — content is never read, so an empty
-    # placeholder satisfies the existence check.
-    - name: Pre-seed placeholder .img.xz
+    - name: Assert a build is needed before anything is seeded
+      ansible.builtin.assert:
+        that:
+          - image_build_needed | bool
+
+    - name: Write a placeholder image
       ansible.builtin.copy:
-        dest: "{{ _output_dir }}/{{ _placeholder_image }}"
+        dest: "{{ __output_dir }}/Armbian_PRESEED_Orangepi5pro_bookworm_current.img.xz"
         content: ""
-        owner: debian
-        group: debian
         mode: "0644"
 
-    # patch_hash matches compute_inputs.yml's formula exactly. The userpatches
-    # list comes from inventory/group_vars/molecule.yml so prepare and converge
-    # cannot drift.
-    - name: Compute matching patch_hash for the pre-seeded manifest
-      ansible.builtin.set_fact:
-        _preseed_patch_hash: "sha256:{{ scenario_userpatches | to_json(sort_keys=true) | hash('sha256') }}"
-
-    - name: Pre-seed manifest.json with matching decision fields
+    - name: Write the seeded manifest
       ansible.builtin.copy:
-        dest: "{{ _output_dir }}/manifest.json"
-        content: "{{ _manifest | to_nice_json(sort_keys=true) }}\n"
-        owner: debian
-        group: debian
+        dest: "{{ __output_dir }}/manifest.json"
+        content: "{{ __manifest | to_nice_json(sort_keys=true) }}\n"
         mode: "0644"
       vars:
-        _manifest:
-          patch_hash: "{{ _preseed_patch_hash }}"
-          armbian_build_ref: "{{ _armbian_build_ref }}"
-          board: orangepi5pro
-          host: "{{ _build_host }}"
+        __manifest:
+          board: "{{ image_build_board }}"
+          name: "{{ image_build_name }}"
           branch: current
           release: bookworm
-          image_filename: "{{ _placeholder_image }}"
-          built_at: "{{ _sentinel_built_at }}"
+          armbian_build_ref: preseeded
+          image_filename: Armbian_PRESEED_Orangepi5pro_bookworm_current.img.xz
+          built_at: PRESEED
+          inputs_hash: "{{ image_build_inputs_hash }}"

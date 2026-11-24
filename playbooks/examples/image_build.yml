@@ -1,48 +1,22 @@
 ---
-# Build one custom Armbian .img.xz with a PXE-first U-Boot, using
-# armbian/build in Docker mode on a builder host. Minimal demo of the
-# image_build role: the output (.img.xz + manifest.json) lands at
-# <armbian_build_output_dir>/<armbian_build_host>/ on the builder.
+# Build one PXE-first Armbian image on a builder host. The image and
+# manifest.json land in <image_build_cache_dir>/output/<image_build_name>/.
 #
-# Usage:
 #   ansible-playbook playbooks/examples/image_build.yml --limit builder-01
-#
-# Role variables (see roles/image_build/README.md):
-#   armbian_build_board        — armbian/build BOARD= value (required)
-#   armbian_build_host         — per-host output subdir key (required)
-#   armbian_build_branch       — current | edge | legacy | vendor (default current)
-#   armbian_build_release      — userspace release (default bookworm)
-#   armbian_build_output_dir   — where <host>/<file>.img.xz + manifest.json land
-#   armbian_build_userpatches  — list of {dest, content} overlay files
-#
-# Companion: playbooks/build_and_publish_from_inventory.yml (resolves the
-# per-host armbian_build profile for every board and publishes the result
-# to the netboot server). Use this one to read, at a glance, the minimal
-# known-good role call.
 
-- name: Build a custom PXE-first Armbian image
-  hosts: "{{ armbian_builders_group | default('armbian_builders') }}"
-  gather_facts: true
-
+- name: Build a PXE-first Armbian image
+  hosts: armbian_builders
+  gather_facts: false
   tasks:
     - name: Build the image
       ansible.builtin.include_role:
-        name: image_build
+        name: david_igou.armbian.image_build
       vars:
-        armbian_build_board: orangepi5pro
-        armbian_build_host: orange-pi-5-pro-01
-        armbian_build_branch: current
-        armbian_build_release: bookworm
-        armbian_build_cache_dir: "/home/{{ ansible_user }}/armbian_build"
-        armbian_build_output_dir: "/home/{{ ansible_user }}/armbian_build/output"
-        armbian_build_userpatches:
-          # Board-scoped overlay (mirrors roles/image_build/README.md):
-          # armbian/build only sources config/boards/<board>.conf when
-          # building that board, so no `if BOARD == ...` guard is needed.
-          # PXE-first is genuinely family-shared in the real fleet — see
-          # armbian_build_family.userpatches in inventory/group_vars/<family>.yml
-          # for the family-level form composed by
-          # playbooks/build_and_publish_from_inventory.yml.
+        image_build_board: orangepi5pro
+        image_build_name: orange-pi-5-pro-01
+        image_build_cache_dir: /srv/armbian_build
+        image_build_userpatches:
+          # armbian/build sources config/boards/<board>.conf only for that board.
           - dest: config/boards/orangepi5pro.conf
             content: |
               function pre_config_uboot_target__orangepi5pro_pxe_first() {
@@ -50,3 +24,7 @@
                   sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${t[*]}\"/" \
                       include/configs/rockchip-common.h
               }
+
+    - name: Show where the image is
+      ansible.builtin.debug:
+        msg: "{{ image_build_manifest.image_filename }} (built: {{ image_build_needed }})"

@@ -1,100 +1,100 @@
 ---
-# Smoke-test the converged builder. Asserts the image_build role:
-#   - Wrote the userpatch into the build checkout at the documented path
-#     with the expected hook function name (apply_userpatches step).
-#   - Hit the check_manifest short-circuit (manifest.json's pre-seeded
-#     sentinel built_at is preserved — proving write_manifest did NOT run).
-#   - Skipped invoke_build (no compile.sh logfile exists under the build
-#     checkout's output/logs/).
-#   - Left manifest.json valid against the expected schema.
-#
-# This scenario deliberately does NOT assert a real .img.xz was produced;
-# real-image verification belongs to playbooks/build_and_publish_from_inventory.yml on the
-# armbian_builders inventory.
-
 - name: Verify
   hosts: all
   gather_facts: false
   become: false
-
   vars:
-    # All paths use the per-host suffix (armbian_build_host=build-orangepi5pro)
-    # that the role appends to armbian_build_cache_dir and armbian_build_output_dir.
-    # converge.yml passes the host name; we mirror it here.
-    _build_host: build-orangepi5pro
-    _cache_dir_host: "/var/lib/armbian_build/{{ _build_host }}"
-    _output_dir: "/var/lib/armbian_build/output/{{ _build_host }}"
-    _build_logs_dir: "{{ _cache_dir_host }}/build/output/logs"
-    _userpatch_path: "{{ _cache_dir_host }}/build/userpatches/config/boards/orangepi5pro.conf"
-    _sentinel_built_at: 2026-01-01T00:00:00Z-PRESEED
-
+    __userpatches_dir: "{{ image_build_cache_dir }}/{{ image_build_name }}/build/userpatches"
+    __output_dir: "{{ image_build_cache_dir }}/output/{{ image_build_name }}"
   tasks:
-    - name: Stat the userpatch file
+    - name: Read the manifest
+      ansible.builtin.slurp:
+        src: "{{ __output_dir }}/manifest.json"
+      register: __manifest_raw
+
+    - name: Assert converge kept the seeded manifest
+      ansible.builtin.assert:
+        that:
+          - (__manifest_raw.content | b64decode | from_json).built_at == 'PRESEED'
+
+    - name: Look for compile.sh logs
       ansible.builtin.stat:
-        path: "{{ _userpatch_path }}"
-      register: _userpatch_stat
+        path: "{{ image_build_cache_dir }}/{{ image_build_name }}/build/output/logs"
+        get_checksum: false
+      register: __logs
 
-    - name: Assert userpatch file landed at the documented path
+    - name: Assert compile.sh never ran
       ansible.builtin.assert:
         that:
-          - _userpatch_stat.stat.exists
-          - _userpatch_stat.stat.isreg
+          - not __logs.stat.exists
 
-    - name: Slurp the userpatch contents
+    - name: Read the written userpatches
       ansible.builtin.slurp:
-        src: "{{ _userpatch_path }}"
-      register: _userpatch_raw
+        src: "{{ __userpatches_dir }}/{{ item.dest }}"
+      loop: "{{ scenario_userpatches }}"
+      loop_control:
+        label: "{{ item.dest }}"
+      register: __written
 
-    - name: Assert userpatch contents include the expected hook function
+    - name: Assert every userpatch was written verbatim
       ansible.builtin.assert:
         that:
-          - "'pre_config_uboot_target__orangepi5pro_pxe_first' in (_userpatch_raw.content | b64decode)"
+          - (item.content | b64decode) == item.item.content
+        fail_msg: "{{ item.item.dest }} differs from the declared content"
+      loop: "{{ __written.results }}"
+      loop_control:
+        label: "{{ item.item.dest }}"
 
-    - name: Read manifest.json
-      ansible.builtin.slurp:
-        src: "{{ _output_dir }}/manifest.json"
-      register: _manifest_raw
+    - name: Check the rebuild decision for each kind of input change
+      ansible.builtin.include_tasks: tasks/plan_case.yml
+      loop:
+        - name: unchanged inputs
+          needed: false
+        - name: a changed compile arg
+          compile_args: "{{ scenario_compile_args | combine({'BUILD_MINIMAL': 'no'}) }}"
+          needed: true
+        - name: changed userpatch content
+          userpatches:
+            - dest: "{{ scenario_userpatches[0].dest }}"
+              content: "{{ scenario_userpatches[0].content }}# changed\n"
+            - "{{ scenario_userpatches[1] }}"
+          needed: true
+        - name: image_build_force
+          force: true
+          needed: true
+      loop_control:
+        loop_var: case
+        label: "{{ case.name }}"
 
-    - name: Parse manifest and assert schema + skip-build sentinel
+    - name: Drop a file into userpatches/ that nobody declared
+      ansible.builtin.copy:
+        dest: "{{ __userpatches_dir }}/stray.conf"
+        content: "not declared\n"
+        mode: "0644"
+
+    - name: Plan with the second userpatch dropped
+      ansible.builtin.include_tasks: tasks/plan_case.yml
       vars:
-        _manifest: "{{ _manifest_raw.content | b64decode | from_json }}"
+        case:
+          name: a dropped userpatch
+          userpatches:
+            - "{{ scenario_userpatches[0] }}"
+          needed: true
+
+    - name: Stat the userpatches that are no longer declared
+      ansible.builtin.stat:
+        path: "{{ __userpatches_dir }}/{{ item }}"
+        get_checksum: false
+      loop:
+        - "{{ scenario_userpatches[1].dest }}"
+        - stray.conf
+      register: __pruned
+
+    - name: Assert undeclared userpatches were removed
       ansible.builtin.assert:
         that:
-          - _manifest.image_filename is string
-          - _manifest.image_filename | length > 0
-          - _manifest.armbian_build_ref is string
-          - _manifest.armbian_build_ref | length > 0
-          - _manifest.patch_hash is string
-          - _manifest.patch_hash | length > 0
-          - _manifest.built_at == _sentinel_built_at
-        fail_msg: >-
-          manifest.json did not match the pre-seeded sentinel (built_at expected
-          {{ _sentinel_built_at }}). Either write_manifest ran (which means
-          check_manifest did NOT short-circuit), or the pre-seed never landed.
-          Got: {{ _manifest }}
-
-    - name: Look for any compile.sh log file (proof invoke_build was skipped)
-      ansible.builtin.find:
-        paths: "{{ _build_logs_dir }}"
-        patterns: "log-build-*.log.ans"
-        file_type: file
-      register: _build_logs
-      # The build/output/logs/ dir is created by compile.sh; missing dir is
-      # itself proof no build ran.
-      failed_when: false
-
-    - name: Assert no compile.sh log file was produced
-      ansible.builtin.assert:
-        that:
-          - (_build_logs.files | default([])) | length == 0
-        fail_msg: >-
-          Found {{ _build_logs.files | length }} compile.sh logfile(s) under
-          {{ _build_logs_dir }} — invoke_build ran when it should have been
-          skipped. Files: {{ _build_logs.files | map(attribute='path') | list }}
-
-    - name: Print verification summary
-      ansible.builtin.debug:
-        msg:
-          - "Userpatch: {{ _userpatch_path }} ({{ _userpatch_stat.stat.size }} bytes)"
-          - "Manifest built_at: {{ (_manifest_raw.content | b64decode | from_json).built_at }} (sentinel preserved → check_manifest skipped invoke_build)"
-          - "Skip-build short-circuit fired: no compile.sh log files under {{ _build_logs_dir }}"
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} is still in userpatches/"
+      loop: "{{ __pruned.results }}"
+      loop_control:
+        label: "{{ item.item }}"

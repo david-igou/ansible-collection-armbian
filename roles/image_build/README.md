@@ -1,129 +1,114 @@
 # image_build
 
-Build a custom Armbian image with caller-supplied userpatches, using
-[`armbian/build`](https://github.com/armbian/build) in Docker mode. The
-role is single-purpose and intent-agnostic: it does not know (nor care)
-what your userpatches do — callers (typically a workflow playbook) supply
-the patch list and consume the resulting `.img.xz` + `manifest.json` from
-`armbian_build_output_dir/<host>/`.
+Build an Armbian image with [`armbian/build`](https://github.com/armbian/build)
+in Docker mode. The caller supplies the board, a per-target name and the
+userpatches; the role checks out the pinned `armbian/build` ref, writes the
+userpatches, builds when the inputs changed, and leaves the image and a
+`manifest.json` under `<image_build_output_dir>/<image_build_name>/`.
 
 ## Inputs
 
-| Var | Default | Purpose |
-|---|---|---|
-| `armbian_build_board` | _required_ | Armbian board name, e.g. `orangepi5pro` |
-| `armbian_build_branch` | `current` | Armbian kernel/U-Boot branch |
-| `armbian_build_release` | `bookworm` | Userspace release |
-| `armbian_build_ref` | `v26.2.0-trunk.844` | Pinned `armbian/build` git ref |
-| `armbian_build_userpatches` | `[]` | List of `{ dest, content }` entries |
-| `armbian_build_cache_dir` | `$HOME/armbian_build` (connecting user's home, via `ansible_env.HOME`) | Checkout + cache + userpatches root |
-| `armbian_build_output_dir` | `$HOME/armbian_build/output` | Where `<host>/<file>.img.xz` + `manifest.json` land |
-| `armbian_build_min_free_gb` | `50` | Preflight threshold |
-| `armbian_build_required_egress_hosts` | github.com, apt.armbian.com, ghcr.io, registry-1.docker.io | Preflight HEAD-checks |
-| `armbian_build_compile_args` | _see defaults_ | Per-run knobs forwarded to `compile.sh` |
-| `armbian_build_timeout` | `7200` | Build timeout in seconds |
-| `armbian_build_force` | `false` | Force rebuild even if manifest matches |
+See [`meta/argument_specs.yml`](meta/argument_specs.yml) for the full contract.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `image_build_board` | yes | — | Armbian `BOARD=` |
+| `image_build_name` | yes | — | Per-target directory name, normally the board's inventory hostname |
+| `image_build_cache_dir` | yes | — | Checkout root on the builder; checkouts land in `<cache_dir>/<name>/build` |
+| `image_build_output_dir` | no | `<image_build_cache_dir>/output` | Image and manifest root |
+| `image_build_branch` | no | `current` | `BRANCH=` |
+| `image_build_release` | no | `bookworm` | `RELEASE=` |
+| `image_build_ref` | no | `v26.2.0-trunk.844` | Pinned `armbian/build` ref |
+| `image_build_userpatches` | no | `[]` | `{dest, content}` files under `userpatches/`; authoritative |
+| `image_build_compile_args` | no | see defaults | Extra `KEY=value` arguments for `compile.sh` |
+| `image_build_timeout` | no | `7200` | Seconds `compile.sh` may run |
+| `image_build_min_free_gb` | no | `50` | Free GiB required at the cache directory |
+| `image_build_force` | no | `false` | Build even if the manifest matches |
+| `image_build_required_egress_hosts` | no | github.com, apt.armbian.com, ghcr.io, registry-1.docker.io | HTTPS HEAD checks before building |
 
 ## Outputs
 
-`<armbian_build_output_dir>/<host>/`:
-- `Armbian_<version>_<board>_<release>_<branch>_<kernel>.img.xz`
-- `Armbian_<version>_<board>_<release>_<branch>_<kernel>.img.xz.sha` (when `COMPRESS_OUTPUTIMAGE` includes `sha`)
-- `manifest.json`
+Facts:
 
-With the defaults (`armbian_build_output_dir: $HOME/armbian_build/output`,
-where `$HOME` is the connecting user's home) and a host
-`orange-pi-5-pro-01`, a completed build leaves this per-host tree on the
-builder (the output dir is keyed by `inventory_hostname`, so two hosts
-that build the same board don't collide):
+- `image_build_inputs_hash`: `sha256:` of the JSON of board, branch,
+  release, ref, userpatches and compile args.
+- `image_build_needed`: whether this run had to build.
+- `image_build_manifest` (`main` only): the manifest of the image now in
+  the output directory.
+
+Files, for `image_build_name: orange-pi-5-pro-01`:
 
 ```text
-$HOME/armbian_build/output/
-└── orange-pi-5-pro-01/
-    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz
-    ├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz.sha
-    └── manifest.json
+<image_build_output_dir>/orange-pi-5-pro-01/
+├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz
+├── Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz.sha
+└── manifest.json
 ```
-
-## Manifest schema
 
 ```json
 {
-  "patch_hash": "sha256:…",
   "armbian_build_ref": "v26.2.0-trunk.844",
   "board": "orangepi5pro",
   "branch": "current",
-  "release": "bookworm",
-  "image_filename": "Armbian_…img.xz",
-  "built_at": "2026-05-05T12:34:56Z"
+  "built_at": "2026-05-05T12:34:56Z",
+  "image_filename": "Armbian_26.2.0-trunk_Orangepi5pro_bookworm_current_6.12.img.xz",
+  "inputs_hash": "sha256:…",
+  "name": "orange-pi-5-pro-01",
+  "release": "bookworm"
 }
 ```
 
-## Idempotency & check mode
+The `.sha` sidecar exists when `COMPRESS_OUTPUTIMAGE` includes `sha`.
 
-The role skips the build (and the manifest write) when an existing
-`manifest.json` matches all five decision fields: `patch_hash`,
-`armbian_build_ref`, `board`, `branch`, `release`. `patch_hash` is
-`sha256` of the canonical-JSON-encoded `armbian_build_userpatches`. Pass
-`-e armbian_build_force=true` to override. The role is not check-mode
-safe: `compile.sh` runs in Docker and always writes to the build cache.
+## Entry points
 
-## Rollback / Recovery
+- `main`: `plan`, then build and write the manifest when
+  `image_build_needed` is true.
+- `tasks_from: plan`: preflight, checkout, userpatches and the rebuild
+  decision, without running `compile.sh`. Use it to find out whether a
+  build is due.
 
-If the build fails mid-run, the manifest is not written (it is only
-written on success), so a subsequent run will re-trigger the build.
-The partial Docker build artifacts under `armbian_build_cache_dir/build/`
-are safe to leave in place — `armbian/build` handles incremental
-rebuilds. To force a clean rebuild from scratch, delete
-`armbian_build_cache_dir/<host>/build/` and re-run with
-`armbian_build_force: true`.
+## Rebuild decision
 
-## Preflight assumptions
+A build runs when `image_build_force` is true, when `manifest.json` is
+missing or its `inputs_hash` differs from `image_build_inputs_hash`, or
+when the image it names is missing. Changing any compile arg or userpatch
+therefore triggers a build. The manifest is written only after a
+successful build, so a failed build is retried on the next run.
 
-The role does not install Docker or modify the host beyond its own
-`armbian_build_cache_dir` and `armbian_build_output_dir`. Preflight
-hard-fails if any prerequisite is missing.
+`userpatches/` is authoritative: files under it that are not in
+`image_build_userpatches` are removed before the decision, so a dropped
+patch cannot linger in the next build.
 
-- Docker ≥17.06 is installed and runnable by the connecting user.
-- Privileged containers work (`docker run --privileged hello-world`).
-- `armbian_build_cache_dir` and `armbian_build_output_dir` are writable
-  by the connecting user. The role runs entirely without `become`; the
-  defaults sit under the connecting user's `$HOME`, so this holds with no
-  setup. If you relocate them to a root-owned path like `/var/lib/`,
-  pre-create + chown the two directories once before the first run.
-- Free space at `armbian_build_cache_dir` ≥ `armbian_build_min_free_gb` GB.
-- `armbian_build_required_egress_hosts` are HTTPS-reachable.
+## Preconditions
 
-## Publish prerequisites (when used with `playbooks/build_and_publish_from_inventory.yml`)
+- Docker 17.06+ running, the connecting user in the `docker` group, and
+  privileged containers allowed.
+- The role runs without privilege escalation; the connecting user must
+  be able to create and write `image_build_cache_dir` and
+  `image_build_output_dir`.
+- `image_build_min_free_gb` GiB free at the cache directory and HTTPS
+  egress to `image_build_required_egress_hosts`.
 
-The role itself only writes to `armbian_build_output_dir` on the builder. The
-companion `playbooks/build_and_publish_from_inventory.yml` publishes the artifacts builder→netboot
-server using rsync over SSH (the controller mediates the transfer). That
-publish step requires:
-
-- The controller can SSH to both the builder and the netboot server as
-  the inventory-declared `ansible_user`.
-- The netboot server's `ansible_user` has passwordless sudo (the publish
-  task uses `--rsync-path=sudo rsync` so the receive side runs as root,
-  writing the root-owned per-board directories with `--mkpath`).
+The role is not check-mode safe. To rebuild from scratch, delete
+`<image_build_cache_dir>/<name>/build` and run with `image_build_force: true`.
 
 ## Example
 
 ```yaml
-- name: Build a custom PXE-first Armbian image
+- name: Build a PXE-first image
   hosts: armbian_builders
-  gather_facts: true
+  gather_facts: false
   tasks:
     - name: Build the image
       ansible.builtin.include_role:
         name: david_igou.armbian.image_build
       vars:
-        armbian_build_board: orangepi5pro
-        armbian_build_host: orange-pi-5-pro-01   # required: per-host output subdir
-        armbian_build_branch: current
-        armbian_build_release: bookworm
-        armbian_build_userpatches:
-          - dest: "config/boards/orangepi5pro.conf"
+        image_build_board: orangepi5pro
+        image_build_name: orange-pi-5-pro-01
+        image_build_cache_dir: /srv/armbian_build
+        image_build_userpatches:
+          - dest: config/boards/orangepi5pro.conf
             content: |
               function pre_config_uboot_target__orangepi5pro_pxe_first() {
                   declare -a t=("pxe" "dhcp" "mmc1" "mmc0" "nvme" "scsi" "usb" "spi")
