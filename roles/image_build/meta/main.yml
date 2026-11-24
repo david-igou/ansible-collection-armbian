@@ -4,7 +4,7 @@ galaxy_info:
   author: David Igou
   description: Build an Armbian image with armbian/build in Docker mode.
   license: MIT
-  min_ansible_version: "2.15"
+  min_ansible_version: "2.19"
   platforms:
     - name: Debian
       versions:
