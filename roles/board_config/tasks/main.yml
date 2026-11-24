@@ -1,5 +1,6 @@
 ---
-- name: Merge the hardware layers into board_config
+# The output fact is named board_config by contract, not board_config_*.
+- name: Merge the hardware layers into board_config  # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     board_config: >-
       {{ [board_config_family, board_config_model, board_config_host]

@@ -43,7 +43,7 @@
     dest: "{{ __bootstrap_armbian_sshd_dropin }}"
     mode: "0644"
     validate: sshd -t -f %s
-  notify: bootstrap_armbian | Restart sshd
+  notify: Restart sshd
 
 - name: Lock the root password
   ansible.builtin.user:

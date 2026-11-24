@@ -2,7 +2,6 @@
 galaxy_info:
   role_name: bootstrap_armbian
   author: David Igou
-  author_email: igou.david@gmail.com
   description: Bootstrap an Armbian board with a passwordless-sudo SSH-key-only user
   license: MIT
   min_ansible_version: "2.19"

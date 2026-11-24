@@ -2,12 +2,11 @@
 galaxy_info:
   role_name: board_boot_wait
   author: David Igou
-  author_email: igou.david@gmail.com
   description: Power-cycle a board and wait until it is reachable over SSH.
   license: MIT
   min_ansible_version: "2.19"
   platforms:
-    - name: Generic
+    - name: GenericLinux
       versions:
         - all
   galaxy_tags:
