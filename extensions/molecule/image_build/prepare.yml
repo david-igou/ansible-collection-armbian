@@ -60,6 +60,7 @@
   become: false
   vars:
     __output_dir: "{{ image_build_cache_dir }}/output/{{ image_build_name }}"
+    __compile_tree: "{{ image_build_cache_dir }}/{{ image_build_name }}/build/cache/sources/linux-kernel-worktree/6.12__rockchip64__arm64"
   tasks:
     - name: Plan the build
       ansible.builtin.include_role:
@@ -76,6 +77,30 @@
         dest: "{{ __output_dir }}/Armbian_PRESEED_Orangepi5pro_bookworm_current.img.xz"
         content: ""
         mode: "0644"
+
+    - name: Write a superseded image and its checksum
+      ansible.builtin.copy:
+        dest: "{{ __output_dir }}/Armbian_OLD_Orangepi5pro_bookworm_current.img.xz{{ item }}"
+        content: ""
+        mode: "0644"
+      loop:
+        - ""
+        - .sha
+
+    # Owned by root, as the build container leaves it.
+    - name: Create a kernel compile tree
+      ansible.builtin.file:
+        path: "{{ __compile_tree }}"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Write a file into the compile tree
+      ansible.builtin.copy:
+        dest: "{{ __compile_tree }}/Makefile"
+        content: ""
+        mode: "0644"
+      become: true
 
     - name: Write the seeded manifest
       ansible.builtin.copy:

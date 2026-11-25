@@ -28,6 +28,24 @@
         that:
           - not __logs.stat.exists
 
+    - name: Stat the seeded compile tree and images
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        get_checksum: false
+      loop:
+        - "{{ image_build_cache_dir }}/{{ image_build_name }}/build/cache/sources/linux-kernel-worktree"
+        - "{{ __output_dir }}/Armbian_OLD_Orangepi5pro_bookworm_current.img.xz"
+        - "{{ __output_dir }}/Armbian_OLD_Orangepi5pro_bookworm_current.img.xz.sha"
+        - "{{ __output_dir }}/Armbian_PRESEED_Orangepi5pro_bookworm_current.img.xz"
+      register: __leftovers
+
+    - name: Assert converge removed everything but the manifest's image
+      ansible.builtin.assert:
+        that:
+          - __leftovers.results | selectattr('stat.exists') | map(attribute='item') | map('basename')
+            == ['Armbian_PRESEED_Orangepi5pro_bookworm_current.img.xz']
+        fail_msg: "left behind: {{ __leftovers.results | selectattr('stat.exists') | map(attribute='item') }}"
+
     - name: Read the written userpatches
       ansible.builtin.slurp:
         src: "{{ __userpatches_dir }}/{{ item.dest }}"

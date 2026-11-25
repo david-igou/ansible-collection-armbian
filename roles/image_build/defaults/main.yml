@@ -14,6 +14,7 @@ image_build_compile_args:
 image_build_timeout: 7200
 image_build_min_free_gb: 50
 image_build_force: false
+image_build_keep_compile_trees: false
 image_build_required_egress_hosts:
   - github.com
   - apt.armbian.com

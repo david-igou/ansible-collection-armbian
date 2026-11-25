@@ -70,3 +70,34 @@
 - name: Expose the manifest of the image in the output directory
   ansible.builtin.set_fact:
     image_build_manifest: "{{ __image_build_new_manifest if image_build_needed | bool else __image_build_existing_manifest }}"
+
+# Runs whether or not this run built, so an existing tree converges too. A
+# failed build never gets here and keeps its trees for the retry.
+# compile.sh's container writes the compile trees as root.
+- name: Remove the kernel and U-Boot compile trees
+  ansible.builtin.file:
+    path: "{{ __image_build_checkout }}/cache/sources/{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - linux-kernel-worktree
+    - u-boot-worktree
+  when: not image_build_keep_compile_trees | bool
+
+- name: Find the images in the output directory
+  ansible.builtin.find:
+    paths: "{{ __image_build_output_dir }}"
+    patterns: "*.img.xz*"
+  become: false
+  register: __image_build_images
+
+- name: Remove images the manifest does not name
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: false
+  loop: >-
+    {{ __image_build_images.files | map(attribute='path')
+       | reject('in', [__image_build_current, __image_build_current ~ '.sha']) | sort }}
+  vars:
+    __image_build_current: "{{ __image_build_output_dir }}/{{ image_build_manifest.image_filename }}"
