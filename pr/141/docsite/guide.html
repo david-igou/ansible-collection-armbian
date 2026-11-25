@@ -1,0 +1,293 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overview &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="../_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="../_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7f41d439"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="david_igou.armbian.board_config role" href="board_config_role.html" />
+    <link rel="prev" title="David_Igou.Armbian" href="../index.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="../_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#roles">Roles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#boot-modes">Boot modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-transport-hook">The transport hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wiring-the-roles-together">Wiring the roles together</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="board_config_role.html">david_igou.armbian.board_config role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="image_build_role.html">david_igou.armbian.image_build role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s root filesystem matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Power-cycle a board and wait until it is reachable over SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../board_config_role.html">david_igou.armbian.board_config role – Merge the hardware layers into the board_config fact.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Create a passwordless-sudo, SSH-key-only automation user on a fresh Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_image_role.html">david_igou.armbian.disk_image role – Stream an .img or .img.xz onto a whole block device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../disk_provision_role.html">david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../image_build_role.html">david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Overview</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <section id="overview">
+<span id="ansible-collections-david-igou-armbian-docsite-guide"></span><h1>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">david_igou.armbian</span></code> is a set of roles for Armbian single-board computers
+that netboot and get reimaged. It ships <strong>roles only</strong>: inventory,
+orchestration and transport (TFTP upload, PoE or PDU control) belong in the
+consuming repository.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Early-stage 0.0.x: role interfaces can change between releases. Pin a
+version in <code class="docutils literal notranslate"><span class="pre">requirements.yml</span></code>.</p>
+</div>
+<section id="roles">
+<h2>Roles<a class="headerlink" href="#roles" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">board_config</span></code></dt><dd><p>Merges layered inventory into the <code class="docutils literal notranslate"><span class="pre">board_config</span></code>, <code class="docutils literal notranslate"><span class="pre">board_config_build</span></code> and
+rootfs-source facts the other roles consume.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">image_build</span></code></dt><dd><p>Builds an Armbian image with <code class="docutils literal notranslate"><span class="pre">armbian/build</span></code> and the board’s userpatches.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code></dt><dd><p>Extracts an image into a per-host NFS root on the netboot server.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">pxelinux_render</span></code></dt><dd><p>Renders a board’s <code class="docutils literal notranslate"><span class="pre">01-&lt;mac&gt;</span></code> pxelinux.cfg on the control node.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">board_boot_wait</span></code></dt><dd><p>Power-cycles a board through the caller’s hook and waits for SSH.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">board_boot_verify</span></code></dt><dd><p>Asserts a board’s root filesystem matches its boot mode.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">bootstrap_armbian</span></code></dt><dd><p>Creates an SSH-key automation user on a freshly flashed board.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">disk_image</span></code> and <code class="docutils literal notranslate"><span class="pre">disk_provision</span></code></dt><dd><p>Write an image, or a <code class="docutils literal notranslate"><span class="pre">systemd-repart</span></code> layout plus a copied root filesystem,
+to a board’s local disk.</p>
+</dd>
+</dl>
+</section>
+<section id="boot-modes">
+<h2>Boot modes<a class="headerlink" href="#boot-modes" title="Link to this heading"></a></h2>
+<p>Each board’s pxelinux.cfg carries every label; its <code class="docutils literal notranslate"><span class="pre">default</span></code> line selects one.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Kernel from</p></th>
+<th class="head"><p>Root filesystem</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nfs</span></code></p></td>
+<td><p>TFTP</p></td>
+<td><p>NFS export <code class="docutils literal notranslate"><span class="pre">&lt;root</span> <span class="pre">path&gt;/&lt;hostname&gt;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sd</span></code></p></td>
+<td><p>TFTP</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">root=LABEL=armbi_root</span></code> on the SD card</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">local</span></code></p></td>
+<td><p>TFTP</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">root=LABEL=armbi_root_local</span></code>, written by <code class="docutils literal notranslate"><span class="pre">disk_provision</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">local_kernel</span></code></p></td>
+<td><p>the local disk (<code class="docutils literal notranslate"><span class="pre">localboot</span> <span class="pre">0</span></code>)</p></td>
+<td><p>the local disk</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">board_boot_verify</span></code> checks the same table from the booted board: an NFS root
+for <code class="docutils literal notranslate"><span class="pre">nfs</span></code>, a non-NFS <code class="docutils literal notranslate"><span class="pre">/dev/*</span></code> root for <code class="docutils literal notranslate"><span class="pre">sd</span></code> and <code class="docutils literal notranslate"><span class="pre">local</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">/dev/nvme*</span></code> for <code class="docutils literal notranslate"><span class="pre">local_kernel</span></code> unless the caller passes another regex.</p>
+</section>
+<section id="the-transport-hook">
+<h2>The transport hook<a class="headerlink" href="#the-transport-hook" title="Link to this heading"></a></h2>
+<p>The collection never talks to switches, routers or PDUs. The single place
+transport plugs in is <code class="docutils literal notranslate"><span class="pre">board_boot_wait_power_cycle_tasks</span></code>: a tasks file the
+caller writes (PoE, PDU, hypervisor restart) that <code class="docutils literal notranslate"><span class="pre">board_boot_wait</span></code> includes
+at the start of every attempt, in the board’s host context. Uploading the
+rendered pxelinux.cfg (<code class="docutils literal notranslate"><span class="pre">pxelinux_render_file</span></code>) to a TFTP server is likewise
+the caller’s own task.</p>
+</section>
+<section id="wiring-the-roles-together">
+<h2>Wiring the roles together<a class="headerlink" href="#wiring-the-roles-together" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Layer board data in inventory: <code class="docutils literal notranslate"><span class="pre">board_config_family</span></code> on a SoC group,
+<code class="docutils literal notranslate"><span class="pre">board_config_model</span></code> on a model group, <code class="docutils literal notranslate"><span class="pre">board_config_host</span></code> in host vars,
+and the matching <code class="docutils literal notranslate"><span class="pre">board_config_build_*</span></code> layers. Run <code class="docutils literal notranslate"><span class="pre">board_config</span></code>.</p></li>
+<li><p>On a builder, feed <code class="docutils literal notranslate"><span class="pre">board_config_build</span></code> to <code class="docutils literal notranslate"><span class="pre">image_build</span></code> and publish
+<code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/{image,</span> <span class="pre">image.sha,</span> <span class="pre">manifest.json}</span></code> under an HTTP assets tree.</p></li>
+<li><p>Resolve each board’s image with <code class="docutils literal notranslate"><span class="pre">board_config</span></code> <code class="docutils literal notranslate"><span class="pre">tasks_from:</span> <span class="pre">rootfs_src</span></code>
+and run <code class="docutils literal notranslate"><span class="pre">rootfs_provision</span></code> on the netboot server.</p></li>
+<li><p>Render the pxelinux.cfg with <code class="docutils literal notranslate"><span class="pre">pxelinux_render</span></code> and upload it.</p></li>
+<li><p>Boot with <code class="docutils literal notranslate"><span class="pre">board_boot_wait</span></code> and confirm with <code class="docutils literal notranslate"><span class="pre">board_boot_verify</span></code>.</p></li>
+</ol>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Boot a board from NFS</span>
+<span class="w">  </span><span class="nt">hosts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boards</span>
+<span class="w">  </span><span class="nt">gather_facts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">tasks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Resolve hardware facts</span>
+<span class="w">      </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.board_config</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Render the pxelinux.cfg</span>
+<span class="w">      </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.pxelinux_render</span>
+<span class="w">        </span><span class="nt">apply</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">delegate_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
+<span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">pxelinux_render_board_mac</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">board_mac</span><span class="nv"> </span><span class="s">}}"</span>
+<span class="w">        </span><span class="nt">pxelinux_render_boot_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nfs</span>
+<span class="w">        </span><span class="nt">pxelinux_render_console</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">board_config.console</span><span class="nv"> </span><span class="s">}}"</span>
+<span class="w">        </span><span class="nt">pxelinux_render_nfs_server_ip</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.0.2.10</span>
+<span class="w">        </span><span class="nt">pxelinux_render_nfs_root_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/srv/netboot/rootfs</span>
+<span class="w">        </span><span class="nt">pxelinux_render_hostname</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">inventory_hostname</span><span class="nv"> </span><span class="s">}}"</span>
+<span class="w">        </span><span class="nt">pxelinux_render_output_dir</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/.cache/pxelinux.cfg"</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Power-cycle and wait</span>
+<span class="w">      </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.board_boot_wait</span>
+<span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">board_boot_wait_power_cycle_tasks</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">playbook_dir</span><span class="nv"> </span><span class="s">}}/tasks/power_cycle.yml"</span>
+<span class="w">        </span><span class="nt">board_boot_wait_attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Check the board booted from NFS</span>
+<span class="w">      </span><span class="nt">ansible.builtin.include_role</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">david_igou.armbian.board_boot_verify</span>
+<span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">board_boot_verify_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nfs</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">playbooks/examples/</span></code> in the collection source has one short call per role.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="David_Igou.Armbian" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="board_config_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.board_config role" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>

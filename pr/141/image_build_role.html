@@ -1,0 +1,523 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta content="2.29.1" name="antsibull-docs" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode &mdash; David_Igou.Armbian Collection  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=41de9001" />
+      <link rel="stylesheet" type="text/css" href="_static/css/ansible.css?v=b54c304f" />
+      <link rel="stylesheet" type="text/css" href="_static/antsibull-minimal.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/rtd-ethical-ads.css?v=289b023e" />
+
+  
+    <link rel="shortcut icon" href="_static/images/Ansible-Mark-RGB_Black.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=7f41d439"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory." href="pxelinux_render_role.html" />
+    <link rel="prev" title="david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs" href="disk_provision_role.html" /><!-- extra head elements for Ansible beyond RTD Sphinx Theme -->
+
+
+
+
+</head>
+
+<body class="wy-body-for-nav"><!-- extra body elements for Ansible beyond RTD Sphinx Theme -->
+
+<div class="DocSite-globalNav ansibleNav">
+  <ul>
+    <li><a href="https://www.ansible.com/blog" target="_blank">Blog</a></li>
+    <li><a href="https://forum.ansible.com/" target="_blank">Ansible community forum</a></li>
+    <li><a href="https://docs.ansible.com/" target="_blank">Documentation</a></li>
+  </ul>
+</div>
+
+<a class="DocSite-nav" href="https://david-igou.github.io/ansible-collection-armbian/branch/main/" style="padding-bottom: 30px;">
+
+  <img class="DocSiteNav-logo"
+    src="_static/images/Ansible-Mark-RGB_White.png"
+    alt="Ansible Logo">
+  <div class="DocSiteNav-title">David_Igou.Armbian Collection Docs</div>
+</a>
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            David_Igou.Armbian Collection
+          </a><!--- Based on https://github.com/rtfd/sphinx_rtd_theme/pull/438/files -->
+
+<div class="version">
+  
+    
+  
+</div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <label class="sr-only" for="q">Search docs:</label>
+    <input type="text" class="st-default-search-input" id="q" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+  
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="docsite/guide.html">Overview</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="docsite/board_config_role.html">david_igou.armbian.board_config role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/image_build_role.html">david_igou.armbian.image_build role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/rootfs_provision_role.html">david_igou.armbian.rootfs_provision role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/pxelinux_render_role.html">david_igou.armbian.pxelinux_render role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/board_boot_wait_role.html">david_igou.armbian.board_boot_wait role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/board_boot_verify_role.html">david_igou.armbian.board_boot_verify role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/disk_image_role.html">david_igou.armbian.disk_image role</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docsite/disk_provision_role.html">david_igou.armbian.disk_provision role</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="board_boot_verify_role.html">david_igou.armbian.board_boot_verify role – Assert a board’s root filesystem matches the declared boot mode.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_boot_wait_role.html">david_igou.armbian.board_boot_wait role – Power-cycle a board and wait until it is reachable over SSH.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="board_config_role.html">david_igou.armbian.board_config role – Merge the hardware layers into the board_config fact.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bootstrap_armbian_role.html">david_igou.armbian.bootstrap_armbian role – Create a passwordless-sudo, SSH-key-only automation user on a fresh Armbian board.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_image_role.html">david_igou.armbian.disk_image role – Stream an .img or .img.xz onto a whole block device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="disk_provision_role.html">david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#entry-point-main-build-an-armbian-image-with-armbian-build-in-docker-mode">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Build an Armbian image with armbian/build in Docker mode</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#parameters">Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#entry-point-plan-prepare-the-armbian-build-tree-and-decide-whether-a-build-is-needed">Entry point <code class="docutils literal notranslate"><span class="pre">plan</span></code> – Prepare the armbian/build tree and decide whether a build is needed</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Synopsis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Parameters</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#collection-links">Collection links</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pxelinux_render_role.html">david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rootfs_provision_role.html">david_igou.armbian.rootfs_provision role – Provision a per-host NFS rootfs and TFTP boot files from an .img.xz</a></li>
+</ul>
+<!-- extra nav elements for Ansible beyond RTD Sphinx Theme -->
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">David_Igou.Armbian Collection</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+
+  
+           <div itemprop="articleBody">
+             
+  <span class="target" id="ansible-collections-david-igou-armbian-image-build-role"></span><section id="david-igou-armbian-image-build-role-build-an-armbian-image-with-armbian-build-in-docker-mode">
+<h1>david_igou.armbian.image_build role – Build an Armbian image with armbian/build in Docker mode<a class="headerlink" href="#david-igou-armbian-image-build-role-build-an-armbian-image-with-armbian-build-in-docker-mode" title="Link to this heading"></a></h1>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This role is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/david_igou/armbian/">david_igou.armbian collection</a> (version 0.1.0-alpha).</p>
+<p>It is not included in <code class="docutils literal notranslate"><span class="pre">ansible-core</span></code>.
+To check whether it is installed, run <code class="code docutils literal notranslate"><span class="pre">ansible-galaxy</span> <span class="pre">collection</span> <span class="pre">list</span></code>.</p>
+<p>To install it use: <code class="code docutils literal notranslate"><span class="pre">ansible-galaxy</span> <span class="pre">collection</span> <span class="pre">install</span> <span class="pre">david_igou.armbian</span></code>.</p>
+<p>To use it in a playbook, specify: <code class="code docutils literal notranslate"><span class="pre">david_igou.armbian.image_build</span></code>.</p>
+</div>
+<nav class="contents local" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#entry-point-main-build-an-armbian-image-with-armbian-build-in-docker-mode" id="id3">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Build an Armbian image with armbian/build in Docker mode</a></p>
+<ul>
+<li><p><a class="reference internal" href="#synopsis" id="id4">Synopsis</a></p></li>
+<li><p><a class="reference internal" href="#parameters" id="id5">Parameters</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#entry-point-plan-prepare-the-armbian-build-tree-and-decide-whether-a-build-is-needed" id="id6">Entry point <code class="docutils literal notranslate"><span class="pre">plan</span></code> – Prepare the armbian/build tree and decide whether a build is needed</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id1" id="id7">Synopsis</a></p></li>
+<li><p><a class="reference internal" href="#id2" id="id8">Parameters</a></p></li>
+</ul>
+</li>
+</ul>
+</nav>
+<span class="target" id="ansible-collections-david-igou-armbian-image-build-role-entrypoint-main"></span><section id="entry-point-main-build-an-armbian-image-with-armbian-build-in-docker-mode">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">main</span></code> – Build an Armbian image with armbian/build in Docker mode</a><a class="headerlink" href="#entry-point-main-build-an-armbian-image-with-armbian-build-in-docker-mode" title="Link to this heading"></a></h2>
+<section id="synopsis">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Runs the <code class="docutils literal notranslate"><span class="pre">plan</span></code> entry point, then, when <code class="docutils literal notranslate"><span class="pre">image_build_needed</span></code> is true, runs <code class="docutils literal notranslate"><span class="pre">compile.sh</span></code>, moves the produced <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> (and its <code class="docutils literal notranslate"><span class="pre">.sha</span></code> sidecar) into <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;image_build_name&gt;/</span></code> and writes <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> there.</p></li>
+<li><p>Runs as the connecting user; that user must be in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group and own <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-cache-dir"><span class="std std-ref"><span class="pre">image_build_cache_dir</span></span></a></strong></code> and <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-output-dir"><span class="std std-ref"><span class="pre">image_build_output_dir</span></span></a></strong></code>. Only the removal of the compile trees escalates privileges. Not check-mode safe.</p></li>
+<li><p>After a successful run, removes the compile trees (unless <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-keep-compile-trees"><span class="std std-ref"><span class="pre">image_build_keep_compile_trees</span></span></a></strong></code>) and any image in the output directory that the manifest does not name.</p></li>
+<li><p>Sets the facts <code class="docutils literal notranslate"><span class="pre">image_build_needed</span></code>, <code class="docutils literal notranslate"><span class="pre">image_build_inputs_hash</span></code> and <code class="docutils literal notranslate"><span class="pre">image_build_manifest</span></code> (the manifest of the image in the output directory, newly written or existing).</p></li>
+</ul>
+</section>
+<section id="parameters">
+<h3><a class="toc-backref" href="#id5" role="doc-backlink">Parameters</a><a class="headerlink" href="#parameters" title="Link to this heading"></a></h3>
+<table class="longtable ansible-option-table docutils align-default" style="width: 100%">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Comments</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_board"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-board"><strong>image_build_board</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_board" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Armbian board name, passed as <code class="docutils literal notranslate"><span class="pre">BOARD=</span></code>.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_branch"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-branch"><strong>image_build_branch</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_branch" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Kernel branch, passed as <code class="docutils literal notranslate"><span class="pre">BRANCH=</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;current&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_cache_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-cache-dir"><strong>image_build_cache_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_cache_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Builder directory for the per-target armbian/build checkouts, writable by the connecting user.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_compile_args"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-compile-args"><strong>image_build_compile_args</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_compile_args" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Extra <code class="docutils literal notranslate"><span class="pre">KEY=value</span></code> arguments for compile.sh. Part of the inputs hash.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">{&quot;BUILD_DESKTOP&quot;:</span> <span class="pre">&quot;no&quot;,</span> <span class="pre">&quot;BUILD_MINIMAL&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;COMPRESS_OUTPUTIMAGE&quot;:</span> <span class="pre">&quot;sha,xz&quot;,</span> <span class="pre">&quot;EXPERT&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;KERNEL_CONFIGURE&quot;:</span> <span class="pre">&quot;no&quot;}</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_force"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-force"><strong>image_build_force</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_force" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Build even when the manifest’s inputs hash matches and its image exists.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_keep_compile_trees"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-keep-compile-trees"><strong>image_build_keep_compile_trees</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_keep_compile_trees" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Keep the kernel and U-Boot compile trees under the checkout’s <code class="docutils literal notranslate"><span class="pre">cache/sources/</span></code> after a successful run.</p>
+<p>They are about 20 GiB per target and only speed up a rebuild of the same kernel. Removing them needs privilege escalation, because the build container writes them as root.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_min_free_gb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-min-free-gb"><strong>image_build_min_free_gb</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_min_free_gb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Minimum free GiB at the cache directory.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">50</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_name"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-name"><strong>image_build_name</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_name" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Directory name for this build target, normally the board’s inventory hostname.</p>
+<p>Keys <code class="docutils literal notranslate"><span class="pre">&lt;image_build_cache_dir&gt;/&lt;name&gt;/</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;name&gt;/</span></code>. Must not contain <code class="docutils literal notranslate"><span class="pre">/</span></code>.</p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_output_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-output-dir"><strong>image_build_output_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Directory for <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/&lt;image&gt;.img.xz</span></code>, its <code class="docutils literal notranslate"><span class="pre">.sha</span></code> sidecar and <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/manifest.json</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">image_build_cache_dir</span> <span class="pre">}}/output&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_ref"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-ref"><strong>image_build_ref</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_ref" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>armbian/build git ref to check out.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;v26.2.0-trunk.844&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_release"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-release"><strong>image_build_release</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_release" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Userspace release, passed as <code class="docutils literal notranslate"><span class="pre">RELEASE=</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;bookworm&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_required_egress_hosts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-required-egress-hosts"><strong>image_build_required_egress_hosts</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_required_egress_hosts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Hosts that must answer an HTTPS HEAD request before the build.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[&quot;github.com&quot;,</span> <span class="pre">&quot;apt.armbian.com&quot;,</span> <span class="pre">&quot;ghcr.io&quot;,</span> <span class="pre">&quot;registry-1.docker.io&quot;]</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_timeout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-timeout"><strong>image_build_timeout</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_timeout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Seconds compile.sh may run.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">7200</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches"><strong>image_build_userpatches</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Files to place under the checkout’s <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code>, each <code class="docutils literal notranslate"><span class="pre">{dest,</span> <span class="pre">content}</span></code>. <code class="docutils literal notranslate"><span class="pre">dest</span></code> is relative to <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code> and must not contain <code class="docutils literal notranslate"><span class="pre">..</span></code>.</p>
+<p>Authoritative. Files under <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code> that are not listed are removed.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[]</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches/content"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches-content"><strong>content</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches/content" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>File content, written verbatim.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches/dest"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches-dest"><strong>dest</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches/dest" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Path relative to <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code>.</p>
+</div></td>
+</tr>
+</tbody>
+</table>
+<span class="target" id="ansible-collections-david-igou-armbian-image-build-role-entrypoint-plan"></span></section>
+</section>
+<section id="entry-point-plan-prepare-the-armbian-build-tree-and-decide-whether-a-build-is-needed">
+<h2><a class="toc-backref" href="#id6" role="doc-backlink">Entry point <code class="docutils literal notranslate"><span class="pre">plan</span></code> – Prepare the armbian/build tree and decide whether a build is needed</a><a class="headerlink" href="#entry-point-plan-prepare-the-armbian-build-tree-and-decide-whether-a-build-is-needed" title="Link to this heading"></a></h2>
+<section id="id1">
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">Synopsis</a><a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Checks free space, the Docker daemon and egress, checks out armbian/build at <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-ref"><span class="std std-ref"><span class="pre">image_build_ref</span></span></a></strong></code>, writes <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches"><span class="std std-ref"><span class="pre">image_build_userpatches</span></span></a></strong></code> and removes undeclared files under <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code>, then compares the inputs hash with the existing <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>. Does not run compile.sh.</p></li>
+<li><p>The inputs hash is the sha256 of the JSON of the board, branch, release, ref, userpatches and compile args. Sets the facts <code class="docutils literal notranslate"><span class="pre">image_build_inputs_hash</span></code> and <code class="docutils literal notranslate"><span class="pre">image_build_needed</span></code> (true when forced, when the manifest is missing or its <code class="docutils literal notranslate"><span class="pre">inputs_hash</span></code> differs, or when the image it names is missing).</p></li>
+</ul>
+</section>
+<section id="id2">
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">Parameters</a><a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<table class="longtable ansible-option-table docutils align-default" style="width: 100%">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Comments</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_board"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-board"><strong>image_build_board</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_board" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Armbian board name, passed as <code class="docutils literal notranslate"><span class="pre">BOARD=</span></code>.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_branch"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-branch"><strong>image_build_branch</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_branch" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Kernel branch, passed as <code class="docutils literal notranslate"><span class="pre">BRANCH=</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;current&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_cache_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-cache-dir"><strong>image_build_cache_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_cache_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Builder directory for the per-target armbian/build checkouts, writable by the connecting user.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_compile_args"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-compile-args"><strong>image_build_compile_args</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_compile_args" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Extra <code class="docutils literal notranslate"><span class="pre">KEY=value</span></code> arguments for compile.sh. Part of the inputs hash.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">{&quot;BUILD_DESKTOP&quot;:</span> <span class="pre">&quot;no&quot;,</span> <span class="pre">&quot;BUILD_MINIMAL&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;COMPRESS_OUTPUTIMAGE&quot;:</span> <span class="pre">&quot;sha,xz&quot;,</span> <span class="pre">&quot;EXPERT&quot;:</span> <span class="pre">&quot;yes&quot;,</span> <span class="pre">&quot;KERNEL_CONFIGURE&quot;:</span> <span class="pre">&quot;no&quot;}</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_force"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-force"><strong>image_build_force</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_force" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Build even when the manifest’s inputs hash matches and its image exists.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_keep_compile_trees"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-keep-compile-trees"><strong>image_build_keep_compile_trees</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_keep_compile_trees" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Keep the kernel and U-Boot compile trees under the checkout’s <code class="docutils literal notranslate"><span class="pre">cache/sources/</span></code> after a successful run.</p>
+<p>They are about 20 GiB per target and only speed up a rebuild of the same kernel. Removing them needs privilege escalation, because the build container writes them as root.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_min_free_gb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-min-free-gb"><strong>image_build_min_free_gb</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_min_free_gb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Minimum free GiB at the cache directory.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">50</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_name"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-name"><strong>image_build_name</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_name" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Directory name for this build target, normally the board’s inventory hostname.</p>
+<p>Keys <code class="docutils literal notranslate"><span class="pre">&lt;image_build_cache_dir&gt;/&lt;name&gt;/</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;name&gt;/</span></code>. Must not contain <code class="docutils literal notranslate"><span class="pre">/</span></code>.</p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_output_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-output-dir"><strong>image_build_output_dir</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Directory for <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/&lt;image&gt;.img.xz</span></code>, its <code class="docutils literal notranslate"><span class="pre">.sha</span></code> sidecar and <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/manifest.json</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">image_build_cache_dir</span> <span class="pre">}}/output&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_ref"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-ref"><strong>image_build_ref</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_ref" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>armbian/build git ref to check out.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;v26.2.0-trunk.844&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_release"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-release"><strong>image_build_release</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_release" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Userspace release, passed as <code class="docutils literal notranslate"><span class="pre">RELEASE=</span></code>.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;bookworm&quot;</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_required_egress_hosts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-required-egress-hosts"><strong>image_build_required_egress_hosts</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_required_egress_hosts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Hosts that must answer an HTTPS HEAD request before the build.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[&quot;github.com&quot;,</span> <span class="pre">&quot;apt.armbian.com&quot;,</span> <span class="pre">&quot;ghcr.io&quot;,</span> <span class="pre">&quot;registry-1.docker.io&quot;]</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_timeout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-timeout"><strong>image_build_timeout</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_timeout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Seconds compile.sh may run.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">7200</span></code></p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches"><strong>image_build_userpatches</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Files to place under the checkout’s <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code>, each <code class="docutils literal notranslate"><span class="pre">{dest,</span> <span class="pre">content}</span></code>. <code class="docutils literal notranslate"><span class="pre">dest</span></code> is relative to <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code> and must not contain <code class="docutils literal notranslate"><span class="pre">..</span></code>.</p>
+<p>Authoritative. Files under <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code> that are not listed are removed.</p>
+<p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[]</span></code></p>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches/content"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches-content"><strong>content</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches/content" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>File content, written verbatim.</p>
+</div></td>
+</tr>
+<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches/dest"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches-dest"><strong>dest</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches/dest" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+</div></td>
+<td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>Path relative to <code class="docutils literal notranslate"><span class="pre">userpatches/</span></code>.</p>
+</div></td>
+</tr>
+</tbody>
+</table>
+<section id="collection-links">
+<h4>Collection links<a class="headerlink" href="#collection-links" title="Link to this heading"></a></h4>
+<ul class="ansible-links">
+<li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/david-igou/ansible-collection-armbian/issues" rel="noopener external" target="_blank">Issue Tracker</a></span></li>
+<li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/david-igou/ansible-collection-armbian" rel="noopener external" target="_blank">Repository (Sources)</a></span></li>
+</ul>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          
+
+<footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="disk_provision_role.html" class="btn btn-neutral float-left" title="david_igou.armbian.disk_provision role – Partition one block device from a declarative layout and populate it from a rootfs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pxelinux_render_role.html" class="btn btn-neutral float-right" title="david_igou.armbian.pxelinux_render role – Render one board’s pxelinux.cfg to a local directory." accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright david-igou.armbian contributors.</p>
+  </div>
+
+  
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script><!-- extra footer elements for Ansible beyond RTD Sphinx Theme -->
+
+</body>
+</html>
