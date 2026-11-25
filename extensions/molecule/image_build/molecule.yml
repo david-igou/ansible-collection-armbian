@@ -1,7 +1,8 @@
 ---
 # Exercises image_build without compile.sh: prepare seeds a manifest for the
 # current inputs, so converge takes the skip path, and verify runs the
-# `plan` entry point to prove input changes flip the decision.
+# `plan` entry point to prove input changes flip the decision. Prepare also
+# seeds a compile tree and a superseded image for converge to remove.
 scenario:
   name: image_build
 ansible:

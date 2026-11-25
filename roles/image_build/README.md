@@ -24,6 +24,7 @@ See [`meta/argument_specs.yml`](meta/argument_specs.yml) for the full contract.
 | `image_build_timeout` | no | `7200` | Seconds `compile.sh` may run |
 | `image_build_min_free_gb` | no | `50` | Free GiB required at the cache directory |
 | `image_build_force` | no | `false` | Build even if the manifest matches |
+| `image_build_keep_compile_trees` | no | `false` | Keep the kernel and U-Boot compile trees after a successful run |
 | `image_build_required_egress_hosts` | no | github.com, apt.armbian.com, ghcr.io, registry-1.docker.io | HTTPS HEAD checks before building |
 
 ## Outputs
@@ -80,13 +81,31 @@ successful build, so a failed build is retried on the next run.
 `image_build_userpatches` are removed before the decision, so a dropped
 patch cannot linger in the next build.
 
+## Cleanup
+
+Every successful run, whether it built or not, ends by removing:
+
+- the kernel and U-Boot compile trees,
+  `<checkout>/cache/sources/linux-kernel-worktree` and `u-boot-worktree`.
+  They are about 20 GiB per target and only speed up a rebuild of the same
+  kernel. Set `image_build_keep_compile_trees: true` to keep them, for
+  example while iterating on a kernel patch.
+- any `.img.xz` (and `.sha`) in the output directory that the manifest
+  does not name, so a rebuild does not leave the previous image behind.
+
+The download caches (`cache/git-bare`, `cache/rootfs`, `output/debs`,
+about 8 GiB per target) stay, so the next build does not start cold. A
+failed build removes nothing: its trees are there for the retry.
+
 ## Preconditions
 
 - Docker 17.06+ running, the connecting user in the `docker` group, and
   privileged containers allowed.
-- The role runs without privilege escalation; the connecting user must
-  be able to create and write `image_build_cache_dir` and
-  `image_build_output_dir`.
+- The connecting user must be able to create and write
+  `image_build_cache_dir` and `image_build_output_dir`. The role escalates
+  privileges only to remove the compile trees, which the build container
+  writes as root; set `image_build_keep_compile_trees: true` on a builder
+  without `sudo`.
 - `image_build_min_free_gb` GiB free at the cache directory and HTTPS
   egress to `image_build_required_egress_hosts`.
 

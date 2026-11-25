@@ -9,9 +9,13 @@ argument_specs:
         sidecar) into C(<image_build_output_dir>/<image_build_name>/) and writes
         C(manifest.json) there.
       - >-
-        Runs as the connecting user without privilege escalation; that user
-        must be in the C(docker) group and own O(image_build_cache_dir) and
-        O(image_build_output_dir). Not check-mode safe.
+        Runs as the connecting user; that user must be in the C(docker) group
+        and own O(image_build_cache_dir) and O(image_build_output_dir). Only
+        the removal of the compile trees escalates privileges. Not check-mode safe.
+      - >-
+        After a successful run, removes the compile trees (unless
+        O(image_build_keep_compile_trees)) and any image in the output directory
+        that the manifest does not name.
       - >-
         Sets the facts C(image_build_needed), C(image_build_inputs_hash) and
         C(image_build_manifest) (the manifest of the image in the output
@@ -97,6 +101,13 @@ argument_specs:
         default: false
         description:
           - Build even when the manifest's inputs hash matches and its image exists.
+      image_build_keep_compile_trees:
+        type: bool
+        default: false
+        description:
+          - Keep the kernel and U-Boot compile trees under the checkout's C(cache/sources/) after a successful run.
+          - They are about 20 GiB per target and only speed up a rebuild of the same kernel.
+            Removing them needs privilege escalation, because the build container writes them as root.
       image_build_required_egress_hosts:
         type: list
         elements: str
