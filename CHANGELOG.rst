@@ -4,6 +4,19 @@ david\_igou.armbian Collection Release Notes
 
 .. contents:: Topics
 
+v0.1.1-alpha
+============
+
+Release Summary
+---------------
+
+The ``image_build`` role now cleans up after itself. Upgrading from ``0.1.0-alpha`` needs no inventory change, but the role now escalates privileges for one task on the builder; set ``image_build_keep_compile_trees: true`` on a builder without ``sudo``.
+
+Minor Changes
+-------------
+
+- image_build - every successful run now removes the kernel and U-Boot compile trees from the checkout's ``cache/sources/`` (about 20 GiB per target) and any image in the output directory that the manifest does not name. The new ``image_build_keep_compile_trees`` keeps the compile trees. Removing them needs privilege escalation on the builder.
+
 v0.1.0-alpha
 ============
 

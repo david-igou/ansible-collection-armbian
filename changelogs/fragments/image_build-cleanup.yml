@@ -1,7 +1,0 @@
----
-minor_changes:
-  - image_build - every successful run now removes the kernel and U-Boot compile
-    trees from the checkout's ``cache/sources/`` (about 20 GiB per target) and any
-    image in the output directory that the manifest does not name. The new
-    ``image_build_keep_compile_trees`` keeps the compile trees. Removing them
-    needs privilege escalation on the builder.
