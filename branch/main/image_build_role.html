@@ -172,7 +172,8 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <h3><a class="toc-backref" href="#id4" role="doc-backlink">Synopsis</a><a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>Runs the <code class="docutils literal notranslate"><span class="pre">plan</span></code> entry point, then, when <code class="docutils literal notranslate"><span class="pre">image_build_needed</span></code> is true, runs <code class="docutils literal notranslate"><span class="pre">compile.sh</span></code>, moves the produced <code class="docutils literal notranslate"><span class="pre">.img.xz</span></code> (and its <code class="docutils literal notranslate"><span class="pre">.sha</span></code> sidecar) into <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;image_build_name&gt;/</span></code> and writes <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> there.</p></li>
-<li><p>Runs as the connecting user without privilege escalation; that user must be in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group and own <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-cache-dir"><span class="std std-ref"><span class="pre">image_build_cache_dir</span></span></a></strong></code> and <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-output-dir"><span class="std std-ref"><span class="pre">image_build_output_dir</span></span></a></strong></code>. Not check-mode safe.</p></li>
+<li><p>Runs as the connecting user; that user must be in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group and own <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-cache-dir"><span class="std std-ref"><span class="pre">image_build_cache_dir</span></span></a></strong></code> and <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-output-dir"><span class="std std-ref"><span class="pre">image_build_output_dir</span></span></a></strong></code>. Only the removal of the compile trees escalates privileges. Not check-mode safe.</p></li>
+<li><p>After a successful run, removes the compile trees (unless <code class="ansible-option docutils literal notranslate"><strong><a class="reference internal" href="#ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-keep-compile-trees"><span class="std std-ref"><span class="pre">image_build_keep_compile_trees</span></span></a></strong></code>) and any image in the output directory that the manifest does not name.</p></li>
 <li><p>Sets the facts <code class="docutils literal notranslate"><span class="pre">image_build_needed</span></code>, <code class="docutils literal notranslate"><span class="pre">image_build_inputs_hash</span></code> and <code class="docutils literal notranslate"><span class="pre">image_build_manifest</span></code> (the manifest of the image in the output directory, newly written or existing).</p></li>
 </ul>
 </section>
@@ -228,6 +229,19 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-main--image_build_keep_compile_trees"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-keep-compile-trees"><strong>image_build_keep_compile_trees</strong></p>
+<a class="ansibleOptionLink" href="#parameter-main--image_build_keep_compile_trees" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Keep the kernel and U-Boot compile trees under the checkout’s <code class="docutils literal notranslate"><span class="pre">cache/sources/</span></code> after a successful run.</p>
+<p>They are about 20 GiB per target and only speed up a rebuild of the same kernel. Removing them needs privilege escalation, because the build container writes them as root.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_min_free_gb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-min-free-gb"><strong>image_build_min_free_gb</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_min_free_gb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
 </div></td>
@@ -235,7 +249,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">50</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_name"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-name"><strong>image_build_name</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_name" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
@@ -243,7 +257,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p>Keys <code class="docutils literal notranslate"><span class="pre">&lt;image_build_cache_dir&gt;/&lt;name&gt;/</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;name&gt;/</span></code>. Must not contain <code class="docutils literal notranslate"><span class="pre">/</span></code>.</p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_output_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-output-dir"><strong>image_build_output_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>
@@ -251,7 +265,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">image_build_cache_dir</span> <span class="pre">}}/output&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_ref"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-ref"><strong>image_build_ref</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_ref" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
@@ -259,7 +273,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;v26.2.0-trunk.844&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_release"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-release"><strong>image_build_release</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_release" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
@@ -267,7 +281,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;bookworm&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_required_egress_hosts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-required-egress-hosts"><strong>image_build_required_egress_hosts</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_required_egress_hosts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p>
 </div></td>
@@ -275,7 +289,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[&quot;github.com&quot;,</span> <span class="pre">&quot;apt.armbian.com&quot;,</span> <span class="pre">&quot;ghcr.io&quot;,</span> <span class="pre">&quot;registry-1.docker.io&quot;]</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_timeout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-timeout"><strong>image_build_timeout</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_timeout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
 </div></td>
@@ -283,7 +297,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">7200</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches"><strong>image_build_userpatches</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span></p>
 </div></td>
@@ -292,14 +306,14 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[]</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches/content"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches-content"><strong>content</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches/content" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>File content, written verbatim.</p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-main--image_build_userpatches/dest"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-main-image-build-userpatches-dest"><strong>dest</strong></p>
 <a class="ansibleOptionLink" href="#parameter-main--image_build_userpatches/dest" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
@@ -371,6 +385,19 @@ To check whether it is installed, run <code class="code docutils literal notrans
 </div></td>
 </tr>
 <tr class="row-odd"><td><div class="ansible-option-cell">
+<div class="ansibleOptionAnchor" id="parameter-plan--image_build_keep_compile_trees"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-keep-compile-trees"><strong>image_build_keep_compile_trees</strong></p>
+<a class="ansibleOptionLink" href="#parameter-plan--image_build_keep_compile_trees" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p>
+</div></td>
+<td><div class="ansible-option-cell"><p>Keep the kernel and U-Boot compile trees under the checkout’s <code class="docutils literal notranslate"><span class="pre">cache/sources/</span></code> after a successful run.</p>
+<p>They are about 20 GiB per target and only speed up a rebuild of the same kernel. Removing them needs privilege escalation, because the build container writes them as root.</p>
+<p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p>
+<ul class="simple">
+<li><p><code class="ansible-option-default-bold docutils literal notranslate"><strong><span class="pre">false</span></strong></code> <span class="ansible-option-choices-default-mark">← (default)</span></p></li>
+<li><p><code class="ansible-option-choices-entry docutils literal notranslate"><span class="pre">true</span></code></p></li>
+</ul>
+</div></td>
+</tr>
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_min_free_gb"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-min-free-gb"><strong>image_build_min_free_gb</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_min_free_gb" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
 </div></td>
@@ -378,7 +405,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">50</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_name"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-name"><strong>image_build_name</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_name" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
@@ -386,7 +413,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p>Keys <code class="docutils literal notranslate"><span class="pre">&lt;image_build_cache_dir&gt;/&lt;name&gt;/</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;image_build_output_dir&gt;/&lt;name&gt;/</span></code>. Must not contain <code class="docutils literal notranslate"><span class="pre">/</span></code>.</p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_output_dir"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-output-dir"><strong>image_build_output_dir</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_output_dir" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p>
 </div></td>
@@ -394,7 +421,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">image_build_cache_dir</span> <span class="pre">}}/output&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_ref"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-ref"><strong>image_build_ref</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_ref" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
@@ -402,7 +429,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;v26.2.0-trunk.844&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_release"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-release"><strong>image_build_release</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_release" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
 </div></td>
@@ -410,7 +437,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">&quot;bookworm&quot;</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_required_egress_hosts"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-required-egress-hosts"><strong>image_build_required_egress_hosts</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_required_egress_hosts" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p>
 </div></td>
@@ -418,7 +445,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[&quot;github.com&quot;,</span> <span class="pre">&quot;apt.armbian.com&quot;,</span> <span class="pre">&quot;ghcr.io&quot;,</span> <span class="pre">&quot;registry-1.docker.io&quot;]</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_timeout"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-timeout"><strong>image_build_timeout</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_timeout" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p>
 </div></td>
@@ -426,7 +453,7 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">7200</span></code></p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches"><strong>image_build_userpatches</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=dictionary</span></p>
 </div></td>
@@ -435,14 +462,14 @@ To check whether it is installed, run <code class="code docutils literal notrans
 <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code class="ansible-option-default docutils literal notranslate"><span class="pre">[]</span></code></p>
 </div></td>
 </tr>
-<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches/content"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches-content"><strong>content</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches/content" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
 <td><div class="ansible-option-indent-desc"></div><div class="ansible-option-cell"><p>File content, written verbatim.</p>
 </div></td>
 </tr>
-<tr class="row-even"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
+<tr class="row-odd"><td><div class="ansible-option-indent"></div><div class="ansible-option-cell">
 <div class="ansibleOptionAnchor" id="parameter-plan--image_build_userpatches/dest"></div><p class="ansible-option-title" id="ansible-collections-david-igou-armbian-image-build-role-parameter-plan-image-build-userpatches-dest"><strong>dest</strong></p>
 <a class="ansibleOptionLink" href="#parameter-plan--image_build_userpatches/dest" title="Permalink to this option"></a><p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
 </div></td>
